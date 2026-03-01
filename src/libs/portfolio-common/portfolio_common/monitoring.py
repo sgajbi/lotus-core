@@ -261,6 +261,33 @@ INGESTION_REPLAY_FAILURE_TOTAL = Counter(
     ["recovery_path", "replay_status"],
 )
 
+ANALYTICS_EXPORT_JOBS_TOTAL = Counter(
+    "analytics_export_jobs_total",
+    "Number of analytics export jobs by dataset_type and terminal status.",
+    ["dataset_type", "status"],
+)
+
+ANALYTICS_EXPORT_JOB_DURATION_SECONDS = Histogram(
+    "analytics_export_job_duration_seconds",
+    "Duration of analytics export job execution in seconds.",
+    labelnames=("dataset_type",),
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 60),
+)
+
+ANALYTICS_EXPORT_RESULT_BYTES = Histogram(
+    "analytics_export_result_bytes",
+    "Serialized payload size for analytics export results.",
+    labelnames=("result_format", "compression"),
+    buckets=(1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216),
+)
+
+ANALYTICS_EXPORT_PAGE_DEPTH = Histogram(
+    "analytics_export_page_depth",
+    "Number of source pages traversed while building analytics export result.",
+    labelnames=("dataset_type",),
+    buckets=(1, 2, 5, 10, 20, 50, 100, 200),
+)
+
 # --------------------------------------------------------------------------------------
 # Optional generic HTTP metrics (use across services if helpful)
 # --------------------------------------------------------------------------------------

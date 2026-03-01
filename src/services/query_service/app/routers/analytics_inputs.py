@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from typing import NoReturn, cast
+from typing import Literal, NoReturn, cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.db import get_async_db_session
 
 from ..dtos.analytics_input_dto import (
+    AnalyticsExportCreateRequest,
+    AnalyticsExportJobResponse,
+    AnalyticsExportJsonResultResponse,
     PortfolioAnalyticsReferenceRequest,
     PortfolioAnalyticsReferenceResponse,
     PortfolioAnalyticsTimeseriesRequest,
@@ -123,5 +127,102 @@ async def get_portfolio_analytics_reference(
             PortfolioAnalyticsReferenceResponse,
             await service.get_portfolio_reference(portfolio_id=portfolio_id, request=request),
         )
+    except AnalyticsInputError as exc:
+        _raise_http_for_analytics_error(exc)
+
+
+@router.post(
+    "/exports/analytics-timeseries/jobs",
+    response_model=AnalyticsExportJobResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Invalid export request contract."},
+        status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "Insufficient source data or unsupported configuration."
+        },
+    },
+    summary="Create analytics timeseries export job",
+    description=(
+        "What: Create a durable export job for portfolio or position analytics timeseries datasets.\n"
+        "How: Validates canonical request payload, computes deterministic fingerprint, and persists lifecycle state.\n"
+        "When: Used for large horizon extractions that should be retrieved asynchronously by downstream analytics."
+    ),
+)
+async def create_analytics_export_job(
+    request: AnalyticsExportCreateRequest,
+    service: AnalyticsTimeseriesService = Depends(get_analytics_timeseries_service),
+) -> AnalyticsExportJobResponse:
+    try:
+        return cast(AnalyticsExportJobResponse, await service.create_export_job(request))
+    except AnalyticsInputError as exc:
+        _raise_http_for_analytics_error(exc)
+
+
+@router.get(
+    "/exports/analytics-timeseries/jobs/{job_id}",
+    response_model=AnalyticsExportJobResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Export job not found."},
+    },
+    summary="Fetch analytics export job status",
+    description=(
+        "What: Fetch lifecycle status for an analytics export job.\n"
+        "How: Reads persisted job metadata and terminal status from canonical query-service storage.\n"
+        "When: Used by polling clients before attempting result retrieval."
+    ),
+)
+async def get_analytics_export_job(
+    job_id: str,
+    service: AnalyticsTimeseriesService = Depends(get_analytics_timeseries_service),
+) -> AnalyticsExportJobResponse:
+    try:
+        return cast(AnalyticsExportJobResponse, await service.get_export_job(job_id))
+    except AnalyticsInputError as exc:
+        _raise_http_for_analytics_error(exc)
+
+
+@router.get(
+    "/exports/analytics-timeseries/jobs/{job_id}/result",
+    response_model=AnalyticsExportJsonResultResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Export job not found."},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "Export job is incomplete or source payload unavailable."
+        },
+    },
+    summary="Fetch analytics export job result",
+    description=(
+        "What: Retrieve finalized export payload for a completed analytics export job.\n"
+        "How: Returns JSON envelope or NDJSON stream with optional gzip encoding.\n"
+        "When: Used by lotus-performance batch pipelines after job completion."
+    ),
+)
+async def get_analytics_export_job_result(
+    job_id: str,
+    result_format: Literal["json", "ndjson"] = Query(
+        "json",
+        description="Preferred serialization format for export result retrieval.",
+        examples=["json"],
+    ),
+    compression: Literal["none", "gzip"] = Query(
+        "none",
+        description="Optional transport compression for result retrieval.",
+        examples=["gzip"],
+    ),
+    service: AnalyticsTimeseriesService = Depends(get_analytics_timeseries_service),
+) -> AnalyticsExportJsonResultResponse | Response:
+    try:
+        if result_format == "ndjson":
+            payload, media_type, content_encoding = await service.get_export_result_ndjson(
+                job_id,
+                compression=compression,
+            )
+            headers = (
+                {"Content-Encoding": content_encoding}
+                if content_encoding == "gzip"
+                else None
+            )
+            return Response(content=payload, media_type=media_type, headers=headers)
+        return cast(AnalyticsExportJsonResultResponse, await service.get_export_result_json(job_id))
     except AnalyticsInputError as exc:
         _raise_http_for_analytics_error(exc)

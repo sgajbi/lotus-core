@@ -1,16 +1,29 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import hashlib
 import hmac
 import json
 import os
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from time import perf_counter
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from portfolio_common.monitoring import (
+    ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
+    ANALYTICS_EXPORT_JOBS_TOTAL,
+    ANALYTICS_EXPORT_PAGE_DEPTH,
+    ANALYTICS_EXPORT_RESULT_BYTES,
+)
+
 from ..dtos.analytics_input_dto import (
+    AnalyticsExportCreateRequest,
+    AnalyticsExportJobResponse,
+    AnalyticsExportJsonResultResponse,
     AnalyticsWindow,
     CashFlowObservation,
     LineageMetadata,
@@ -25,6 +38,7 @@ from ..dtos.analytics_input_dto import (
     PositionTimeseriesRow,
     QualityDiagnostics,
 )
+from ..repositories.analytics_export_repository import AnalyticsExportRepository
 from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 
 
@@ -36,7 +50,9 @@ class AnalyticsInputError(RuntimeError):
 
 class AnalyticsTimeseriesService:
     def __init__(self, db: AsyncSession):
+        self.db = db
         self.repo = AnalyticsTimeseriesRepository(db)
+        self.export_repo = AnalyticsExportRepository(db)
         self._page_token_secret = os.getenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "lotus-core-local-dev")
 
     def _request_fingerprint(self, payload: dict) -> str:
@@ -445,3 +461,194 @@ class AnalyticsTimeseriesService:
                 data_version="state_inputs_v1",
             ),
         )
+
+    @staticmethod
+    def _to_export_response(row: object) -> AnalyticsExportJobResponse:
+        return AnalyticsExportJobResponse(
+            job_id=row.job_id,
+            dataset_type=row.dataset_type,
+            portfolio_id=row.portfolio_id,
+            status=row.status,
+            request_fingerprint=row.request_fingerprint,
+            result_format=row.result_format,
+            compression=row.compression,
+            result_row_count=row.result_row_count,
+            error_message=row.error_message,
+            created_at=row.created_at,
+            started_at=row.started_at,
+            completed_at=row.completed_at,
+        )
+
+    @staticmethod
+    def _jsonable(value: object) -> object:
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
+        if isinstance(value, list):
+            return [AnalyticsTimeseriesService._jsonable(item) for item in value]
+        if isinstance(value, dict):
+            return {str(key): AnalyticsTimeseriesService._jsonable(item) for key, item in value.items()}
+        return value
+
+    async def create_export_job(
+        self, request: AnalyticsExportCreateRequest
+    ) -> AnalyticsExportJobResponse:
+        request_payload = request.model_dump(mode="json")
+        request_fingerprint = self._request_fingerprint(request_payload)
+
+        async with self.db.begin():
+            existing = await self.export_repo.get_latest_by_fingerprint(
+                request_fingerprint=request_fingerprint,
+                dataset_type=request.dataset_type,
+            )
+            if existing is not None and existing.status in {"accepted", "running", "completed"}:
+                return self._to_export_response(existing)
+
+            job_id = f"aexp_{uuid4().hex[:24]}"
+            row = await self.export_repo.create_job(
+                job_id=job_id,
+                dataset_type=request.dataset_type,
+                portfolio_id=request.portfolio_id,
+                request_fingerprint=request_fingerprint,
+                request_payload=request_payload,
+                result_format=request.result_format,
+                compression=request.compression,
+            )
+            await self.export_repo.mark_running(row)
+
+            started = perf_counter()
+            try:
+                if request.dataset_type == "portfolio_timeseries":
+                    assert request.portfolio_timeseries_request is not None
+                    data_rows, page_depth = await self._collect_portfolio_timeseries_for_export(
+                        portfolio_id=request.portfolio_id,
+                        request=request.portfolio_timeseries_request,
+                    )
+                else:
+                    assert request.position_timeseries_request is not None
+                    data_rows, page_depth = await self._collect_position_timeseries_for_export(
+                        portfolio_id=request.portfolio_id,
+                        request=request.position_timeseries_request,
+                    )
+                result_payload = {
+                    "job_id": job_id,
+                    "dataset_type": request.dataset_type,
+                    "generated_at": datetime.now(UTC).isoformat(),
+                    "contract_version": "rfc_063_v1",
+                    "data": self._jsonable(data_rows),
+                }
+                result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
+                ANALYTICS_EXPORT_RESULT_BYTES.labels(request.result_format, request.compression).observe(
+                    result_bytes
+                )
+                ANALYTICS_EXPORT_PAGE_DEPTH.labels(request.dataset_type).observe(page_depth)
+                await self.export_repo.mark_completed(
+                    row,
+                    result_payload=result_payload,
+                    result_row_count=len(data_rows),
+                )
+                ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
+            except AnalyticsInputError as exc:
+                await self.export_repo.mark_failed(row, error_message=str(exc))
+                ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
+            finally:
+                ANALYTICS_EXPORT_JOB_DURATION_SECONDS.labels(request.dataset_type).observe(
+                    perf_counter() - started
+                )
+            return self._to_export_response(row)
+
+    async def get_export_job(self, job_id: str) -> AnalyticsExportJobResponse:
+        row = await self.export_repo.get_job(job_id)
+        if row is None:
+            raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
+        return self._to_export_response(row)
+
+    async def get_export_result_json(self, job_id: str) -> AnalyticsExportJsonResultResponse:
+        row = await self.export_repo.get_job(job_id)
+        if row is None:
+            raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
+        if row.status != "completed":
+            raise AnalyticsInputError(
+                "UNSUPPORTED_CONFIGURATION",
+                "Export job is not completed yet; result unavailable.",
+            )
+        if not isinstance(row.result_payload, dict):
+            raise AnalyticsInputError("INSUFFICIENT_DATA", "Export job completed without payload.")
+        return AnalyticsExportJsonResultResponse(**row.result_payload)
+
+    async def get_export_result_ndjson(
+        self, job_id: str, *, compression: str
+    ) -> tuple[bytes, str, str]:
+        row = await self.export_repo.get_job(job_id)
+        if row is None:
+            raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
+        if row.status != "completed":
+            raise AnalyticsInputError(
+                "UNSUPPORTED_CONFIGURATION",
+                "Export job is not completed yet; result unavailable.",
+            )
+        if not isinstance(row.result_payload, dict):
+            raise AnalyticsInputError("INSUFFICIENT_DATA", "Export job completed without payload.")
+        payload_data = row.result_payload.get("data")
+        if not isinstance(payload_data, list):
+            raise AnalyticsInputError("INSUFFICIENT_DATA", "Export payload data is malformed.")
+
+        header = {
+            "record_type": "metadata",
+            "job_id": row.job_id,
+            "dataset_type": row.dataset_type,
+            "generated_at": row.result_payload.get("generated_at"),
+            "contract_version": row.result_payload.get("contract_version"),
+        }
+        lines = [json.dumps(header, separators=(",", ":"))]
+        for item in payload_data:
+            lines.append(json.dumps({"record_type": "data", "record": item}, separators=(",", ":")))
+        encoded = ("\n".join(lines) + "\n").encode("utf-8")
+        content_encoding = "none"
+        if compression == "gzip":
+            encoded = gzip.compress(encoded)
+            content_encoding = "gzip"
+        return (encoded, "application/x-ndjson", content_encoding)
+
+    async def _collect_portfolio_timeseries_for_export(
+        self, *, portfolio_id: str, request: PortfolioAnalyticsTimeseriesRequest
+    ) -> tuple[list[dict[str, object]], int]:
+        rows: list[dict[str, object]] = []
+        page_depth = 0
+        page_token: str | None = None
+        while True:
+            page_depth += 1
+            page_request = request.page.model_copy(update={"page_token": page_token, "page_size": 2000})
+            paged_request = request.model_copy(update={"page": page_request})
+            response = await self.get_portfolio_timeseries(
+                portfolio_id=portfolio_id,
+                request=paged_request,
+            )
+            rows.extend(
+                [item.model_dump(mode="json") for item in response.observations]
+            )
+            page_token = response.page.next_page_token
+            if not page_token:
+                break
+        return rows, page_depth
+
+    async def _collect_position_timeseries_for_export(
+        self, *, portfolio_id: str, request: PositionAnalyticsTimeseriesRequest
+    ) -> tuple[list[dict[str, object]], int]:
+        rows: list[dict[str, object]] = []
+        page_depth = 0
+        page_token: str | None = None
+        while True:
+            page_depth += 1
+            page_request = request.page.model_copy(update={"page_token": page_token, "page_size": 2000})
+            paged_request = request.model_copy(update={"page": page_request})
+            response = await self.get_position_timeseries(
+                portfolio_id=portfolio_id,
+                request=paged_request,
+            )
+            rows.extend([item.model_dump(mode="json") for item in response.rows])
+            page_token = response.page.next_page_token
+            if not page_token:
+                break
+        return rows, page_depth

@@ -472,3 +472,157 @@ class PortfolioAnalyticsReferenceResponse(BaseModel):
     )
 
     model_config = ConfigDict()
+
+
+class AnalyticsExportCreateRequest(BaseModel):
+    dataset_type: Literal["portfolio_timeseries", "position_timeseries"] = Field(
+        ...,
+        description="Dataset contract to export.",
+        examples=["portfolio_timeseries"],
+    )
+    portfolio_id: str = Field(
+        ...,
+        description="Canonical portfolio identifier to export.",
+        examples=["DEMO_DPM_EUR_001"],
+    )
+    portfolio_timeseries_request: PortfolioAnalyticsTimeseriesRequest | None = Field(
+        None,
+        description="Portfolio timeseries request when dataset_type is portfolio_timeseries.",
+    )
+    position_timeseries_request: PositionAnalyticsTimeseriesRequest | None = Field(
+        None,
+        description="Position timeseries request when dataset_type is position_timeseries.",
+    )
+    result_format: Literal["json", "ndjson"] = Field(
+        "json",
+        description="Preferred result serialization format.",
+        examples=["ndjson"],
+    )
+    compression: Literal["none", "gzip"] = Field(
+        "none",
+        description="Preferred result compression mode.",
+        examples=["gzip"],
+    )
+    consumer_system: str = Field(
+        "lotus-performance",
+        description="Consumer system identifier for governance and lineage.",
+        examples=["lotus-performance"],
+    )
+
+    @model_validator(mode="after")
+    def validate_dataset_request_binding(self) -> "AnalyticsExportCreateRequest":
+        if self.dataset_type == "portfolio_timeseries":
+            if self.portfolio_timeseries_request is None:
+                raise ValueError(
+                    "portfolio_timeseries_request must be provided when dataset_type=portfolio_timeseries."
+                )
+            if self.position_timeseries_request is not None:
+                raise ValueError(
+                    "position_timeseries_request must be null when dataset_type=portfolio_timeseries."
+                )
+        if self.dataset_type == "position_timeseries":
+            if self.position_timeseries_request is None:
+                raise ValueError(
+                    "position_timeseries_request must be provided when dataset_type=position_timeseries."
+                )
+            if self.portfolio_timeseries_request is not None:
+                raise ValueError(
+                    "portfolio_timeseries_request must be null when dataset_type=position_timeseries."
+                )
+        return self
+
+    model_config = ConfigDict()
+
+
+class AnalyticsExportJobResponse(BaseModel):
+    job_id: str = Field(
+        ...,
+        description="Stable analytics export job identifier.",
+        examples=["aexp_7e8ad3e7bc6f4d3b97de66f1"],
+    )
+    dataset_type: Literal["portfolio_timeseries", "position_timeseries"] = Field(
+        ...,
+        description="Dataset contract selected for this export job.",
+        examples=["position_timeseries"],
+    )
+    portfolio_id: str = Field(
+        ...,
+        description="Canonical portfolio identifier for this export job.",
+        examples=["DEMO_DPM_EUR_001"],
+    )
+    status: Literal["accepted", "running", "completed", "failed"] = Field(
+        ...,
+        description="Current export job lifecycle status.",
+        examples=["completed"],
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic fingerprint for the request payload.",
+        examples=["4bb3f6477f1ed3e3f8a04c471e7f6516"],
+    )
+    result_format: Literal["json", "ndjson"] = Field(
+        ...,
+        description="Serialized format for result retrieval.",
+        examples=["ndjson"],
+    )
+    compression: Literal["none", "gzip"] = Field(
+        ...,
+        description="Compression mode for result retrieval.",
+        examples=["gzip"],
+    )
+    result_row_count: int | None = Field(
+        None,
+        description="Count of rows exported when status is completed.",
+        examples=[3650],
+    )
+    error_message: str | None = Field(
+        None,
+        description="Failure reason when status is failed.",
+        examples=["Missing FX rate for EUR/USD on 2025-01-31."],
+    )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the export job was created.",
+        examples=["2026-03-01T21:30:00Z"],
+    )
+    started_at: datetime | None = Field(
+        None,
+        description="UTC timestamp when processing started.",
+        examples=["2026-03-01T21:30:01Z"],
+    )
+    completed_at: datetime | None = Field(
+        None,
+        description="UTC timestamp when processing completed or failed.",
+        examples=["2026-03-01T21:30:03Z"],
+    )
+
+    model_config = ConfigDict()
+
+
+class AnalyticsExportJsonResultResponse(BaseModel):
+    job_id: str = Field(
+        ...,
+        description="Export job identifier.",
+        examples=["aexp_7e8ad3e7bc6f4d3b97de66f1"],
+    )
+    dataset_type: Literal["portfolio_timeseries", "position_timeseries"] = Field(
+        ...,
+        description="Dataset type included in this result payload.",
+        examples=["portfolio_timeseries"],
+    )
+    generated_at: datetime = Field(
+        ...,
+        description="UTC timestamp when this result was generated.",
+        examples=["2026-03-01T21:30:03Z"],
+    )
+    contract_version: str = Field(
+        ...,
+        description="Contract version label included in payload lineage.",
+        examples=["rfc_063_v1"],
+    )
+    data: list[dict[str, object]] = Field(
+        default_factory=list,
+        description="Serialized observations or rows from the selected dataset.",
+    )
+
+    model_config = ConfigDict()

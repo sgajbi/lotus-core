@@ -44,6 +44,47 @@ async def async_test_client():
             "observations": [],
         }
     )
+    mock_service.create_export_job = AsyncMock(
+        return_value={
+            "job_id": "aexp_1",
+            "dataset_type": "portfolio_timeseries",
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "status": "completed",
+            "request_fingerprint": "fp1",
+            "result_format": "json",
+            "compression": "none",
+            "result_row_count": 1,
+            "error_message": None,
+            "created_at": datetime(2026, 3, 1, tzinfo=UTC),
+            "started_at": datetime(2026, 3, 1, tzinfo=UTC),
+            "completed_at": datetime(2026, 3, 1, tzinfo=UTC),
+        }
+    )
+    mock_service.get_export_job = AsyncMock(
+        return_value={
+            "job_id": "aexp_1",
+            "dataset_type": "portfolio_timeseries",
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "status": "completed",
+            "request_fingerprint": "fp1",
+            "result_format": "json",
+            "compression": "none",
+            "result_row_count": 1,
+            "error_message": None,
+            "created_at": datetime(2026, 3, 1, tzinfo=UTC),
+            "started_at": datetime(2026, 3, 1, tzinfo=UTC),
+            "completed_at": datetime(2026, 3, 1, tzinfo=UTC),
+        }
+    )
+    mock_service.get_export_result_json = AsyncMock(
+        return_value={
+            "job_id": "aexp_1",
+            "dataset_type": "portfolio_timeseries",
+            "generated_at": datetime(2026, 3, 1, tzinfo=UTC),
+            "contract_version": "rfc_063_v1",
+            "data": [],
+        }
+    )
 
     app.dependency_overrides[get_analytics_timeseries_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app)
@@ -69,3 +110,33 @@ async def test_portfolio_analytics_timeseries_success(async_test_client):
     body = response.json()
     assert body["portfolio_id"] == "DEMO_DPM_EUR_001"
     mock_service.get_portfolio_timeseries.assert_awaited_once()
+
+
+async def test_create_analytics_export_job_success(async_test_client):
+    client, mock_service = async_test_client
+    response = await client.post(
+        "/integration/exports/analytics-timeseries/jobs",
+        json={
+            "dataset_type": "portfolio_timeseries",
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "portfolio_timeseries_request": {
+                "as_of_date": "2025-12-31",
+                "period": "one_month",
+            },
+            "result_format": "json",
+            "compression": "none",
+            "consumer_system": "lotus-performance",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["job_id"] == "aexp_1"
+    mock_service.create_export_job.assert_awaited_once()
+
+
+async def test_get_analytics_export_job_result_json_success(async_test_client):
+    client, _mock_service = async_test_client
+    response = await client.get(
+        "/integration/exports/analytics-timeseries/jobs/aexp_1/result?result_format=json&compression=none"
+    )
+    assert response.status_code == 200
+    assert response.json()["job_id"] == "aexp_1"

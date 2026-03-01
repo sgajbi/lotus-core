@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from fastapi.responses import Response
 
 from src.services.query_service.app.dtos.analytics_input_dto import (
+    AnalyticsExportCreateRequest,
     AnalyticsWindow,
     PortfolioAnalyticsReferenceRequest,
     PortfolioAnalyticsTimeseriesRequest,
@@ -13,7 +15,10 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
 )
 from src.services.query_service.app.routers.analytics_inputs import (
     _raise_http_for_analytics_error,
+    create_analytics_export_job,
+    get_analytics_export_job,
     get_analytics_timeseries_service,
+    get_analytics_export_job_result,
     get_portfolio_analytics_reference,
     get_portfolio_analytics_timeseries,
     get_position_analytics_timeseries,
@@ -129,3 +134,115 @@ def test_raise_http_for_analytics_error_unknown_code_maps_to_500() -> None:
 def test_get_analytics_timeseries_service_factory() -> None:
     service = get_analytics_timeseries_service(db=MagicMock())
     assert service is not None
+
+
+@pytest.mark.asyncio
+async def test_router_create_export_job_success() -> None:
+    service = MagicMock()
+    service.create_export_job = AsyncMock(
+        return_value={
+            "job_id": "aexp_1",
+            "dataset_type": "portfolio_timeseries",
+            "portfolio_id": "P1",
+            "status": "completed",
+            "request_fingerprint": "fp1",
+            "result_format": "json",
+            "compression": "none",
+            "result_row_count": 1,
+            "error_message": None,
+            "created_at": "2026-03-01T12:00:00Z",
+            "started_at": "2026-03-01T12:00:01Z",
+            "completed_at": "2026-03-01T12:00:02Z",
+        }
+    )
+    response = await create_analytics_export_job(
+        request=AnalyticsExportCreateRequest(
+            dataset_type="portfolio_timeseries",
+            portfolio_id="P1",
+            portfolio_timeseries_request=PortfolioAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                period="one_month",
+            ),
+        ),
+        service=service,
+    )
+    assert response["job_id"] == "aexp_1"
+
+
+@pytest.mark.asyncio
+async def test_router_get_export_job_result_ndjson_success() -> None:
+    service = MagicMock()
+    service.get_export_result_ndjson = AsyncMock(
+        return_value=(b'{"record_type":"metadata"}\n', "application/x-ndjson", "gzip")
+    )
+    response = await get_analytics_export_job_result(
+        job_id="aexp_1",
+        result_format="ndjson",
+        compression="gzip",
+        service=service,
+    )
+    assert isinstance(response, Response)
+    assert response.media_type == "application/x-ndjson"
+
+
+@pytest.mark.asyncio
+async def test_router_get_export_job_success() -> None:
+    service = MagicMock()
+    service.get_export_job = AsyncMock(
+        return_value={
+            "job_id": "aexp_1",
+            "dataset_type": "portfolio_timeseries",
+            "portfolio_id": "P1",
+            "status": "completed",
+            "request_fingerprint": "fp1",
+            "result_format": "json",
+            "compression": "none",
+            "result_row_count": 1,
+            "error_message": None,
+            "created_at": "2026-03-01T12:00:00Z",
+            "started_at": "2026-03-01T12:00:01Z",
+            "completed_at": "2026-03-01T12:00:02Z",
+        }
+    )
+    response = await get_analytics_export_job(job_id="aexp_1", service=service)
+    assert response["job_id"] == "aexp_1"
+
+
+@pytest.mark.asyncio
+async def test_router_export_endpoints_error_mapping() -> None:
+    service = MagicMock()
+    service.create_export_job = AsyncMock(
+        side_effect=AnalyticsInputError("RESOURCE_NOT_FOUND", "missing")
+    )
+    with pytest.raises(HTTPException) as exc_info_create:
+        await create_analytics_export_job(
+            request=AnalyticsExportCreateRequest(
+                dataset_type="portfolio_timeseries",
+                portfolio_id="P1",
+                portfolio_timeseries_request=PortfolioAnalyticsTimeseriesRequest(
+                    as_of_date="2025-12-31",
+                    period="one_month",
+                ),
+            ),
+            service=service,
+        )
+    assert exc_info_create.value.status_code == 404
+
+    service.get_export_job = AsyncMock(
+        side_effect=AnalyticsInputError("INSUFFICIENT_DATA", "no result")
+    )
+    with pytest.raises(HTTPException) as exc_info_get:
+        await get_analytics_export_job(job_id="aexp_1", service=service)
+    assert exc_info_get.value.status_code == 422
+
+    service.get_export_result_json = AsyncMock(
+        side_effect=AnalyticsInputError("UNSUPPORTED_CONFIGURATION", "in progress")
+    )
+    with pytest.raises(HTTPException) as exc_info_result:
+        await get_analytics_export_job_result(
+            job_id="aexp_1",
+            result_format="json",
+            compression="none",
+            service=service,
+        )
+    assert exc_info_result.value.status_code == 422

@@ -872,6 +872,28 @@ class ReprocessingJob(Base):
     )
 
 
+class AnalyticsExportJob(Base):
+    __tablename__ = "analytics_export_jobs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String, unique=True, index=True, nullable=False)
+    dataset_type = Column(String, index=True, nullable=False)
+    portfolio_id = Column(String, index=True, nullable=False)
+    status = Column(String, index=True, nullable=False, server_default="accepted")
+    request_fingerprint = Column(String, index=True, nullable=False)
+    request_payload = Column(JSON, nullable=False)
+    result_payload = Column(JSON, nullable=True)
+    result_row_count = Column(Integer, nullable=True)
+    result_format = Column(String, nullable=False, server_default="json")
+    compression = Column(String, nullable=False, server_default="none")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
 class CashflowRule(Base):
     """
     Defines the business rules for generating a cashflow from a transaction type.
