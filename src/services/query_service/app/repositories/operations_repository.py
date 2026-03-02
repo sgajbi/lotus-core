@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
@@ -66,14 +66,14 @@ class OperationsRepository:
     async def get_stale_processing_valuation_jobs_count(
         self, portfolio_id: str, stale_minutes: int
     ) -> int:
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
         stmt = (
             select(func.count())
             .select_from(PortfolioValuationJob)
             .where(
                 PortfolioValuationJob.portfolio_id == portfolio_id,
                 PortfolioValuationJob.status == "PROCESSING",
-                PortfolioValuationJob.updated_at
-                < (func.now() - func.make_interval(mins=stale_minutes)),
+                PortfolioValuationJob.updated_at < stale_threshold,
             )
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)

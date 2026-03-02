@@ -89,6 +89,49 @@ async def test_get_pending_aggregation_jobs_count(
     assert "portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING')" in compiled
 
 
+async def test_get_processing_valuation_jobs_count(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+
+    value = await repository.get_processing_valuation_jobs_count("P1")
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from portfolio_valuation_jobs" in compiled.lower()
+    assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled
+
+
+async def test_get_stale_processing_valuation_jobs_count(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 1)
+
+    value = await repository.get_stale_processing_valuation_jobs_count("P1", stale_minutes=15)
+
+    assert value == 1
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from portfolio_valuation_jobs" in compiled.lower()
+    assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled
+    assert "portfolio_valuation_jobs.updated_at <" in compiled
+
+
+async def test_get_oldest_pending_valuation_date(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one_or_none(mock_db_session, date(2025, 8, 1))
+
+    value = await repository.get_oldest_pending_valuation_date("P1")
+
+    assert value == date(2025, 8, 1)
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "min(portfolio_valuation_jobs.valuation_date)" in compiled.lower()
+    assert "portfolio_valuation_jobs.status IN ('PENDING', 'PROCESSING')" in compiled
+
+
 async def test_get_latest_transaction_date(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
@@ -157,6 +200,21 @@ async def test_get_latest_snapshot_date_for_current_epoch_as_of(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.date <= '2025-08-20'" in compiled
+
+
+async def test_get_position_snapshot_history_mismatch_count(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 0)
+
+    value = await repository.get_position_snapshot_history_mismatch_count("P1")
+
+    assert value == 0
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from (select position_history.portfolio_id" in compiled.lower()
+    assert "left outer join" in compiled.lower()
+    assert "daily_position_snapshots" in compiled.lower()
 
 
 async def test_get_position_state(repository: OperationsRepository, mock_db_session: AsyncMock):
