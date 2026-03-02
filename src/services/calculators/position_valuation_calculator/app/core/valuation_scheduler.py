@@ -34,7 +34,10 @@ class ValuationScheduler:
     """
     def __init__(self, poll_interval: int = 30, batch_size: int = 100):
         self._poll_interval = int(os.getenv("VALUATION_SCHEDULER_POLL_INTERVAL", poll_interval))
-        self._batch_size = batch_size
+        self._batch_size = int(os.getenv("VALUATION_SCHEDULER_BATCH_SIZE", str(batch_size)))
+        self._dispatch_rounds_per_poll = int(
+            os.getenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "3")
+        )
         self._running = True
         self._producer: KafkaProducer = get_kafka_producer()
 
@@ -240,13 +243,14 @@ class ValuationScheduler:
                     async with db.begin():
                         await self._create_backfill_jobs(db)
 
-                claimed_jobs = []
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        repo = ValuationRepository(db)
-                        claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
-                
-                if claimed_jobs:
+                for _ in range(self._dispatch_rounds_per_poll):
+                    claimed_jobs = []
+                    async for db in get_async_db_session():
+                        async with db.begin():
+                            repo = ValuationRepository(db)
+                            claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
+                    if not claimed_jobs:
+                        break
                     await self._dispatch_jobs(claimed_jobs)
                 
                 async for db in get_async_db_session():

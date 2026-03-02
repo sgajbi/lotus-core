@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,17 +29,25 @@ class OperationsService:
             current_epoch,
             active_reprocessing_keys,
             pending_valuation_jobs,
+            processing_valuation_jobs,
+            stale_processing_valuation_jobs,
+            oldest_pending_valuation_date,
             pending_aggregation_jobs,
             latest_transaction_date,
             latest_position_snapshot_date_unbounded,
+            position_snapshot_history_mismatch_count,
         ) = await asyncio.gather(
             self.repo.get_latest_business_date(),
             self.repo.get_current_portfolio_epoch(portfolio_id),
             self.repo.get_active_reprocessing_keys_count(portfolio_id),
             self.repo.get_pending_valuation_jobs_count(portfolio_id),
+            self.repo.get_processing_valuation_jobs_count(portfolio_id),
+            self.repo.get_stale_processing_valuation_jobs_count(portfolio_id, stale_minutes=15),
+            self.repo.get_oldest_pending_valuation_date(portfolio_id),
             self.repo.get_pending_aggregation_jobs_count(portfolio_id),
             self.repo.get_latest_transaction_date(portfolio_id),
             self.repo.get_latest_snapshot_date_for_current_epoch(portfolio_id),
+            self.repo.get_position_snapshot_history_mismatch_count(portfolio_id),
         )
 
         latest_booked_transaction_date = None
@@ -56,17 +65,29 @@ class OperationsService:
                 ),
             )
 
+        valuation_backlog_age_days = None
+        if oldest_pending_valuation_date:
+            reference_date = latest_business_date or datetime.now(timezone.utc).date()
+            valuation_backlog_age_days = max(
+                0, (reference_date - oldest_pending_valuation_date).days
+            )
+
         return SupportOverviewResponse(
             portfolio_id=portfolio_id,
             business_date=latest_business_date,
             current_epoch=current_epoch,
             active_reprocessing_keys=active_reprocessing_keys,
             pending_valuation_jobs=pending_valuation_jobs,
+            processing_valuation_jobs=processing_valuation_jobs,
+            stale_processing_valuation_jobs=stale_processing_valuation_jobs,
+            oldest_pending_valuation_date=oldest_pending_valuation_date,
+            valuation_backlog_age_days=valuation_backlog_age_days,
             pending_aggregation_jobs=pending_aggregation_jobs,
             latest_transaction_date=latest_transaction_date,
             latest_booked_transaction_date=latest_booked_transaction_date,
             latest_position_snapshot_date=latest_position_snapshot_date_unbounded,
             latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
+            position_snapshot_history_mismatch_count=position_snapshot_history_mismatch_count,
         )
 
     async def get_lineage(self, portfolio_id: str, security_id: str) -> LineageResponse:

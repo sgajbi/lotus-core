@@ -25,6 +25,31 @@ class Transaction(BaseModel):
     trade_fee: Optional[condecimal(ge=Decimal(0))] = Field(
         default=Decimal(0), json_schema_extra={"example": "5.0"}
     )
+    brokerage: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        description="Brokerage fee component. If provided with other fee components, trade_fee is recomputed from breakdown.",
+        json_schema_extra={"example": "2.50"},
+    )
+    stamp_duty: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        description="Stamp duty fee component.",
+        json_schema_extra={"example": "1.20"},
+    )
+    exchange_fee: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        description="Exchange fee component.",
+        json_schema_extra={"example": "0.70"},
+    )
+    gst: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        description="Goods and services tax fee component.",
+        json_schema_extra={"example": "0.45"},
+    )
+    other_fees: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        description="Other fee components not covered by standard fields.",
+        json_schema_extra={"example": "0.15"},
+    )
     settlement_date: Optional[datetime] = None
     economic_event_id: Optional[str] = Field(
         default=None,

@@ -90,13 +90,35 @@ class CostCalculatorConsumer(BaseConsumer):
     def _transform_event_for_engine(self, event: TransactionEvent) -> dict:
         """
         Transforms a TransactionEvent into a raw dictionary suitable for the
-        financial-calculator-engine, converting trade_fee to a Fees object structure.
+        financial-calculator-engine, converting fee fields to a Fees object structure.
         """
         event_dict = event.model_dump(mode="json")
         trade_fee_str = event_dict.pop("trade_fee", "0") or "0"
+        brokerage = event_dict.pop("brokerage", None)
+        stamp_duty = event_dict.pop("stamp_duty", None)
+        exchange_fee = event_dict.pop("exchange_fee", None)
+        gst = event_dict.pop("gst", None)
+        other_fees = event_dict.pop("other_fees", None)
 
-        if Decimal(trade_fee_str) > 0:
+        fee_components = {
+            "brokerage": brokerage,
+            "stamp_duty": stamp_duty,
+            "exchange_fee": exchange_fee,
+            "gst": gst,
+            "other_fees": other_fees,
+        }
+        if any(v is not None for v in fee_components.values()):
+            normalized = {
+                k: str(Decimal(str(v or "0")))
+                for k, v in fee_components.items()
+            }
+            event_dict["fees"] = normalized
+            event_dict["trade_fee"] = str(sum(Decimal(v) for v in normalized.values()))
+        elif Decimal(trade_fee_str) > 0:
             event_dict["fees"] = {"brokerage": trade_fee_str}
+            event_dict["trade_fee"] = trade_fee_str
+        else:
+            event_dict["trade_fee"] = "0"
 
         return event_dict
 
@@ -212,6 +234,7 @@ class CostCalculatorConsumer(BaseConsumer):
                             p_txn.transaction_type, "persist_transaction_costs", "attempt"
                         )
                         updated_txn = await repo.update_transaction_costs(p_txn)
+                        await repo.replace_transaction_cost_breakdown(p_txn)
                         self._record_lifecycle_stage(
                             p_txn.transaction_type, "persist_transaction_costs", "success"
                         )
