@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from decimal import Decimal
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
+    TransactionCost,
     Portfolio,
     FxRate,
     PositionLotState,
@@ -70,6 +71,48 @@ class CostCalculatorRepository:
             db_txn_to_update.realized_gain_loss_local = transaction_result.realized_gain_loss_local
         
         return db_txn_to_update
+
+    async def replace_transaction_cost_breakdown(self, transaction_result: EngineTransaction) -> None:
+        """
+        Replaces the per-fee breakdown rows for a transaction.
+
+        The method is idempotent for reprocessing because existing rows are deleted
+        before re-insert using the latest computed fee components.
+        """
+        stmt = select(DBTransaction).filter_by(transaction_id=transaction_result.transaction_id)
+        result = await self.db.execute(stmt)
+        db_txn = result.scalars().first()
+        if not db_txn:
+            return
+
+        await self.db.execute(
+            TransactionCost.__table__.delete().where(
+                TransactionCost.transaction_id == transaction_result.transaction_id
+            )
+        )
+
+        fees = transaction_result.fees
+        if not fees:
+            return
+
+        fee_components = {
+            "brokerage": fees.brokerage,
+            "stamp_duty": fees.stamp_duty,
+            "exchange_fee": fees.exchange_fee,
+            "gst": fees.gst,
+            "other_fees": fees.other_fees,
+        }
+        for fee_type, amount in fee_components.items():
+            if (amount or Decimal(0)) <= 0:
+                continue
+            self.db.add(
+                TransactionCost(
+                    transaction_id=transaction_result.transaction_id,
+                    fee_type=fee_type,
+                    amount=amount,
+                    currency=db_txn.trade_currency or db_txn.currency,
+                )
+            )
 
     async def upsert_buy_lot_state(self, transaction_result: EngineTransaction) -> None:
         """Persists BUY lot state as a durable, idempotent record."""

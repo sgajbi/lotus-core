@@ -52,6 +52,39 @@ class OperationsRepository:
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
+    async def get_processing_valuation_jobs_count(self, portfolio_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(PortfolioValuationJob)
+            .where(
+                PortfolioValuationJob.portfolio_id == portfolio_id,
+                PortfolioValuationJob.status == "PROCESSING",
+            )
+        )
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_stale_processing_valuation_jobs_count(
+        self, portfolio_id: str, stale_minutes: int
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(PortfolioValuationJob)
+            .where(
+                PortfolioValuationJob.portfolio_id == portfolio_id,
+                PortfolioValuationJob.status == "PROCESSING",
+                PortfolioValuationJob.updated_at
+                < (func.now() - func.make_interval(mins=stale_minutes)),
+            )
+        )
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_oldest_pending_valuation_date(self, portfolio_id: str) -> Optional[date]:
+        stmt = select(func.min(PortfolioValuationJob.valuation_date)).where(
+            PortfolioValuationJob.portfolio_id == portfolio_id,
+            PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")),
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def get_pending_aggregation_jobs_count(self, portfolio_id: str) -> int:
         stmt = (
             select(func.count())
@@ -118,6 +151,49 @@ class OperationsRepository:
             )
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def get_position_snapshot_history_mismatch_count(self, portfolio_id: str) -> int:
+        latest_history = (
+            select(
+                PositionHistory.portfolio_id,
+                PositionHistory.security_id,
+                PositionHistory.epoch,
+                func.max(PositionHistory.position_date).label("latest_history_date"),
+            )
+            .where(PositionHistory.portfolio_id == portfolio_id)
+            .group_by(
+                PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
+            )
+            .subquery()
+        )
+        latest_snapshot = (
+            select(
+                DailyPositionSnapshot.portfolio_id,
+                DailyPositionSnapshot.security_id,
+                DailyPositionSnapshot.epoch,
+                func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
+            )
+            .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+            .group_by(
+                DailyPositionSnapshot.portfolio_id,
+                DailyPositionSnapshot.security_id,
+                DailyPositionSnapshot.epoch,
+            )
+            .subquery()
+        )
+        joined = latest_history.outerjoin(
+            latest_snapshot,
+            and_(
+                latest_history.c.portfolio_id == latest_snapshot.c.portfolio_id,
+                latest_history.c.security_id == latest_snapshot.c.security_id,
+                latest_history.c.epoch == latest_snapshot.c.epoch,
+            ),
+        )
+        stmt = select(func.count()).select_from(joined).where(
+            latest_snapshot.c.latest_snapshot_date.is_(None),
+            latest_history.c.latest_history_date.is_not(None),
+        )
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_position_state(
         self, portfolio_id: str, security_id: str

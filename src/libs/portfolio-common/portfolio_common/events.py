@@ -94,6 +94,11 @@ class TransactionEvent(BaseModel):
     trade_currency: str
     currency: str
     trade_fee: Optional[Decimal] = Field(default=Decimal(0))
+    brokerage: Optional[Decimal] = Field(default=None)
+    stamp_duty: Optional[Decimal] = Field(default=None)
+    exchange_fee: Optional[Decimal] = Field(default=None)
+    gst: Optional[Decimal] = Field(default=None)
+    other_fees: Optional[Decimal] = Field(default=None)
     settlement_date: Optional[datetime] = None
     net_cost: Optional[Decimal] = None
     gross_cost: Optional[Decimal] = None

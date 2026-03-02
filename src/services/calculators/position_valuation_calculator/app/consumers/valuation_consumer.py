@@ -86,7 +86,14 @@ class ValuationConsumer(BaseConsumer):
                                 portfolio_id=event.portfolio_id, security_id=event.security_id, reason="missing_ref_data"
                             ).inc()
                             logger.error(f"{error_msg} Job will be marked FAILED.")
-                            await repo.update_job_status(event.portfolio_id, event.security_id, event.valuation_date, 'FAILED', failure_reason=error_msg)
+                            await repo.update_job_status(
+                                event.portfolio_id,
+                                event.security_id,
+                                event.valuation_date,
+                                event.epoch,
+                                "FAILED",
+                                failure_reason=error_msg,
+                            )
                             await idempotency_repo.mark_event_processed(event_id, event.portfolio_id, SERVICE_NAME, correlation_id)
                             return
                         
@@ -141,7 +148,13 @@ class ValuationConsumer(BaseConsumer):
                             correlation_id=correlation_id
                         )
                         
-                        await repo.update_job_status(event.portfolio_id, event.security_id, event.valuation_date, 'COMPLETE')
+                        await repo.update_job_status(
+                            event.portfolio_id,
+                            event.security_id,
+                            event.valuation_date,
+                            event.epoch,
+                            "COMPLETE",
+                        )
                         await idempotency_repo.mark_event_processed(event_id, event.portfolio_id, SERVICE_NAME, correlation_id)
                 
                 except DataNotFoundError as e:
@@ -155,6 +168,7 @@ class ValuationConsumer(BaseConsumer):
                         idempotency_repo = IdempotencyRepository(db)
                         await repo.update_job_status(
                             event.portfolio_id, event.security_id, event.valuation_date,
+                            event.epoch,
                             status='SKIPPED_NO_POSITION',
                             failure_reason=str(e)
                         )
@@ -177,6 +191,7 @@ class ValuationConsumer(BaseConsumer):
                             event.portfolio_id,
                             event.security_id,
                             event.valuation_date,
+                            event.epoch,
                             status='FAILED', # FIX: Use keyword argument for clarity
                             failure_reason=str(e)
                         )

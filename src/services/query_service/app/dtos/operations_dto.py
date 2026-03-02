@@ -29,6 +29,29 @@ class SupportOverviewResponse(BaseModel):
         description="Number of pending/processing valuation jobs for the portfolio.",
         examples=[14],
     )
+    processing_valuation_jobs: int = Field(
+        ...,
+        description="Number of valuation jobs currently in PROCESSING state.",
+        examples=[3],
+    )
+    stale_processing_valuation_jobs: int = Field(
+        ...,
+        description="Number of PROCESSING valuation jobs older than stale threshold (15 minutes).",
+        examples=[1],
+    )
+    oldest_pending_valuation_date: Optional[date] = Field(
+        None,
+        description="Oldest valuation date among pending/processing jobs for backlog analysis.",
+        examples=["2025-11-03"],
+    )
+    valuation_backlog_age_days: Optional[int] = Field(
+        None,
+        description=(
+            "Backlog age in days computed from oldest pending valuation date "
+            "to business_date (or current UTC date when business_date is missing)."
+        ),
+        examples=[119],
+    )
     pending_aggregation_jobs: int = Field(
         ...,
         description="Number of pending/processing portfolio aggregation jobs for the portfolio.",
@@ -62,6 +85,14 @@ class SupportOverviewResponse(BaseModel):
             "up to business_date."
         ),
         examples=["2025-12-30"],
+    )
+    position_snapshot_history_mismatch_count: int = Field(
+        ...,
+        description=(
+            "Count of position keys where position_history exists but no matching "
+            "daily_position_snapshot exists for the same portfolio/security/epoch."
+        ),
+        examples=[0],
     )
 
 

@@ -30,8 +30,12 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_current_portfolio_epoch.return_value = 2
     mock_ops_repo.get_active_reprocessing_keys_count.return_value = 1
     mock_ops_repo.get_pending_valuation_jobs_count.return_value = 4
+    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 2
+    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 1
+    mock_ops_repo.get_oldest_pending_valuation_date.return_value = date(2025, 8, 20)
     mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 1
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
@@ -43,11 +47,16 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.current_epoch == 2
     assert response.active_reprocessing_keys == 1
     assert response.pending_valuation_jobs == 4
+    assert response.processing_valuation_jobs == 2
+    assert response.stale_processing_valuation_jobs == 1
+    assert response.oldest_pending_valuation_date == date(2025, 8, 20)
+    assert response.valuation_backlog_age_days == 10
     assert response.pending_aggregation_jobs == 1
     assert response.latest_transaction_date == date(2025, 9, 2)
     assert response.latest_booked_transaction_date == date(2025, 8, 30)
     assert response.latest_position_snapshot_date == date(2025, 8, 30)
     assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)
+    assert response.position_snapshot_history_mismatch_count == 0
 
 
 async def test_get_lineage_raises_when_state_missing(
@@ -165,13 +174,18 @@ async def test_get_support_overview_without_business_date(
     mock_ops_repo.get_current_portfolio_epoch.return_value = 1
     mock_ops_repo.get_active_reprocessing_keys_count.return_value = 0
     mock_ops_repo.get_pending_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_oldest_pending_valuation_date.return_value = None
     mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 0
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 31)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 31)
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
 
     response = await service.get_support_overview("P1")
 
     assert response.business_date is None
+    assert response.valuation_backlog_age_days is None
     assert response.latest_booked_transaction_date is None
     assert response.latest_booked_position_snapshot_date is None
     mock_ops_repo.get_latest_transaction_date_as_of.assert_not_awaited()

@@ -256,6 +256,7 @@ class ValuationRepository:
         portfolio_id: str,
         security_id: str,
         valuation_date: date,
+        epoch: int,
         status: str,
         failure_reason: Optional[str] = None
     ):
@@ -273,7 +274,8 @@ class ValuationRepository:
             .where(
                 PortfolioValuationJob.portfolio_id == portfolio_id,
                 PortfolioValuationJob.security_id == security_id,
-                PortfolioValuationJob.valuation_date == valuation_date
+                PortfolioValuationJob.valuation_date == valuation_date,
+                PortfolioValuationJob.epoch == epoch,
             )
             .values(**values_to_update)
         )

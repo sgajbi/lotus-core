@@ -242,6 +242,47 @@ async def test_consumer_uses_trade_fee_in_calculation(
     mock_repo.upsert_accrued_income_offset_state.assert_called_once()
 
 
+async def test_consumer_uses_fee_breakdown_when_provided(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    """
+    GIVEN a BUY event with explicit fee breakdown fields
+    WHEN the consumer transforms and processes the event
+    THEN fee components should be used (not only trade_fee), and total trade_fee should match component sum.
+    """
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+
+    incoming_event_dict = json.loads(mock_buy_kafka_message.value().decode("utf-8"))
+    incoming_event_dict["trade_fee"] = "0.00"
+    incoming_event_dict["brokerage"] = "2.50"
+    incoming_event_dict["stamp_duty"] = "1.20"
+    incoming_event_dict["exchange_fee"] = "0.70"
+    incoming_event_dict["gst"] = "0.45"
+    incoming_event_dict["other_fees"] = "0.15"
+    mock_buy_kafka_message.value.return_value = json.dumps(incoming_event_dict).encode("utf-8")
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.get_transaction_history.return_value = []
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_fx_rate.return_value = None
+    mock_repo.update_transaction_costs.side_effect = lambda arg: arg
+
+    await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
+    assert updated_transaction_arg.fees.brokerage == Decimal("2.50")
+    assert updated_transaction_arg.fees.stamp_duty == Decimal("1.20")
+    assert updated_transaction_arg.fees.exchange_fee == Decimal("0.70")
+    assert updated_transaction_arg.fees.gst == Decimal("0.45")
+    assert updated_transaction_arg.fees.other_fees == Decimal("0.15")
+    assert updated_transaction_arg.fees.total_fees == Decimal("5.00")
+
+
 async def test_consumer_propagates_epoch_field(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_buy_kafka_message: MagicMock,

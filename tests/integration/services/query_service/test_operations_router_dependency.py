@@ -29,12 +29,20 @@ async def test_support_overview_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_support_overview.return_value = {
         "portfolio_id": "P1",
+        "business_date": date(2025, 8, 31),
         "current_epoch": 3,
         "active_reprocessing_keys": 1,
         "pending_valuation_jobs": 2,
+        "processing_valuation_jobs": 1,
+        "stale_processing_valuation_jobs": 0,
+        "oldest_pending_valuation_date": date(2025, 8, 30),
+        "valuation_backlog_age_days": 1,
         "pending_aggregation_jobs": 0,
         "latest_transaction_date": date(2025, 8, 31),
+        "latest_booked_transaction_date": date(2025, 8, 31),
         "latest_position_snapshot_date": date(2025, 8, 31),
+        "latest_booked_position_snapshot_date": date(2025, 8, 31),
+        "position_snapshot_history_mismatch_count": 0,
     }
 
     response = await client.get("/support/portfolios/P1/overview")
