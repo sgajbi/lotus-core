@@ -418,6 +418,24 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 "breach_backlog_growth": False,
             }
 
+        async def get_operating_band(
+            self,
+            *,
+            lookback_minutes: int = 60,
+            failure_rate_threshold: Decimal = Decimal("0.03"),
+            queue_latency_threshold_seconds: float = 5.0,
+            backlog_age_threshold_seconds: float = 300.0,
+        ):
+            return {
+                "lookback_minutes": lookback_minutes,
+                "operating_band": "yellow",
+                "recommended_action": "Scale up one band and monitor DLQ pressure.",
+                "backlog_age_seconds": 42.0,
+                "dlq_pressure_ratio": Decimal("0.25"),
+                "failure_rate": Decimal("0"),
+                "triggered_signals": ["backlog_age_seconds>=15", "dlq_pressure_ratio>=0.25"],
+            }
+
         async def find_successful_replay_audit_by_fingerprint(
             self,
             replay_fingerprint: str,
@@ -954,6 +972,15 @@ async def test_ingestion_error_budget_endpoint(async_test_client: httpx.AsyncCli
     assert "dlq_events_in_window" in body
     assert "dlq_budget_events_per_window" in body
     assert "dlq_pressure_ratio" in body
+
+
+async def test_ingestion_operating_band_endpoint(async_test_client: httpx.AsyncClient):
+    response = await async_test_client.get("/ingestion/health/operating-band")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["operating_band"] in {"green", "yellow", "orange", "red"}
+    assert "recommended_action" in body
+    assert "triggered_signals" in body
 
 
 async def test_ingestion_idempotency_diagnostics_endpoint(async_test_client: httpx.AsyncClient):

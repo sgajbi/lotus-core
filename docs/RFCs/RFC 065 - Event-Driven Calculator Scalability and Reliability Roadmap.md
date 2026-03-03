@@ -325,3 +325,7 @@ Acceptance:
 - introduced `ops-contract` test suite in `scripts/test_manifest.py`
 - wired suite into CI matrix as `Tests (ops-contract)`
 - added local runner target `make test-ops-contract`
+3. Added canonical operating-band endpoint for automation and runbooks:
+- added `GET /ingestion/health/operating-band` to return `green|yellow|orange|red` severity
+- classification combines backlog age, DLQ pressure ratio, and SLO breach signals in one response contract
+- added unit and integration coverage to lock endpoint behavior and routing shape

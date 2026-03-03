@@ -134,3 +134,51 @@ async def test_get_error_budget_status_includes_pressure_ratios(
     assert result.dlq_events_in_window == 4
     assert result.dlq_budget_events_per_window == 10
     assert result.dlq_pressure_ratio == Decimal("0.4")
+
+
+async def test_get_operating_band_returns_red_for_high_backlog_or_dlq(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _mock_slo_status(**_kwargs):
+        return SimpleNamespace(
+            backlog_age_seconds=200.0,
+            breach_failure_rate=False,
+            breach_queue_latency=False,
+            breach_backlog_age=True,
+            failure_rate=Decimal("0.01"),
+        )
+
+    async def _mock_error_budget_status(**_kwargs):
+        return SimpleNamespace(dlq_pressure_ratio=Decimal("1.2"))
+
+    monkeypatch.setattr(service, "get_slo_status", _mock_slo_status)
+    monkeypatch.setattr(service, "get_error_budget_status", _mock_error_budget_status)
+
+    result = await service.get_operating_band()
+    assert result.operating_band == "red"
+    assert "backlog_age_seconds>=180" in result.triggered_signals
+
+
+async def test_get_operating_band_returns_yellow_for_early_pressure(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _mock_slo_status(**_kwargs):
+        return SimpleNamespace(
+            backlog_age_seconds=20.0,
+            breach_failure_rate=False,
+            breach_queue_latency=False,
+            breach_backlog_age=False,
+            failure_rate=Decimal("0.005"),
+        )
+
+    async def _mock_error_budget_status(**_kwargs):
+        return SimpleNamespace(dlq_pressure_ratio=Decimal("0.10"))
+
+    monkeypatch.setattr(service, "get_slo_status", _mock_slo_status)
+    monkeypatch.setattr(service, "get_error_budget_status", _mock_error_budget_status)
+
+    result = await service.get_operating_band()
+    assert result.operating_band == "yellow"
+    assert result.recommended_action.startswith("Scale up one band")

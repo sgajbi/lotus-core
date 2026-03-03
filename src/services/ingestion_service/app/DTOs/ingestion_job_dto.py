@@ -202,6 +202,41 @@ class IngestionSloStatusResponse(BaseModel):
     )
 
 
+class IngestionOperatingBandResponse(BaseModel):
+    lookback_minutes: int = Field(
+        ge=1,
+        description="Lookback window in minutes used for operating-band classification.",
+        examples=[60],
+    )
+    operating_band: Literal["green", "yellow", "orange", "red"] = Field(
+        description="Current operating severity band for ingestion and calculator scaling workflows.",
+        examples=["yellow"],
+    )
+    recommended_action: str = Field(
+        description="Runbook-oriented next action for this band.",
+        examples=["Scale up one band and monitor DLQ pressure."],
+    )
+    backlog_age_seconds: float = Field(
+        ge=0.0,
+        description="Oldest non-terminal ingestion backlog age used for band classification.",
+        examples=[42.0],
+    )
+    dlq_pressure_ratio: Decimal = Field(
+        ge=Decimal("0"),
+        description="DLQ pressure ratio used for band classification.",
+        examples=["0.3000"],
+    )
+    failure_rate: Decimal = Field(
+        ge=Decimal("0"),
+        description="Current failure rate used for band classification.",
+        examples=["0.0125"],
+    )
+    triggered_signals: list[str] = Field(
+        description="List of signals that triggered the final band decision.",
+        examples=[["backlog_age_seconds>=15", "dlq_pressure_ratio>=0.25"]],
+    )
+
+
 class IngestionBacklogBreakdownItemResponse(BaseModel):
     endpoint: str = Field(
         description="Ingestion endpoint associated with this backlog group.",

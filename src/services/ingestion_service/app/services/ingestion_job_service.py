@@ -23,6 +23,7 @@ from app.DTOs.ingestion_job_dto import (
     IngestionJobResponse,
     IngestionJobStatus,
     IngestionOpsModeResponse,
+    IngestionOperatingBandResponse,
     IngestionSloStatusResponse,
     IngestionStalledJobListResponse,
     IngestionStalledJobResponse,
@@ -477,6 +478,83 @@ class IngestionJobService:
             breach_failure_rate=False,
             breach_queue_latency=False,
             breach_backlog_age=False,
+        )
+
+    async def get_operating_band(
+        self,
+        *,
+        lookback_minutes: int = 60,
+        failure_rate_threshold: Decimal = Decimal("0.03"),
+        queue_latency_threshold_seconds: float = 5.0,
+        backlog_age_threshold_seconds: float = 300.0,
+    ) -> IngestionOperatingBandResponse:
+        slo_status = await self.get_slo_status(
+            lookback_minutes=lookback_minutes,
+            failure_rate_threshold=failure_rate_threshold,
+            queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+            backlog_age_threshold_seconds=backlog_age_threshold_seconds,
+        )
+        error_budget = await self.get_error_budget_status(
+            lookback_minutes=lookback_minutes,
+            failure_rate_threshold=failure_rate_threshold,
+        )
+
+        triggered_signals: list[str] = []
+        operating_band = "green"
+        recommended_action = "Hold baseline replicas."
+        backlog_age_seconds = float(slo_status.backlog_age_seconds)
+        dlq_pressure_ratio = Decimal(error_budget.dlq_pressure_ratio)
+        failure_rate = Decimal(slo_status.failure_rate)
+
+        if backlog_age_seconds >= 180 or dlq_pressure_ratio >= Decimal("1.0"):
+            operating_band = "red"
+            recommended_action = (
+                "Enter incident mode and block non-emergency replay until lag pressure stabilizes."
+            )
+            if backlog_age_seconds >= 180:
+                triggered_signals.append("backlog_age_seconds>=180")
+            if dlq_pressure_ratio >= Decimal("1.0"):
+                triggered_signals.append("dlq_pressure_ratio>=1.0")
+        elif (
+            backlog_age_seconds >= 60
+            or dlq_pressure_ratio >= Decimal("0.50")
+            or slo_status.breach_failure_rate
+            or slo_status.breach_queue_latency
+            or slo_status.breach_backlog_age
+        ):
+            operating_band = "orange"
+            recommended_action = (
+                "Aggressively scale calculators and pause non-critical replay operations."
+            )
+            if backlog_age_seconds >= 60:
+                triggered_signals.append("backlog_age_seconds>=60")
+            if dlq_pressure_ratio >= Decimal("0.50"):
+                triggered_signals.append("dlq_pressure_ratio>=0.50")
+            if slo_status.breach_failure_rate:
+                triggered_signals.append("breach_failure_rate")
+            if slo_status.breach_queue_latency:
+                triggered_signals.append("breach_queue_latency")
+            if slo_status.breach_backlog_age:
+                triggered_signals.append("breach_backlog_age")
+        elif backlog_age_seconds >= 15 or dlq_pressure_ratio >= Decimal("0.25"):
+            operating_band = "yellow"
+            recommended_action = "Scale up one band and monitor DLQ pressure."
+            if backlog_age_seconds >= 15:
+                triggered_signals.append("backlog_age_seconds>=15")
+            if dlq_pressure_ratio >= Decimal("0.25"):
+                triggered_signals.append("dlq_pressure_ratio>=0.25")
+
+        if not triggered_signals:
+            triggered_signals.append("stable_signals")
+
+        return IngestionOperatingBandResponse(
+            lookback_minutes=lookback_minutes,
+            operating_band=operating_band,  # type: ignore[arg-type]
+            recommended_action=recommended_action,
+            backlog_age_seconds=backlog_age_seconds,
+            dlq_pressure_ratio=dlq_pressure_ratio,
+            failure_rate=failure_rate,
+            triggered_signals=triggered_signals,
         )
 
     async def get_backlog_breakdown(
