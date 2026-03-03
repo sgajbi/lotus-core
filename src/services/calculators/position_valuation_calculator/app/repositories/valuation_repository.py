@@ -17,6 +17,10 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.utils import async_timed
+from portfolio_common.monitoring import (
+    observe_valuation_worker_jobs_claimed,
+    observe_valuation_worker_stale_resets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +309,7 @@ class ValuationRepository:
         claimed_jobs = result.mappings().all()
         if claimed_jobs:
             logger.info(f"Found and claimed {len(claimed_jobs)} eligible valuation jobs.")
+            observe_valuation_worker_jobs_claimed(len(claimed_jobs))
         return [PortfolioValuationJob(**job) for job in claimed_jobs]
 
     @async_timed(repository="ValuationRepository", method="get_portfolio")
@@ -424,6 +429,7 @@ class ValuationRepository:
         
         if reset_count > 0:
             logger.warning(f"Reset {reset_count} stale valuation jobs from 'PROCESSING' to 'PENDING'.")
+            observe_valuation_worker_stale_resets(reset_count)
             
         return reset_count
 

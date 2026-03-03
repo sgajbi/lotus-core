@@ -221,6 +221,16 @@ VALUATION_JOBS_FAILED_TOTAL = Counter(
     labelnames=("portfolio_id", "security_id", "reason"),
 )
 
+VALUATION_WORKER_JOBS_CLAIMED_TOTAL = Counter(
+    "valuation_worker_jobs_claimed_total",
+    "Total number of valuation jobs claimed for processing.",
+)
+
+VALUATION_WORKER_STALE_RESETS_TOTAL = Counter(
+    "valuation_worker_stale_resets_total",
+    "Total number of stale valuation jobs reset from PROCESSING to PENDING.",
+)
+
 CASHFLOWS_CREATED_TOTAL = Counter(
     "cashflows_created_total",
     "Total number of cashflows created, by classification and timing.",
@@ -328,6 +338,14 @@ def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> No
 def reprocessing_worker_batch_timer():
     """Context manager that observes one reprocessing worker batch duration."""
     return REPROCESSING_WORKER_BATCH_SECONDS.time()
+
+
+def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:
+    VALUATION_WORKER_JOBS_CLAIMED_TOTAL.inc(count)
+
+
+def observe_valuation_worker_stale_resets(count: int = 1) -> None:
+    VALUATION_WORKER_STALE_RESETS_TOTAL.inc(count)
 
 # --------------------------------------------------------------------------------------
 # Optional generic HTTP metrics (use across services if helpful)
