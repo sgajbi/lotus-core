@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -43,6 +44,11 @@ from portfolio_common.monitoring import (
     INGESTION_REPLAY_FAILURE_TOTAL,
 )
 from sqlalchemy import and_, desc, func, select
+
+REPLAY_MAX_RECORDS_PER_REQUEST = int(
+    os.getenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", "5000")
+)
+REPLAY_MAX_BACKLOG_JOBS = int(os.getenv("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", "5000"))
 
 
 @dataclass(slots=True)
@@ -99,6 +105,7 @@ def _to_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEventRespons
         consumer_group=event.consumer_group,
         dlq_topic=event.dlq_topic,
         original_key=event.original_key,
+        error_reason_code=event.error_reason_code,
         error_reason=event.error_reason,
         correlation_id=event.correlation_id,
         payload_excerpt=event.payload_excerpt,
@@ -1018,6 +1025,29 @@ class IngestionJobService:
             )
 
     async def assert_retry_allowed(self, submitted_at: datetime) -> None:
+        await self.assert_retry_allowed_for_records(submitted_at=submitted_at, replay_record_count=1)
+
+    async def _count_backlog_jobs(self) -> int:
+        async for db in get_async_db_session():
+            backlog = int(
+                (
+                    await db.scalar(
+                        select(func.count(DBIngestionJob.id)).where(
+                            DBIngestionJob.status.in_(("accepted", "queued"))
+                        )
+                    )
+                )
+                or 0
+            )
+            return backlog
+        return 0
+
+    async def assert_retry_allowed_for_records(
+        self,
+        *,
+        submitted_at: datetime,
+        replay_record_count: int,
+    ) -> None:
         mode = await self.get_ops_mode()
         if mode.mode == "paused":
             raise PermissionError("Retries are blocked while ingestion is paused.")
@@ -1028,6 +1058,25 @@ class IngestionJobService:
             raise PermissionError("Current time is after configured replay window.")
         if now < submitted_at:
             raise PermissionError("Retry blocked: job submission timestamp is in the future.")
+        if replay_record_count > REPLAY_MAX_RECORDS_PER_REQUEST:
+            raise PermissionError(
+                "Retry blocked: requested replay record count exceeds configured limit. "
+                f"requested_records={replay_record_count}, "
+                f"max_records={REPLAY_MAX_RECORDS_PER_REQUEST}."
+            )
+        backlog_jobs = await self._count_backlog_jobs()
+        if backlog_jobs >= REPLAY_MAX_BACKLOG_JOBS:
+            raise PermissionError(
+                "Retry blocked: ingestion backlog exceeds configured replay safety threshold. "
+                f"backlog_jobs={backlog_jobs}, max_backlog_jobs={REPLAY_MAX_BACKLOG_JOBS}."
+            )
+
+    async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
+        now = datetime.now(UTC)
+        await self.assert_retry_allowed_for_records(
+            submitted_at=now,
+            replay_record_count=max(1, int(record_count)),
+        )
 
 
 _INGESTION_JOB_SERVICE = IngestionJobService()

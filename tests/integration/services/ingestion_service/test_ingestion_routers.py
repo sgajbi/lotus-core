@@ -313,6 +313,7 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                     "consumer_group": consumer_group or "persistence-service-group",
                     "dlq_topic": "persistence_service.dlq",
                     "original_key": "TXN-2026-000145",
+                    "error_reason_code": "VALIDATION_ERROR",
                     "error_reason": "ValidationError: portfolio_id is required",
                     "correlation_id": "ING:test-correlation-id",
                     "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
@@ -329,6 +330,7 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 consumer_group="persistence-service-group",
                 dlq_topic="persistence_service.dlq",
                 original_key="TXN-2026-000145",
+                error_reason_code="VALIDATION_ERROR",
                 error_reason="ValidationError: portfolio_id is required",
                 correlation_id="ING:test-correlation-id",
                 payload_excerpt='{"transaction_id":"TXN-2026-000145"}',
@@ -527,6 +529,17 @@ async def async_test_client(mock_kafka_producer: MagicMock):
         async def assert_retry_allowed(self, submitted_at: datetime) -> None:
             if self.mode == "paused":
                 raise PermissionError("Retries are blocked while ingestion is paused.")
+
+        async def assert_retry_allowed_for_records(
+            self,
+            *,
+            submitted_at: datetime,
+            replay_record_count: int,
+        ) -> None:
+            await self.assert_retry_allowed(submitted_at)
+
+        async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
+            return None
 
     fake_job_service = FakeIngestionJobService()
     app.dependency_overrides[get_ingestion_job_service] = lambda: fake_job_service

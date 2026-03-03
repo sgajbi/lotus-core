@@ -5,7 +5,11 @@ import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from confluent_kafka import KafkaError
-from portfolio_common.kafka_consumer import BaseConsumer, RetryableConsumerError
+from portfolio_common.kafka_consumer import (
+    BaseConsumer,
+    RetryableConsumerError,
+    classify_dlq_reason_code,
+)
 from portfolio_common.logging_utils import correlation_id_var
 
 pytestmark = pytest.mark.asyncio
@@ -144,11 +148,20 @@ async def test_dlq_payload_is_correct(test_consumer: ConcreteTestConsumer, mock_
     assert payload['original_topic'] == "test-topic"
     assert payload['original_key'] == "key3"
     assert payload['original_value'] == '{"data": "value3"}'
+    assert payload["error_reason_code"] == "VALIDATION_ERROR"
     assert "Test Error" in payload['error_reason']
     assert "Traceback" in payload['error_traceback']
     
     headers_dict = dict(call_args['headers'])
     assert headers_dict['correlation_id'] == correlation_id.encode('utf-8')
+
+
+async def test_classify_dlq_reason_code_deserialization():
+    assert classify_dlq_reason_code(ValueError("JSON decode failed at position 13")) == "DESERIALIZATION_ERROR"
+
+
+async def test_classify_dlq_reason_code_timeout():
+    assert classify_dlq_reason_code(RuntimeError("downstream timeout while reading response")) == "DOWNSTREAM_TIMEOUT"
 
 
 async def test_consumer_applies_runtime_overrides(monkeypatch):

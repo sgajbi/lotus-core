@@ -20,6 +20,34 @@ from .logging_utils import correlation_id_var, generate_correlation_id
 
 logger = logging.getLogger(__name__)
 
+DLQ_REASON_CODE_VALIDATION = "VALIDATION_ERROR"
+DLQ_REASON_CODE_DESERIALIZATION = "DESERIALIZATION_ERROR"
+DLQ_REASON_CODE_DATA_INTEGRITY = "DATA_INTEGRITY_ERROR"
+DLQ_REASON_CODE_DOWNSTREAM_TIMEOUT = "DOWNSTREAM_TIMEOUT"
+DLQ_REASON_CODE_AUTHORIZATION = "AUTHORIZATION_ERROR"
+DLQ_REASON_CODE_UNCLASSIFIED = "UNCLASSIFIED_PROCESSING_ERROR"
+
+
+def classify_dlq_reason_code(error: Exception) -> str:
+    """
+    Maps terminal consumer exceptions into a deterministic reason-code taxonomy.
+    """
+    error_name = error.__class__.__name__.lower()
+    error_text = str(error).lower()
+    combined = f"{error_name}:{error_text}"
+
+    if "json" in combined and any(token in combined for token in ("decode", "deserialize", "parsing")):
+        return DLQ_REASON_CODE_DESERIALIZATION
+    if any(token in combined for token in ("validation", "missing", "required", "invalid", "schema", "keyerror", "valueerror", "typeerror")):
+        return DLQ_REASON_CODE_VALIDATION
+    if any(token in combined for token in ("integrity", "foreign key", "constraint", "unique violation", "duplicate key")):
+        return DLQ_REASON_CODE_DATA_INTEGRITY
+    if any(token in combined for token in ("timeout", "timed out", "deadline exceeded")):
+        return DLQ_REASON_CODE_DOWNSTREAM_TIMEOUT
+    if any(token in combined for token in ("permission", "forbidden", "unauthorized", "access denied", "auth")):
+        return DLQ_REASON_CODE_AUTHORIZATION
+    return DLQ_REASON_CODE_UNCLASSIFIED
+
 
 class BaseConsumer(ABC):
     """
@@ -84,6 +112,7 @@ class BaseConsumer(ABC):
 
         try:
             correlation_id = correlation_id_var.get()
+            error_reason_code = classify_dlq_reason_code(error)
             
             dlq_payload = {
                 "correlation_id": correlation_id,
@@ -91,6 +120,7 @@ class BaseConsumer(ABC):
                 "original_key": msg.key().decode('utf-8') if msg.key() else None,
                 "original_value": msg.value().decode('utf-8'),
                 "error_timestamp": datetime.now(timezone.utc).isoformat(),
+                "error_reason_code": error_reason_code,
                 "error_reason": str(error),
                 "error_traceback": traceback.format_exc()
             }
@@ -106,14 +136,21 @@ class BaseConsumer(ABC):
             )
             self._producer.flush(timeout=5)
             await self._record_consumer_dlq_event(
-                msg=msg, error=error, correlation_id=correlation_id
+                msg=msg,
+                error=error,
+                error_reason_code=error_reason_code,
+                correlation_id=correlation_id,
             )
             logger.warning(f"Message with key '{dlq_payload['original_key']}' sent to DLQ '{self.dlq_topic}'.")
         except Exception as e:
             logger.error(f"FATAL: Could not send message to DLQ. Error: {e}", exc_info=True)
 
     async def _record_consumer_dlq_event(
-        self, msg: Message, error: Exception, correlation_id: str | None
+        self,
+        msg: Message,
+        error: Exception,
+        error_reason_code: str,
+        correlation_id: str | None,
     ) -> None:
         payload_excerpt = None
         try:
@@ -127,6 +164,7 @@ class BaseConsumer(ABC):
             consumer_group=self._consumer_config["group.id"],
             dlq_topic=self.dlq_topic or "",
             original_key=msg.key().decode("utf-8") if msg.key() else None,
+            error_reason_code=error_reason_code,
             error_reason=str(error),
             correlation_id=correlation_id,
             payload_excerpt=payload_excerpt,

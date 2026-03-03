@@ -1,7 +1,7 @@
 # RFC 065 - Event-Driven Calculator Scalability and Reliability Roadmap
 
 ## Status
-In Progress (Phase 1 hardening underway)
+In Progress (Phase 3 hardening underway)
 
 ## Date
 2026-03-03
@@ -198,3 +198,23 @@ Acceptance:
 3. Added autoscaling deployment artifacts:
 - KEDA `ScaledObject` definitions for core calculator consumer groups
 - runbook-style usage notes and tuning guidance
+
+### Phase 3 progress (2026-03-03)
+1. Implemented canonical consumer DLQ reason-code taxonomy and persisted it durably:
+- added deterministic classifier in `BaseConsumer` for terminal failures
+- DLQ payload now includes `error_reason_code` for runbook routing and analytics
+- `consumer_dlq_events` now stores `error_reason_code` (indexed) via Alembic migration
+2. Exposed reason-code metadata through ingestion operations APIs:
+- `ConsumerDlqEventResponse` now includes `error_reason_code`
+- ingestion service DLQ event mapping includes new canonical field
+3. Added replay blast-radius guardrails:
+- replay max-record guardrail (`LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST`)
+- replay backlog guardrail (`LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS`)
+- guardrails enforced for:
+  - ingestion job retry replays
+  - consumer DLQ correlated replays
+  - transaction reprocessing publish endpoint
+4. Added meaningful tests:
+- DLQ taxonomy and payload reason-code unit tests
+- replay guardrail unit tests for record and backlog limits
+- ingestion router integration coverage updated for new reason-code field and guardrail methods
