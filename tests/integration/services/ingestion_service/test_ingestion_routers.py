@@ -461,6 +461,15 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 "operating_band_yellow_dlq_pressure_ratio": Decimal("0.25"),
                 "operating_band_orange_dlq_pressure_ratio": Decimal("0.50"),
                 "operating_band_red_dlq_pressure_ratio": Decimal("1.0"),
+                "calculator_peak_lag_age_seconds": {
+                    "position": 30,
+                    "cost": 45,
+                    "valuation": 60,
+                    "cashflow": 45,
+                    "timeseries": 120,
+                },
+                "replay_isolation_mode": "shared_workers",
+                "partition_growth_strategy": "scale_out_only",
             }
 
         async def get_reprocessing_queue_health(self):
@@ -1076,6 +1085,12 @@ async def test_ingestion_operating_policy_endpoint(async_test_client: httpx.Asyn
     assert "reprocessing_worker_batch_size" in body
     assert "valuation_scheduler_dispatch_rounds" in body
     assert "operating_band_red_backlog_age_seconds" in body
+    assert "calculator_peak_lag_age_seconds" in body
+    assert body["replay_isolation_mode"] in {"shared_workers", "dedicated_workers"}
+    assert body["partition_growth_strategy"] in {
+        "scale_out_only",
+        "pre_shard_large_portfolios",
+    }
 
 
 async def test_ingestion_reprocessing_queue_health_endpoint(async_test_client: httpx.AsyncClient):

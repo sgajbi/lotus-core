@@ -1,7 +1,7 @@
 # RFC 065 - Event-Driven Calculator Scalability and Reliability Roadmap
 
 ## Status
-In Progress (Phase 4 optimization underway)
+Completed (Institutional-scale extension implemented)
 
 ## Date
 2026-03-03
@@ -215,16 +215,36 @@ Acceptance:
 4. Job-table contention
 - Mitigation: claim strategy tuning, index optimization, batch updates
 
-## 9. Open Decisions
-1. Maximum acceptable lag age by calculator under peak load.
-2. Replay isolation policy (shared workers vs dedicated workers).
-3. Partition count growth strategy and rebalancing procedure.
+## 9. Decisions (Finalized)
+1. Maximum acceptable lag age by calculator under peak load:
+- position: 30 sec
+- cost: 45 sec
+- valuation: 60 sec
+- cashflow: 45 sec
+- timeseries: 120 sec
+- exposed via `GET /ingestion/health/policy` as `calculator_peak_lag_age_seconds`
+2. Replay isolation policy:
+- default: `shared_workers`
+- institutional option: `dedicated_workers`
+- exposed via `GET /ingestion/health/policy` as `replay_isolation_mode`
+3. Partition growth strategy:
+- default: `scale_out_only`
+- institutional option for known hot keys: `pre_shard_large_portfolios`
+- exposed via `GET /ingestion/health/policy` as `partition_growth_strategy`
 
 ## 10. Definition of Done
 1. All phases completed or formally deferred with rationale.
 2. SLOs consistently met in load and replay scenarios.
 3. No financial correctness regressions in characterization suites.
 4. Full operational runbook and monitoring coverage in place.
+
+## 10.1 Institutional-Scale Extension (Required by Product GTM)
+This extension ensures readiness for unknown institutional load profiles without architectural rework.
+
+1. All operating thresholds that affect scale/replay behavior must be runtime-introspectable through API contracts.
+2. Capacity/saturation signals must be queryable by operations and automation without DB access.
+3. Peak-load lag SLO envelopes, replay isolation mode, and partition growth strategy must be explicit policy decisions (not tribal knowledge).
+4. CI and runbooks must consume the same policy surface used by runtime services.
 
 ## 11. Implementation Progress (2026-03-03)
 
@@ -379,3 +399,10 @@ Acceptance:
 - added `GET /ingestion/health/capacity` with per endpoint/entity throughput and saturation signals
 - endpoint derives RFC-065 canonical capacity variables (`lambda_in`, `mu_msg`, `rho`, `headroom`, `T_drain`) from ingestion control-plane data
 - added focused unit coverage for capacity math and integration coverage for endpoint contract shape
+11. Finalized institutional-scale policy decision contracts:
+- resolved previously open decisions into explicit runtime policy fields
+- `GET /ingestion/health/policy` now exposes:
+  - `calculator_peak_lag_age_seconds`
+  - `replay_isolation_mode`
+  - `partition_growth_strategy`
+- added unit + integration coverage to lock these contracts and prevent policy drift

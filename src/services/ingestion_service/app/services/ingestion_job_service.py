@@ -95,6 +95,30 @@ VALUATION_SCHEDULER_DISPATCH_ROUNDS = int(
     os.getenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "3")
 )
 CAPACITY_ASSUMED_REPLICAS = int(os.getenv("LOTUS_CORE_CAPACITY_ASSUMED_REPLICAS", "1"))
+REPLAY_ISOLATION_MODE = os.getenv("LOTUS_CORE_REPLAY_ISOLATION_MODE", "shared_workers")
+PARTITION_GROWTH_STRATEGY = os.getenv("LOTUS_CORE_PARTITION_GROWTH_STRATEGY", "scale_out_only")
+_DEFAULT_CALCULATOR_PEAK_LAG_AGE = {
+    "position": 30,
+    "cost": 45,
+    "valuation": 60,
+    "cashflow": 45,
+    "timeseries": 120,
+}
+_calculator_peak_lag_age_raw = os.getenv("LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON")
+if _calculator_peak_lag_age_raw:
+    try:
+        _parsed_peak_lag_age = json.loads(_calculator_peak_lag_age_raw)
+        if isinstance(_parsed_peak_lag_age, dict):
+            CALCULATOR_PEAK_LAG_AGE_SECONDS = {
+                key: int(_parsed_peak_lag_age.get(key, default))
+                for key, default in _DEFAULT_CALCULATOR_PEAK_LAG_AGE.items()
+            }
+        else:
+            CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_DEFAULT_CALCULATOR_PEAK_LAG_AGE)
+    except Exception:
+        CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_DEFAULT_CALCULATOR_PEAK_LAG_AGE)
+else:
+    CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_DEFAULT_CALCULATOR_PEAK_LAG_AGE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -751,6 +775,20 @@ class IngestionJobService:
         )
 
     async def get_operating_policy(self) -> IngestionOpsPolicyResponse:
+        replay_isolation_mode = (
+            REPLAY_ISOLATION_MODE
+            if REPLAY_ISOLATION_MODE in {"shared_workers", "dedicated_workers"}
+            else "shared_workers"
+        )
+        partition_growth_strategy = (
+            PARTITION_GROWTH_STRATEGY
+            if PARTITION_GROWTH_STRATEGY in {"scale_out_only", "pre_shard_large_portfolios"}
+            else "scale_out_only"
+        )
+        calculator_peak_lag_age_seconds = {
+            key: max(1, int(value))
+            for key, value in CALCULATOR_PEAK_LAG_AGE_SECONDS.items()
+        }
         values = {
             "lookback_minutes_default": DEFAULT_LOOKBACK_MINUTES,
             "failure_rate_threshold_default": str(DEFAULT_FAILURE_RATE_THRESHOLD),
@@ -774,6 +812,9 @@ class IngestionJobService:
             "operating_band_yellow_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio),
             "operating_band_orange_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.orange_dlq_pressure_ratio),
             "operating_band_red_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.red_dlq_pressure_ratio),
+            "calculator_peak_lag_age_seconds": calculator_peak_lag_age_seconds,
+            "replay_isolation_mode": replay_isolation_mode,
+            "partition_growth_strategy": partition_growth_strategy,
         }
         serialized = json.dumps(values, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
@@ -802,6 +843,9 @@ class IngestionJobService:
             operating_band_yellow_dlq_pressure_ratio=OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio,
             operating_band_orange_dlq_pressure_ratio=OPERATING_BAND_POLICY.orange_dlq_pressure_ratio,
             operating_band_red_dlq_pressure_ratio=OPERATING_BAND_POLICY.red_dlq_pressure_ratio,
+            calculator_peak_lag_age_seconds=calculator_peak_lag_age_seconds,
+            replay_isolation_mode=replay_isolation_mode,  # type: ignore[arg-type]
+            partition_growth_strategy=partition_growth_strategy,  # type: ignore[arg-type]
         )
 
     async def get_reprocessing_queue_health(self) -> IngestionReprocessingQueueHealthResponse:

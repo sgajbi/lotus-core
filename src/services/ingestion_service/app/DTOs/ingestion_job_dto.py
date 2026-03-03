@@ -336,6 +336,35 @@ class IngestionOpsPolicyResponse(BaseModel):
         description="DLQ pressure threshold that triggers red operating band.",
         examples=["1.0"],
     )
+    calculator_peak_lag_age_seconds: dict[str, int] = Field(
+        description=(
+            "Peak-load lag-age SLO envelope (seconds) by calculator group "
+            "(position, cost, valuation, cashflow, timeseries)."
+        ),
+        examples=[
+            {
+                "position": 30,
+                "cost": 45,
+                "valuation": 60,
+                "cashflow": 45,
+                "timeseries": 120,
+            }
+        ],
+    )
+    replay_isolation_mode: Literal["shared_workers", "dedicated_workers"] = Field(
+        description=(
+            "Replay execution isolation policy. `shared_workers` reuses primary workers; "
+            "`dedicated_workers` isolates replay load to dedicated workers."
+        ),
+        examples=["shared_workers"],
+    )
+    partition_growth_strategy: Literal["scale_out_only", "pre_shard_large_portfolios"] = Field(
+        description=(
+            "Kafka partition growth strategy: `scale_out_only` grows topic partitions with standard rebalancing; "
+            "`pre_shard_large_portfolios` reserves extra partitions for hot-key portfolios."
+        ),
+        examples=["scale_out_only"],
+    )
 
 
 class IngestionReprocessingQueueItemResponse(BaseModel):
