@@ -288,3 +288,11 @@ Acceptance:
 - `consumer_dlq_replay_audit(recovery_path, replay_status, requested_at)`
 - `consumer_dlq_replay_audit(replay_fingerprint, replay_status, recovery_path, requested_at)`
 3. Added Alembic migration for index rollout to keep runtime behavior and schema in sync.
+4. Deepened SQL-side aggregate execution for ingestion operations:
+- `get_backlog_breakdown` now uses grouped DB aggregation with conditional counts and backlog oldest-timestamp extraction
+- `get_idempotency_diagnostics` now uses grouped DB aggregation (`count`, `count distinct`, `array_agg distinct`, `min/max`) instead of full-row Python grouping
+- `get_error_budget_status` now computes current/previous windows via aggregate SQL queries instead of loading job rows
+5. Added ingestion-job aggregate indexes for these operations:
+- `ingestion_jobs(submitted_at)`
+- `ingestion_jobs(status, submitted_at)`
+- `ingestion_jobs(idempotency_key, submitted_at)`

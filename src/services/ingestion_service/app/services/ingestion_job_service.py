@@ -427,52 +427,55 @@ class IngestionJobService:
     ) -> IngestionBacklogBreakdownResponse:
         async for db in get_async_db_session():
             since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            jobs = (
-                await db.scalars(
-                    select(DBIngestionJob)
-                    .where(DBIngestionJob.submitted_at >= since)
-                    .order_by(desc(DBIngestionJob.submitted_at))
-                )
-            ).all()
-
-            grouped: dict[tuple[str, str], dict[str, Any]] = {}
             now_utc = datetime.now(UTC)
-            for job in jobs:
-                key = (job.endpoint, job.entity_type)
-                state = grouped.setdefault(
-                    key,
-                    {
-                        "total": 0,
-                        "accepted": 0,
-                        "queued": 0,
-                        "failed": 0,
-                        "oldest_backlog_submitted_at": None,
-                    },
+            rows = await db.execute(
+                select(
+                    DBIngestionJob.endpoint,
+                    DBIngestionJob.entity_type,
+                    func.count(DBIngestionJob.id).label("total_jobs"),
+                    func.sum(case((DBIngestionJob.status == "accepted", 1), else_=0)).label(
+                        "accepted_jobs"
+                    ),
+                    func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)).label(
+                        "queued_jobs"
+                    ),
+                    func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
+                        "failed_jobs"
+                    ),
+                    func.min(
+                        case(
+                            (
+                                DBIngestionJob.status.in_(["accepted", "queued"]),
+                                DBIngestionJob.submitted_at,
+                            ),
+                            else_=None,
+                        )
+                    ).label("oldest_backlog_submitted_at"),
                 )
-                state["total"] += 1
-                if job.status == "accepted":
-                    state["accepted"] += 1
-                elif job.status == "queued":
-                    state["queued"] += 1
-                elif job.status == "failed":
-                    state["failed"] += 1
-
-                if job.status in {"accepted", "queued"}:
-                    oldest = state["oldest_backlog_submitted_at"]
-                    if oldest is None or job.submitted_at < oldest:
-                        state["oldest_backlog_submitted_at"] = job.submitted_at
+                .where(DBIngestionJob.submitted_at >= since)
+                .group_by(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
+            )
 
             rows: list[IngestionBacklogBreakdownItemResponse] = []
-            for (endpoint, entity_type), state in grouped.items():
-                backlog_jobs = int(state["accepted"] + state["queued"])
-                oldest_backlog_submitted_at = state["oldest_backlog_submitted_at"]
+            for (
+                endpoint,
+                entity_type,
+                total_jobs_raw,
+                accepted_jobs_raw,
+                queued_jobs_raw,
+                failed_jobs_raw,
+                oldest_backlog_submitted_at,
+            ) in rows:
+                accepted_jobs = int(accepted_jobs_raw or 0)
+                queued_jobs = int(queued_jobs_raw or 0)
+                failed_jobs = int(failed_jobs_raw or 0)
+                backlog_jobs = int(accepted_jobs + queued_jobs)
                 oldest_backlog_age_seconds = (
                     float((now_utc - oldest_backlog_submitted_at).total_seconds())
                     if oldest_backlog_submitted_at is not None
                     else 0.0
                 )
-                total_jobs = int(state["total"])
-                failed_jobs = int(state["failed"])
+                total_jobs = int(total_jobs_raw or 0)
                 failure_rate = (
                     Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
                 )
@@ -481,8 +484,8 @@ class IngestionJobService:
                         endpoint=endpoint,
                         entity_type=entity_type,
                         total_jobs=total_jobs,
-                        accepted_jobs=int(state["accepted"]),
-                        queued_jobs=int(state["queued"]),
+                        accepted_jobs=accepted_jobs,
+                        queued_jobs=queued_jobs,
                         failed_jobs=failed_jobs,
                         backlog_jobs=backlog_jobs,
                         oldest_backlog_submitted_at=oldest_backlog_submitted_at,
@@ -812,39 +815,46 @@ class IngestionJobService:
     ) -> IngestionIdempotencyDiagnosticsResponse:
         async for db in get_async_db_session():
             since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            rows = (
-                await db.scalars(
-                    select(DBIngestionJob)
-                    .where(
-                        and_(
-                            DBIngestionJob.submitted_at >= since,
-                            DBIngestionJob.idempotency_key.is_not(None),
-                        )
-                    )
-                    .order_by(desc(DBIngestionJob.submitted_at))
-                )
-            ).all()
-
-            grouped: dict[str, list[DBIngestionJob]] = {}
-            for row in rows:
-                if row.idempotency_key is None:
-                    continue
-                grouped.setdefault(row.idempotency_key, []).append(row)
-
             items: list[IngestionIdempotencyDiagnosticItemResponse] = []
+            rows = await db.execute(
+                select(
+                    DBIngestionJob.idempotency_key,
+                    func.count(DBIngestionJob.id).label("usage_count"),
+                    func.count(func.distinct(DBIngestionJob.endpoint)).label("endpoint_count"),
+                    func.array_agg(func.distinct(DBIngestionJob.endpoint)).label("endpoints"),
+                    func.min(DBIngestionJob.submitted_at).label("first_seen_at"),
+                    func.max(DBIngestionJob.submitted_at).label("last_seen_at"),
+                )
+                .where(
+                    and_(
+                        DBIngestionJob.submitted_at >= since,
+                        DBIngestionJob.idempotency_key.is_not(None),
+                    )
+                )
+                .group_by(DBIngestionJob.idempotency_key)
+                .order_by(desc("usage_count"))
+                .limit(limit)
+            )
             collisions = 0
-            for key, jobs in grouped.items():
-                endpoints = sorted({job.endpoint for job in jobs})
-                collision_detected = len(endpoints) > 1
+            for (
+                key,
+                usage_count_raw,
+                endpoint_count_raw,
+                endpoints_raw,
+                first_seen_at,
+                last_seen_at,
+            ) in rows:
+                usage_count = int(usage_count_raw or 0)
+                endpoint_count = int(endpoint_count_raw or 0)
+                endpoints = sorted(list(endpoints_raw or []))
+                collision_detected = endpoint_count > 1
                 if collision_detected:
                     collisions += 1
-                first_seen_at = min(job.submitted_at for job in jobs)
-                last_seen_at = max(job.submitted_at for job in jobs)
                 items.append(
                     IngestionIdempotencyDiagnosticItemResponse(
                         idempotency_key=key,
-                        usage_count=len(jobs),
-                        endpoint_count=len(endpoints),
+                        usage_count=usage_count,
+                        endpoint_count=endpoint_count,
                         endpoints=endpoints,
                         first_seen_at=first_seen_at,
                         last_seen_at=last_seen_at,
@@ -852,7 +862,6 @@ class IngestionJobService:
                     )
                 )
 
-            items = sorted(items, key=lambda item: item.usage_count, reverse=True)[:limit]
             return IngestionIdempotencyDiagnosticsResponse(
                 lookback_minutes=lookback_minutes,
                 total_keys=len(items),
@@ -877,36 +886,48 @@ class IngestionJobService:
             now_utc = datetime.now(UTC)
             current_since = now_utc - timedelta(minutes=lookback_minutes)
             previous_since = now_utc - timedelta(minutes=lookback_minutes * 2)
-
-            current_jobs = (
-                await db.scalars(
-                    select(DBIngestionJob).where(DBIngestionJob.submitted_at >= current_since)
+            current_row = (
+                await db.execute(
+                    select(
+                        func.count(DBIngestionJob.id).label("total_jobs"),
+                        func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
+                            "failed_jobs"
+                        ),
+                        func.sum(
+                            case(
+                                (DBIngestionJob.status.in_(["accepted", "queued"]), 1),
+                                else_=0,
+                            )
+                        ).label("backlog_jobs"),
+                    ).where(DBIngestionJob.submitted_at >= current_since)
                 )
-            ).all()
-            previous_jobs = (
-                await db.scalars(
-                    select(DBIngestionJob).where(
+            ).one()
+            previous_row = (
+                await db.execute(
+                    select(
+                        func.sum(
+                            case(
+                                (DBIngestionJob.status.in_(["accepted", "queued"]), 1),
+                                else_=0,
+                            )
+                        ).label("previous_backlog_jobs"),
+                    ).where(
                         and_(
                             DBIngestionJob.submitted_at >= previous_since,
                             DBIngestionJob.submitted_at < current_since,
                         )
                     )
                 )
-            ).all()
+            ).one()
 
-            total_jobs = len(current_jobs)
-            failed_jobs = len([job for job in current_jobs if job.status == "failed"])
+            total_jobs = int(current_row[0] or 0)
+            failed_jobs = int(current_row[1] or 0)
             failure_rate = (
                 Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
             )
             remaining_budget = max(Decimal("0"), failure_rate_threshold - failure_rate)
-
-            backlog_jobs = len(
-                [job for job in current_jobs if job.status in {"accepted", "queued"}]
-            )
-            previous_backlog_jobs = len(
-                [job for job in previous_jobs if job.status in {"accepted", "queued"}]
-            )
+            backlog_jobs = int(current_row[2] or 0)
+            previous_backlog_jobs = int(previous_row[0] or 0)
             backlog_growth = backlog_jobs - previous_backlog_jobs
 
             return IngestionErrorBudgetStatusResponse(
