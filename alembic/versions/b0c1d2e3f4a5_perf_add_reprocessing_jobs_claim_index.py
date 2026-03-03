@@ -1,7 +1,7 @@
 """perf: add composite claim index for reprocessing_jobs
 
 Revision ID: b0c1d2e3f4a5
-Revises: a1d9c8b7e6f5
+Revises: f2a3b4c5d6e7
 Create Date: 2026-03-03 12:00:00
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b0c1d2e3f4a5"
-down_revision: Union[str, None] = "a1d9c8b7e6f5"
+down_revision: Union[str, None] = "f2a3b4c5d6e7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
