@@ -346,3 +346,7 @@ Acceptance:
 - `GET /ingestion/health/policy` now includes `policy_version` and `policy_fingerprint`
 - fingerprint is computed from canonical active policy values with stable JSON serialization and SHA-256 truncation
 - enables automation to detect runtime policy drift with a single contract read
+7. Added reprocessing-queue health endpoint for operations visibility:
+- added `GET /ingestion/health/reprocessing-queue` with per-job-type pending/processing/failed counts
+- endpoint includes oldest pending age signal for queue pressure triage and worker-scaling decisions
+- added unit and integration coverage to lock response contract and aggregation behavior
