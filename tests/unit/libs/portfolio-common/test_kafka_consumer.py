@@ -149,3 +149,53 @@ async def test_dlq_payload_is_correct(test_consumer: ConcreteTestConsumer, mock_
     
     headers_dict = dict(call_args['headers'])
     assert headers_dict['correlation_id'] == correlation_id.encode('utf-8')
+
+
+async def test_consumer_applies_runtime_overrides(monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
+        '{"max.poll.interval.ms": 180000, "fetch.min.bytes": 1}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
+        '{"test-group": {"fetch.min.bytes": 4096, "max.partition.fetch.bytes": 1048576}}',
+    )
+
+    with patch("portfolio_common.kafka_consumer.Consumer", return_value=MagicMock()), patch(
+        "portfolio_common.kafka_consumer.get_kafka_producer", return_value=MagicMock()
+    ):
+        consumer = ConcreteTestConsumer(
+            bootstrap_servers="mock_bs",
+            topic="test-topic",
+            group_id="test-group",
+            dlq_topic="test.dlq",
+        )
+
+    assert consumer._consumer_config["max.poll.interval.ms"] == 180000
+    assert consumer._consumer_config["fetch.min.bytes"] == 4096
+    assert consumer._consumer_config["max.partition.fetch.bytes"] == 1048576
+
+
+async def test_consumer_ignores_invalid_runtime_overrides(monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
+        '{"unsupported.key": 1, "enable.auto.commit": "false"}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
+        '{"test-group": {"session.timeout.ms": "45000"}}',
+    )
+
+    with patch("portfolio_common.kafka_consumer.Consumer", return_value=MagicMock()), patch(
+        "portfolio_common.kafka_consumer.get_kafka_producer", return_value=MagicMock()
+    ):
+        consumer = ConcreteTestConsumer(
+            bootstrap_servers="mock_bs",
+            topic="test-topic",
+            group_id="test-group",
+            dlq_topic="test.dlq",
+        )
+
+    assert "unsupported.key" not in consumer._consumer_config
+    assert consumer._consumer_config["enable.auto.commit"] is False
+    assert consumer._consumer_config["session.timeout.ms"] == 45000

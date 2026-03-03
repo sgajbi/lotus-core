@@ -188,3 +188,13 @@ Acceptance:
 1. Unit tests for transaction partition-key guardrails in ingestion service
 2. Unit tests for deterministic transaction ordering helper
 3. Unit test for deterministic ordering in backdated replay flow
+
+### Phase 2 progress (2026-03-03)
+1. Added environment-driven Kafka consumer tuning:
+- global defaults via `LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON`
+- per-consumer-group overrides via `LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON`
+- strict key whitelist and type coercion to prevent unsafe runtime config
+2. Applied runtime tuning automatically in `BaseConsumer` for every service consumer group.
+3. Added autoscaling deployment artifacts:
+- KEDA `ScaledObject` definitions for core calculator consumer groups
+- runbook-style usage notes and tuning guidance
