@@ -218,3 +218,13 @@ Acceptance:
 - DLQ taxonomy and payload reason-code unit tests
 - replay guardrail unit tests for record and backlog limits
 - ingestion router integration coverage updated for new reason-code field and guardrail methods
+
+### Phase 4 progress (2026-03-03)
+1. Reduced ingestion operations query overhead in service hot paths:
+- `get_health_summary` now uses one aggregate SQL statement instead of multiple sequential count queries
+- `get_consumer_lag` now performs grouped SQL aggregation (`count`, `max`) with DB-side sorting/limit instead of loading and grouping full event sets in Python
+2. Added composite indexes for DLQ and replay-audit operational query patterns:
+- `consumer_dlq_events(consumer_group, original_topic, observed_at)`
+- `consumer_dlq_replay_audit(recovery_path, replay_status, requested_at)`
+- `consumer_dlq_replay_audit(replay_fingerprint, replay_status, recovery_path, requested_at)`
+3. Added Alembic migration for index rollout to keep runtime behavior and schema in sync.
