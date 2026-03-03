@@ -325,6 +325,12 @@ Acceptance:
 - worker now emits canonical counters for claimed/completed/failed reprocessing jobs
 - worker now records batch processing duration histogram for claim/process loop latency tracking
 - added focused unit coverage to assert success/failure metric emission paths and timer invocation behavior
+14. Hardened valuation-worker queue observability and hot-path indexing:
+- valuation repository now emits counters for claimed valuation jobs and stale-job resets
+- added focused unit coverage for valuation claim/reset metric emission paths
+- added valuation queue indexes for hot operational paths:
+  - claim ordering (`status, portfolio_id, security_id, valuation_date, id`)
+  - stale-processing scan (`status, updated_at`)
 
 ### Phase 5 progress (2026-03-03)
 1. Added dedicated RFC-065 operational playbook:
