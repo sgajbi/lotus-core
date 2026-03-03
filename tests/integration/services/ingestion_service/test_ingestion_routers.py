@@ -258,6 +258,9 @@ async def async_test_client(mock_kafka_producer: MagicMock):
             return {
                 "lookback_minutes": lookback_minutes,
                 "total_backlog_jobs": 1,
+                "largest_group_backlog_jobs": 1,
+                "largest_group_backlog_share": Decimal("1"),
+                "top_3_backlog_share": Decimal("1"),
                 "groups": [
                     {
                         "endpoint": "/ingest/transactions",
@@ -941,6 +944,8 @@ async def test_ingestion_backlog_breakdown(async_test_client: httpx.AsyncClient)
     body = response.json()
     assert "groups" in body
     assert "total_backlog_jobs" in body
+    assert "largest_group_backlog_share" in body
+    assert "top_3_backlog_share" in body
     assert body["groups"][0]["endpoint"] == "/ingest/transactions"
 
 

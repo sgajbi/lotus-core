@@ -865,7 +865,8 @@ class IngestionJobService:
                 .group_by(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
             )
 
-            rows: list[IngestionBacklogBreakdownItemResponse] = []
+            grouped_rows = rows.all()
+            items: list[IngestionBacklogBreakdownItemResponse] = []
             for (
                 endpoint,
                 entity_type,
@@ -874,7 +875,7 @@ class IngestionJobService:
                 queued_jobs_raw,
                 failed_jobs_raw,
                 oldest_backlog_submitted_at,
-            ) in rows:
+            ) in grouped_rows:
                 accepted_jobs = int(accepted_jobs_raw or 0)
                 queued_jobs = int(queued_jobs_raw or 0)
                 failed_jobs = int(failed_jobs_raw or 0)
@@ -888,7 +889,7 @@ class IngestionJobService:
                 failure_rate = (
                     Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
                 )
-                rows.append(
+                items.append(
                     IngestionBacklogBreakdownItemResponse(
                         endpoint=endpoint,
                         entity_type=entity_type,
@@ -903,21 +904,38 @@ class IngestionJobService:
                     )
                 )
 
-            rows = sorted(
-                rows,
+            items = sorted(
+                items,
                 key=lambda item: (item.backlog_jobs, item.oldest_backlog_age_seconds),
                 reverse=True,
             )[:limit]
 
+            largest_group_backlog_jobs = int(items[0].backlog_jobs if items else 0)
+            if total_backlog_jobs > 0:
+                largest_group_backlog_share = (
+                    Decimal(largest_group_backlog_jobs) / Decimal(total_backlog_jobs)
+                )
+                top_3_backlog_jobs = int(sum(item.backlog_jobs for item in items[:3]))
+                top_3_backlog_share = Decimal(top_3_backlog_jobs) / Decimal(total_backlog_jobs)
+            else:
+                largest_group_backlog_share = Decimal("0")
+                top_3_backlog_share = Decimal("0")
+
             return IngestionBacklogBreakdownResponse(
                 lookback_minutes=lookback_minutes,
                 total_backlog_jobs=total_backlog_jobs,
-                groups=rows,
+                largest_group_backlog_jobs=largest_group_backlog_jobs,
+                largest_group_backlog_share=largest_group_backlog_share,
+                top_3_backlog_share=top_3_backlog_share,
+                groups=items,
             )
 
         return IngestionBacklogBreakdownResponse(
             lookback_minutes=lookback_minutes,
             total_backlog_jobs=0,
+            largest_group_backlog_jobs=0,
+            largest_group_backlog_share=Decimal("0"),
+            top_3_backlog_share=Decimal("0"),
             groups=[],
         )
 
