@@ -190,3 +190,34 @@ async def test_get_support_overview_without_business_date(
     assert response.latest_booked_position_snapshot_date is None
     mock_ops_repo.get_latest_transaction_date_as_of.assert_not_awaited()
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.assert_not_awaited()
+
+
+async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):
+    mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_active_reprocessing_keys_count.return_value = 2
+    mock_ops_repo.get_pending_valuation_jobs_count.return_value = 7
+    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 3
+    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 1
+    mock_ops_repo.get_valuation_failed_jobs_count.return_value = 4
+    mock_ops_repo.get_valuation_failed_jobs_last_hours.return_value = 2
+    mock_ops_repo.get_oldest_pending_valuation_date.return_value = date(2025, 8, 20)
+    mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 5
+    mock_ops_repo.get_processing_aggregation_jobs_count.return_value = 2
+    mock_ops_repo.get_stale_processing_aggregation_jobs_count.return_value = 1
+    mock_ops_repo.get_aggregation_failed_jobs_count.return_value = 1
+    mock_ops_repo.get_aggregation_failed_jobs_last_hours.return_value = 1
+    mock_ops_repo.get_oldest_pending_aggregation_date.return_value = date(2025, 8, 25)
+
+    response = await service.get_calculator_slos("P1", stale_threshold_minutes=15)
+
+    assert response.portfolio_id == "P1"
+    assert response.business_date == date(2025, 8, 30)
+    assert response.stale_threshold_minutes == 15
+    assert response.valuation.pending_jobs == 7
+    assert response.valuation.failed_jobs == 4
+    assert response.valuation.failed_jobs_last_24h == 2
+    assert response.valuation.backlog_age_days == 10
+    assert response.aggregation.pending_jobs == 5
+    assert response.aggregation.failed_jobs == 1
+    assert response.aggregation.backlog_age_days == 5
+    assert response.reprocessing.active_reprocessing_keys == 2

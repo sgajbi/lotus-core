@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -93,6 +93,86 @@ class SupportOverviewResponse(BaseModel):
             "daily_position_snapshot exists for the same portfolio/security/epoch."
         ),
         examples=[0],
+    )
+
+
+class CalculatorSloBucket(BaseModel):
+    pending_jobs: int = Field(
+        ...,
+        description="Count of jobs currently waiting in PENDING state.",
+        examples=[12],
+    )
+    processing_jobs: int = Field(
+        ...,
+        description="Count of jobs actively processing.",
+        examples=[3],
+    )
+    stale_processing_jobs: int = Field(
+        ...,
+        description="Count of PROCESSING jobs older than stale threshold (15 minutes).",
+        examples=[1],
+    )
+    failed_jobs: int = Field(
+        ...,
+        description="Count of jobs currently in FAILED terminal state.",
+        examples=[0],
+    )
+    failed_jobs_last_24h: int = Field(
+        ...,
+        description="Count of jobs that moved to FAILED state in the last 24 hours.",
+        examples=[2],
+    )
+    oldest_open_job_date: Optional[date] = Field(
+        None,
+        description="Oldest business date among open jobs (PENDING/PROCESSING).",
+        examples=["2026-02-25"],
+    )
+    backlog_age_days: Optional[int] = Field(
+        None,
+        description=(
+            "Age in days from oldest_open_job_date to business_date "
+            "(or current UTC date when business_date is unavailable)."
+        ),
+        examples=[7],
+    )
+
+
+class ReprocessingSloBucket(BaseModel):
+    active_reprocessing_keys: int = Field(
+        ...,
+        description="Number of position keys currently in REPROCESSING state.",
+        examples=[4],
+    )
+
+
+class CalculatorSloResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Unique portfolio identifier.", examples=["PF-001"])
+    business_date: Optional[date] = Field(
+        None,
+        description="Latest business date from default business calendar.",
+        examples=["2026-03-02"],
+    )
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold used to classify stale processing jobs.",
+        examples=[15],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this SLO snapshot was generated.",
+        examples=["2026-03-03T10:05:11Z"],
+    )
+    valuation: CalculatorSloBucket = Field(
+        ...,
+        description="Valuation calculator SLO snapshot for this portfolio.",
+    )
+    aggregation: CalculatorSloBucket = Field(
+        ...,
+        description="Timeseries aggregation SLO snapshot for this portfolio.",
+    )
+    reprocessing: ReprocessingSloBucket = Field(
+        ...,
+        description="Reprocessing SLO snapshot for this portfolio.",
     )
 
 

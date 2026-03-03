@@ -4,9 +4,12 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.operations_dto import (
+    CalculatorSloBucket,
+    CalculatorSloResponse,
     LineageKeyListResponse,
     LineageKeyRecord,
     LineageResponse,
+    ReprocessingSloBucket,
     SupportJobListResponse,
     SupportJobRecord,
     SupportOverviewResponse,
@@ -88,6 +91,84 @@ class OperationsService:
             latest_position_snapshot_date=latest_position_snapshot_date_unbounded,
             latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
             position_snapshot_history_mismatch_count=position_snapshot_history_mismatch_count,
+        )
+
+    async def get_calculator_slos(
+        self, portfolio_id: str, stale_threshold_minutes: int = 15
+    ) -> CalculatorSloResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        (
+            latest_business_date,
+            active_reprocessing_keys,
+            valuation_pending,
+            valuation_processing,
+            valuation_stale_processing,
+            valuation_failed,
+            valuation_failed_last_24h,
+            valuation_oldest_open,
+            aggregation_pending,
+            aggregation_processing,
+            aggregation_stale_processing,
+            aggregation_failed,
+            aggregation_failed_last_24h,
+            aggregation_oldest_open,
+        ) = await asyncio.gather(
+            self.repo.get_latest_business_date(),
+            self.repo.get_active_reprocessing_keys_count(portfolio_id),
+            self.repo.get_pending_valuation_jobs_count(portfolio_id),
+            self.repo.get_processing_valuation_jobs_count(portfolio_id),
+            self.repo.get_stale_processing_valuation_jobs_count(
+                portfolio_id, stale_minutes=stale_threshold_minutes
+            ),
+            self.repo.get_valuation_failed_jobs_count(portfolio_id),
+            self.repo.get_valuation_failed_jobs_last_hours(portfolio_id, hours=24),
+            self.repo.get_oldest_pending_valuation_date(portfolio_id),
+            self.repo.get_pending_aggregation_jobs_count(portfolio_id),
+            self.repo.get_processing_aggregation_jobs_count(portfolio_id),
+            self.repo.get_stale_processing_aggregation_jobs_count(
+                portfolio_id, stale_minutes=stale_threshold_minutes
+            ),
+            self.repo.get_aggregation_failed_jobs_count(portfolio_id),
+            self.repo.get_aggregation_failed_jobs_last_hours(portfolio_id, hours=24),
+            self.repo.get_oldest_pending_aggregation_date(portfolio_id),
+        )
+
+        reference_date = latest_business_date or datetime.now(timezone.utc).date()
+        valuation_backlog_age_days = (
+            max(0, (reference_date - valuation_oldest_open).days)
+            if valuation_oldest_open is not None
+            else None
+        )
+        aggregation_backlog_age_days = (
+            max(0, (reference_date - aggregation_oldest_open).days)
+            if aggregation_oldest_open is not None
+            else None
+        )
+
+        return CalculatorSloResponse(
+            portfolio_id=portfolio_id,
+            business_date=latest_business_date,
+            stale_threshold_minutes=stale_threshold_minutes,
+            generated_at_utc=datetime.now(timezone.utc),
+            valuation=CalculatorSloBucket(
+                pending_jobs=valuation_pending,
+                processing_jobs=valuation_processing,
+                stale_processing_jobs=valuation_stale_processing,
+                failed_jobs=valuation_failed,
+                failed_jobs_last_24h=valuation_failed_last_24h,
+                oldest_open_job_date=valuation_oldest_open,
+                backlog_age_days=valuation_backlog_age_days,
+            ),
+            aggregation=CalculatorSloBucket(
+                pending_jobs=aggregation_pending,
+                processing_jobs=aggregation_processing,
+                stale_processing_jobs=aggregation_stale_processing,
+                failed_jobs=aggregation_failed,
+                failed_jobs_last_24h=aggregation_failed_last_24h,
+                oldest_open_job_date=aggregation_oldest_open,
+                backlog_age_days=aggregation_backlog_age_days,
+            ),
+            reprocessing=ReprocessingSloBucket(active_reprocessing_keys=active_reprocessing_keys),
         )
 
     async def get_lineage(self, portfolio_id: str, security_id: str) -> LineageResponse:

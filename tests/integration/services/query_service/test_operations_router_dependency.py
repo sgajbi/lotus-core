@@ -62,6 +62,51 @@ async def test_support_overview_unexpected_maps_to_500(async_test_client):
     assert "support overview" in response.json()["detail"].lower()
 
 
+async def test_calculator_slos_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_calculator_slos.return_value = {
+        "portfolio_id": "P1",
+        "business_date": date(2025, 8, 31),
+        "stale_threshold_minutes": 15,
+        "generated_at_utc": "2026-03-03T10:05:11Z",
+        "valuation": {
+            "pending_jobs": 2,
+            "processing_jobs": 1,
+            "stale_processing_jobs": 0,
+            "failed_jobs": 0,
+            "failed_jobs_last_24h": 0,
+            "oldest_open_job_date": date(2025, 8, 31),
+            "backlog_age_days": 0,
+        },
+        "aggregation": {
+            "pending_jobs": 1,
+            "processing_jobs": 0,
+            "stale_processing_jobs": 0,
+            "failed_jobs": 0,
+            "failed_jobs_last_24h": 0,
+            "oldest_open_job_date": date(2025, 8, 31),
+            "backlog_age_days": 0,
+        },
+        "reprocessing": {"active_reprocessing_keys": 0},
+    }
+
+    response = await client.get("/support/portfolios/P1/calculator-slos")
+
+    assert response.status_code == 200
+    assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["valuation"]["pending_jobs"] == 2
+
+
+async def test_calculator_slos_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_calculator_slos.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/calculator-slos")
+
+    assert response.status_code == 500
+    assert "calculator slo snapshot" in response.json()["detail"].lower()
+
+
 async def test_lineage_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage.return_value = {
@@ -220,6 +265,16 @@ async def test_support_overview_not_found_maps_to_404(async_test_client):
     mock_service.get_support_overview.side_effect = ValueError("not found")
 
     response = await client.get("/support/portfolios/P404/overview")
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_calculator_slos_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_calculator_slos.side_effect = ValueError("not found")
+
+    response = await client.get("/support/portfolios/P404/calculator-slos")
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
