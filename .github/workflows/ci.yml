@@ -85,6 +85,7 @@ jobs:
           - suite: unit
           - suite: unit-db
           - suite: integration-lite
+          - suite: ops-contract
           - suite: buy-rfc
           - suite: sell-rfc
     steps:

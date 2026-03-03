@@ -316,3 +316,12 @@ Acceptance:
 - error-budget response now includes replay backlog pressure ratio and DLQ pressure ratio (`P_dlq`) aligned to RFC formulas
 - included raw supporting controls in the same response (`dlq_events_in_window`, `dlq_budget_events_per_window`) for runbook decisions
 - added unit and integration coverage to lock new contract fields and calculations
+
+### Phase 5 progress (2026-03-03)
+1. Added dedicated RFC-065 operational playbook:
+- `docs/operations/RFC-065-Calculator-Scalability-Operations-Playbook.md`
+- includes canonical signal definitions, operating bands, incident workflow, replay safety rules, and incident exit criteria
+2. Added explicit CI smoke contract coverage for ingestion operations APIs:
+- introduced `ops-contract` test suite in `scripts/test_manifest.py`
+- wired suite into CI matrix as `Tests (ops-contract)`
+- added local runner target `make test-ops-contract`
