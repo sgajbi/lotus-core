@@ -316,6 +316,11 @@ Acceptance:
 - error-budget response now includes replay backlog pressure ratio and DLQ pressure ratio (`P_dlq`) aligned to RFC formulas
 - included raw supporting controls in the same response (`dlq_events_in_window`, `dlq_budget_events_per_window`) for runbook decisions
 - added unit and integration coverage to lock new contract fields and calculations
+12. Reduced reprocessing job queue contention with atomic claim semantics:
+- `ReprocessingJobRepository.find_and_claim_jobs` now uses a single `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING *` statement
+- claim flow now increments `attempt_count` and sets timestamps atomically at claim time
+- added composite claim-order index on `reprocessing_jobs(job_type, status, created_at, id)` for hot-path queue scans under load
+- added focused unit tests validating SKIP LOCKED SQL shape and row-to-model mapping
 
 ### Phase 5 progress (2026-03-03)
 1. Added dedicated RFC-065 operational playbook:

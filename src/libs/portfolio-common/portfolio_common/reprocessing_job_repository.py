@@ -3,9 +3,8 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
-from sqlalchemy import update
+from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from .database_models import ReprocessingJob
 
@@ -32,29 +31,33 @@ class ReprocessingJobRepository:
         Finds PENDING jobs, atomically claims them by updating their
         status to PROCESSING, and returns the claimed jobs.
         """
-        # This is a simplified version. A more robust implementation would use SKIP LOCKED.
-        # For our purposes, this is sufficient as we will run a single worker instance.
-        stmt = (
-            select(ReprocessingJob)
-            .where(ReprocessingJob.status == 'PENDING', ReprocessingJob.job_type == job_type)
-            .order_by(ReprocessingJob.created_at.asc())
-            .limit(batch_size)
+        query = text(
+            """
+            UPDATE reprocessing_jobs
+            SET status = 'PROCESSING',
+                updated_at = now(),
+                last_attempted_at = now(),
+                attempt_count = attempt_count + 1
+            WHERE id IN (
+                SELECT id
+                FROM reprocessing_jobs
+                WHERE status = 'PENDING' AND job_type = :job_type
+                ORDER BY created_at ASC, id ASC
+                LIMIT :batch_size
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *;
+            """
         )
-        result = await self.db.execute(stmt)
-        jobs_to_claim = result.scalars().all()
-
-        if not jobs_to_claim:
-            return []
-
-        claimed_ids = [job.id for job in jobs_to_claim]
-        update_stmt = (
-            update(ReprocessingJob)
-            .where(ReprocessingJob.id.in_(claimed_ids))
-            .values(status='PROCESSING', updated_at=datetime.now(timezone.utc), last_attempted_at=datetime.now(timezone.utc))
+        result = await self.db.execute(
+            query,
+            {
+                "job_type": job_type,
+                "batch_size": batch_size,
+            },
         )
-        await self.db.execute(update_stmt)
-
-        return jobs_to_claim
+        claimed_jobs = result.mappings().all()
+        return [ReprocessingJob(**job) for job in claimed_jobs]
 
     async def update_job_status(
         self, job_id: int, status: str, failure_reason: Optional[str] = None
