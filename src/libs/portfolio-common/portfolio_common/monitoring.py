@@ -173,6 +173,30 @@ REPROCESSING_EPOCH_BUMPED_TOTAL = Counter(
     labelnames=("portfolio_id", "security_id"),
 )
 
+REPROCESSING_WORKER_JOBS_CLAIMED_TOTAL = Counter(
+    "reprocessing_worker_jobs_claimed_total",
+    "Total number of reprocessing jobs claimed by the worker.",
+    ["job_type"],
+)
+
+REPROCESSING_WORKER_JOBS_COMPLETED_TOTAL = Counter(
+    "reprocessing_worker_jobs_completed_total",
+    "Total number of reprocessing jobs completed by the worker.",
+    ["job_type"],
+)
+
+REPROCESSING_WORKER_JOBS_FAILED_TOTAL = Counter(
+    "reprocessing_worker_jobs_failed_total",
+    "Total number of reprocessing jobs that failed in worker processing.",
+    ["job_type"],
+)
+
+REPROCESSING_WORKER_BATCH_SECONDS = Histogram(
+    "reprocessing_worker_batch_seconds",
+    "Time taken to claim and process one reprocessing worker batch.",
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
+)
+
 POSITION_STATE_WATERMARK_LAG_DAYS = Gauge(
     "position_state_watermark_lag_days",
     "The current lag in days between the latest business date and a key's watermark.",
@@ -287,6 +311,23 @@ ANALYTICS_EXPORT_PAGE_DEPTH = Histogram(
     labelnames=("dataset_type",),
     buckets=(1, 2, 5, 10, 20, 50, 100, 200),
 )
+
+
+def observe_reprocessing_worker_jobs_claimed(job_type: str, count: int = 1) -> None:
+    REPROCESSING_WORKER_JOBS_CLAIMED_TOTAL.labels(job_type).inc(count)
+
+
+def observe_reprocessing_worker_jobs_completed(job_type: str, count: int = 1) -> None:
+    REPROCESSING_WORKER_JOBS_COMPLETED_TOTAL.labels(job_type).inc(count)
+
+
+def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> None:
+    REPROCESSING_WORKER_JOBS_FAILED_TOTAL.labels(job_type).inc(count)
+
+
+def reprocessing_worker_batch_timer():
+    """Context manager that observes one reprocessing worker batch duration."""
+    return REPROCESSING_WORKER_BATCH_SECONDS.time()
 
 # --------------------------------------------------------------------------------------
 # Optional generic HTTP metrics (use across services if helpful)

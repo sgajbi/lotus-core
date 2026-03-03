@@ -321,6 +321,10 @@ Acceptance:
 - claim flow now increments `attempt_count` and sets timestamps atomically at claim time
 - added composite claim-order index on `reprocessing_jobs(job_type, status, created_at, id)` for hot-path queue scans under load
 - added focused unit tests validating SKIP LOCKED SQL shape and row-to-model mapping
+13. Added dedicated reprocessing-worker observability signals:
+- worker now emits canonical counters for claimed/completed/failed reprocessing jobs
+- worker now records batch processing duration histogram for claim/process loop latency tracking
+- added focused unit coverage to assert success/failure metric emission paths and timer invocation behavior
 
 ### Phase 5 progress (2026-03-03)
 1. Added dedicated RFC-065 operational playbook:
