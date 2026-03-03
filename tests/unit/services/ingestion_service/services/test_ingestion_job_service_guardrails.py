@@ -5,7 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
-from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
+from src.services.ingestion_service.app.services.ingestion_job_service import (
+    IngestionJobService,
+    OperatingBandPolicy,
+    OperatingBandSignals,
+    classify_operating_band,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -182,3 +187,53 @@ async def test_get_operating_band_returns_yellow_for_early_pressure(
     result = await service.get_operating_band()
     assert result.operating_band == "yellow"
     assert result.recommended_action.startswith("Scale up one band")
+
+
+async def test_classify_operating_band_policy_yellow_orange_red_ordering():
+    policy = OperatingBandPolicy(
+        yellow_backlog_age_seconds=10.0,
+        orange_backlog_age_seconds=50.0,
+        red_backlog_age_seconds=100.0,
+        yellow_dlq_pressure_ratio=Decimal("0.20"),
+        orange_dlq_pressure_ratio=Decimal("0.40"),
+        red_dlq_pressure_ratio=Decimal("0.90"),
+    )
+
+    yellow = classify_operating_band(
+        signals=OperatingBandSignals(
+            backlog_age_seconds=12.0,
+            dlq_pressure_ratio=Decimal("0.10"),
+            breach_failure_rate=False,
+            breach_queue_latency=False,
+            breach_backlog_age=False,
+            failure_rate=Decimal("0.00"),
+        ),
+        policy=policy,
+    )
+    assert yellow.operating_band == "yellow"
+
+    orange = classify_operating_band(
+        signals=OperatingBandSignals(
+            backlog_age_seconds=55.0,
+            dlq_pressure_ratio=Decimal("0.10"),
+            breach_failure_rate=False,
+            breach_queue_latency=False,
+            breach_backlog_age=False,
+            failure_rate=Decimal("0.00"),
+        ),
+        policy=policy,
+    )
+    assert orange.operating_band == "orange"
+
+    red = classify_operating_band(
+        signals=OperatingBandSignals(
+            backlog_age_seconds=20.0,
+            dlq_pressure_ratio=Decimal("1.10"),
+            breach_failure_rate=False,
+            breach_queue_latency=False,
+            breach_backlog_age=False,
+            failure_rate=Decimal("0.00"),
+        ),
+        policy=policy,
+    )
+    assert red.operating_band == "red"
