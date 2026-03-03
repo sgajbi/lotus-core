@@ -90,50 +90,87 @@ def _resolve_runtime_ids(
     resolved_benchmark_id = benchmark_id
 
     def _portfolio_ready(candidate_id: str) -> bool:
-        check_urls = [
+        get_urls = [
             f"{query_base_url}/portfolios/{candidate_id}/positions",
             f"{query_base_url}/portfolios/{candidate_id}/transactions?limit=1",
             f"{query_base_url}/support/portfolios/{candidate_id}/overview",
         ]
-        for url in check_urls:
+        post_checks = [
+            (
+                f"{query_base_url}/integration/portfolios/{candidate_id}/analytics/portfolio-timeseries",
+                {
+                    "as_of_date": "2026-03-01",
+                    "period": "three_months",
+                    "frequency": "daily",
+                    "consumer_system": "lotus-performance",
+                    "page": {"page_size": 100},
+                },
+            ),
+            (
+                f"{query_base_url}/integration/portfolios/{candidate_id}/analytics/position-timeseries",
+                {
+                    "as_of_date": "2026-03-01",
+                    "period": "three_months",
+                    "frequency": "daily",
+                    "consumer_system": "lotus-performance",
+                    "page": {"page_size": 100},
+                },
+            ),
+        ]
+        for url in get_urls:
             try:
                 response = session.get(url, timeout=10)
             except requests.RequestException:
                 return False
             if not (200 <= response.status_code < 300):
                 return False
+        for url, payload in post_checks:
+            try:
+                response = session.post(url, json=payload, timeout=15)
+            except requests.RequestException:
+                return False
+            if not (200 <= response.status_code < 300):
+                return False
         return True
 
-    candidate_ids: list[str] = [portfolio_id]
-    try:
-        response = session.get(f"{query_base_url}/lookups/portfolios?limit=50", timeout=10)
-        if response.status_code == 200:
-            payload = response.json()
-            discovered: list[str] = []
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        candidate_ids: list[str] = [portfolio_id]
+        try:
+            response = session.get(f"{query_base_url}/lookups/portfolios?limit=50", timeout=10)
+            if response.status_code == 200:
+                payload = response.json()
+                discovered: list[str] = []
 
-            def _collect_ids(node: Any) -> None:
-                if isinstance(node, dict):
-                    for key in ("portfolio_id", "id", "portfolioId"):
-                        value = node.get(key)
-                        if isinstance(value, str) and value.strip():
-                            discovered.append(value)
-                    for value in node.values():
-                        _collect_ids(value)
-                elif isinstance(node, list):
-                    for item in node:
-                        _collect_ids(item)
+                def _collect_ids(node: Any) -> None:
+                    if isinstance(node, dict):
+                        for key in ("portfolio_id", "id", "portfolioId"):
+                            value = node.get(key)
+                            if isinstance(value, str) and value.strip():
+                                discovered.append(value)
+                        for value in node.values():
+                            _collect_ids(value)
+                    elif isinstance(node, list):
+                        for item in node:
+                            _collect_ids(item)
 
-            _collect_ids(payload)
-            for discovered_id in discovered:
-                if discovered_id not in candidate_ids:
-                    candidate_ids.append(discovered_id)
-    except requests.RequestException:
-        pass
+                _collect_ids(payload)
+                candidate_ids = []
+                for discovered_id in discovered:
+                    if discovered_id not in candidate_ids:
+                        candidate_ids.append(discovered_id)
+                if portfolio_id not in candidate_ids:
+                    candidate_ids.append(portfolio_id)
+        except requests.RequestException:
+            pass
 
-    for candidate_id in candidate_ids:
-        if _portfolio_ready(candidate_id):
-            resolved_portfolio_id = candidate_id
+        for candidate_id in candidate_ids:
+            if _portfolio_ready(candidate_id):
+                resolved_portfolio_id = candidate_id
+                break
+        if resolved_portfolio_id != portfolio_id:
             break
+        time.sleep(2)
 
     if resolved_portfolio_id != portfolio_id:
         print(
