@@ -250,3 +250,57 @@ async def test_get_operating_policy_returns_configured_thresholds(
     assert policy.replay_max_records_per_request >= 1
     assert policy.replay_max_backlog_jobs >= 1
     assert policy.dlq_budget_events_per_window >= 1
+
+
+async def test_get_reprocessing_queue_health_aggregates_by_job_type(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FakeBegin:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class _FakeResult:
+        def mappings(self):
+            return self
+
+        def all(self):
+            now = datetime.now(UTC)
+            return [
+                {
+                    "job_type": "RESET_WATERMARKS",
+                    "pending_jobs": 3,
+                    "processing_jobs": 1,
+                    "failed_jobs": 0,
+                    "oldest_pending_created_at": now - timedelta(seconds=30),
+                },
+                {
+                    "job_type": "REINDEX_SNAPSHOTS",
+                    "pending_jobs": 1,
+                    "processing_jobs": 0,
+                    "failed_jobs": 2,
+                    "oldest_pending_created_at": now - timedelta(seconds=10),
+                },
+            ]
+
+    class _FakeSession:
+        async def execute(self, _stmt):
+            return _FakeResult()
+
+        def begin(self):
+            return _FakeBegin()
+
+    async def _mock_get_async_db_session():
+        yield _FakeSession()
+
+    monkeypatch.setattr(service_module, "get_async_db_session", _mock_get_async_db_session)
+
+    response = await service.get_reprocessing_queue_health()
+    assert response.total_pending_jobs == 4
+    assert response.total_processing_jobs == 1
+    assert response.total_failed_jobs == 2
+    assert response.queues[0].job_type == "RESET_WATERMARKS"
+    assert response.queues[0].oldest_pending_age_seconds > 0

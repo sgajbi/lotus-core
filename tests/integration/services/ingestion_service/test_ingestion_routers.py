@@ -455,6 +455,25 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 "operating_band_red_dlq_pressure_ratio": Decimal("1.0"),
             }
 
+        async def get_reprocessing_queue_health(self):
+            now = datetime.now(UTC)
+            return {
+                "as_of": now,
+                "total_pending_jobs": 4,
+                "total_processing_jobs": 1,
+                "total_failed_jobs": 0,
+                "queues": [
+                    {
+                        "job_type": "RESET_WATERMARKS",
+                        "pending_jobs": 4,
+                        "processing_jobs": 1,
+                        "failed_jobs": 0,
+                        "oldest_pending_created_at": now,
+                        "oldest_pending_age_seconds": 12.5,
+                    }
+                ],
+            }
+
         async def find_successful_replay_audit_by_fingerprint(
             self,
             replay_fingerprint: str,
@@ -1011,6 +1030,16 @@ async def test_ingestion_operating_policy_endpoint(async_test_client: httpx.Asyn
     assert "lookback_minutes_default" in body
     assert "replay_max_records_per_request" in body
     assert "operating_band_red_backlog_age_seconds" in body
+
+
+async def test_ingestion_reprocessing_queue_health_endpoint(async_test_client: httpx.AsyncClient):
+    response = await async_test_client.get("/ingestion/health/reprocessing-queue")
+    assert response.status_code == 200
+    body = response.json()
+    assert "as_of" in body
+    assert body["total_pending_jobs"] >= 0
+    assert body["queues"][0]["job_type"] == "RESET_WATERMARKS"
+    assert "oldest_pending_age_seconds" in body["queues"][0]
 
 
 async def test_ingestion_idempotency_diagnostics_endpoint(async_test_client: httpx.AsyncClient):

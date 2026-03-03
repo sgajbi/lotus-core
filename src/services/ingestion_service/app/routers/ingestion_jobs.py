@@ -23,6 +23,7 @@ from app.DTOs.ingestion_job_dto import (
     IngestionOpsModeUpdateRequest,
     IngestionOpsPolicyResponse,
     IngestionOperatingBandResponse,
+    IngestionReprocessingQueueHealthResponse,
     IngestionReplayAuditListResponse,
     IngestionReplayAuditResponse,
     IngestionRetryRequest,
@@ -639,6 +640,24 @@ async def get_ingestion_operating_policy(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_operating_policy()
+
+
+@router.get(
+    "/ingestion/health/reprocessing-queue",
+    response_model=IngestionReprocessingQueueHealthResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Ingestion Operations"],
+    summary="Get reprocessing queue health by job type",
+    description=(
+        "What: Return pending/processing/failed reprocessing queue health grouped by job type.\n"
+        "How: Aggregate durable reprocessing job states and compute oldest pending age signal.\n"
+        "When: Use for operations triage and replay worker scaling decisions."
+    ),
+)
+async def get_reprocessing_queue_health(
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+):
+    return await ingestion_job_service.get_reprocessing_queue_health()
 
 
 @router.get(

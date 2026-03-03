@@ -313,6 +313,62 @@ class IngestionOpsPolicyResponse(BaseModel):
     )
 
 
+class IngestionReprocessingQueueItemResponse(BaseModel):
+    job_type: str = Field(
+        description="Canonical reprocessing job type.",
+        examples=["RESET_WATERMARKS"],
+    )
+    pending_jobs: int = Field(
+        ge=0,
+        description="Number of pending jobs for this job type.",
+        examples=[14],
+    )
+    processing_jobs: int = Field(
+        ge=0,
+        description="Number of currently processing jobs for this job type.",
+        examples=[2],
+    )
+    failed_jobs: int = Field(
+        ge=0,
+        description="Number of failed jobs for this job type.",
+        examples=[1],
+    )
+    oldest_pending_created_at: datetime | None = Field(
+        description="Timestamp of the oldest pending job for this type, if any.",
+        examples=["2026-03-03T04:10:11.000Z"],
+    )
+    oldest_pending_age_seconds: float = Field(
+        ge=0,
+        description="Age in seconds for the oldest pending job for this type.",
+        examples=[127.5],
+    )
+
+
+class IngestionReprocessingQueueHealthResponse(BaseModel):
+    as_of: datetime = Field(
+        description="UTC timestamp when queue health was computed.",
+        examples=["2026-03-03T04:12:20.000Z"],
+    )
+    total_pending_jobs: int = Field(
+        ge=0,
+        description="Total number of pending reprocessing jobs across all types.",
+        examples=[14],
+    )
+    total_processing_jobs: int = Field(
+        ge=0,
+        description="Total number of processing reprocessing jobs across all types.",
+        examples=[3],
+    )
+    total_failed_jobs: int = Field(
+        ge=0,
+        description="Total number of failed reprocessing jobs across all types.",
+        examples=[1],
+    )
+    queues: list[IngestionReprocessingQueueItemResponse] = Field(
+        description="Per-job-type queue health rows sorted by highest pending pressure."
+    )
+
+
 class IngestionBacklogBreakdownItemResponse(BaseModel):
     endpoint: str = Field(
         description="Ingestion endpoint associated with this backlog group.",
