@@ -21,6 +21,7 @@ from app.DTOs.ingestion_job_dto import (
     IngestionJobResponse,
     IngestionOpsModeResponse,
     IngestionOpsModeUpdateRequest,
+    IngestionOperatingBandResponse,
     IngestionReplayAuditListResponse,
     IngestionReplayAuditResponse,
     IngestionRetryRequest,
@@ -591,6 +592,33 @@ async def get_ingestion_error_budget_status(
         lookback_minutes=lookback_minutes,
         failure_rate_threshold=failure_rate_threshold,
         backlog_growth_threshold=backlog_growth_threshold,
+    )
+
+
+@router.get(
+    "/ingestion/health/operating-band",
+    response_model=IngestionOperatingBandResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Ingestion Operations"],
+    summary="Get ingestion operating band",
+    description=(
+        "What: Return canonical ingestion operating band (green/yellow/orange/red).\n"
+        "How: Combine backlog-age, DLQ pressure, and SLO breach signals into one runbook-ready severity.\n"
+        "When: Use for autoscaling decisions, replay safety gating, and incident triage automation."
+    ),
+)
+async def get_ingestion_operating_band(
+    lookback_minutes: int = Query(default=60, ge=5, le=1440),
+    failure_rate_threshold: Decimal = Query(default=Decimal("0.03"), ge=0, le=1),
+    queue_latency_threshold_seconds: float = Query(default=5.0, ge=0.1, le=600),
+    backlog_age_threshold_seconds: float = Query(default=300, ge=1, le=86400),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+):
+    return await ingestion_job_service.get_operating_band(
+        lookback_minutes=lookback_minutes,
+        failure_rate_threshold=failure_rate_threshold,
+        queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+        backlog_age_threshold_seconds=backlog_age_threshold_seconds,
     )
 
 
