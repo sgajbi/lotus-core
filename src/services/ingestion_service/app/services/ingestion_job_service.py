@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+import hashlib
+import json
 import os
 from typing import Any, Literal
 from uuid import uuid4
@@ -674,7 +676,26 @@ class IngestionJobService:
         )
 
     async def get_operating_policy(self) -> IngestionOpsPolicyResponse:
+        values = {
+            "lookback_minutes_default": DEFAULT_LOOKBACK_MINUTES,
+            "failure_rate_threshold_default": str(DEFAULT_FAILURE_RATE_THRESHOLD),
+            "queue_latency_threshold_seconds_default": DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
+            "backlog_age_threshold_seconds_default": DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
+            "replay_max_records_per_request": max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
+            "replay_max_backlog_jobs": max(1, REPLAY_MAX_BACKLOG_JOBS),
+            "dlq_budget_events_per_window": max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
+            "operating_band_yellow_backlog_age_seconds": OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
+            "operating_band_orange_backlog_age_seconds": OPERATING_BAND_POLICY.orange_backlog_age_seconds,
+            "operating_band_red_backlog_age_seconds": OPERATING_BAND_POLICY.red_backlog_age_seconds,
+            "operating_band_yellow_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio),
+            "operating_band_orange_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.orange_dlq_pressure_ratio),
+            "operating_band_red_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.red_dlq_pressure_ratio),
+        }
+        serialized = json.dumps(values, sort_keys=True, separators=(",", ":"))
+        fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
         return IngestionOpsPolicyResponse(
+            policy_version="v1",
+            policy_fingerprint=fingerprint,
             lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
             failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
             queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
