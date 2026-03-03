@@ -255,6 +255,18 @@ async def test_get_operating_policy_returns_configured_thresholds(
     assert policy.valuation_scheduler_batch_size >= 1
     assert policy.valuation_scheduler_dispatch_rounds >= 1
     assert policy.dlq_budget_events_per_window >= 1
+    assert set(policy.calculator_peak_lag_age_seconds.keys()) == {
+        "position",
+        "cost",
+        "valuation",
+        "cashflow",
+        "timeseries",
+    }
+    assert policy.replay_isolation_mode in {"shared_workers", "dedicated_workers"}
+    assert policy.partition_growth_strategy in {
+        "scale_out_only",
+        "pre_shard_large_portfolios",
+    }
 
 
 async def test_get_reprocessing_queue_health_aggregates_by_job_type(
