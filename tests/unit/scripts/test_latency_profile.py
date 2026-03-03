@@ -56,13 +56,27 @@ def test_pick_identifier_from_payload_nested() -> None:
 
 def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
     session = MagicMock()
-    portfolio_response = MagicMock()
-    portfolio_response.status_code = 200
-    portfolio_response.json.return_value = {"items": [{"portfolio_id": "PORT_123"}]}
+    lookup_response = MagicMock()
+    lookup_response.status_code = 200
+    lookup_response.json.return_value = {"items": [{"portfolio_id": "PORT_123"}]}
+    not_ready_response = MagicMock()
+    not_ready_response.status_code = 404
+    ready_response = MagicMock()
+    ready_response.status_code = 200
     benchmark_response = MagicMock()
     benchmark_response.status_code = 200
     benchmark_response.json.return_value = {"benchmarks": [{"benchmark_id": "BMK_ABC"}]}
-    session.get.return_value = portfolio_response
+
+    def get_side_effect(url: str, timeout: int = 10):  # noqa: ARG001
+        if "/lookups/portfolios" in url:
+            return lookup_response
+        if "DEMO_DPM_EUR_001" in url:
+            return not_ready_response
+        if "PORT_123" in url:
+            return ready_response
+        return not_ready_response
+
+    session.get.side_effect = get_side_effect
     session.post.return_value = benchmark_response
 
     portfolio_id, benchmark_id = _resolve_runtime_ids(
