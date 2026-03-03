@@ -24,6 +24,9 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/calculators/position_valuation_calculator/repositories/test_unit_valuation_repo.py",
     ],
     "integration-lite": _discover_integration_lite(),
+    "ops-contract": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+    ],
     "e2e-smoke": [
         "tests/e2e/test_query_service_observability.py",
         "tests/e2e/test_complex_portfolio_lifecycle.py",
