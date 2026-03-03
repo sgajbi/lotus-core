@@ -243,6 +243,9 @@ async def test_get_operating_policy_returns_configured_thresholds(
     service: IngestionJobService,
 ):
     policy = await service.get_operating_policy()
+    assert policy.policy_version == "v1"
+    assert len(policy.policy_fingerprint) == 16
+    assert all(char in "0123456789abcdef" for char in policy.policy_fingerprint)
     assert policy.lookback_minutes_default >= 1
     assert policy.replay_max_records_per_request >= 1
     assert policy.replay_max_backlog_jobs >= 1

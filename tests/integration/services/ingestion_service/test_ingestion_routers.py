@@ -438,6 +438,8 @@ async def async_test_client(mock_kafka_producer: MagicMock):
 
         async def get_operating_policy(self):
             return {
+                "policy_version": "v1",
+                "policy_fingerprint": "e6a9f2cc3bb5e5a7",
                 "lookback_minutes_default": 60,
                 "failure_rate_threshold_default": Decimal("0.03"),
                 "queue_latency_threshold_seconds_default": 5.0,
@@ -1004,6 +1006,8 @@ async def test_ingestion_operating_policy_endpoint(async_test_client: httpx.Asyn
     response = await async_test_client.get("/ingestion/health/policy")
     assert response.status_code == 200
     body = response.json()
+    assert body["policy_version"] == "v1"
+    assert body["policy_fingerprint"]
     assert "lookback_minutes_default" in body
     assert "replay_max_records_per_request" in body
     assert "operating_band_red_backlog_age_seconds" in body

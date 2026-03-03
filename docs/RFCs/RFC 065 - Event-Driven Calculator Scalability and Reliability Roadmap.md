@@ -337,3 +337,7 @@ Acceptance:
 - added `GET /ingestion/health/policy` exposing active SLO defaults, replay guardrails, DLQ budget, and operating-band thresholds
 - enables runbooks and automation to consume runtime policy directly and avoid configuration drift
 - added unit and integration coverage for endpoint contract shape
+6. Added deterministic policy-version and fingerprint metadata for drift detection:
+- `GET /ingestion/health/policy` now includes `policy_version` and `policy_fingerprint`
+- fingerprint is computed from canonical active policy values with stable JSON serialization and SHA-256 truncation
+- enables automation to detect runtime policy drift with a single contract read

@@ -238,6 +238,14 @@ class IngestionOperatingBandResponse(BaseModel):
 
 
 class IngestionOpsPolicyResponse(BaseModel):
+    policy_version: str = Field(
+        description="Semantic policy schema/version identifier for ingestion operating policy.",
+        examples=["v1"],
+    )
+    policy_fingerprint: str = Field(
+        description="Deterministic fingerprint of active policy values for drift detection.",
+        examples=["e6a9f2cc3bb5e5a7"],
+    )
     lookback_minutes_default: int = Field(
         ge=1,
         description="Default lookback window (minutes) used by ingestion health endpoints.",
