@@ -7,7 +7,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.database_models import PositionHistory, Transaction as DBTransaction, PositionState
 from ..core.position_models import PositionState as PositionStateDTO
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
 from ..repositories.position_repository import PositionRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.outbox_repository import OutboxRepository
@@ -84,7 +84,8 @@ class PositionCalculator:
             # Combine historical events with the current triggering event
             all_events_to_replay = [TransactionEvent.model_validate(t) for t in historical_db_txns]
             all_events_to_replay.append(event)
-            all_events_to_replay.sort(key=lambda x: x.transaction_date) # Re-sort to ensure chronological order
+            # Ensure replay order is deterministic even when timestamps collide.
+            all_events_to_replay.sort(key=transaction_event_ordering_key)
             
             logger.info(f"Atomically queuing {len(all_events_to_replay)} events for reprocessing replay in Epoch {new_state.epoch}")
             for event_to_publish in all_events_to_replay:

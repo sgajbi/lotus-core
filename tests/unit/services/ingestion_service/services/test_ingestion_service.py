@@ -90,6 +90,56 @@ async def test_publish_transactions(
     assert call_args["value"]["transaction_id"] == "T1"
 
 
+async def test_publish_transactions_normalizes_partition_key(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transactions = [
+        Transaction(
+            transaction_id="T2",
+            portfolio_id="  P1  ",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        )
+    ]
+
+    await ingestion_service.publish_transactions(transactions)
+
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    assert call_args["key"] == "P1"
+
+
+async def test_publish_transactions_rejects_empty_partition_key(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transactions = [
+        Transaction(
+            transaction_id="T3",
+            portfolio_id="   ",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        )
+    ]
+
+    with pytest.raises(ValueError, match="portfolio_id"):
+        await ingestion_service.publish_transactions(transactions)
+
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_publish_with_correlation_id(
     ingestion_service: IngestionService, mock_kafka_producer: MagicMock
 ):

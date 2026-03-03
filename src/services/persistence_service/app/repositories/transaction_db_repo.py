@@ -26,7 +26,8 @@ class TransactionDBRepository:
         try:
             # Exclude event-only fields that do not map to the transactions table.
             event_dict = event.model_dump(
-                exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"}
+                exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
+                exclude_none=True,
             )
             
             # The statement to execute.

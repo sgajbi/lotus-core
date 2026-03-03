@@ -1,5 +1,5 @@
 # libs/portfolio-common/portfolio_common/events.py
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 from decimal import Decimal
@@ -111,7 +111,26 @@ class TransactionEvent(BaseModel):
     calculation_policy_id: Optional[str] = None
     calculation_policy_version: Optional[str] = None
     source_system: Optional[str] = None
+    created_at: Optional[datetime] = None
     epoch: Optional[int] = None
+
+
+def transaction_event_ordering_key(event: "TransactionEvent") -> tuple[date, datetime, datetime, str]:
+    """
+    Deterministic intra-partition ordering for transaction processing.
+    Priority:
+    1) effective business date (derived from transaction_date)
+    2) transaction timestamp
+    3) ingestion timestamp (created_at when present)
+    4) stable event identity (transaction_id)
+    """
+    ingestion_ts = event.created_at or datetime.fromtimestamp(0, tz=timezone.utc)
+    return (
+        event.transaction_date.date(),
+        event.transaction_date,
+        ingestion_ts,
+        event.transaction_id,
+    )
 
 class DailyPositionSnapshotPersistedEvent(BaseModel):
     """

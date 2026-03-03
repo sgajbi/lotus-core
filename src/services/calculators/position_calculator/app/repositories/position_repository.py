@@ -87,7 +87,7 @@ class PositionRepository:
         stmt = (
             select(Transaction)
             .where(Transaction.portfolio_id == portfolio_id, Transaction.security_id == security_id)
-            .order_by(Transaction.transaction_date.asc(), Transaction.id.asc())
+            .order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -126,7 +126,7 @@ class PositionRepository:
             Transaction.portfolio_id == portfolio_id,
             Transaction.security_id == security_id,
             func.date(Transaction.transaction_date) >= a_date
-        ).order_by(Transaction.transaction_date.asc(), Transaction.id.asc())
+        ).order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
