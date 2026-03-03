@@ -23,6 +23,7 @@ from app.DTOs.ingestion_job_dto import (
     IngestionJobResponse,
     IngestionJobStatus,
     IngestionOpsModeResponse,
+    IngestionOpsPolicyResponse,
     IngestionOperatingBandResponse,
     IngestionSloStatusResponse,
     IngestionStalledJobListResponse,
@@ -47,14 +48,6 @@ from portfolio_common.monitoring import (
 from sqlalchemy import and_, case, desc, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-REPLAY_MAX_RECORDS_PER_REQUEST = int(
-    os.getenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", "5000")
-)
-REPLAY_MAX_BACKLOG_JOBS = int(os.getenv("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", "5000"))
-DLQ_BUDGET_EVENTS_PER_WINDOW = int(
-    os.getenv("LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", "10")
-)
-
 
 def _env_decimal(name: str, default: str) -> Decimal:
     raw_value = os.getenv(name)
@@ -64,6 +57,25 @@ def _env_decimal(name: str, default: str) -> Decimal:
         return Decimal(raw_value)
     except Exception:
         return Decimal(default)
+
+
+REPLAY_MAX_RECORDS_PER_REQUEST = int(
+    os.getenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", "5000")
+)
+REPLAY_MAX_BACKLOG_JOBS = int(os.getenv("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", "5000"))
+DLQ_BUDGET_EVENTS_PER_WINDOW = int(
+    os.getenv("LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", "10")
+)
+DEFAULT_LOOKBACK_MINUTES = int(os.getenv("LOTUS_CORE_DEFAULT_LOOKBACK_MINUTES", "60"))
+DEFAULT_FAILURE_RATE_THRESHOLD = _env_decimal(
+    "LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD", "0.03"
+)
+DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = float(
+    os.getenv("LOTUS_CORE_DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS", "5.0")
+)
+DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = float(
+    os.getenv("LOTUS_CORE_DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS", "300.0")
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -659,6 +671,23 @@ class IngestionJobService:
             dlq_pressure_ratio=dlq_pressure_ratio,
             failure_rate=failure_rate,
             triggered_signals=decision.triggered_signals,
+        )
+
+    async def get_operating_policy(self) -> IngestionOpsPolicyResponse:
+        return IngestionOpsPolicyResponse(
+            lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
+            failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
+            queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
+            backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
+            replay_max_records_per_request=max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
+            replay_max_backlog_jobs=max(1, REPLAY_MAX_BACKLOG_JOBS),
+            dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
+            operating_band_yellow_backlog_age_seconds=OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
+            operating_band_orange_backlog_age_seconds=OPERATING_BAND_POLICY.orange_backlog_age_seconds,
+            operating_band_red_backlog_age_seconds=OPERATING_BAND_POLICY.red_backlog_age_seconds,
+            operating_band_yellow_dlq_pressure_ratio=OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio,
+            operating_band_orange_dlq_pressure_ratio=OPERATING_BAND_POLICY.orange_dlq_pressure_ratio,
+            operating_band_red_dlq_pressure_ratio=OPERATING_BAND_POLICY.red_dlq_pressure_ratio,
         )
 
     async def get_backlog_breakdown(
