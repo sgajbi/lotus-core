@@ -6,6 +6,7 @@ from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.operations_dto import (
+    CalculatorSloResponse,
     LineageKeyListResponse,
     LineageResponse,
     SupportJobListResponse,
@@ -49,6 +50,43 @@ async def get_support_overview(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while building support overview.",
+        )
+
+
+@router.get(
+    "/support/portfolios/{portfolio_id}/calculator-slos",
+    response_model=CalculatorSloResponse,
+    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."}},
+    summary="Get calculator SLO baseline snapshot for a portfolio",
+    description=(
+        "What: Return calculator backlog, stale-processing, and failed-job baselines for one "
+        "portfolio.\n"
+        "How: Aggregate valuation/aggregation job states and reprocessing key counts in a single "
+        "support payload.\n"
+        "When: Use before scaling actions, during incidents, and for daily operational SLO checks."
+    ),
+)
+async def get_calculator_slos(
+    portfolio_id: str = Path(..., description="Portfolio identifier."),
+    stale_threshold_minutes: int = Query(
+        15,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale PROCESSING jobs.",
+    ),
+    service: OperationsService = Depends(get_operations_service),
+):
+    try:
+        return await service.get_calculator_slos(
+            portfolio_id=portfolio_id, stale_threshold_minutes=stale_threshold_minutes
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception:
+        logger.exception("Failed to build calculator SLO snapshot for portfolio %s", portfolio_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected server error occurred while building calculator SLO snapshot.",
         )
 
 
