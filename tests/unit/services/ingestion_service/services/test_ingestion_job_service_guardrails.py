@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -77,3 +78,59 @@ async def test_assert_reprocessing_publish_allowed_reuses_retry_guardrails(
     monkeypatch.setattr(service, "assert_retry_allowed_for_records", _mock_guardrail)
     await service.assert_reprocessing_publish_allowed(7)
     assert called["count"] == 1
+
+
+async def test_get_error_budget_status_includes_pressure_ratios(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FakeBegin:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class _FakeResult:
+        def __init__(self, *, row: tuple | None = None, scalar: int | None = None):
+            self._row = row
+            self._scalar = scalar
+
+        def one(self):
+            assert self._row is not None
+            return self._row
+
+        def scalar_one(self):
+            assert self._scalar is not None
+            return self._scalar
+
+    class _FakeSession:
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, _stmt):
+            self.calls += 1
+            if self.calls == 1:
+                return _FakeResult(row=(100, 5, 20))
+            if self.calls == 2:
+                return _FakeResult(row=(10,))
+            if self.calls == 3:
+                return _FakeResult(scalar=4)
+            raise AssertionError("Unexpected execute call count")
+
+        def begin(self):
+            return _FakeBegin()
+
+    async def _mock_get_async_db_session():
+        yield _FakeSession()
+
+    monkeypatch.setattr(service_module, "get_async_db_session", _mock_get_async_db_session)
+    monkeypatch.setattr(service_module, "REPLAY_MAX_BACKLOG_JOBS", 5000)
+    monkeypatch.setattr(service_module, "DLQ_BUDGET_EVENTS_PER_WINDOW", 10)
+
+    result = await service.get_error_budget_status()
+    assert result.failure_rate == Decimal("0.05")
+    assert result.replay_backlog_pressure_ratio == Decimal("0.004")
+    assert result.dlq_events_in_window == 4
+    assert result.dlq_budget_events_per_window == 10
+    assert result.dlq_pressure_ratio == Decimal("0.4")

@@ -312,3 +312,7 @@ Acceptance:
 - `mark_failed` and `mark_retried` use `UPDATE ... RETURNING` for metric label context (`endpoint`, `entity_type`) without extra reads
 - retry counter increments are now DB-atomic (`coalesce(retry_count, 0) + 1`) to avoid lost updates under concurrent retry operations
 - added focused unit coverage to lock transition SQL intent and failure-record persistence behavior
+11. Added canonical pressure-ratio signals to ingestion error-budget endpoint:
+- error-budget response now includes replay backlog pressure ratio and DLQ pressure ratio (`P_dlq`) aligned to RFC formulas
+- included raw supporting controls in the same response (`dlq_events_in_window`, `dlq_budget_events_per_window`) for runbook decisions
+- added unit and integration coverage to lock new contract fields and calculations

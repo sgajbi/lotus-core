@@ -734,6 +734,32 @@ class IngestionErrorBudgetStatusResponse(BaseModel):
         description="Backlog growth compared with previous window.",
         examples=[3],
     )
+    replay_backlog_pressure_ratio: Decimal = Field(
+        ge=Decimal("0"),
+        description=(
+            "Backlog saturation ratio against replay guardrail capacity "
+            "(backlog_jobs / replay_max_backlog_jobs)."
+        ),
+        examples=["0.0024"],
+    )
+    dlq_events_in_window: int = Field(
+        ge=0,
+        description="Count of consumer DLQ events observed in current lookback window.",
+        examples=[4],
+    )
+    dlq_budget_events_per_window: int = Field(
+        ge=1,
+        description="Configured DLQ event budget for the same lookback window.",
+        examples=[10],
+    )
+    dlq_pressure_ratio: Decimal = Field(
+        ge=Decimal("0"),
+        description=(
+            "DLQ pressure ratio against budget "
+            "(dlq_events_in_window / dlq_budget_events_per_window)."
+        ),
+        examples=["0.4000"],
+    )
     breach_failure_rate: bool = Field(
         description="Whether failure rate exceeds threshold.",
         examples=[False],

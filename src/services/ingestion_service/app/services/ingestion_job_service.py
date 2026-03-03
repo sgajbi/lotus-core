@@ -50,6 +50,9 @@ REPLAY_MAX_RECORDS_PER_REQUEST = int(
     os.getenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", "5000")
 )
 REPLAY_MAX_BACKLOG_JOBS = int(os.getenv("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", "5000"))
+DLQ_BUDGET_EVENTS_PER_WINDOW = int(
+    os.getenv("LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", "10")
+)
 
 
 @dataclass(slots=True)
@@ -989,6 +992,16 @@ class IngestionJobService:
                     )
                 )
             ).one()
+            dlq_events_in_window = int(
+                (
+                    await db.execute(
+                        select(func.count(DBConsumerDlqEvent.id)).where(
+                            DBConsumerDlqEvent.observed_at >= current_since
+                        )
+                    )
+                ).scalar_one()
+                or 0
+            )
 
             total_jobs = int(current_row[0] or 0)
             failed_jobs = int(current_row[1] or 0)
@@ -999,6 +1012,13 @@ class IngestionJobService:
             backlog_jobs = int(current_row[2] or 0)
             previous_backlog_jobs = int(previous_row[0] or 0)
             backlog_growth = backlog_jobs - previous_backlog_jobs
+            replay_backlog_pressure_ratio = Decimal(backlog_jobs) / Decimal(
+                max(1, REPLAY_MAX_BACKLOG_JOBS)
+            )
+            dlq_budget_events_per_window = max(1, DLQ_BUDGET_EVENTS_PER_WINDOW)
+            dlq_pressure_ratio = Decimal(dlq_events_in_window) / Decimal(
+                dlq_budget_events_per_window
+            )
 
             return IngestionErrorBudgetStatusResponse(
                 lookback_minutes=lookback_minutes,
@@ -1010,6 +1030,10 @@ class IngestionJobService:
                 backlog_jobs=backlog_jobs,
                 previous_backlog_jobs=previous_backlog_jobs,
                 backlog_growth=backlog_growth,
+                replay_backlog_pressure_ratio=replay_backlog_pressure_ratio,
+                dlq_events_in_window=dlq_events_in_window,
+                dlq_budget_events_per_window=dlq_budget_events_per_window,
+                dlq_pressure_ratio=dlq_pressure_ratio,
                 breach_failure_rate=failure_rate > failure_rate_threshold,
                 breach_backlog_growth=backlog_growth > backlog_growth_threshold,
             )
@@ -1023,6 +1047,10 @@ class IngestionJobService:
             backlog_jobs=0,
             previous_backlog_jobs=0,
             backlog_growth=0,
+            replay_backlog_pressure_ratio=Decimal("0"),
+            dlq_events_in_window=0,
+            dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
+            dlq_pressure_ratio=Decimal("0"),
             breach_failure_rate=False,
             breach_backlog_growth=False,
         )

@@ -410,6 +410,10 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 "backlog_jobs": 1,
                 "previous_backlog_jobs": 1,
                 "backlog_growth": 0,
+                "replay_backlog_pressure_ratio": Decimal("0.0002"),
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "dlq_pressure_ratio": Decimal("0"),
                 "breach_failure_rate": False,
                 "breach_backlog_growth": False,
             }
@@ -946,6 +950,10 @@ async def test_ingestion_error_budget_endpoint(async_test_client: httpx.AsyncCli
     body = response.json()
     assert "failure_rate" in body
     assert "remaining_error_budget" in body
+    assert "replay_backlog_pressure_ratio" in body
+    assert "dlq_events_in_window" in body
+    assert "dlq_budget_events_per_window" in body
+    assert "dlq_pressure_ratio" in body
 
 
 async def test_ingestion_idempotency_diagnostics_endpoint(async_test_client: httpx.AsyncClient):
