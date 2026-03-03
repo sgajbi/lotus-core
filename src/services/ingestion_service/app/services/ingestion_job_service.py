@@ -43,7 +43,7 @@ from portfolio_common.monitoring import (
     INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL,
     INGESTION_REPLAY_FAILURE_TOTAL,
 )
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, case, desc, func, select
 
 REPLAY_MAX_RECORDS_PER_REQUEST = int(
     os.getenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", "5000")
@@ -324,37 +324,22 @@ class IngestionJobService:
 
     async def get_health_summary(self) -> IngestionHealthSummaryResponse:
         async for db in get_async_db_session():
-            total_jobs = int((await db.scalar(select(func.count(DBIngestionJob.id)))) or 0)
-            accepted_jobs = int(
-                (
-                    await db.scalar(
-                        select(func.count(DBIngestionJob.id)).where(
-                            DBIngestionJob.status == "accepted"
-                        )
+            row = (
+                await db.execute(
+                    select(
+                        func.count(DBIngestionJob.id),
+                        func.sum(
+                            case((DBIngestionJob.status == "accepted", 1), else_=0)
+                        ),
+                        func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)),
+                        func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)),
                     )
                 )
-                or 0
-            )
-            queued_jobs = int(
-                (
-                    await db.scalar(
-                        select(func.count(DBIngestionJob.id)).where(
-                            DBIngestionJob.status == "queued"
-                        )
-                    )
-                )
-                or 0
-            )
-            failed_jobs = int(
-                (
-                    await db.scalar(
-                        select(func.count(DBIngestionJob.id)).where(
-                            DBIngestionJob.status == "failed"
-                        )
-                    )
-                )
-                or 0
-            )
+            ).one()
+            total_jobs = int(row[0] or 0)
+            accepted_jobs = int(row[1] or 0)
+            queued_jobs = int(row[2] or 0)
+            failed_jobs = int(row[3] or 0)
             return IngestionHealthSummaryResponse(
                 total_jobs=total_jobs,
                 accepted_jobs=accepted_jobs,
@@ -717,21 +702,21 @@ class IngestionJobService:
     ) -> IngestionConsumerLagResponse:
         async for db in get_async_db_session():
             since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            rows = (
-                await db.scalars(
-                    select(DBConsumerDlqEvent).where(DBConsumerDlqEvent.observed_at >= since)
-                )
-            ).all()
-
-            grouped: dict[tuple[str, str], list[DBConsumerDlqEvent]] = {}
-            for row in rows:
-                key = (row.consumer_group, row.original_topic)
-                grouped.setdefault(key, []).append(row)
-
             groups: list[IngestionConsumerLagGroupResponse] = []
-            for (consumer_group, original_topic), events in grouped.items():
-                events = sorted(events, key=lambda item: item.observed_at, reverse=True)
-                dlq_events = len(events)
+            rows = await db.execute(
+                select(
+                    DBConsumerDlqEvent.consumer_group,
+                    DBConsumerDlqEvent.original_topic,
+                    func.count(DBConsumerDlqEvent.id).label("dlq_events"),
+                    func.max(DBConsumerDlqEvent.observed_at).label("last_observed_at"),
+                )
+                .where(DBConsumerDlqEvent.observed_at >= since)
+                .group_by(DBConsumerDlqEvent.consumer_group, DBConsumerDlqEvent.original_topic)
+                .order_by(desc("dlq_events"), desc("last_observed_at"))
+                .limit(limit)
+            )
+            for consumer_group, original_topic, dlq_events_raw, last_observed_at in rows:
+                dlq_events = int(dlq_events_raw or 0)
                 if dlq_events >= 20:
                     severity = "high"
                 elif dlq_events >= 5:
@@ -743,19 +728,10 @@ class IngestionJobService:
                         consumer_group=consumer_group,
                         original_topic=original_topic,
                         dlq_events=dlq_events,
-                        last_observed_at=events[0].observed_at if events else None,
+                        last_observed_at=last_observed_at,
                         lag_severity=severity,  # type: ignore[arg-type]
                     )
                 )
-
-            groups = sorted(
-                groups,
-                key=lambda item: (
-                    item.dlq_events,
-                    item.last_observed_at or datetime.min.replace(tzinfo=UTC),
-                ),
-                reverse=True,
-            )[:limit]
             backlog = await self.get_health_summary()
             return IngestionConsumerLagResponse(
                 lookback_minutes=lookback_minutes,

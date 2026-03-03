@@ -1,7 +1,7 @@
 # RFC 065 - Event-Driven Calculator Scalability and Reliability Roadmap
 
 ## Status
-In Progress (Phase 3 hardening underway)
+In Progress (Phase 4 optimization underway)
 
 ## Date
 2026-03-03
@@ -79,6 +79,66 @@ Your proposal is directionally correct and should be the baseline:
 ### 5.4 Replay and failure management
 1. Standard dead-letter queues with deterministic failure codes.
 2. Replay tools by key/date range with auditable execution metadata.
+
+### 5.5 Quantitative variables and sizing model
+The following variables are canonical for performance planning, autoscaling thresholds, and runbook decisions:
+
+| Variable | Definition | Unit |
+|---|---|---|
+| `lambda_in` | Inbound event rate into a calculator consumer group | events/sec |
+| `mu_msg` | Sustained per-replica processing throughput | events/sec/replica |
+| `N_replica` | Active consumer replicas in a group | replicas |
+| `rho` | Utilization ratio = `lambda_in / (N_replica * mu_msg)` | ratio |
+| `L_lag` | Current Kafka consumer lag | events |
+| `T_lag` | Lag age (`oldest_unprocessed_event_age`) | sec |
+| `S_p95` | p95 end-to-end service time per event | sec |
+| `B_batch` | Write micro-batch size for heavy persistence steps | records |
+| `C_commit` | Offset commit interval or record count boundary | sec or records |
+| `R_retry` | Retry attempts for transient failures before DLQ | attempts |
+| `T_backoff` | Backoff interval between retries | sec |
+| `Q_dlq` | DLQ event rate | events/min |
+| `R_replay` | Replay request size (records) | records |
+| `J_backlog` | Operational backlog in ingestion control plane (`accepted+queued`) | jobs |
+
+Canonical derived formulas:
+
+| Metric | Formula | Interpretation |
+|---|---|---|
+| Effective capacity | `Capacity = N_replica * mu_msg` | Max stable throughput before lag growth |
+| Headroom | `Headroom = 1 - rho` | Safety margin for burst handling |
+| Drain time | `T_drain = L_lag / max(Capacity - lambda_in, epsilon)` | Time to clear lag under current load |
+| Replay pressure ratio | `P_replay = R_replay / LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST` | Guardrail saturation for replay blast radius |
+| DLQ pressure | `P_dlq = Q_dlq / Q_dlq_budget` | Incident pressure score for operations |
+
+### 5.6 Numeric operating envelopes (initial baseline)
+These are initial target envelopes for Phase 4/5 and should be calibrated with production-like load tests.
+
+| Calculator group | Target `rho` ceiling | Target `T_lag` p95 | Target `S_p95` | DLQ budget |
+|---|---:|---:|---:|---:|
+| `position` | 0.70 | <= 30 sec | <= 0.20 sec | <= 2 events/15 min |
+| `cost` | 0.75 | <= 45 sec | <= 0.35 sec | <= 3 events/15 min |
+| `valuation` | 0.75 | <= 60 sec | <= 0.50 sec | <= 3 events/15 min |
+| `cashflow` | 0.70 | <= 45 sec | <= 0.30 sec | <= 2 events/15 min |
+| `timeseries` | 0.80 | <= 120 sec | <= 1.00 sec | <= 5 events/15 min |
+
+Replay and ingestion-ops safety budgets:
+
+| Control | Baseline value | Source |
+|---|---:|---|
+| Max replay records per request | 5000 | `LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST` |
+| Max backlog jobs for replay allowance | 5000 | `LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS` |
+| Ingestion write max requests/window | 120 per 60 sec | `LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS` / `LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS` |
+| Ingestion write max records/window | 10000 per 60 sec | `LOTUS_CORE_INGEST_RATE_LIMIT_MAX_RECORDS` / `LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS` |
+
+### 5.7 Numeric table for autoscaling signal bands
+Recommended lag-driven scale bands (to be encoded in KEDA/HPA and runbook alerts):
+
+| Signal band | Condition | Action |
+|---|---|---|
+| Green | `rho < 0.60` and `T_lag < 15 sec` | Hold baseline replicas |
+| Yellow | `0.60 <= rho < 0.80` or `15 sec <= T_lag < 60 sec` | Scale up one band; monitor DLQ pressure |
+| Orange | `0.80 <= rho < 0.95` or `60 sec <= T_lag < 180 sec` | Aggressive autoscale; pause non-critical replay |
+| Red | `rho >= 0.95` or `T_lag >= 180 sec` | Enter incident mode; block replay except emergency paths |
 
 ## 6. Incremental Delivery Plan
 
@@ -218,3 +278,13 @@ Acceptance:
 - DLQ taxonomy and payload reason-code unit tests
 - replay guardrail unit tests for record and backlog limits
 - ingestion router integration coverage updated for new reason-code field and guardrail methods
+
+### Phase 4 progress (2026-03-03)
+1. Reduced ingestion operations query overhead in service hot paths:
+- `get_health_summary` now uses one aggregate SQL statement instead of multiple sequential count queries
+- `get_consumer_lag` now performs grouped SQL aggregation (`count`, `max`) with DB-side sorting/limit instead of loading and grouping full event sets in Python
+2. Added composite indexes for DLQ and replay-audit operational query patterns:
+- `consumer_dlq_events(consumer_group, original_topic, observed_at)`
+- `consumer_dlq_replay_audit(recovery_path, replay_status, requested_at)`
+- `consumer_dlq_replay_audit(replay_fingerprint, replay_status, recovery_path, requested_at)`
+3. Added Alembic migration for index rollout to keep runtime behavior and schema in sync.

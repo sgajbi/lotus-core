@@ -835,6 +835,15 @@ class ConsumerDlqEvent(Base):
     payload_excerpt = Column(Text, nullable=True)
     observed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    __table_args__ = (
+        Index(
+            "ix_consumer_dlq_events_group_topic_observed_at",
+            "consumer_group",
+            "original_topic",
+            observed_at.desc(),
+        ),
+    )
+
 
 class ConsumerDlqReplayAudit(Base):
     __tablename__ = "consumer_dlq_replay_audit"
@@ -853,6 +862,22 @@ class ConsumerDlqReplayAudit(Base):
     requested_by = Column(String, nullable=True)
     requested_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_consumer_dlq_replay_audit_path_status_requested_at",
+            "recovery_path",
+            "replay_status",
+            requested_at.desc(),
+        ),
+        Index(
+            "ix_consumer_dlq_replay_audit_fingerprint_status_path",
+            "replay_fingerprint",
+            "replay_status",
+            "recovery_path",
+            requested_at.desc(),
+        ),
+    )
 
 
 class PositionState(Base):
