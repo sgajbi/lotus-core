@@ -829,6 +829,7 @@ class ConsumerDlqEvent(Base):
     consumer_group = Column(String, index=True, nullable=False)
     dlq_topic = Column(String, index=True, nullable=False)
     original_key = Column(String, nullable=True)
+    error_reason_code = Column(String, index=True, nullable=False, server_default="UNCLASSIFIED_PROCESSING_ERROR")
     error_reason = Column(Text, nullable=False)
     correlation_id = Column(String, nullable=True)
     payload_excerpt = Column(Text, nullable=True)

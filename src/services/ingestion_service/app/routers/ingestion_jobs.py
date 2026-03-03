@@ -168,6 +168,15 @@ def _deterministic_replay_fingerprint(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _payload_record_count(payload: dict[str, Any] | None) -> int:
+    if not payload:
+        return 0
+    counts = [len(value) for value in payload.values() if isinstance(value, list)]
+    if counts:
+        return max(counts)
+    return 1
+
+
 @router.get(
     "/ingestion/jobs/{job_id}",
     response_model=IngestionJobResponse,
@@ -328,14 +337,6 @@ async def retry_ingestion_job(
             },
         )
     try:
-        await ingestion_job_service.assert_retry_allowed(context.submitted_at)
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "INGESTION_RETRY_BLOCKED", "message": str(exc)},
-        ) from exc
-
-    try:
         replay_payload = _filter_payload_by_record_keys(
             endpoint=context.endpoint,
             payload=context.request_payload,
@@ -345,6 +346,17 @@ async def retry_ingestion_job(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED", "message": str(exc)},
+        ) from exc
+    replay_record_count = _payload_record_count(replay_payload)
+    try:
+        await ingestion_job_service.assert_retry_allowed_for_records(
+            submitted_at=context.submitted_at,
+            replay_record_count=replay_record_count,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "INGESTION_RETRY_BLOCKED", "message": str(exc)},
         ) from exc
 
     if retry_request.dry_run:
@@ -822,7 +834,10 @@ async def replay_consumer_dlq_event(
                 "Replay blocked because an equivalent deterministic replay already succeeded."
             ),
         )
-    await ingestion_job_service.assert_retry_allowed(context.submitted_at)
+    await ingestion_job_service.assert_retry_allowed_for_records(
+        submitted_at=context.submitted_at,
+        replay_record_count=_payload_record_count(context.request_payload),
+    )
     if replay_request.dry_run:
         replay_audit_id = await ingestion_job_service.record_consumer_dlq_replay_audit(
             recovery_path="consumer_dlq_replay",

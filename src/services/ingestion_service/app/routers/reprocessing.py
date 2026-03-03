@@ -52,6 +52,13 @@ async def reprocess_transactions(
             detail={"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
         ) from exc
     try:
+        await ingestion_job_service.assert_reprocessing_publish_allowed(num_to_reprocess)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "INGESTION_REPLAY_BLOCKED", "message": str(exc)},
+        ) from exc
+    try:
         enforce_ingestion_write_rate_limit(
             endpoint="/reprocess/transactions",
             record_count=len(request.transaction_ids),

@@ -407,6 +407,10 @@ class ConsumerDlqEventResponse(BaseModel):
         description="Original message key, if available.",
         examples=["TXN-2026-000145"],
     )
+    error_reason_code: str = Field(
+        description="Canonical DLQ reason code for routing, replay policy, and incident analytics.",
+        examples=["VALIDATION_ERROR"],
+    )
     error_reason: str = Field(
         description="Error reason captured when consumer rejected the message.",
         examples=["ValidationError: portfolio_id is required"],
