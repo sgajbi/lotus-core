@@ -81,6 +81,10 @@ DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = float(
 DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = float(
     os.getenv("LOTUS_CORE_DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS", "300.0")
 )
+REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = int(
+    os.getenv("REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", "10")
+)
+REPROCESSING_WORKER_BATCH_SIZE = int(os.getenv("REPROCESSING_WORKER_BATCH_SIZE", "10"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -686,6 +690,10 @@ class IngestionJobService:
             "backlog_age_threshold_seconds_default": DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
             "replay_max_records_per_request": max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
             "replay_max_backlog_jobs": max(1, REPLAY_MAX_BACKLOG_JOBS),
+            "reprocessing_worker_poll_interval_seconds": max(
+                1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
+            ),
+            "reprocessing_worker_batch_size": max(1, REPROCESSING_WORKER_BATCH_SIZE),
             "dlq_budget_events_per_window": max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
             "operating_band_yellow_backlog_age_seconds": OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
             "operating_band_orange_backlog_age_seconds": OPERATING_BAND_POLICY.orange_backlog_age_seconds,
@@ -705,6 +713,10 @@ class IngestionJobService:
             backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
             replay_max_records_per_request=max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
             replay_max_backlog_jobs=max(1, REPLAY_MAX_BACKLOG_JOBS),
+            reprocessing_worker_poll_interval_seconds=max(
+                1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
+            ),
+            reprocessing_worker_batch_size=max(1, REPROCESSING_WORKER_BATCH_SIZE),
             dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
             operating_band_yellow_backlog_age_seconds=OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
             operating_band_orange_backlog_age_seconds=OPERATING_BAND_POLICY.orange_backlog_age_seconds,

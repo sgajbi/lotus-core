@@ -276,6 +276,16 @@ class IngestionOpsPolicyResponse(BaseModel):
         description="Replay guardrail: backlog ceiling beyond which replay is blocked.",
         examples=[5000],
     )
+    reprocessing_worker_poll_interval_seconds: int = Field(
+        ge=1,
+        description="Configured poll interval (seconds) for the valuation reprocessing worker.",
+        examples=[10],
+    )
+    reprocessing_worker_batch_size: int = Field(
+        ge=1,
+        description="Configured batch size used by the valuation reprocessing worker claim loop.",
+        examples=[10],
+    )
     dlq_budget_events_per_window: int = Field(
         ge=1,
         description="DLQ budget used to compute DLQ pressure ratios for the active window.",

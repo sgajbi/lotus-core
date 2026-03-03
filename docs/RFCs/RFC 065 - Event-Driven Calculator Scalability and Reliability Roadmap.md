@@ -350,3 +350,7 @@ Acceptance:
 - added `GET /ingestion/health/reprocessing-queue` with per-job-type pending/processing/failed counts
 - endpoint includes oldest pending age signal for queue pressure triage and worker-scaling decisions
 - added unit and integration coverage to lock response contract and aggregation behavior
+8. Aligned reprocessing worker tuning with policy introspection:
+- `ReprocessingWorker` poll interval and batch size are now env-driven (`REPROCESSING_WORKER_POLL_INTERVAL_SECONDS`, `REPROCESSING_WORKER_BATCH_SIZE`)
+- `GET /ingestion/health/policy` now exposes both worker tuning values so automation and runbooks can detect drift
+- added focused unit coverage for env override behavior and policy contract fields
