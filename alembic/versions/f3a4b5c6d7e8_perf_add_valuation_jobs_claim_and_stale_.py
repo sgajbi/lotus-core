@@ -1,6 +1,6 @@
 """perf: add valuation_jobs claim and stale-scan indexes
 
-Revision ID: c1d2e3f4a5b6
+Revision ID: f3a4b5c6d7e8
 Revises: b0c1d2e3f4a5
 Create Date: 2026-03-03 14:15:00
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision: str = "c1d2e3f4a5b6"
+revision: str = "f3a4b5c6d7e8"
 down_revision: Union[str, None] = "b0c1d2e3f4a5"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
