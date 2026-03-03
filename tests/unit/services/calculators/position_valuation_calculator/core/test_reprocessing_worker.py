@@ -78,3 +78,13 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     
     # 3. Marked the job as complete
     mock_repro_job_repo.update_job_status.assert_awaited_once_with(1, "COMPLETE")
+
+
+async def test_worker_reads_poll_and_batch_from_environment(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", "7")
+    monkeypatch.setenv("REPROCESSING_WORKER_BATCH_SIZE", "21")
+
+    worker = ReprocessingWorker()
+
+    assert worker._poll_interval == 7
+    assert worker._batch_size == 21

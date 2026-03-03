@@ -1,6 +1,7 @@
 # src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py
 import logging
 import asyncio
+import os
 from datetime import date, timedelta, datetime
 
 from portfolio_common.db import get_async_db_session
@@ -10,13 +11,26 @@ from portfolio_common.reprocessing_job_repository import ReprocessingJobReposito
 
 logger = logging.getLogger(__name__)
 
+
+def _env_positive_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return max(1, int(default))
+    try:
+        return max(1, int(raw_value))
+    except Exception:
+        return max(1, int(default))
+
+
 class ReprocessingWorker:
     """
     A background worker that polls for and processes durable reprocessing jobs.
     """
     def __init__(self, poll_interval: int = 10, batch_size: int = 10):
-        self._poll_interval = poll_interval
-        self._batch_size = batch_size
+        self._poll_interval = _env_positive_int(
+            "REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", poll_interval
+        )
+        self._batch_size = _env_positive_int("REPROCESSING_WORKER_BATCH_SIZE", batch_size)
         self._running = True
 
     def stop(self):
