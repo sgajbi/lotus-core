@@ -296,3 +296,8 @@ Acceptance:
 - `ingestion_jobs(submitted_at)`
 - `ingestion_jobs(status, submitted_at)`
 - `ingestion_jobs(idempotency_key, submitted_at)`
+6. Optimized SLO computation path:
+- `get_slo_status` now uses DB-side aggregate query for total/failure/backlog-age signals and DB percentile (`percentile_cont`) for p95 queue latency
+- retained safe fallback path to Python-side p95 calculation for environments without percentile support
+7. Added latency-path support index:
+- `ingestion_jobs(submitted_at, completed_at)` for p95 latency window scanning efficiency
