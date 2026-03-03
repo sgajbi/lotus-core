@@ -251,6 +251,9 @@ async def test_get_operating_policy_returns_configured_thresholds(
     assert policy.replay_max_backlog_jobs >= 1
     assert policy.reprocessing_worker_poll_interval_seconds >= 1
     assert policy.reprocessing_worker_batch_size >= 1
+    assert policy.valuation_scheduler_poll_interval_seconds >= 1
+    assert policy.valuation_scheduler_batch_size >= 1
+    assert policy.valuation_scheduler_dispatch_rounds >= 1
     assert policy.dlq_budget_events_per_window >= 1
 
 

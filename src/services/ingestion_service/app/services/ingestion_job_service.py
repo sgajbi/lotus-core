@@ -85,6 +85,13 @@ REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = int(
     os.getenv("REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", "10")
 )
 REPROCESSING_WORKER_BATCH_SIZE = int(os.getenv("REPROCESSING_WORKER_BATCH_SIZE", "10"))
+VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = int(
+    os.getenv("VALUATION_SCHEDULER_POLL_INTERVAL", "30")
+)
+VALUATION_SCHEDULER_BATCH_SIZE = int(os.getenv("VALUATION_SCHEDULER_BATCH_SIZE", "100"))
+VALUATION_SCHEDULER_DISPATCH_ROUNDS = int(
+    os.getenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "3")
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -694,6 +701,11 @@ class IngestionJobService:
                 1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
             ),
             "reprocessing_worker_batch_size": max(1, REPROCESSING_WORKER_BATCH_SIZE),
+            "valuation_scheduler_poll_interval_seconds": max(
+                1, VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
+            ),
+            "valuation_scheduler_batch_size": max(1, VALUATION_SCHEDULER_BATCH_SIZE),
+            "valuation_scheduler_dispatch_rounds": max(1, VALUATION_SCHEDULER_DISPATCH_ROUNDS),
             "dlq_budget_events_per_window": max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
             "operating_band_yellow_backlog_age_seconds": OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
             "operating_band_orange_backlog_age_seconds": OPERATING_BAND_POLICY.orange_backlog_age_seconds,
@@ -717,6 +729,11 @@ class IngestionJobService:
                 1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
             ),
             reprocessing_worker_batch_size=max(1, REPROCESSING_WORKER_BATCH_SIZE),
+            valuation_scheduler_poll_interval_seconds=max(
+                1, VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
+            ),
+            valuation_scheduler_batch_size=max(1, VALUATION_SCHEDULER_BATCH_SIZE),
+            valuation_scheduler_dispatch_rounds=max(1, VALUATION_SCHEDULER_DISPATCH_ROUNDS),
             dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
             operating_band_yellow_backlog_age_seconds=OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
             operating_band_orange_backlog_age_seconds=OPERATING_BAND_POLICY.orange_backlog_age_seconds,

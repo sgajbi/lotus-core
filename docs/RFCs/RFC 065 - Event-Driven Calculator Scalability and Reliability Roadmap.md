@@ -354,3 +354,7 @@ Acceptance:
 - `ReprocessingWorker` poll interval and batch size are now env-driven (`REPROCESSING_WORKER_POLL_INTERVAL_SECONDS`, `REPROCESSING_WORKER_BATCH_SIZE`)
 - `GET /ingestion/health/policy` now exposes both worker tuning values so automation and runbooks can detect drift
 - added focused unit coverage for env override behavior and policy contract fields
+9. Extended policy introspection with valuation scheduler runtime tuning:
+- `GET /ingestion/health/policy` now exposes `VALUATION_SCHEDULER_POLL_INTERVAL`, `VALUATION_SCHEDULER_BATCH_SIZE`, and `VALUATION_SCHEDULER_DISPATCH_ROUNDS`
+- policy fingerprint now includes scheduler tuning values for deterministic drift detection
+- added unit and integration coverage for the new scheduler policy fields
