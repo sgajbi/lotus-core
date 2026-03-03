@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import os
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from app.DTOs.ingestion_job_dto import (
@@ -54,6 +54,145 @@ REPLAY_MAX_BACKLOG_JOBS = int(os.getenv("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", "5
 DLQ_BUDGET_EVENTS_PER_WINDOW = int(
     os.getenv("LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", "10")
 )
+
+
+def _env_decimal(name: str, default: str) -> Decimal:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return Decimal(default)
+    try:
+        return Decimal(raw_value)
+    except Exception:
+        return Decimal(default)
+
+
+@dataclass(frozen=True, slots=True)
+class OperatingBandPolicy:
+    yellow_backlog_age_seconds: float
+    orange_backlog_age_seconds: float
+    red_backlog_age_seconds: float
+    yellow_dlq_pressure_ratio: Decimal
+    orange_dlq_pressure_ratio: Decimal
+    red_dlq_pressure_ratio: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class OperatingBandSignals:
+    backlog_age_seconds: float
+    dlq_pressure_ratio: Decimal
+    breach_failure_rate: bool
+    breach_queue_latency: bool
+    breach_backlog_age: bool
+    failure_rate: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class OperatingBandDecision:
+    operating_band: Literal["green", "yellow", "orange", "red"]
+    recommended_action: str
+    triggered_signals: list[str]
+
+
+OPERATING_BAND_POLICY = OperatingBandPolicy(
+    yellow_backlog_age_seconds=float(
+        os.getenv("LOTUS_CORE_OPERATING_BAND_YELLOW_BACKLOG_AGE_SECONDS", "15")
+    ),
+    orange_backlog_age_seconds=float(
+        os.getenv("LOTUS_CORE_OPERATING_BAND_ORANGE_BACKLOG_AGE_SECONDS", "60")
+    ),
+    red_backlog_age_seconds=float(
+        os.getenv("LOTUS_CORE_OPERATING_BAND_RED_BACKLOG_AGE_SECONDS", "180")
+    ),
+    yellow_dlq_pressure_ratio=_env_decimal(
+        "LOTUS_CORE_OPERATING_BAND_YELLOW_DLQ_PRESSURE_RATIO", "0.25"
+    ),
+    orange_dlq_pressure_ratio=_env_decimal(
+        "LOTUS_CORE_OPERATING_BAND_ORANGE_DLQ_PRESSURE_RATIO", "0.50"
+    ),
+    red_dlq_pressure_ratio=_env_decimal(
+        "LOTUS_CORE_OPERATING_BAND_RED_DLQ_PRESSURE_RATIO", "1.0"
+    ),
+)
+
+
+def classify_operating_band(
+    *,
+    signals: OperatingBandSignals,
+    policy: OperatingBandPolicy = OPERATING_BAND_POLICY,
+) -> OperatingBandDecision:
+    triggered_signals: list[str] = []
+    if (
+        signals.backlog_age_seconds >= policy.red_backlog_age_seconds
+        or signals.dlq_pressure_ratio >= policy.red_dlq_pressure_ratio
+    ):
+        if signals.backlog_age_seconds >= policy.red_backlog_age_seconds:
+            triggered_signals.append(
+                f"backlog_age_seconds>={int(policy.red_backlog_age_seconds)}"
+            )
+        if signals.dlq_pressure_ratio >= policy.red_dlq_pressure_ratio:
+            triggered_signals.append(
+                f"dlq_pressure_ratio>={policy.red_dlq_pressure_ratio.normalize()}"
+            )
+        return OperatingBandDecision(
+            operating_band="red",
+            recommended_action=(
+                "Enter incident mode and block non-emergency replay until lag pressure stabilizes."
+            ),
+            triggered_signals=triggered_signals,
+        )
+
+    if (
+        signals.backlog_age_seconds >= policy.orange_backlog_age_seconds
+        or signals.dlq_pressure_ratio >= policy.orange_dlq_pressure_ratio
+        or signals.breach_failure_rate
+        or signals.breach_queue_latency
+        or signals.breach_backlog_age
+    ):
+        if signals.backlog_age_seconds >= policy.orange_backlog_age_seconds:
+            triggered_signals.append(
+                f"backlog_age_seconds>={int(policy.orange_backlog_age_seconds)}"
+            )
+        if signals.dlq_pressure_ratio >= policy.orange_dlq_pressure_ratio:
+            triggered_signals.append(
+                f"dlq_pressure_ratio>={policy.orange_dlq_pressure_ratio.normalize()}"
+            )
+        if signals.breach_failure_rate:
+            triggered_signals.append("breach_failure_rate")
+        if signals.breach_queue_latency:
+            triggered_signals.append("breach_queue_latency")
+        if signals.breach_backlog_age:
+            triggered_signals.append("breach_backlog_age")
+        return OperatingBandDecision(
+            operating_band="orange",
+            recommended_action=(
+                "Aggressively scale calculators and pause non-critical replay operations."
+            ),
+            triggered_signals=triggered_signals,
+        )
+
+    if (
+        signals.backlog_age_seconds >= policy.yellow_backlog_age_seconds
+        or signals.dlq_pressure_ratio >= policy.yellow_dlq_pressure_ratio
+    ):
+        if signals.backlog_age_seconds >= policy.yellow_backlog_age_seconds:
+            triggered_signals.append(
+                f"backlog_age_seconds>={int(policy.yellow_backlog_age_seconds)}"
+            )
+        if signals.dlq_pressure_ratio >= policy.yellow_dlq_pressure_ratio:
+            triggered_signals.append(
+                f"dlq_pressure_ratio>={policy.yellow_dlq_pressure_ratio.normalize()}"
+            )
+        return OperatingBandDecision(
+            operating_band="yellow",
+            recommended_action="Scale up one band and monitor DLQ pressure.",
+            triggered_signals=triggered_signals,
+        )
+
+    return OperatingBandDecision(
+        operating_band="green",
+        recommended_action="Hold baseline replicas.",
+        triggered_signals=["stable_signals"],
+    )
 
 
 @dataclass(slots=True)
@@ -498,63 +637,28 @@ class IngestionJobService:
             lookback_minutes=lookback_minutes,
             failure_rate_threshold=failure_rate_threshold,
         )
-
-        triggered_signals: list[str] = []
-        operating_band = "green"
-        recommended_action = "Hold baseline replicas."
         backlog_age_seconds = float(slo_status.backlog_age_seconds)
         dlq_pressure_ratio = Decimal(error_budget.dlq_pressure_ratio)
         failure_rate = Decimal(slo_status.failure_rate)
-
-        if backlog_age_seconds >= 180 or dlq_pressure_ratio >= Decimal("1.0"):
-            operating_band = "red"
-            recommended_action = (
-                "Enter incident mode and block non-emergency replay until lag pressure stabilizes."
+        decision = classify_operating_band(
+            signals=OperatingBandSignals(
+                backlog_age_seconds=backlog_age_seconds,
+                dlq_pressure_ratio=dlq_pressure_ratio,
+                breach_failure_rate=bool(slo_status.breach_failure_rate),
+                breach_queue_latency=bool(slo_status.breach_queue_latency),
+                breach_backlog_age=bool(slo_status.breach_backlog_age),
+                failure_rate=failure_rate,
             )
-            if backlog_age_seconds >= 180:
-                triggered_signals.append("backlog_age_seconds>=180")
-            if dlq_pressure_ratio >= Decimal("1.0"):
-                triggered_signals.append("dlq_pressure_ratio>=1.0")
-        elif (
-            backlog_age_seconds >= 60
-            or dlq_pressure_ratio >= Decimal("0.50")
-            or slo_status.breach_failure_rate
-            or slo_status.breach_queue_latency
-            or slo_status.breach_backlog_age
-        ):
-            operating_band = "orange"
-            recommended_action = (
-                "Aggressively scale calculators and pause non-critical replay operations."
-            )
-            if backlog_age_seconds >= 60:
-                triggered_signals.append("backlog_age_seconds>=60")
-            if dlq_pressure_ratio >= Decimal("0.50"):
-                triggered_signals.append("dlq_pressure_ratio>=0.50")
-            if slo_status.breach_failure_rate:
-                triggered_signals.append("breach_failure_rate")
-            if slo_status.breach_queue_latency:
-                triggered_signals.append("breach_queue_latency")
-            if slo_status.breach_backlog_age:
-                triggered_signals.append("breach_backlog_age")
-        elif backlog_age_seconds >= 15 or dlq_pressure_ratio >= Decimal("0.25"):
-            operating_band = "yellow"
-            recommended_action = "Scale up one band and monitor DLQ pressure."
-            if backlog_age_seconds >= 15:
-                triggered_signals.append("backlog_age_seconds>=15")
-            if dlq_pressure_ratio >= Decimal("0.25"):
-                triggered_signals.append("dlq_pressure_ratio>=0.25")
-
-        if not triggered_signals:
-            triggered_signals.append("stable_signals")
+        )
 
         return IngestionOperatingBandResponse(
             lookback_minutes=lookback_minutes,
-            operating_band=operating_band,  # type: ignore[arg-type]
-            recommended_action=recommended_action,
+            operating_band=decision.operating_band,
+            recommended_action=decision.recommended_action,
             backlog_age_seconds=backlog_age_seconds,
             dlq_pressure_ratio=dlq_pressure_ratio,
             failure_rate=failure_rate,
-            triggered_signals=triggered_signals,
+            triggered_signals=decision.triggered_signals,
         )
 
     async def get_backlog_breakdown(

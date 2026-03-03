@@ -329,3 +329,7 @@ Acceptance:
 - added `GET /ingestion/health/operating-band` to return `green|yellow|orange|red` severity
 - classification combines backlog age, DLQ pressure ratio, and SLO breach signals in one response contract
 - added unit and integration coverage to lock endpoint behavior and routing shape
+4. Refactored operating-band logic into reusable policy + classifier components:
+- extracted `OperatingBandPolicy`, `OperatingBandSignals`, and `classify_operating_band(...)`
+- centralized threshold policy to avoid duplicated branching logic and simplify future tuning
+- added deterministic unit coverage for policy ordering (yellow -> orange -> red)
