@@ -304,3 +304,6 @@ Acceptance:
 8. Hardened operational-index coverage for backlog and failure runbooks:
 - added partial non-terminal backlog index on ingestion jobs (`status in accepted/queued`) to accelerate stalled/backlog scans
 - added ordered failure-history index for ingestion job failures (`job_id, failed_at`) to accelerate runbook failure lookups
+9. Correctness and resilience hardening for ops metrics:
+- `get_backlog_breakdown.total_backlog_jobs` now reports full-window backlog across all endpoint groups (not only the limited top-N group page)
+- narrowed SLO percentile fallback to `SQLAlchemyError` instead of a broad catch-all, reducing risk of masking non-database defects

@@ -44,6 +44,7 @@ from portfolio_common.monitoring import (
     INGESTION_REPLAY_FAILURE_TOTAL,
 )
 from sqlalchemy import and_, case, desc, func, select
+from sqlalchemy.exc import SQLAlchemyError
 
 REPLAY_MAX_RECORDS_PER_REQUEST = int(
     os.getenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", "5000")
@@ -406,7 +407,7 @@ class IngestionJobService:
                     backlog_age_seconds = float(
                         (datetime.now(UTC) - oldest_backlog_submitted_at).total_seconds()
                     )
-            except Exception:
+            except SQLAlchemyError:
                 # Fallback path for dialects/environments without percentile_cont support.
                 jobs = (
                     await db.scalars(
@@ -469,6 +470,19 @@ class IngestionJobService:
         async for db in get_async_db_session():
             since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
             now_utc = datetime.now(UTC)
+            total_backlog_jobs = int(
+                (
+                    await db.scalar(
+                        select(func.count(DBIngestionJob.id)).where(
+                            and_(
+                                DBIngestionJob.submitted_at >= since,
+                                DBIngestionJob.status.in_(["accepted", "queued"]),
+                            )
+                        )
+                    )
+                )
+                or 0
+            )
             rows = await db.execute(
                 select(
                     DBIngestionJob.endpoint,
@@ -543,7 +557,7 @@ class IngestionJobService:
 
             return IngestionBacklogBreakdownResponse(
                 lookback_minutes=lookback_minutes,
-                total_backlog_jobs=sum(item.backlog_jobs for item in rows),
+                total_backlog_jobs=total_backlog_jobs,
                 groups=rows,
             )
 
