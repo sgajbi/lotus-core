@@ -796,6 +796,16 @@ class IngestionJob(Base):
     retry_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_retried_at = Column(DateTime(timezone=True), nullable=True)
 
+    __table_args__ = (
+        Index("ix_ingestion_jobs_submitted_at", "submitted_at"),
+        Index("ix_ingestion_jobs_status_submitted_at", "status", submitted_at.desc()),
+        Index(
+            "ix_ingestion_jobs_idempotency_key_submitted_at",
+            "idempotency_key",
+            submitted_at.desc(),
+        ),
+    )
+
 
 class IngestionJobFailure(Base):
     __tablename__ = "ingestion_job_failures"
