@@ -331,6 +331,13 @@ Acceptance:
 - added valuation queue indexes for hot operational paths:
   - claim ordering (`status, portfolio_id, security_id, valuation_date, id`)
   - stale-processing scan (`status, updated_at`)
+15. Hardened ingestion backlog breakdown correctness and hotspot visibility:
+- fixed grouped backlog aggregation path to correctly iterate SQL result rows (removed result-shadowing bug)
+- added backlog concentration signals to health contract:
+  - `largest_group_backlog_jobs`
+  - `largest_group_backlog_share`
+  - `top_3_backlog_share`
+- added focused unit coverage to lock concentration math and zero-backlog behavior
 
 ### Phase 5 progress (2026-03-03)
 1. Added dedicated RFC-065 operational playbook:

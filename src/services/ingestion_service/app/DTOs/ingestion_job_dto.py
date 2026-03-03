@@ -456,6 +456,23 @@ class IngestionBacklogBreakdownResponse(BaseModel):
         description="Total backlog jobs across all returned groups.",
         examples=[17],
     )
+    largest_group_backlog_jobs: int = Field(
+        ge=0,
+        description="Backlog jobs in the largest endpoint/entity backlog group.",
+        examples=[9],
+    )
+    largest_group_backlog_share: Decimal = Field(
+        ge=Decimal("0"),
+        le=Decimal("1"),
+        description="Largest-group backlog concentration share (largest_group_backlog_jobs / total_backlog_jobs).",
+        examples=["0.5294"],
+    )
+    top_3_backlog_share: Decimal = Field(
+        ge=Decimal("0"),
+        le=Decimal("1"),
+        description="Backlog concentration share of the top 3 groups by backlog_jobs.",
+        examples=["0.8824"],
+    )
     groups: list[IngestionBacklogBreakdownItemResponse] = Field(
         description="Backlog and failure-rate breakdown grouped by endpoint and entity_type."
     )
