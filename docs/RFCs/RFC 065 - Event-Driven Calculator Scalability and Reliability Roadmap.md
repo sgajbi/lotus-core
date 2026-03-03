@@ -307,3 +307,8 @@ Acceptance:
 9. Correctness and resilience hardening for ops metrics:
 - `get_backlog_breakdown.total_backlog_jobs` now reports full-window backlog across all endpoint groups (not only the limited top-N group page)
 - narrowed SLO percentile fallback to `SQLAlchemyError` instead of a broad catch-all, reducing risk of masking non-database defects
+10. Reduced ingestion job lifecycle transition contention and race windows:
+- `mark_queued`, `mark_failed`, and `mark_retried` now use single-statement atomic `UPDATE` paths instead of select-then-mutate flows
+- `mark_failed` and `mark_retried` use `UPDATE ... RETURNING` for metric label context (`endpoint`, `entity_type`) without extra reads
+- retry counter increments are now DB-atomic (`coalesce(retry_count, 0) + 1`) to avoid lost updates under concurrent retry operations
+- added focused unit coverage to lock transition SQL intent and failure-record persistence behavior

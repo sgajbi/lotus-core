@@ -43,7 +43,7 @@ from portfolio_common.monitoring import (
     INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL,
     INGESTION_REPLAY_FAILURE_TOTAL,
 )
-from sqlalchemy import and_, case, desc, func, select
+from sqlalchemy import and_, case, desc, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 REPLAY_MAX_RECORDS_PER_REQUEST = int(
@@ -192,14 +192,15 @@ class IngestionJobService:
     async def mark_queued(self, job_id: str) -> None:
         async for db in get_async_db_session():
             async with db.begin():
-                row = await db.scalar(
-                    select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
+                await db.execute(
+                    update(DBIngestionJob)
+                    .where(DBIngestionJob.job_id == job_id)
+                    .values(
+                        status="queued",
+                        completed_at=datetime.now(UTC),
+                        failure_reason=None,
+                    )
                 )
-                if row is None:
-                    return
-                row.status = "queued"
-                row.completed_at = datetime.now(UTC)
-                row.failure_reason = None
 
     async def mark_failed(
         self,
@@ -210,14 +211,21 @@ class IngestionJobService:
     ) -> None:
         async for db in get_async_db_session():
             async with db.begin():
-                row = await db.scalar(
-                    select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
+                updated = (
+                    await db.execute(
+                        update(DBIngestionJob)
+                        .where(DBIngestionJob.job_id == job_id)
+                        .values(
+                            status="failed",
+                            completed_at=datetime.now(UTC),
+                            failure_reason=failure_reason,
+                        )
+                        .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
+                    )
                 )
+                row = updated.first()
                 if row is None:
                     return
-                row.status = "failed"
-                row.completed_at = datetime.now(UTC)
-                row.failure_reason = failure_reason
                 db.add(
                     DBIngestionJobFailure(
                         failure_id=f"fail_{uuid4().hex}",
@@ -236,13 +244,20 @@ class IngestionJobService:
     async def mark_retried(self, job_id: str) -> None:
         async for db in get_async_db_session():
             async with db.begin():
-                row = await db.scalar(
-                    select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
+                updated = (
+                    await db.execute(
+                        update(DBIngestionJob)
+                        .where(DBIngestionJob.job_id == job_id)
+                        .values(
+                            retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
+                            last_retried_at=datetime.now(UTC),
+                        )
+                        .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
+                    )
                 )
+                row = updated.first()
                 if row is None:
                     return
-                row.retry_count = int(row.retry_count or 0) + 1
-                row.last_retried_at = datetime.now(UTC)
                 INGESTION_JOBS_RETRIED_TOTAL.labels(
                     endpoint=row.endpoint, entity_type=row.entity_type, result="accepted"
                 ).inc()
