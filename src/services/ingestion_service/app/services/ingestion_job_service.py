@@ -365,32 +365,73 @@ class IngestionJobService:
     ) -> IngestionSloStatusResponse:
         async for db in get_async_db_session():
             since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            jobs = (
-                await db.scalars(select(DBIngestionJob).where(DBIngestionJob.submitted_at >= since))
-            ).all()
-            total_jobs = len(jobs)
-            failed_jobs = len([j for j in jobs if j.status == "failed"])
-
-            latencies = [
-                (j.completed_at - j.submitted_at).total_seconds()
-                for j in jobs
-                if j.completed_at is not None
-            ]
-            latencies.sort()
-            if not latencies:
-                p95_latency = 0.0
-            else:
-                p95_index = max(0, min(len(latencies) - 1, int(len(latencies) * 0.95) - 1))
-                p95_latency = float(latencies[p95_index])
-
-            non_terminal = [j for j in jobs if j.status in {"accepted", "queued"}]
-            if non_terminal:
-                oldest = min(non_terminal, key=lambda item: item.submitted_at)
-                backlog_age_seconds = float(
-                    (datetime.now(UTC) - oldest.submitted_at).total_seconds()
+            # Prefer DB-side aggregation (including percentile) to avoid loading all jobs in memory.
+            p95_latency = 0.0
+            total_jobs = 0
+            failed_jobs = 0
+            backlog_age_seconds = 0.0
+            try:
+                latency_seconds = func.extract(
+                    "epoch",
+                    DBIngestionJob.completed_at - DBIngestionJob.submitted_at,
                 )
-            else:
-                backlog_age_seconds = 0.0
+                row = (
+                    await db.execute(
+                        select(
+                            func.count(DBIngestionJob.id).label("total_jobs"),
+                            func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
+                                "failed_jobs"
+                            ),
+                            func.min(
+                                case(
+                                    (
+                                        DBIngestionJob.status.in_(["accepted", "queued"]),
+                                        DBIngestionJob.submitted_at,
+                                    ),
+                                    else_=None,
+                                )
+                            ).label("oldest_backlog_submitted_at"),
+                            func.percentile_cont(0.95)
+                            .within_group(latency_seconds)
+                            .filter(DBIngestionJob.completed_at.is_not(None))
+                            .label("p95_latency"),
+                        ).where(DBIngestionJob.submitted_at >= since)
+                    )
+                ).one()
+                total_jobs = int(row[0] or 0)
+                failed_jobs = int(row[1] or 0)
+                oldest_backlog_submitted_at = row[2]
+                p95_latency = float(row[3] or 0.0)
+                if oldest_backlog_submitted_at is not None:
+                    backlog_age_seconds = float(
+                        (datetime.now(UTC) - oldest_backlog_submitted_at).total_seconds()
+                    )
+            except Exception:
+                # Fallback path for dialects/environments without percentile_cont support.
+                jobs = (
+                    await db.scalars(
+                        select(DBIngestionJob).where(DBIngestionJob.submitted_at >= since)
+                    )
+                ).all()
+                total_jobs = len(jobs)
+                failed_jobs = len([j for j in jobs if j.status == "failed"])
+
+                latencies = [
+                    (j.completed_at - j.submitted_at).total_seconds()
+                    for j in jobs
+                    if j.completed_at is not None
+                ]
+                latencies.sort()
+                if latencies:
+                    p95_index = max(0, min(len(latencies) - 1, int(len(latencies) * 0.95) - 1))
+                    p95_latency = float(latencies[p95_index])
+
+                non_terminal = [j for j in jobs if j.status in {"accepted", "queued"}]
+                if non_terminal:
+                    oldest = min(non_terminal, key=lambda item: item.submitted_at)
+                    backlog_age_seconds = float(
+                        (datetime.now(UTC) - oldest.submitted_at).total_seconds()
+                    )
             INGESTION_BACKLOG_AGE_SECONDS.set(backlog_age_seconds)
 
             failure_rate = (

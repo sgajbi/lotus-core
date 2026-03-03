@@ -804,6 +804,11 @@ class IngestionJob(Base):
             "idempotency_key",
             submitted_at.desc(),
         ),
+        Index(
+            "ix_ingestion_jobs_submitted_completed_at",
+            "submitted_at",
+            "completed_at",
+        ),
     )
 
 
