@@ -301,3 +301,6 @@ Acceptance:
 - retained safe fallback path to Python-side p95 calculation for environments without percentile support
 7. Added latency-path support index:
 - `ingestion_jobs(submitted_at, completed_at)` for p95 latency window scanning efficiency
+8. Hardened operational-index coverage for backlog and failure runbooks:
+- added partial non-terminal backlog index on ingestion jobs (`status in accepted/queued`) to accelerate stalled/backlog scans
+- added ordered failure-history index for ingestion job failures (`job_id, failed_at`) to accelerate runbook failure lookups

@@ -823,6 +823,10 @@ class IngestionJobFailure(Base):
     failed_record_keys = Column(JSON, nullable=True)
     failed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    __table_args__ = (
+        Index("ix_ingestion_job_failures_job_failed_at", "job_id", failed_at.desc()),
+    )
+
 
 class IngestionOpsControl(Base):
     __tablename__ = "ingestion_ops_control"
