@@ -12,6 +12,7 @@ from app.DTOs.ingestion_job_dto import (
     ConsumerDlqEventListResponse,
     IngestionBacklogBreakdownResponse,
     IngestionConsumerLagResponse,
+    IngestionCapacityStatusResponse,
     IngestionErrorBudgetStatusResponse,
     IngestionHealthSummaryResponse,
     IngestionIdempotencyDiagnosticsResponse,
@@ -658,6 +659,31 @@ async def get_reprocessing_queue_health(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_reprocessing_queue_health()
+
+
+@router.get(
+    "/ingestion/health/capacity",
+    response_model=IngestionCapacityStatusResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Ingestion Operations"],
+    summary="Get ingestion capacity and saturation diagnostics",
+    description=(
+        "What: Return per endpoint/entity ingestion capacity diagnostics using RFC-065 throughput signals.\n"
+        "How: Aggregate accepted, processed, and backlog records and derive lambda_in, mu_msg, rho, headroom, and drain time.\n"
+        "When: Use to detect overload, prioritize scaling, and estimate backlog recovery time."
+    ),
+)
+async def get_ingestion_capacity_status(
+    lookback_minutes: int = Query(default=60, ge=5, le=1440),
+    limit: int = Query(default=200, ge=1, le=500),
+    assumed_replicas: int = Query(default=1, ge=1, le=500),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+):
+    return await ingestion_job_service.get_capacity_status(
+        lookback_minutes=lookback_minutes,
+        limit=limit,
+        assumed_replicas=assumed_replicas,
+    )
 
 
 @router.get(

@@ -394,6 +394,109 @@ class IngestionReprocessingQueueHealthResponse(BaseModel):
     )
 
 
+class IngestionCapacityGroupResponse(BaseModel):
+    endpoint: str = Field(
+        description="Ingestion endpoint associated with this capacity group.",
+        examples=["/ingest/transactions"],
+    )
+    entity_type: str = Field(
+        description="Canonical entity type associated with this capacity group.",
+        examples=["transaction"],
+    )
+    total_records: int = Field(
+        ge=0,
+        description="Total accepted records observed in the lookback window for this group.",
+        examples=[25000],
+    )
+    processed_records: int = Field(
+        ge=0,
+        description="Records in this group that progressed out of accepted state (queued or failed).",
+        examples=[24000],
+    )
+    backlog_records: int = Field(
+        ge=0,
+        description="Records still pending processing in accepted state.",
+        examples=[1000],
+    )
+    backlog_jobs: int = Field(
+        ge=0,
+        description="Pending job count in accepted state for this group.",
+        examples=[12],
+    )
+    lambda_in_events_per_second: Decimal = Field(
+        ge=Decimal("0"),
+        description="Inbound record rate (`lambda_in`) for this group over the lookback window.",
+        examples=["6.944444"],
+    )
+    mu_msg_per_replica_events_per_second: Decimal = Field(
+        ge=Decimal("0"),
+        description="Estimated per-replica processing rate (`mu_msg`) for this group.",
+        examples=["6.666667"],
+    )
+    assumed_replicas: int = Field(
+        ge=1,
+        description="Replica count assumed for effective-capacity and utilization calculations.",
+        examples=[2],
+    )
+    effective_capacity_events_per_second: Decimal = Field(
+        ge=Decimal("0"),
+        description="Estimated effective capacity (`N_replica * mu_msg`) for this group.",
+        examples=["13.333334"],
+    )
+    utilization_ratio: Decimal = Field(
+        ge=Decimal("0"),
+        description="Utilization ratio (`rho = lambda_in / capacity`). Values above 1 indicate overload.",
+        examples=["0.520833"],
+    )
+    headroom_ratio: Decimal = Field(
+        description="Capacity headroom ratio (`1 - rho`). Negative values indicate sustained overload.",
+        examples=["0.479167"],
+    )
+    estimated_drain_seconds: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Estimated backlog drain time in seconds using `T_drain = backlog / (capacity - lambda_in)` "
+            "when net drain capacity is positive."
+        ),
+        examples=[300.0],
+    )
+    saturation_state: Literal["stable", "near_capacity", "over_capacity"] = Field(
+        description="Operational saturation classification derived from utilization ratio bands.",
+        examples=["stable"],
+    )
+
+
+class IngestionCapacityStatusResponse(BaseModel):
+    as_of: datetime = Field(
+        description="UTC timestamp when capacity status was computed.",
+        examples=["2026-03-03T14:55:22.000Z"],
+    )
+    lookback_minutes: int = Field(
+        ge=1,
+        description="Lookback window in minutes used for capacity calculations.",
+        examples=[60],
+    )
+    assumed_replicas: int = Field(
+        ge=1,
+        description="Replica count assumption used for all capacity rows in this response.",
+        examples=[2],
+    )
+    total_backlog_records: int = Field(
+        ge=0,
+        description="Total accepted-state backlog records across all returned groups.",
+        examples=[4200],
+    )
+    total_groups: int = Field(
+        ge=0,
+        description="Number of capacity groups returned in this response.",
+        examples=[5],
+    )
+    groups: list[IngestionCapacityGroupResponse] = Field(
+        description="Per endpoint/entity capacity diagnostics sorted by highest backlog pressure."
+    )
+
+
 class IngestionBacklogBreakdownItemResponse(BaseModel):
     endpoint: str = Field(
         description="Ingestion endpoint associated with this backlog group.",

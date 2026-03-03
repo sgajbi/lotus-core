@@ -375,3 +375,7 @@ Acceptance:
 - `GET /ingestion/health/policy` now exposes `VALUATION_SCHEDULER_POLL_INTERVAL`, `VALUATION_SCHEDULER_BATCH_SIZE`, and `VALUATION_SCHEDULER_DISPATCH_ROUNDS`
 - policy fingerprint now includes scheduler tuning values for deterministic drift detection
 - added unit and integration coverage for the new scheduler policy fields
+10. Added ingestion capacity and saturation diagnostics endpoint:
+- added `GET /ingestion/health/capacity` with per endpoint/entity throughput and saturation signals
+- endpoint derives RFC-065 canonical capacity variables (`lambda_in`, `mu_msg`, `rho`, `headroom`, `T_drain`) from ingestion control-plane data
+- added focused unit coverage for capacity math and integration coverage for endpoint contract shape

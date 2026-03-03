@@ -482,6 +482,40 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 ],
             }
 
+        async def get_capacity_status(
+            self,
+            *,
+            lookback_minutes: int = 60,
+            limit: int = 200,
+            assumed_replicas: int = 1,
+        ):
+            now = datetime.now(UTC)
+            return {
+                "as_of": now,
+                "lookback_minutes": lookback_minutes,
+                "assumed_replicas": assumed_replicas,
+                "total_backlog_records": 300,
+                "total_groups": 1,
+                "groups": [
+                    {
+                        "endpoint": "/ingest/transactions",
+                        "entity_type": "transaction",
+                        "total_records": 1200,
+                        "processed_records": 900,
+                        "backlog_records": 300,
+                        "backlog_jobs": 6,
+                        "lambda_in_events_per_second": Decimal("0.333333"),
+                        "mu_msg_per_replica_events_per_second": Decimal("0.250000"),
+                        "assumed_replicas": assumed_replicas,
+                        "effective_capacity_events_per_second": Decimal("0.500000"),
+                        "utilization_ratio": Decimal("0.666666"),
+                        "headroom_ratio": Decimal("0.333334"),
+                        "estimated_drain_seconds": 1800.0,
+                        "saturation_state": "stable",
+                    }
+                ][:limit],
+            }
+
         async def find_successful_replay_audit_by_fingerprint(
             self,
             replay_fingerprint: str,
@@ -1052,6 +1086,27 @@ async def test_ingestion_reprocessing_queue_health_endpoint(async_test_client: h
     assert body["total_pending_jobs"] >= 0
     assert body["queues"][0]["job_type"] == "RESET_WATERMARKS"
     assert "oldest_pending_age_seconds" in body["queues"][0]
+
+
+async def test_ingestion_capacity_status_endpoint(async_test_client: httpx.AsyncClient):
+    response = await async_test_client.get(
+        "/ingestion/health/capacity",
+        params={"lookback_minutes": 60, "assumed_replicas": 2},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["lookback_minutes"] == 60
+    assert body["assumed_replicas"] == 2
+    assert body["total_backlog_records"] >= 0
+    assert body["total_groups"] >= 1
+    assert body["groups"][0]["endpoint"] == "/ingest/transactions"
+    assert "lambda_in_events_per_second" in body["groups"][0]
+    assert "mu_msg_per_replica_events_per_second" in body["groups"][0]
+    assert body["groups"][0]["saturation_state"] in {
+        "stable",
+        "near_capacity",
+        "over_capacity",
+    }
 
 
 async def test_ingestion_idempotency_diagnostics_endpoint(async_test_client: httpx.AsyncClient):
