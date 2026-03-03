@@ -286,6 +286,21 @@ class IngestionOpsPolicyResponse(BaseModel):
         description="Configured batch size used by the valuation reprocessing worker claim loop.",
         examples=[10],
     )
+    valuation_scheduler_poll_interval_seconds: int = Field(
+        ge=1,
+        description="Configured poll interval (seconds) for the valuation scheduler.",
+        examples=[30],
+    )
+    valuation_scheduler_batch_size: int = Field(
+        ge=1,
+        description="Configured batch size for valuation scheduler scans and claims.",
+        examples=[100],
+    )
+    valuation_scheduler_dispatch_rounds: int = Field(
+        ge=1,
+        description="Configured number of dispatch claim rounds executed per scheduler poll.",
+        examples=[3],
+    )
     dlq_budget_events_per_window: int = Field(
         ge=1,
         description="DLQ budget used to compute DLQ pressure ratios for the active window.",

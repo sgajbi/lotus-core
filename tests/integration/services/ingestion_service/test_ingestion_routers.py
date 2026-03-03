@@ -448,6 +448,9 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 "replay_max_backlog_jobs": 5000,
                 "reprocessing_worker_poll_interval_seconds": 10,
                 "reprocessing_worker_batch_size": 10,
+                "valuation_scheduler_poll_interval_seconds": 30,
+                "valuation_scheduler_batch_size": 100,
+                "valuation_scheduler_dispatch_rounds": 3,
                 "dlq_budget_events_per_window": 10,
                 "operating_band_yellow_backlog_age_seconds": 15.0,
                 "operating_band_orange_backlog_age_seconds": 60.0,
@@ -1032,6 +1035,7 @@ async def test_ingestion_operating_policy_endpoint(async_test_client: httpx.Asyn
     assert "lookback_minutes_default" in body
     assert "replay_max_records_per_request" in body
     assert "reprocessing_worker_batch_size" in body
+    assert "valuation_scheduler_dispatch_rounds" in body
     assert "operating_band_red_backlog_age_seconds" in body
 
 
