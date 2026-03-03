@@ -436,6 +436,23 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                 "triggered_signals": ["backlog_age_seconds>=15", "dlq_pressure_ratio>=0.25"],
             }
 
+        async def get_operating_policy(self):
+            return {
+                "lookback_minutes_default": 60,
+                "failure_rate_threshold_default": Decimal("0.03"),
+                "queue_latency_threshold_seconds_default": 5.0,
+                "backlog_age_threshold_seconds_default": 300.0,
+                "replay_max_records_per_request": 5000,
+                "replay_max_backlog_jobs": 5000,
+                "dlq_budget_events_per_window": 10,
+                "operating_band_yellow_backlog_age_seconds": 15.0,
+                "operating_band_orange_backlog_age_seconds": 60.0,
+                "operating_band_red_backlog_age_seconds": 180.0,
+                "operating_band_yellow_dlq_pressure_ratio": Decimal("0.25"),
+                "operating_band_orange_dlq_pressure_ratio": Decimal("0.50"),
+                "operating_band_red_dlq_pressure_ratio": Decimal("1.0"),
+            }
+
         async def find_successful_replay_audit_by_fingerprint(
             self,
             replay_fingerprint: str,
@@ -981,6 +998,15 @@ async def test_ingestion_operating_band_endpoint(async_test_client: httpx.AsyncC
     assert body["operating_band"] in {"green", "yellow", "orange", "red"}
     assert "recommended_action" in body
     assert "triggered_signals" in body
+
+
+async def test_ingestion_operating_policy_endpoint(async_test_client: httpx.AsyncClient):
+    response = await async_test_client.get("/ingestion/health/policy")
+    assert response.status_code == 200
+    body = response.json()
+    assert "lookback_minutes_default" in body
+    assert "replay_max_records_per_request" in body
+    assert "operating_band_red_backlog_age_seconds" in body
 
 
 async def test_ingestion_idempotency_diagnostics_endpoint(async_test_client: httpx.AsyncClient):

@@ -333,3 +333,7 @@ Acceptance:
 - extracted `OperatingBandPolicy`, `OperatingBandSignals`, and `classify_operating_band(...)`
 - centralized threshold policy to avoid duplicated branching logic and simplify future tuning
 - added deterministic unit coverage for policy ordering (yellow -> orange -> red)
+5. Added ingestion policy introspection endpoint:
+- added `GET /ingestion/health/policy` exposing active SLO defaults, replay guardrails, DLQ budget, and operating-band thresholds
+- enables runbooks and automation to consume runtime policy directly and avoid configuration drift
+- added unit and integration coverage for endpoint contract shape

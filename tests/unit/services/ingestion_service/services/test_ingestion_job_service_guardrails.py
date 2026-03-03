@@ -237,3 +237,13 @@ async def test_classify_operating_band_policy_yellow_orange_red_ordering():
         policy=policy,
     )
     assert red.operating_band == "red"
+
+
+async def test_get_operating_policy_returns_configured_thresholds(
+    service: IngestionJobService,
+):
+    policy = await service.get_operating_policy()
+    assert policy.lookback_minutes_default >= 1
+    assert policy.replay_max_records_per_request >= 1
+    assert policy.replay_max_backlog_jobs >= 1
+    assert policy.dlq_budget_events_per_window >= 1

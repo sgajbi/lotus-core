@@ -237,6 +237,74 @@ class IngestionOperatingBandResponse(BaseModel):
     )
 
 
+class IngestionOpsPolicyResponse(BaseModel):
+    lookback_minutes_default: int = Field(
+        ge=1,
+        description="Default lookback window (minutes) used by ingestion health endpoints.",
+        examples=[60],
+    )
+    failure_rate_threshold_default: Decimal = Field(
+        ge=Decimal("0"),
+        description="Default failure-rate threshold used for SLO/error-budget evaluations.",
+        examples=["0.03"],
+    )
+    queue_latency_threshold_seconds_default: float = Field(
+        ge=0.0,
+        description="Default queue-latency threshold (seconds) used for SLO evaluation.",
+        examples=[5.0],
+    )
+    backlog_age_threshold_seconds_default: float = Field(
+        ge=0.0,
+        description="Default backlog-age threshold (seconds) used for SLO evaluation.",
+        examples=[300.0],
+    )
+    replay_max_records_per_request: int = Field(
+        ge=1,
+        description="Replay guardrail: maximum replay records allowed per request.",
+        examples=[5000],
+    )
+    replay_max_backlog_jobs: int = Field(
+        ge=1,
+        description="Replay guardrail: backlog ceiling beyond which replay is blocked.",
+        examples=[5000],
+    )
+    dlq_budget_events_per_window: int = Field(
+        ge=1,
+        description="DLQ budget used to compute DLQ pressure ratios for the active window.",
+        examples=[10],
+    )
+    operating_band_yellow_backlog_age_seconds: float = Field(
+        ge=0.0,
+        description="Backlog age threshold (seconds) that triggers yellow operating band.",
+        examples=[15.0],
+    )
+    operating_band_orange_backlog_age_seconds: float = Field(
+        ge=0.0,
+        description="Backlog age threshold (seconds) that triggers orange operating band.",
+        examples=[60.0],
+    )
+    operating_band_red_backlog_age_seconds: float = Field(
+        ge=0.0,
+        description="Backlog age threshold (seconds) that triggers red operating band.",
+        examples=[180.0],
+    )
+    operating_band_yellow_dlq_pressure_ratio: Decimal = Field(
+        ge=Decimal("0"),
+        description="DLQ pressure threshold that triggers yellow operating band.",
+        examples=["0.25"],
+    )
+    operating_band_orange_dlq_pressure_ratio: Decimal = Field(
+        ge=Decimal("0"),
+        description="DLQ pressure threshold that triggers orange operating band.",
+        examples=["0.50"],
+    )
+    operating_band_red_dlq_pressure_ratio: Decimal = Field(
+        ge=Decimal("0"),
+        description="DLQ pressure threshold that triggers red operating band.",
+        examples=["1.0"],
+    )
+
+
 class IngestionBacklogBreakdownItemResponse(BaseModel):
     endpoint: str = Field(
         description="Ingestion endpoint associated with this backlog group.",

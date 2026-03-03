@@ -21,6 +21,7 @@ from app.DTOs.ingestion_job_dto import (
     IngestionJobResponse,
     IngestionOpsModeResponse,
     IngestionOpsModeUpdateRequest,
+    IngestionOpsPolicyResponse,
     IngestionOperatingBandResponse,
     IngestionReplayAuditListResponse,
     IngestionReplayAuditResponse,
@@ -620,6 +621,24 @@ async def get_ingestion_operating_band(
         queue_latency_threshold_seconds=queue_latency_threshold_seconds,
         backlog_age_threshold_seconds=backlog_age_threshold_seconds,
     )
+
+
+@router.get(
+    "/ingestion/health/policy",
+    response_model=IngestionOpsPolicyResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Ingestion Operations"],
+    summary="Get ingestion operating policy thresholds",
+    description=(
+        "What: Return active ingestion policy thresholds and replay/DLQ guardrails.\n"
+        "How: Expose configured defaults used by SLO, operating-band, and replay gating flows.\n"
+        "When: Use to prevent config drift and keep runbooks/automation aligned with runtime policy."
+    ),
+)
+async def get_ingestion_operating_policy(
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+):
+    return await ingestion_job_service.get_operating_policy()
 
 
 @router.get(
