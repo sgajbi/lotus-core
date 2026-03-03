@@ -11,6 +11,7 @@ from typing import Dict, Optional
 from uuid import uuid4
 from confluent_kafka import Consumer, Message
 
+from .config import get_kafka_consumer_runtime_overrides
 from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
@@ -48,6 +49,13 @@ class BaseConsumer(ABC):
             'session.timeout.ms': 30000,
             'heartbeat.interval.ms': 3000
         }
+        runtime_overrides = get_kafka_consumer_runtime_overrides(group_id)
+        if runtime_overrides:
+            self._consumer_config.update(runtime_overrides)
+            logger.info(
+                "Applied Kafka consumer runtime overrides.",
+                extra={"group_id": group_id, "override_keys": sorted(runtime_overrides.keys())},
+            )
         self._running = True
 
         if self.dlq_topic:
