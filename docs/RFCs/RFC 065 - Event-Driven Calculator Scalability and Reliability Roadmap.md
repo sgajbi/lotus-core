@@ -1,7 +1,7 @@
 # RFC 065 - Event-Driven Calculator Scalability and Reliability Roadmap
 
 ## Status
-Proposed (Needs Approval)
+In Progress (Phase 1 hardening underway)
 
 ## Date
 2026-03-03
@@ -165,3 +165,26 @@ Acceptance:
 2. SLOs consistently met in load and replay scenarios.
 3. No financial correctness regressions in characterization suites.
 4. Full operational runbook and monitoring coverage in place.
+
+## 11. Implementation Progress (2026-03-03)
+
+### Completed in this change set
+1. Partition-key hardening at ingestion publish boundary:
+- transaction publish now rejects empty `portfolio_id` partition keys
+- transaction partition keys are normalized (`strip`) before Kafka publish
+2. Deterministic replay ordering hardening:
+- added canonical transaction ordering function with explicit tie-breaks:
+  - effective business date (derived from transaction timestamp)
+  - transaction timestamp
+  - ingestion timestamp (`created_at`) when available
+  - transaction id
+- position replay now uses deterministic ordering key
+- replay query ordering no longer uses surrogate DB id as tie-break; uses `transaction_id`
+3. Persistence safety update:
+- transaction UPSERT now excludes `None` values to prevent nullable event fields
+  from clobbering non-null DB defaults
+
+### Validation coverage added
+1. Unit tests for transaction partition-key guardrails in ingestion service
+2. Unit tests for deterministic transaction ordering helper
+3. Unit test for deterministic ordering in backdated replay flow

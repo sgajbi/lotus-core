@@ -42,6 +42,13 @@ class IngestionService:
             headers.append(("idempotency_key", idempotency_key.encode("utf-8")))
         return headers or None
 
+    @staticmethod
+    def _partition_key_or_raise(*, key: str, field_name: str) -> str:
+        normalized = key.strip()
+        if not normalized:
+            raise ValueError(f"Partition key field '{field_name}' must be non-empty.")
+        return normalized
+
     async def publish_business_dates(
         self, business_dates: List[BusinessDate], idempotency_key: str | None = None
     ) -> None:
@@ -87,10 +94,13 @@ class IngestionService:
         """Publishes a single transaction to the raw transactions topic."""
         headers = self._get_headers(idempotency_key)
         transaction_payload = transaction.model_dump()
+        partition_key = self._partition_key_or_raise(
+            key=transaction.portfolio_id, field_name="portfolio_id"
+        )
         try:
             self._kafka_producer.publish_message(
                 topic=KAFKA_RAW_TRANSACTIONS_TOPIC,
-                key=transaction.portfolio_id,
+                key=partition_key,
                 value=transaction_payload,
                 headers=headers,
             )
@@ -108,10 +118,13 @@ class IngestionService:
         headers = self._get_headers(idempotency_key)
         for transaction in transactions:
             transaction_payload = transaction.model_dump()
+            partition_key = self._partition_key_or_raise(
+                key=transaction.portfolio_id, field_name="portfolio_id"
+            )
             try:
                 self._kafka_producer.publish_message(
                     topic=KAFKA_RAW_TRANSACTIONS_TOPIC,
-                    key=transaction.portfolio_id,
+                    key=partition_key,
                     value=transaction_payload,
                     headers=headers,
                 )

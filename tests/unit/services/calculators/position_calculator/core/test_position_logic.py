@@ -164,6 +164,74 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     second_call_args = mock_outbox_repo.create_outbox_event.call_args_list[1].kwargs
     assert second_call_args['payload']['epoch'] == 1
 
+
+@pytest.mark.asyncio
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_backdated_replay_has_deterministic_tie_break_order(
+    mock_fencer_class: MagicMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_outbox_repo: AsyncMock,
+    sample_event: TransactionEvent,
+):
+    """
+    GIVEN backdated replay candidates with identical transaction_date
+    WHEN reprocessing is triggered
+    THEN replay order is deterministic by transaction ordering key, not DB arrival order.
+    """
+    mock_fencer_instance = mock_fencer_class.return_value
+    mock_fencer_instance.check = AsyncMock(return_value=True)
+    sample_event.epoch = None
+    sample_event.transaction_id = "TXN_C"
+    sample_event.transaction_date = datetime(2025, 8, 20, 10, 0, 0)
+
+    mock_state_repo.get_or_create_state.return_value = PositionState(
+        watermark_date=date(2025, 8, 25), epoch=0
+    )
+    mock_state_repo.increment_epoch_and_reset_watermark.return_value = PositionState(epoch=1)
+
+    # Intentionally unsorted by transaction_id.
+    mock_repo.get_all_transactions_for_security.return_value = [
+        DBTransaction(
+            transaction_id="TXN_B",
+            portfolio_id="P1",
+            security_id="S1",
+            instrument_id="I1",
+            transaction_date=datetime(2025, 8, 20, 10, 0, 0),
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
+            trade_currency="USD",
+            currency="USD",
+            trade_fee=Decimal("0"),
+        ),
+        DBTransaction(
+            transaction_id="TXN_A",
+            portfolio_id="P1",
+            security_id="S1",
+            instrument_id="I1",
+            transaction_date=datetime(2025, 8, 20, 10, 0, 0),
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
+            trade_currency="USD",
+            currency="USD",
+            trade_fee=Decimal("0"),
+        ),
+    ]
+
+    await PositionCalculator.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
+    )
+
+    replay_ids = [
+        call.kwargs["payload"]["transaction_id"]
+        for call in mock_outbox_repo.create_outbox_event.call_args_list
+    ]
+    assert replay_ids == ["TXN_A", "TXN_B", "TXN_C"]
+
 def test_calculate_next_position_for_sell_uses_net_cost():
     """
     Verifies that for a SELL transaction, the cost basis is correctly reduced
