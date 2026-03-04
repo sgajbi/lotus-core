@@ -24,7 +24,7 @@ pytestmark = pytest.mark.asyncio
 def reset_cache():
     """Resets the module-level cache before each test to ensure isolation."""
     from src.services.calculators.cashflow_calculator_service.app.consumers import transaction_consumer
-    transaction_consumer._cashflow_rules_cache = None
+    transaction_consumer._cashflow_rule_cache_state = None
     yield
 
 @pytest.fixture
@@ -143,7 +143,7 @@ async def test_process_message_success(
 
         # Assert
         mock_idempotency_repo.is_event_processed.assert_called_once_with("raw_transactions_completed-0-123", "cashflow-calculator")
-        mock_rules_repo.get_all_rules.assert_awaited_once() 
+        mock_rules_repo.get_all_rules.assert_awaited_once()
         mock_cashflow_repo.create_cashflow.assert_called_once()
         mock_outbox_repo.create_outbox_event.assert_called_once()
         
@@ -183,7 +183,8 @@ async def test_process_message_sends_to_dlq_if_rule_not_found(
         await cashflow_consumer.process_message(mock_kafka_message)
 
         # ASSERT
-        mock_rules_repo.get_all_rules.assert_awaited_once()
+        # Missing-rule path intentionally forces one immediate refresh.
+        assert mock_rules_repo.get_all_rules.await_count == 2
         
         # Verify business logic was NOT executed
         mock_cashflow_repo.create_cashflow.assert_not_called()
@@ -224,3 +225,136 @@ async def test_process_message_skips_stale_epoch_event(
         mock_cashflow_repo.create_cashflow.assert_not_called()
         mock_outbox_repo.create_outbox_event.assert_not_called()
         cashflow_consumer._send_to_dlq_async.assert_not_called()
+
+
+async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    from src.services.calculators.cashflow_calculator_service.app.consumers import transaction_consumer
+
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.side_effect = [
+        [
+            CashflowRule(
+                transaction_type="BUY",
+                classification="INVESTMENT_OUTFLOW",
+                timing="BOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+            )
+        ],
+        [
+            CashflowRule(
+                transaction_type="BUY",
+                classification="INVESTMENT_OUTFLOW",
+                timing="EOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+            )
+        ],
+    ]
+
+    with patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300), patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+        return_value=rules_repo,
+    ), patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+        side_effect=[10.0, 20.0, 1200.0, 1210.0],
+    ):
+        first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        second_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        third_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        assert first_rule is not None
+        assert second_rule is not None
+        assert third_rule is not None
+        assert first_rule.timing == "BOD"
+        assert second_rule.timing == "BOD"
+        assert third_rule.timing == "EOD"
+        assert rules_repo.get_all_rules.await_count == 2
+
+
+async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    from src.services.calculators.cashflow_calculator_service.app.consumers import transaction_consumer
+
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.side_effect = [
+        [
+            CashflowRule(
+                transaction_type="BUY",
+                classification="INVESTMENT_OUTFLOW",
+                timing="BOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+            )
+        ],
+        [
+            CashflowRule(
+                transaction_type="DIVIDEND",
+                classification="INCOME",
+                timing="EOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+            )
+        ],
+    ]
+
+    with patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300), patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+        return_value=rules_repo,
+    ), patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+        side_effect=[100.0, 110.0],
+    ):
+        rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "DIVIDEND")
+        assert rule is not None
+        assert rule.transaction_type == "DIVIDEND"
+        assert rules_repo.get_all_rules.await_count == 2
+
+
+async def test_invalidate_cashflow_rule_cache_forces_reload(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    from src.services.calculators.cashflow_calculator_service.app.consumers import transaction_consumer
+
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.side_effect = [
+        [
+            CashflowRule(
+                transaction_type="BUY",
+                classification="INVESTMENT_OUTFLOW",
+                timing="BOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+            )
+        ],
+        [
+            CashflowRule(
+                transaction_type="BUY",
+                classification="INVESTMENT_OUTFLOW",
+                timing="EOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+            )
+        ],
+    ]
+
+    with patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600), patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+        return_value=rules_repo,
+    ), patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+        side_effect=[5.0, 6.0, 7.0, 8.0],
+    ):
+        first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        assert first_rule is not None
+        assert first_rule.timing == "BOD"
+        transaction_consumer.invalidate_cashflow_rule_cache()
+        reloaded_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        assert reloaded_rule is not None
+        assert reloaded_rule.timing == "EOD"
+        assert rules_repo.get_all_rules.await_count == 2

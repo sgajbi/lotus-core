@@ -2,23 +2,23 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2025-09-02 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `cashflow_calculator_service`, `portfolio-common` |
 | Depends On | RFC 001 |
-| Scope | DB-driven cashflow rules, rule consumption behavior, business-level cashflow metrics |
+| Scope | DB-driven cashflow rules, runtime rule refresh behavior, business-level cashflow metrics |
 
 ## Executive Summary
 
 RFC 022 modernized cashflow processing by moving rule logic from static code config to database policy records and adding business-level metrics.
 
-Current state is strong but not fully complete:
-1. DB-driven `cashflow_rules` and repository/cache loading are implemented.
+Current implementation is complete:
+1. DB-driven `cashflow_rules` and repository loading are implemented.
 2. `cashflows_created_total` metric is implemented and emitted with `classification`/`timing` labels.
-3. A key agility goal remains incomplete: runtime rule-change refresh without service restart is not implemented (module-level cache has no invalidation/refresh path).
+3. Runtime no-restart rule update behavior is implemented with TTL refresh, explicit invalidation hook, and missing-rule forced refresh safeguard.
 
-Classification: `Partially implemented (requires enhancement)`.
+Classification: `Fully implemented and aligned`.
 
 ## Original Requested Requirements (Preserved)
 
@@ -33,14 +33,13 @@ Original RFC 022 requested:
 Implemented:
 1. `cashflow_rules` schema exists via Alembic migration.
 2. Service loads rules from DB through `CashflowRulesRepository`.
-3. Consumer uses module-level cache for fast rule lookup.
+3. Consumer uses in-memory cache with deterministic refresh controls:
+   1. TTL-based refresh (`CASHFLOW_RULE_CACHE_TTL_SECONDS`).
+   2. Explicit invalidation hook (`invalidate_cashflow_rule_cache`).
+   3. Missing-rule forced refresh to pick up newly added rule types immediately.
 4. Missing rule path sends event to DLQ as non-retryable configuration error.
 5. `CASHFLOWS_CREATED_TOTAL` counter is defined and incremented in `CashflowLogic.calculate`.
-6. Unit tests exist for rules repository, consumer behavior, and metric label emission.
-
-Not yet implemented:
-1. No cache refresh or invalidation path for runtime rule updates.
-2. No admin endpoint/signal-driven reload workflow in current service.
+6. Unit tests cover repository behavior, consumer behavior, and cache refresh semantics.
 
 Evidence:
 - `alembic/versions/1a7b8c9d0e2f_feat_add_cashflow_rules_table.py`
@@ -57,37 +56,26 @@ Evidence:
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
 | Replace hardcoded rules with DB policy table | Implemented (`cashflow_rules`) | migration + repository |
-| Load/cached rule lookup in consumer | Implemented (module-level cache) | `transaction_consumer.py` |
+| Load/cached rule lookup in consumer | Implemented (TTL cache + explicit invalidation + missing-rule forced refresh) | `transaction_consumer.py`; consumer unit tests |
 | Metric `cashflows_created_total` with labels | Implemented | `monitoring.py`; `cashflow_logic.py`; core tests |
-| Dynamic rule updates without restart | Not implemented (cache refresh absent) | `transaction_consumer.py` |
+| Dynamic rule updates without restart | Implemented | `transaction_consumer.py`; `test_cashflow_transaction_consumer.py` |
 
 ## Design Reasoning and Trade-offs
 
 1. DB-driven rules improve governance and remove business-policy code redeploy dependency.
-2. In-memory cache preserves consumer throughput.
+2. In-memory caching preserves consumer throughput.
+3. TTL + forced refresh keeps runtime agility without requiring restarts.
 
 Trade-off:
-- Current cache strategy optimizes steady-state performance but sacrifices runtime agility until reload mechanism exists.
+- Very low-frequency rule changes may still wait up to TTL unless missing-rule path or explicit invalidation is used.
 
 ## Gap Assessment
 
-Primary remaining gap:
-1. Introduce safe cache refresh/reload semantics so rule updates are applied without service restart.
-
-Secondary considerations:
-1. Add operational visibility for rule-version currently loaded by each consumer instance.
-2. Add deterministic test proving hot rule update behavior once implemented.
-
-## Deviations and Evolution Since Original RFC
-
-1. Core architecture completed DB migration and metric instrumentation.
-2. Dynamic refresh requirement was deferred implicitly and should now be tracked explicitly as a delta.
+No blocking implementation gap remains for RFC-022 scope.
 
 ## Proposed Changes
 
-1. Add rule-cache refresh mechanism (TTL, admin trigger, or event-driven invalidation).
-2. Add test coverage for hot-rule update behavior.
-3. Document reload semantics in cashflow operations guide.
+1. Keep cache-policy controls (`CASHFLOW_RULE_CACHE_TTL_SECONDS`, invalidation hook) documented and regression-tested.
 
 ## Test and Validation Evidence
 
@@ -100,21 +88,16 @@ Secondary considerations:
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned:
+Aligned:
 1. Schema and DB-driven configuration: met.
 2. Business metric instrumentation: met.
-3. Runtime no-restart dynamic update behavior: not yet met.
+3. Runtime no-restart dynamic update behavior: met.
 
 ## Rollout and Backward Compatibility
 
-No runtime change introduced by this documentation retrofit.
-
-## Open Questions
-
-1. Preferred reload strategy: event-driven invalidation, periodic TTL reload, or explicit admin endpoint?
-2. Should rule updates be versioned and auditable with `effective_from` to avoid mid-batch ambiguity?
+1. Runtime behavior remains backward-compatible.
+2. Rule-update responsiveness is improved without requiring process restart.
 
 ## Next Actions
 
-1. Track and implement dynamic rule refresh delta in `RFC-DELTA-BACKLOG.md`.
-2. Add regression tests and operations documentation for reload semantics.
+1. Maintain cache refresh regression tests as part of consumer suite.
