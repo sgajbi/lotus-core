@@ -38,6 +38,7 @@ Implemented capability in lotus-core:
    - projected positions and projected summary
 2. Persistence layer for simulation sessions and changes.
 3. Query-service simulation service/repository stack with integration and unit tests.
+4. Snapshot-first baseline sourcing with position-history fallback for projected views.
 
 Not implemented as originally written:
 1. No dedicated standalone `simulation-service` process.
@@ -56,6 +57,41 @@ Evidence:
 - `tests/unit/services/query_service/services/test_simulation_service.py`
 - `tests/unit/services/query_service/repositories/test_simulation_repository.py`
 
+### Implemented Endpoint Contract (Current)
+
+| Endpoint | Method | Purpose | Sync/Async |
+| --- | --- | --- | --- |
+| `/simulation-sessions` | `POST` | Create active simulation session with TTL | Sync |
+| `/simulation-sessions/{session_id}` | `GET` | Fetch session metadata and lifecycle state | Sync |
+| `/simulation-sessions/{session_id}` | `DELETE` | Close session (lifecycle transition) | Sync |
+| `/simulation-sessions/{session_id}/changes` | `POST` | Add one or more hypothetical changes | Sync |
+| `/simulation-sessions/{session_id}/changes/{change_id}` | `DELETE` | Remove a previously staged change | Sync |
+| `/simulation-sessions/{session_id}/projected-positions` | `GET` | Compute projected position set for the session | Sync |
+| `/simulation-sessions/{session_id}/projected-summary` | `GET` | Compute projected summary metrics | Sync |
+
+### Projection Algorithm (Implemented)
+
+For each session `s`:
+1. Load baseline positions for `s.portfolio_id` from latest daily snapshots.
+2. If no snapshot exists, fallback to latest position history.
+3. Build baseline map keyed by `(portfolio_id, security_id)`:
+   - `baseline_quantity`
+   - `proposed_quantity := baseline_quantity`
+4. Ensure every changed security exists in the map (default baseline `0`).
+5. Apply each change `c` by transaction-sign mapping:
+   - Positive set: `{BUY, DEPOSIT, TRANSFER_IN}`
+   - Negative set: `{SELL, WITHDRAWAL, TRANSFER_OUT, FEE, TAX}`
+   - `effect(c) = +magnitude(c)` for positive types
+   - `effect(c) = -magnitude(c)` for negative types
+   - `magnitude(c) = quantity if present else amount if present else 0`
+6. Update proposed quantity:
+   - `proposed_quantity := proposed_quantity + effect(c)`
+7. Filter out non-positive projected holdings (`proposed_quantity <= 0`) in projected-positions response.
+8. Compute summary fields:
+   - `total_baseline_positions = count(baseline_quantity > 0 in returned positions)`
+   - `total_proposed_positions = count(returned positions)`
+   - `net_delta_quantity = sum(proposed_quantity - baseline_quantity)`
+
 ## Requirement-to-Implementation Traceability
 
 | Original Requirement | Current Implementation | Status | Evidence |
@@ -70,13 +106,22 @@ Evidence:
 
 1. **Why current approach**: in-process query-service simulation sessions reduce operational complexity and integrate cleanly with canonical core data paths.
 2. **Why no async job service currently**: current projected-state use cases are covered by synchronous session-driven APIs.
-3. **Trade-off**: simpler architecture but narrower analytical output than original rich diff vision.
+3. **Why session versioning**: every change mutation increments session version to give deterministic client-side concurrency/state tracking.
+4. **Trade-off**: simpler architecture but narrower analytical output than original rich diff vision.
 
 ## Gap Assessment
 
 RFC 013 is partially implemented:
 1. Core simulation session capability exists and is production-aligned with newer RFCs.
 2. Original async job-based architecture and broader analytics-diff outputs were not implemented in this RFC form.
+
+## Explicit Non-Goals (Current lotus-core Scope)
+
+The following are intentionally out of current RFC-013 implementation scope:
+1. Dedicated standalone simulation worker/microservice process.
+2. Async simulation job queue and polling endpoints.
+3. In-core concentration/risk analytics diff engine (owned by downstream analytics services).
+4. Long-running scenario orchestration beyond session-transaction what-if mutation.
 
 ## Deviations and Evolution Since Original RFC
 
