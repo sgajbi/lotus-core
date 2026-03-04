@@ -230,6 +230,12 @@
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
       "review_by": "2026-08-24"
+    },
+    {
+      "finding": "src/services/ingestion_service/app/settings.py:32:return float(raw)",
+      "justification": "Non-monetary operational threshold parsing; approved exception.",
+      "owner": "platform-governance",
+      "review_by": "2026-08-24"
     }
   ]
 }

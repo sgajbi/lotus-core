@@ -204,6 +204,26 @@ async def test_get_held_since_dates_empty_input(repository: PositionRepository):
     assert held_since_map == {}
 
 
+async def test_get_held_since_dates_non_empty_input_returns_keyed_map(
+    repository: PositionRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    row = MagicMock()
+    row.security_id = "S1"
+    row.epoch = 3
+    row.held_since_date = date(2025, 1, 10)
+    mock_result.all.return_value = [row]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    held_since_map = await repository.get_held_since_dates("P1", [("S1", 3)])
+
+    assert held_since_map == {("S1", 3): date(2025, 1, 10)}
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "FROM position_history" in compiled_query
+    assert "GROUP BY position_history.security_id, position_history.epoch" in compiled_query
+
+
 async def test_get_latest_positions_by_portfolio_as_of_date_builds_expected_query(
     repository: PositionRepository, mock_db_session: AsyncMock
 ):

@@ -231,3 +231,18 @@ async def test_get_transactions_count_with_as_of_date(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "date(transactions.transaction_date) <= '2025-01-15'" in compiled_query
+
+
+async def test_get_latest_business_date(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = date(2026, 3, 1)
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    latest = await repository.get_latest_business_date()
+
+    assert latest == date(2026, 3, 1)
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from business_dates" in compiled_query.lower()

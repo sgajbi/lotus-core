@@ -1,12 +1,12 @@
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from portfolio_common.logging_utils import correlation_id_var
+from .settings import env_bool, env_int, load_query_service_settings
 
 logger = logging.getLogger("enterprise_readiness")
 MiddlewareNext = Callable[[Request], Awaitable[Response]]
@@ -27,11 +27,18 @@ _REDACT_FIELDS = {
 
 
 def _env_enabled(name: str, default: str = "true") -> bool:
-    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return env_bool(name, default.strip().lower() in {"1", "true", "yes", "on"})
 
 
 def _load_json_map(name: str) -> dict[str, Any]:
-    raw = os.getenv(name, "{}")
+    settings = load_query_service_settings()
+    if name == "ENTERPRISE_FEATURE_FLAGS_JSON":
+        parsed = settings.enterprise_feature_flags
+        return parsed if isinstance(parsed, dict) else {}
+    if name == "ENTERPRISE_CAPABILITY_RULES_JSON":
+        parsed = settings.enterprise_capability_rules
+        return parsed if isinstance(parsed, dict) else {}
+    raw = "{}"
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
@@ -40,14 +47,11 @@ def _load_json_map(name: str) -> dict[str, Any]:
 
 
 def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
+    return env_int(name, default)
 
 
 def enterprise_policy_version() -> str:
-    return os.getenv("ENTERPRISE_POLICY_VERSION", "1.0.0")
+    return load_query_service_settings().enterprise_policy_version
 
 
 def validate_enterprise_runtime_config() -> list[str]:
@@ -61,7 +65,7 @@ def validate_enterprise_runtime_config() -> list[str]:
 
     if (
         _env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false")
-        and not os.getenv("ENTERPRISE_PRIMARY_KEY_ID", "").strip()
+        and not load_query_service_settings().enterprise_primary_key_id.strip()
     ):
         issues.append("missing_primary_key_id")
 

@@ -1,18 +1,13 @@
-import os
-
 from fastapi import HTTPException, status
-
-
-def _env_enabled(name: str, default: str = "true") -> bool:
-    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+from .settings import get_ingestion_service_settings
 
 
 def portfolio_bundle_adapter_enabled() -> bool:
-    return _env_enabled("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", "true")
+    return get_ingestion_service_settings().adapter_mode.portfolio_bundle_enabled
 
 
 def upload_adapter_enabled() -> bool:
-    return _env_enabled("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", "true")
+    return get_ingestion_service_settings().adapter_mode.upload_apis_enabled
 
 
 def require_portfolio_bundle_adapter_enabled() -> None:

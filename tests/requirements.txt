@@ -4,6 +4,7 @@
 pytest==8.2.2
 pytest-cov==5.0.0
 pytest-dependency==0.6.0
+hypothesis==6.140.2
 openpyxl==3.1.5
 
 # Plugin for running asyncio tests

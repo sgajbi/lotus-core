@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import hashlib
 import json
-import os
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -54,71 +53,29 @@ from portfolio_common.monitoring import (
 )
 from sqlalchemy import and_, case, desc, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
+from ..settings import get_ingestion_service_settings
 
+_SETTINGS = get_ingestion_service_settings()
+_RUNTIME_POLICY = _SETTINGS.runtime_policy
 
-def _env_decimal(name: str, default: str) -> Decimal:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return Decimal(default)
-    try:
-        return Decimal(raw_value)
-    except Exception:
-        return Decimal(default)
-
-
-REPLAY_MAX_RECORDS_PER_REQUEST = int(
-    os.getenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", "5000")
+REPLAY_MAX_RECORDS_PER_REQUEST = _RUNTIME_POLICY.replay_max_records_per_request
+REPLAY_MAX_BACKLOG_JOBS = _RUNTIME_POLICY.replay_max_backlog_jobs
+DLQ_BUDGET_EVENTS_PER_WINDOW = _RUNTIME_POLICY.dlq_budget_events_per_window
+DEFAULT_LOOKBACK_MINUTES = _RUNTIME_POLICY.default_lookback_minutes
+DEFAULT_FAILURE_RATE_THRESHOLD = _RUNTIME_POLICY.default_failure_rate_threshold
+DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = (
+    _RUNTIME_POLICY.default_queue_latency_threshold_seconds
 )
-REPLAY_MAX_BACKLOG_JOBS = int(os.getenv("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", "5000"))
-DLQ_BUDGET_EVENTS_PER_WINDOW = int(
-    os.getenv("LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", "10")
-)
-DEFAULT_LOOKBACK_MINUTES = int(os.getenv("LOTUS_CORE_DEFAULT_LOOKBACK_MINUTES", "60"))
-DEFAULT_FAILURE_RATE_THRESHOLD = _env_decimal(
-    "LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD", "0.03"
-)
-DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = float(
-    os.getenv("LOTUS_CORE_DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS", "5.0")
-)
-DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = float(
-    os.getenv("LOTUS_CORE_DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS", "300.0")
-)
-REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = int(
-    os.getenv("REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", "10")
-)
-REPROCESSING_WORKER_BATCH_SIZE = int(os.getenv("REPROCESSING_WORKER_BATCH_SIZE", "10"))
-VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = int(
-    os.getenv("VALUATION_SCHEDULER_POLL_INTERVAL", "30")
-)
-VALUATION_SCHEDULER_BATCH_SIZE = int(os.getenv("VALUATION_SCHEDULER_BATCH_SIZE", "100"))
-VALUATION_SCHEDULER_DISPATCH_ROUNDS = int(
-    os.getenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "3")
-)
-CAPACITY_ASSUMED_REPLICAS = int(os.getenv("LOTUS_CORE_CAPACITY_ASSUMED_REPLICAS", "1"))
-REPLAY_ISOLATION_MODE = os.getenv("LOTUS_CORE_REPLAY_ISOLATION_MODE", "shared_workers")
-PARTITION_GROWTH_STRATEGY = os.getenv("LOTUS_CORE_PARTITION_GROWTH_STRATEGY", "scale_out_only")
-_DEFAULT_CALCULATOR_PEAK_LAG_AGE = {
-    "position": 30,
-    "cost": 45,
-    "valuation": 60,
-    "cashflow": 45,
-    "timeseries": 120,
-}
-_calculator_peak_lag_age_raw = os.getenv("LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON")
-if _calculator_peak_lag_age_raw:
-    try:
-        _parsed_peak_lag_age = json.loads(_calculator_peak_lag_age_raw)
-        if isinstance(_parsed_peak_lag_age, dict):
-            CALCULATOR_PEAK_LAG_AGE_SECONDS = {
-                key: int(_parsed_peak_lag_age.get(key, default))
-                for key, default in _DEFAULT_CALCULATOR_PEAK_LAG_AGE.items()
-            }
-        else:
-            CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_DEFAULT_CALCULATOR_PEAK_LAG_AGE)
-    except Exception:
-        CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_DEFAULT_CALCULATOR_PEAK_LAG_AGE)
-else:
-    CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_DEFAULT_CALCULATOR_PEAK_LAG_AGE)
+DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_backlog_age_threshold_seconds
+REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = _RUNTIME_POLICY.reprocessing_worker_poll_interval_seconds
+REPROCESSING_WORKER_BATCH_SIZE = _RUNTIME_POLICY.reprocessing_worker_batch_size
+VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = _RUNTIME_POLICY.valuation_scheduler_poll_interval_seconds
+VALUATION_SCHEDULER_BATCH_SIZE = _RUNTIME_POLICY.valuation_scheduler_batch_size
+VALUATION_SCHEDULER_DISPATCH_ROUNDS = _RUNTIME_POLICY.valuation_scheduler_dispatch_rounds
+CAPACITY_ASSUMED_REPLICAS = _RUNTIME_POLICY.capacity_assumed_replicas
+REPLAY_ISOLATION_MODE = _RUNTIME_POLICY.replay_isolation_mode
+PARTITION_GROWTH_STRATEGY = _RUNTIME_POLICY.partition_growth_strategy
+CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_RUNTIME_POLICY.calculator_peak_lag_age_seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,24 +106,12 @@ class OperatingBandDecision:
 
 
 OPERATING_BAND_POLICY = OperatingBandPolicy(
-    yellow_backlog_age_seconds=float(
-        os.getenv("LOTUS_CORE_OPERATING_BAND_YELLOW_BACKLOG_AGE_SECONDS", "15")
-    ),
-    orange_backlog_age_seconds=float(
-        os.getenv("LOTUS_CORE_OPERATING_BAND_ORANGE_BACKLOG_AGE_SECONDS", "60")
-    ),
-    red_backlog_age_seconds=float(
-        os.getenv("LOTUS_CORE_OPERATING_BAND_RED_BACKLOG_AGE_SECONDS", "180")
-    ),
-    yellow_dlq_pressure_ratio=_env_decimal(
-        "LOTUS_CORE_OPERATING_BAND_YELLOW_DLQ_PRESSURE_RATIO", "0.25"
-    ),
-    orange_dlq_pressure_ratio=_env_decimal(
-        "LOTUS_CORE_OPERATING_BAND_ORANGE_DLQ_PRESSURE_RATIO", "0.50"
-    ),
-    red_dlq_pressure_ratio=_env_decimal(
-        "LOTUS_CORE_OPERATING_BAND_RED_DLQ_PRESSURE_RATIO", "1.0"
-    ),
+    yellow_backlog_age_seconds=_RUNTIME_POLICY.operating_band.yellow_backlog_age_seconds,
+    orange_backlog_age_seconds=_RUNTIME_POLICY.operating_band.orange_backlog_age_seconds,
+    red_backlog_age_seconds=_RUNTIME_POLICY.operating_band.red_backlog_age_seconds,
+    yellow_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.yellow_dlq_pressure_ratio,
+    orange_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.orange_dlq_pressure_ratio,
+    red_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.red_dlq_pressure_ratio,
 )
 
 

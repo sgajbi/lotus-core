@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -18,6 +17,7 @@ from ..dtos.capabilities_dto import (
     IntegrationCapabilitiesResponse,
     WorkflowCapability,
 )
+from ..settings import env_bool, load_query_service_settings
 
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ _DEFAULT_INPUT_MODES_BY_CONSUMER: dict[str, list[str]] = {
 class CapabilitiesService:
     @staticmethod
     def _resolve_as_of_date() -> date:
-        if not (os.getenv("HOST_DATABASE_URL") or os.getenv("DATABASE_URL")):
+        if not load_query_service_settings().has_database_url:
             return datetime.now(UTC).date()
         try:
             with SessionLocal() as db:
@@ -74,14 +74,11 @@ class CapabilitiesService:
 
     @staticmethod
     def _env_bool(name: str, default: bool) -> bool:
-        value = os.getenv(name)
-        if value is None:
-            return default
-        return value.strip().lower() in {"1", "true", "yes", "on"}
+        return env_bool(name, default)
 
     @staticmethod
     def _load_tenant_overrides() -> dict[str, dict[str, Any]]:
-        raw = os.getenv("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON")
+        raw = load_query_service_settings().capability_tenant_overrides_json
         if not raw:
             return {}
         try:
@@ -114,7 +111,7 @@ class CapabilitiesService:
             key: self._env_bool(env_name, default)
             for key, (env_name, default) in _FEATURE_ENV_DEFAULTS.items()
         }
-        policy_version = os.getenv("LOTUS_CORE_POLICY_VERSION", "tenant-default-v1")
+        policy_version = load_query_service_settings().lotus_core_policy_version
         supported_input_modes = list(
             _DEFAULT_INPUT_MODES_BY_CONSUMER.get(consumer_system, ["lotus_core_ref"])
         )

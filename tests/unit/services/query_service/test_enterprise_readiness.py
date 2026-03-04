@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 import pytest
 from fastapi import Request
@@ -126,6 +127,16 @@ def test_load_json_map_returns_empty_on_invalid_json(monkeypatch):
 def test_load_feature_flags_returns_empty_for_non_object_payload(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_FEATURE_FLAGS_JSON", "[]")
     assert load_feature_flags() == {}
+
+
+def test_load_json_map_unknown_name_returns_empty_dict() -> None:
+    assert _load_json_map("SOME_UNKNOWN_JSON_CONFIG") == {}
+
+
+def test_load_json_map_unknown_name_invalid_json_path_returns_empty_dict() -> None:
+    with patch("src.services.query_service.app.enterprise_readiness.json.loads") as mock_loads:
+        mock_loads.side_effect = json.JSONDecodeError("bad", "x", 0)
+        assert _load_json_map("SOME_UNKNOWN_JSON_CONFIG") == {}
 
 
 def test_authorize_write_request_requires_service_identity_when_headers_present(monkeypatch):

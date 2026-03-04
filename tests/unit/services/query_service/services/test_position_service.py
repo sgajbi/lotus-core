@@ -270,3 +270,61 @@ async def test_get_latest_positions_defaults_to_today_when_business_date_absent(
         mock_position_repo.get_latest_positions_by_portfolio_as_of_date.assert_awaited_once_with(
             "P1", date.today()
         )
+
+
+async def test_get_latest_positions_weight_zero_when_all_values_zero(mock_position_repo: AsyncMock):
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        zero_snapshot = DailyPositionSnapshot(
+            security_id="S0",
+            quantity=Decimal("1"),
+            cost_basis=Decimal("0"),
+            cost_basis_local=Decimal("0"),
+            market_value=Decimal("0"),
+            market_value_local=Decimal("0"),
+            unrealized_gain_loss=Decimal("0"),
+            unrealized_gain_loss_local=Decimal("0"),
+            date=date(2025, 1, 1),
+        )
+        mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+            (zero_snapshot, None, PositionState(status="CURRENT", epoch=1))
+        ]
+        mock_position_repo.get_held_since_dates.return_value = {}
+
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions("P1")
+
+        assert len(response.positions) == 1
+        assert response.positions[0].weight == Decimal(0)
+        assert response.positions[0].held_since_date == date(2025, 1, 1)
+
+
+async def test_get_latest_positions_uses_default_held_since_when_map_missing(
+    mock_position_repo: AsyncMock,
+):
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        snapshot = DailyPositionSnapshot(
+            security_id="S3",
+            quantity=Decimal("2"),
+            cost_basis=Decimal("20"),
+            cost_basis_local=Decimal("20"),
+            market_value=Decimal("20"),
+            market_value_local=Decimal("20"),
+            unrealized_gain_loss=Decimal("0"),
+            unrealized_gain_loss_local=Decimal("0"),
+            date=date(2025, 1, 2),
+        )
+        mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+            (snapshot, None, PositionState(status="CURRENT", epoch=3))
+        ]
+        mock_position_repo.get_held_since_dates.return_value = {}
+
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions("P1")
+
+        assert response.positions[0].held_since_date == date(2025, 1, 2)

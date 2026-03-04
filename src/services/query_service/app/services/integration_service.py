@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -35,6 +34,7 @@ from ..dtos.reference_integration_dto import (
     SeriesPoint,
 )
 from ..repositories.reference_data_repository import ReferenceDataRepository
+from ..settings import load_query_service_settings
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class IntegrationService:
 
     @staticmethod
     def _load_policy() -> dict[str, Any]:
-        raw = os.getenv("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON")
+        raw = load_query_service_settings().integration_snapshot_policy_json
         if not raw:
             return {}
         try:
@@ -163,7 +163,7 @@ class IntegrationService:
             warnings.append("NO_ALLOWED_SECTION_RESTRICTION")
 
         return PolicyContext(
-            policy_version=os.getenv("LOTUS_CORE_POLICY_VERSION", "tenant-default-v1"),
+            policy_version=load_query_service_settings().lotus_core_policy_version,
             policy_source=policy_source,
             matched_rule_id=matched_rule_id,
             strict_mode=strict_mode,

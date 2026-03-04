@@ -223,3 +223,59 @@ async def test_process_message_handles_unexpected_error(
     
     # Idempotency key should NOT be marked as processed, as the message went to DLQ for retry
     mock_idempotency_repo.mark_event_processed.assert_not_called()
+
+
+async def test_process_message_marks_job_failed_when_fx_rate_missing(
+    consumer: ValuationConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+):
+    """
+    GIVEN valuation requires cross-currency conversion and FX is missing
+    WHEN the consumer processes the message
+    THEN it should persist a FAILED valuation snapshot and mark the job FAILED.
+    """
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("8000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency="EUR",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("90"),
+        currency="EUR",
+        price_date=mock_event.valuation_date,
+    )
+    mock_valuation_repo.get_fx_rate.return_value = None
+    mock_valuation_repo.upsert_daily_snapshot.return_value = DailyPositionSnapshot(
+        id=1,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.valuation_date,
+        epoch=mock_event.epoch,
+        valuation_status="FAILED",
+    )
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_valuation_repo.update_job_status.assert_called_once()
+    update_args = mock_valuation_repo.update_job_status.call_args.args
+    update_kwargs = mock_valuation_repo.update_job_status.call_args.kwargs
+    assert update_args[4] == "FAILED"
+    assert "Missing FX rate" in update_kwargs["failure_reason"]
+    mock_outbox_repo.create_outbox_event.assert_called_once()
+    consumer._send_to_dlq_async.assert_not_called()
+    mock_idempotency_repo.mark_event_processed.assert_called_once()

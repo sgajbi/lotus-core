@@ -4,33 +4,29 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
+from .settings import get_ingestion_service_settings
 
 
-def _as_bool(value: str | None, default: bool) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+_SETTINGS = get_ingestion_service_settings()
 
+OPS_TOKEN_REQUIRED = _SETTINGS.ops_auth.token_required
+OPS_TOKEN_VALUE = _SETTINGS.ops_auth.token_value
+OPS_AUTH_MODE = _SETTINGS.ops_auth.auth_mode
+OPS_JWT_HS256_SECRET = _SETTINGS.ops_auth.jwt_hs256_secret
+OPS_JWT_ISSUER = _SETTINGS.ops_auth.jwt_issuer
+OPS_JWT_AUDIENCE = _SETTINGS.ops_auth.jwt_audience
+OPS_JWT_CLOCK_SKEW_SECONDS = _SETTINGS.ops_auth.jwt_clock_skew_seconds
 
-OPS_TOKEN_REQUIRED = _as_bool(os.getenv("LOTUS_CORE_INGEST_OPS_TOKEN_REQUIRED"), True)
-OPS_TOKEN_VALUE = os.getenv("LOTUS_CORE_INGEST_OPS_TOKEN", "lotus-core-ops-local")
-OPS_AUTH_MODE = os.getenv("LOTUS_CORE_INGEST_OPS_AUTH_MODE", "token_or_jwt")
-OPS_JWT_HS256_SECRET = os.getenv("LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET", "")
-OPS_JWT_ISSUER = os.getenv("LOTUS_CORE_INGEST_OPS_JWT_ISSUER", "")
-OPS_JWT_AUDIENCE = os.getenv("LOTUS_CORE_INGEST_OPS_JWT_AUDIENCE", "")
-OPS_JWT_CLOCK_SKEW_SECONDS = int(os.getenv("LOTUS_CORE_INGEST_OPS_JWT_CLOCK_SKEW_SECONDS", "60"))
-
-RATE_LIMIT_ENABLED = _as_bool(os.getenv("LOTUS_CORE_INGEST_RATE_LIMIT_ENABLED"), True)
-RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS", "60"))
-RATE_LIMIT_MAX_REQUESTS = int(os.getenv("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS", "120"))
-RATE_LIMIT_MAX_RECORDS = int(os.getenv("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_RECORDS", "10000"))
+RATE_LIMIT_ENABLED = _SETTINGS.rate_limit.enabled
+RATE_LIMIT_WINDOW_SECONDS = _SETTINGS.rate_limit.window_seconds
+RATE_LIMIT_MAX_REQUESTS = _SETTINGS.rate_limit.max_requests
+RATE_LIMIT_MAX_RECORDS = _SETTINGS.rate_limit.max_records
 
 @dataclass(slots=True)
 class _WriteEvent:
