@@ -1,7 +1,6 @@
 # services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py
 import logging
 import json
-import os
 import time
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +13,9 @@ from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.events import TransactionEvent, CashflowCalculatedEvent
 from portfolio_common.db import get_async_db_session
+from portfolio_common.config import (
+    CASHFLOW_RULE_CACHE_TTL_SECONDS as DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS,
+)
 from portfolio_common.config import KAFKA_CASHFLOW_CALCULATED_TOPIC
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
@@ -28,9 +30,7 @@ logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "cashflow-calculator"
 
-CASHFLOW_RULE_CACHE_TTL_SECONDS = int(
-    os.getenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "300")
-)
+CASHFLOW_RULE_CACHE_TTL_SECONDS = DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS
 
 
 @dataclass

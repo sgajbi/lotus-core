@@ -51,6 +51,9 @@ BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = os.getenv(
     "false",
 ).strip().lower() in {"1", "true", "yes", "on"}
 
+# Cashflow calculator runtime cache policy
+CASHFLOW_RULE_CACHE_TTL_SECONDS = int(os.getenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "300"))
+
 
 _CONSUMER_ALLOWED_TYPES: dict[str, type] = {
     "auto.offset.reset": str,
