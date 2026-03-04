@@ -17,6 +17,9 @@ class DockerStackError(RuntimeError):
 def _is_retryable_compose_up_error(stderr: str) -> bool:
     retryable_markers = (
         "already exists",
+        "container name",
+        "is already in use",
+        "no such container",
         "pulling",
         "didn't complete successfully: exit",
         "context deadline exceeded",
@@ -70,8 +73,8 @@ def compose_up(
         except subprocess.CalledProcessError as exc:
             last_error = exc
             stderr = (exc.stderr or b"").decode("utf-8", errors="ignore").lower()
-            _remove_conflicting_named_containers(stderr, runner)
-            if _is_retryable_compose_up_error(stderr):
+            removed_conflicts = _remove_conflicting_named_containers(stderr, runner)
+            if removed_conflicts or _is_retryable_compose_up_error(stderr):
                 runner(
                     ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
                     check=False,
@@ -182,10 +185,13 @@ def compose_down(compose_file: str) -> None:
 def _remove_conflicting_named_containers(
     stderr: str,
     runner: Callable[..., subprocess.CompletedProcess],
-) -> None:
+) -> bool:
+    removed_any = False
     matches = re.findall(r'container name "/([^"]+)" is already in use', stderr)
     for container_name in matches:
         runner(["docker", "rm", "-f", container_name], check=False, capture_output=True)
+        removed_any = True
+    return removed_any
 
 
 def resolve_compose_file(project_root: str) -> str:
