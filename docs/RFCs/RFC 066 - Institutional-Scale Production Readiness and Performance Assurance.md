@@ -114,3 +114,15 @@ RFC-065 remains the foundational scalability roadmap. RFC-066 is the production-
 - `output/task-runs/*performance-load-gate*.md`
 5. Added CI job `Performance Load Gate` in `.github/workflows/ci.yml`.
 6. Added make target `test-performance-load-gate` and wired lint/format coverage for the new script.
+
+### Slice B.1 - CI Strategy Hardening (Completed in this change set)
+1. Split load testing into two tiers:
+- `fast` profile tier for PR gating (quick signal, low runtime, no drain wait enforcement).
+- `full` profile tier for institutional verification (includes drain invariants and heavier replay stress).
+2. Updated pipeline strategy:
+- PR/push path runs `Performance Load Gate (Fast)`.
+- Scheduled/manual/main path runs `Performance Load Gate (Full)`.
+3. Added explicit make targets:
+- `test-performance-load-gate` (fast tier)
+- `test-performance-load-gate-full` (full tier)
+4. Reduced PR lead time without dropping quality, while preserving heavyweight evidence collection for production readiness.
