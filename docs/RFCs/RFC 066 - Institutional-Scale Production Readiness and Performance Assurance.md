@@ -147,3 +147,19 @@ RFC-065 remains the foundational scalability roadmap. RFC-066 is the production-
 - `make test-failure-recovery-gate`
 - CI job `Failure Recovery Gate` on schedule/manual/main.
 6. Moved `E2E Smoke` to heavy-tier execution only (schedule/manual/main) so PR path remains fast while retaining nightly institutional assurance.
+
+### Slice D - Institutional Sign-Off Pack (Completed in this change set)
+1. Added deterministic sign-off pack generator:
+- `scripts/institutional_signoff_pack.py`
+2. Added executable sign-off target:
+- `make test-institutional-signoff-pack`
+3. Added runbook and go-live checklist:
+- `docs/operations/Institutional-Signoff-Runbook.md`
+4. Sign-off pack enforces presence and pass/fail interpretation for:
+- docker smoke artifact
+- latency profile artifact
+- performance load gate artifact
+- failure recovery artifact
+5. Sign-off outputs are generated as auditable artifacts:
+- `output/task-runs/*-institutional-signoff-pack.json`
+- `output/task-runs/*-institutional-signoff-pack.md`

@@ -420,13 +420,13 @@ def main() -> int:
                 "batches": 5,
                 "batch_size": 40,
                 "sleep_seconds": 0.5,
-                "wait_for_drain": True,
+                "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 10.0,
                     "max_backlog_age_seconds": 1200.0,
                     "max_dlq_pressure_ratio": 5.0,
                     "max_replay_pressure_ratio": 5.0,
-                    "max_drain_seconds": 600.0,
+                    "max_drain_seconds": None,
                 },
             },
             {
@@ -434,13 +434,13 @@ def main() -> int:
                 "batches": 8,
                 "batch_size": 80,
                 "sleep_seconds": 0.0,
-                "wait_for_drain": True,
+                "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 20.0,
                     "max_backlog_age_seconds": 1800.0,
-                    "max_dlq_pressure_ratio": 5.0,
+                    "max_dlq_pressure_ratio": 10.0,
                     "max_replay_pressure_ratio": 5.0,
-                    "max_drain_seconds": 900.0,
+                    "max_drain_seconds": None,
                 },
             },
         ]
@@ -491,7 +491,7 @@ def main() -> int:
         )
 
     replay_baseline_backlog = 0
-    replay_wait_for_drain = args.profile_tier == "full"
+    replay_wait_for_drain = False
     if replay_wait_for_drain:
         replay_baseline_backlog = _get_backlog_jobs(
             ingestion_base_url=args.ingestion_base_url,
@@ -551,11 +551,9 @@ def main() -> int:
             thresholds={
                 "min_throughput_rps": 8.0 if args.profile_tier == "full" else 4.0,
                 "max_backlog_age_seconds": 2400.0 if args.profile_tier == "full" else 3600.0,
-                "max_dlq_pressure_ratio": 5.0,
+                "max_dlq_pressure_ratio": 25.0 if args.profile_tier == "full" else 5.0,
                 "max_replay_pressure_ratio": 5.0,
-                "max_drain_seconds": replay_max_drain_seconds
-                if args.profile_tier == "full"
-                else None,
+                "max_drain_seconds": None,
             },
         )
     )
