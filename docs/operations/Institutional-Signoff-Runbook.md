@@ -21,6 +21,16 @@ This command writes:
 1. `output/task-runs/*-institutional-signoff-pack.json`
 2. `output/task-runs/*-institutional-signoff-pack.md`
 
+## CI Enforcement
+1. GitHub Actions job `Institutional Sign-Off Pack` runs on:
+   1. `main` pushes,
+   2. scheduled pipelines,
+   3. manual workflow dispatch.
+2. The job is a required production-readiness gate and fails when:
+   1. any required artifact is missing,
+   2. any gate status is failed,
+   3. any required artifact is older than 24 hours (`--max-age-hours 24`).
+
 ## Go-Live Checklist
 All items must be `yes`:
 1. Docker endpoint smoke passed.

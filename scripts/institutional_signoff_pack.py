@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from numbers import Real
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +116,45 @@ def _failure_recovery_status(path: Path | None) -> ArtifactStatus:
     )
 
 
+def _is_artifact_fresh(path: Path, *, max_age_hours: int) -> bool:
+    age_seconds = (
+        datetime.now(UTC) - datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+    ).total_seconds()
+    return age_seconds <= (max_age_hours * 3600)
+
+
+def _freshness_summary(path: Path, *, max_age_hours: int) -> str:
+    age_seconds = int(
+        (datetime.now(UTC) - datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)).total_seconds()
+    )
+    return f"age_seconds={age_seconds}, max_age_hours={max_age_hours}"
+
+
+def _apply_recency_policy(
+    statuses: list[ArtifactStatus], *, max_age_hours: int
+) -> list[ArtifactStatus]:
+    recency_checked: list[ArtifactStatus] = []
+    for status in statuses:
+        if status.path is None:
+            recency_checked.append(status)
+            continue
+        artifact_path = Path(status.path)
+        fresh = _is_artifact_fresh(artifact_path, max_age_hours=max_age_hours)
+        recency_checked.append(
+            ArtifactStatus(
+                name=status.name,
+                path=status.path,
+                passed=status.passed and fresh,
+                summary=(
+                    f"{status.summary}; "
+                    f"{_freshness_summary(artifact_path, max_age_hours=max_age_hours)}; "
+                    f"fresh={fresh}"
+                ),
+            )
+        )
+    return recency_checked
+
+
 def _write_pack(
     output_dir: Path, statuses: list[ArtifactStatus], require_all: bool
 ) -> tuple[Path, Path, bool]:
@@ -153,7 +192,8 @@ def _write_pack(
     ]
     for item in statuses:
         lines.append(
-            f"| {item.name} | {'yes' if item.passed else 'no'} | {item.summary} | {item.path or 'missing'} |"
+            f"| {item.name} | {'yes' if item.passed else 'no'} | "
+            f"{item.summary} | {item.path or 'missing'} |"
         )
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path, md_path, overall_passed
@@ -166,6 +206,12 @@ def main() -> int:
     parser.add_argument("--artifact-dir", default="output/task-runs")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--require-all", action="store_true")
+    parser.add_argument(
+        "--max-age-hours",
+        type=int,
+        default=24,
+        help="Maximum allowed artifact age for recency policy.",
+    )
     args = parser.parse_args()
 
     artifact_dir = Path(args.artifact_dir).resolve()
@@ -177,6 +223,7 @@ def main() -> int:
         _performance_status(_latest_artifact(artifact_dir, "*-performance-load-gate.json")),
         _failure_recovery_status(_latest_artifact(artifact_dir, "*-failure-recovery-gate.json")),
     ]
+    statuses = _apply_recency_policy(statuses, max_age_hours=args.max_age_hours)
     json_path, md_path, overall_passed = _write_pack(
         output_dir=output_dir,
         statuses=statuses,

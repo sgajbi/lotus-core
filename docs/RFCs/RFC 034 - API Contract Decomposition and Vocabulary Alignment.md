@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Deprecated |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service`, API governance |
 | Depends On | RFC 012, RFC 039, RFC 040, RFC 056, RFC 057, RFC 067 stream |
 | Scope | Decompose oversized API contracts and enforce canonical vocabulary discipline |
@@ -69,7 +69,7 @@ Trade-off:
 ## Gap Assessment
 
 Remaining delta:
-1. RFC 034 text itself is now stale and should be superseded by a current-era API decomposition/vocabulary governance RFC that references active endpoints only.
+1. RFC 034 text itself is now historical and is superseded by RFC-067 for active governance.
 
 ## Deviations and Evolution Since Original RFC
 
@@ -78,8 +78,8 @@ Remaining delta:
 
 ## Proposed Changes
 
-1. Keep RFC 034 as a historical record but mark it `Deprecated`.
-2. Track replacement with a fresh decomposition-and-vocabulary governance RFC aligned to post-RFC-057 architecture.
+1. Keep RFC 034 as a historical record marked `Deprecated`.
+2. Use RFC-067 as the active decomposition-and-vocabulary governance authority.
 
 ## Test and Validation Evidence
 
@@ -102,9 +102,8 @@ No runtime change introduced by this documentation retrofit.
 
 ## Open Questions
 
-1. Should the replacement RFC be authored as lotus-core-only governance, or as a cross-repo contract master RFC with lotus-platform ownership?
+1. None blocking for lotus-core implementation scope.
 
 ## Next Actions
 
-1. Draft successor RFC for active decomposition/vocabulary governance model.
-2. Keep this RFC as deprecated historical context only.
+1. Keep this RFC as deprecated historical context only and point active governance to RFC-067.

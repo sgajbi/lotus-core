@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Deprecated |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | query-service quality gates (historical) |
 | Depends On | RFC 054, pre-RFC-056 query scope |
 | Scope | Unit-heavy DTO contract testing wave |
@@ -73,7 +73,7 @@ Remaining delta:
 ## Proposed Changes
 
 1. Mark RFC 055 as deprecated historical record.
-2. Create successor RFC for current DTO pyramid strategy tied to active domains.
+2. Successor active-domain DTO strategy is defined in RFC-068.
 
 ## Test and Validation Evidence
 
@@ -95,4 +95,4 @@ No runtime change introduced by this documentation retrofit.
 
 ## Next Actions
 
-1. Draft successor DTO pyramid RFC mapped to active query-service contract families.
+1. Keep RFC-068 as active authority for DTO pyramid governance.
