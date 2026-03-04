@@ -44,6 +44,10 @@ class RecoveryResult:
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
+    _run_capture(cmd, cwd=cwd)
+
+
+def _run_capture(cmd: list[str], cwd: Path) -> str:
     completed = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
     if completed.returncode != 0:
         raise RuntimeError(
@@ -51,6 +55,7 @@ def _run(cmd: list[str], cwd: Path) -> None:
             f"stdout:\n{completed.stdout}\n"
             f"stderr:\n{completed.stderr}"
         )
+    return completed.stdout
 
 
 def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
@@ -175,12 +180,32 @@ def _get_backlog_jobs(*, ingestion_base_url: str, ops_token: str) -> int:
     return int(response.json().get("backlog_jobs", 0))
 
 
-def _pause_container(container_name: str) -> None:
-    _run(["docker", "pause", container_name], cwd=Path.cwd())
+def _resolve_interruption_container(
+    *, repo_root: Path, compose_file: str, interruption_container: str
+) -> str:
+    """
+    Resolve interruption target using docker compose service lookup first.
+    Falls back to the original argument to preserve manual container-name usage.
+    """
+    target = interruption_container.strip()
+    if not target:
+        raise ValueError("interruption container cannot be empty")
+    try:
+        container_id = _run_capture(
+            ["docker", "compose", "-f", compose_file, "ps", "-q", target],
+            cwd=repo_root,
+        ).strip()
+    except RuntimeError:
+        container_id = ""
+    return container_id or target
 
 
-def _unpause_container(container_name: str) -> None:
-    _run(["docker", "unpause", container_name], cwd=Path.cwd())
+def _pause_container(container_name: str, repo_root: Path) -> None:
+    _run(["docker", "pause", container_name], cwd=repo_root)
+
+
+def _unpause_container(container_name: str, repo_root: Path) -> None:
+    _run(["docker", "unpause", container_name], cwd=repo_root)
 
 
 def _wait_drain_to_target_backlog(
@@ -279,7 +304,12 @@ def main() -> int:
         sleep_seconds_between_batches=0.1,
     )
 
-    _pause_container(args.interruption_container)
+    interruption_target = _resolve_interruption_container(
+        repo_root=repo_root,
+        compose_file=args.compose_file,
+        interruption_container=args.interruption_container,
+    )
+    _pause_container(interruption_target, repo_root=repo_root)
     peak_backlog = baseline_backlog_jobs
     try:
         interruption_deadline = time.time() + args.interruption_seconds
@@ -298,7 +328,7 @@ def main() -> int:
             peak_backlog = max(peak_backlog, current_backlog)
             time.sleep(1)
     finally:
-        _unpause_container(args.interruption_container)
+        _unpause_container(interruption_target, repo_root=repo_root)
 
     drain_seconds = _wait_drain_to_target_backlog(
         ingestion_base_url=args.ingestion_base_url,
@@ -341,7 +371,7 @@ def main() -> int:
         run_id=run_id,
         started_at=datetime.fromtimestamp(started, tz=UTC).isoformat(),
         ended_at=datetime.fromtimestamp(ended, tz=UTC).isoformat(),
-        interruption_container=args.interruption_container,
+        interruption_container=interruption_target,
         interruption_seconds=args.interruption_seconds,
         baseline_backlog_jobs=baseline_backlog_jobs,
         peak_backlog_jobs_during_interruption=peak_backlog,
