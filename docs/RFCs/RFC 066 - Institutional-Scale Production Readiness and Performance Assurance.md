@@ -90,3 +90,27 @@ Functional correctness alone is insufficient for bank/fintech deployments. We mu
 
 ## 9. Implementation Notes
 RFC-065 remains the foundational scalability roadmap. RFC-066 is the production-readiness enforcement layer that turns those decisions into auditable, CI-gated operating guarantees.
+
+## 10. Progress (2026-03-04)
+
+### Slice A - Completed
+1. Deterministic docker smoke expanded to cover ingestion operations and policy/capacity contracts.
+2. Contract checks now fail explicitly on missing institutional policy fields or missing capacity signals.
+
+### Slice B - Completed in this change set
+1. Added deterministic load profile runner: `scripts/performance_load_gate.py`.
+2. Implemented three profiles:
+- `steady_state`
+- `burst`
+- `replay_storm`
+3. Added enforceable threshold evaluation with per-profile failure reasons:
+- throughput floor
+- backlog-age ceiling
+- DLQ pressure ceiling
+- replay pressure ceiling
+- backlog drain-time ceiling
+4. Added JSON/Markdown artifact generation:
+- `output/task-runs/*performance-load-gate*.json`
+- `output/task-runs/*performance-load-gate*.md`
+5. Added CI job `Performance Load Gate` in `.github/workflows/ci.yml`.
+6. Added make target `test-performance-load-gate` and wired lint/format coverage for the new script.
