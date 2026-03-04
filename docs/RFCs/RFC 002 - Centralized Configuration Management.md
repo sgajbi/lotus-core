@@ -20,7 +20,7 @@ The platform has implemented a meaningful portion of this architecture:
 
 However, full convergence is incomplete:
 1. Ingestion hotspot modules are migrated to typed settings, but this pattern is not yet uniformly rolled out to all services.
-2. Configuration guardrails exist for ingestion hotspot modules, but repository-wide enforcement is still pending.
+2. Repository-wide configuration guardrail enforcement now exists, with an approved allowlist baseline for remaining direct env access.
 
 RFC 002 therefore remains **Partially Implemented**.
 
@@ -67,7 +67,7 @@ Legacy/outdated naming in earlier RFC language has been normalized:
 | Typed settings usage | Exists in select modules but not repo-wide | Partial | `src/libs/financial-calculator-engine/src/core/config/settings.py` |
 | Fail-fast startup validation | Present in slices; not consistently enforced for all service config classes | Partial | service startup/runtime behavior patterns |
 | Eliminate ad-hoc env access | Completed for ingestion hotspot modules via typed settings | Partial | `src/services/ingestion_service/app/settings.py`; `ops_controls.py`; `ingestion_job_service.py` |
-| Consistent conventions and governance | Ingestion-focused guardrail implemented; repo-wide guardrail still pending | Partial | `scripts/config_access_guard.py`; `Makefile`; open delta `RFC-002-D02` |
+| Consistent conventions and governance | Repo-wide guardrail implemented with approved allowlist baseline | Partial | `scripts/config_access_guard.py`; `Makefile`; open delta `RFC-002-D04` |
 
 ## Configuration Layering Model (Target Standard)
 The target model clarified by this RFC:
@@ -78,7 +78,7 @@ The target model clarified by this RFC:
 3. **Layer 3 (Runtime usage)**:
    - Business logic reads typed settings objects, not raw environment values.
 4. **Layer 4 (Governance/CI)**:
-   - CI/lint guardrails prevent new direct `os.getenv` usage outside approved settings modules.
+   - CI/lint guardrails prevent new direct `os.getenv` usage outside approved settings/config modules.
 
 ## Deterministic Configuration Resolution Algorithm
 For each configurable runtime parameter `P`:
@@ -106,8 +106,10 @@ This algorithm is partially implemented today and is the required standard for c
 ## Gaps Still Open (Relevant and Pending)
 1. `RFC-002-D01` (done):
    - Ingestion runtime env parsing consolidated into typed settings module.
-2. `RFC-002-D02` (in progress):
-   - Guardrail exists for ingestion hotspot modules; repository-wide config layering/guardrail still to be completed.
+2. `RFC-002-D02` (done):
+   - Repository-wide config guardrail now enforces no new direct env parsing outside approved modules.
+3. `RFC-002-D04` (open):
+   - Reduce allowlisted legacy direct env access by migrating remaining service modules to typed settings.
 
 These are still relevant and should be implemented before RFC 002 can be marked `Implemented`.
 
@@ -150,5 +152,5 @@ Completion work is additive/refactoring in nature and should not require API con
 
 ## Next Actions
 1. Keep RFC 002 status as `Partially Implemented`.
-2. Complete `RFC-002-D02` with repository-wide configuration layering and guardrail enforcement.
-3. Reclassify RFC 002 to `Implemented` once the typed settings + guardrail pattern is broadly enforced across services.
+2. Execute `RFC-002-D04` by shrinking the config guard allowlist through targeted typed-settings migrations.
+3. Reclassify RFC 002 to `Implemented` once remaining allowlisted service modules are migrated.

@@ -100,7 +100,14 @@ class IngestionRuntimePolicySettings:
 
 
 @dataclass(frozen=True, slots=True)
+class IngestionAdapterModeSettings:
+    portfolio_bundle_enabled: bool
+    upload_apis_enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
 class IngestionServiceSettings:
+    adapter_mode: IngestionAdapterModeSettings
     ops_auth: IngestionOpsAuthSettings
     rate_limit: IngestionRateLimitSettings
     runtime_policy: IngestionRuntimePolicySettings
@@ -143,6 +150,12 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
         auth_mode = "token_or_jwt"
 
     return IngestionServiceSettings(
+        adapter_mode=IngestionAdapterModeSettings(
+            portfolio_bundle_enabled=_env_bool(
+                "LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", True
+            ),
+            upload_apis_enabled=_env_bool("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", True),
+        ),
         ops_auth=IngestionOpsAuthSettings(
             token_required=_env_bool("LOTUS_CORE_INGEST_OPS_TOKEN_REQUIRED", True),
             token_value=_env_str("LOTUS_CORE_INGEST_OPS_TOKEN", "lotus-core-ops-local"),
@@ -219,8 +232,5 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
     )
 
 
-_SETTINGS = load_ingestion_service_settings()
-
-
 def get_ingestion_service_settings() -> IngestionServiceSettings:
-    return _SETTINGS
+    return load_ingestion_service_settings()

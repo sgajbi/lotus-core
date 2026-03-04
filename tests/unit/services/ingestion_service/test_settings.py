@@ -46,3 +46,13 @@ def test_load_ingestion_service_settings_coerces_env_values(monkeypatch):
     assert settings.runtime_policy.operating_band.red_dlq_pressure_ratio == Decimal("2.5")
     assert settings.runtime_policy.calculator_peak_lag_age_seconds["position"] == 99
     assert settings.runtime_policy.calculator_peak_lag_age_seconds["timeseries"] == 300
+
+
+def test_load_ingestion_service_settings_adapter_mode_flags(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", "false")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", "0")
+
+    settings = load_ingestion_service_settings()
+
+    assert settings.adapter_mode.portfolio_bundle_enabled is False
+    assert settings.adapter_mode.upload_apis_enabled is False
