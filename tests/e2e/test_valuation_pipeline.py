@@ -3,6 +3,7 @@ import pytest
 from decimal import Decimal
 from typing import Callable
 from .api_client import E2EApiClient
+from .assertions import as_decimal
 
 
 @pytest.fixture(scope="module")
@@ -60,12 +61,12 @@ def test_full_valuation_pipeline(setup_valuation_data, e2e_api_client: E2EApiCli
     valuation = position["valuation"]
 
     assert position["security_id"] == "SEC_E2E_VAL"
-    assert position["quantity"] == 10.0
-    assert position["cost_basis"] == 1000.0
+    assert as_decimal(position["quantity"]) == Decimal("10")
+    assert as_decimal(position["cost_basis"]) == Decimal("1000")
     
-    assert valuation["market_price"] == 110.0
+    assert as_decimal(valuation["market_price"]) == Decimal("110")
     # Expected market_value = 10 shares * 110/share = 1100
-    assert valuation["market_value"] == 1100.0
+    assert as_decimal(valuation["market_value"]) == Decimal("1100")
     
     # Expected unrealized_gain_loss = 1100 (MV) - 1000 (Cost) = 100
-    assert valuation["unrealized_gain_loss"] == pytest.approx(100.0)
+    assert float(as_decimal(valuation["unrealized_gain_loss"])) == pytest.approx(100.0)

@@ -359,9 +359,10 @@ jobs:
 
       - name: Run E2E smoke suite
         env:
-          E2E_INGESTION_URL: http://localhost:8200
-          E2E_QUERY_URL: http://localhost:8201
-          HOST_DATABASE_URL: postgresql://user:password@localhost:55432/portfolio_db
+          LOTUS_TEST_ENV_PROFILE: e2e
+          E2E_INGESTION_URL: http://localhost:8400
+          E2E_QUERY_URL: http://localhost:8401
+          HOST_DATABASE_URL: postgresql://user:password@localhost:57432/portfolio_db
         run: make test-e2e-smoke
 
       - name: Capture docker compose logs on failure

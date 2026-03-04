@@ -1,4 +1,5 @@
 # tests/e2e/test_failure_scenarios.py
+import os
 import pytest
 import time
 import uuid
@@ -11,15 +12,24 @@ import requests
 from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_DLQ_TOPIC
 from .api_client import E2EApiClient
 
+PERSISTENCE_HOST_PORT = os.getenv("LOTUS_PERSISTENCE_HOST_PORT", "8080")
+POSITION_CALCULATOR_HOST_PORT = os.getenv("LOTUS_POSITION_CALCULATOR_HOST_PORT", "8081")
+CASHFLOW_CALCULATOR_HOST_PORT = os.getenv("LOTUS_CASHFLOW_CALCULATOR_HOST_PORT", "8082")
+COST_CALCULATOR_HOST_PORT = os.getenv("LOTUS_COST_CALCULATOR_HOST_PORT", "8083")
+POSITION_VALUATION_HOST_PORT = os.getenv("LOTUS_POSITION_VALUATION_HOST_PORT", "8084")
+TIMESERIES_GENERATOR_HOST_PORT = os.getenv("LOTUS_TIMESERIES_GENERATOR_HOST_PORT", "8085")
+INGESTION_HOST_PORT = os.getenv("LOTUS_INGESTION_HOST_PORT", "8200")
+QUERY_HOST_PORT = os.getenv("LOTUS_QUERY_HOST_PORT", "8201")
+
 CORE_SERVICE_HEALTH_URLS = [
-    "http://localhost:8080/health/ready",  # persistence_service
-    "http://localhost:8081/health/ready",  # position_calculator_service
-    "http://localhost:8082/health/ready",  # cashflow_calculator_service
-    "http://localhost:8083/health/ready",  # cost_calculator_service
-    "http://localhost:8084/health/ready",  # position_valuation_calculator
-    "http://localhost:8085/health/ready",  # timeseries_generator_service
-    "http://localhost:8200/health/ready",  # ingestion_service
-    "http://localhost:8201/health/ready",  # query_service
+    f"http://localhost:{PERSISTENCE_HOST_PORT}/health/ready",  # persistence_service
+    f"http://localhost:{POSITION_CALCULATOR_HOST_PORT}/health/ready",  # position_calculator_service
+    f"http://localhost:{CASHFLOW_CALCULATOR_HOST_PORT}/health/ready",  # cashflow_calculator_service
+    f"http://localhost:{COST_CALCULATOR_HOST_PORT}/health/ready",  # cost_calculator_service
+    f"http://localhost:{POSITION_VALUATION_HOST_PORT}/health/ready",  # position_valuation_calculator
+    f"http://localhost:{TIMESERIES_GENERATOR_HOST_PORT}/health/ready",  # timeseries_generator_service
+    f"http://localhost:{INGESTION_HOST_PORT}/health/ready",  # ingestion_service
+    f"http://localhost:{QUERY_HOST_PORT}/health/ready",  # query_service
 ]
 
 def wait_for_postgres_ready(db_engine, timeout=30):
@@ -64,7 +74,7 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     dlq_consumer_conf = {
         'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
         'group.id': f'test-dlq-checker-{uuid.uuid4()}',
-        'auto.offset.reset': 'earliest'
+        'auto.offset.reset': 'latest'
     }
     dlq_consumer = Consumer(dlq_consumer_conf)
     dlq_consumer.subscribe([KAFKA_PERSISTENCE_DLQ_TOPIC])
@@ -99,7 +109,7 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     subprocess.run(["docker", "compose", "restart", "persistence_service"], check=True, capture_output=True)
     
     # 6. ACT: Wait for the persistence service to become healthy again
-    wait_for_service_ready("http://localhost:8080/health/ready")
+    wait_for_service_ready(f"http://localhost:{PERSISTENCE_HOST_PORT}/health/ready")
 
     # 7. ACT/ASSERT: Ingest and persist a new transaction after recovery.
     transaction_payload_after = {"transactions": [{"transaction_id": transaction_id_after, "portfolio_id": portfolio_id, "instrument_id": "FAIL_INST", "security_id": "SEC_FAIL", "transaction_date": "2025-08-05T10:05:00Z", "transaction_type": "BUY", "quantity": 1, "price": 1, "gross_transaction_amount": 1, "trade_currency": "USD", "currency": "USD"}]}

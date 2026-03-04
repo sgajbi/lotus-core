@@ -49,6 +49,15 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
         f"/portfolios?portfolio_id={PORTFOLIO_ID}",
         lambda data: data.get("portfolios") and len(data["portfolios"]) == 1
     )
+    e2e_api_client.poll_for_data(
+        "/instruments",
+        lambda data: (
+            isinstance(data.get("instruments"), list)
+            and {inst.get("security_id") for inst in data["instruments"]}.issuperset(
+                {CASH_USD_ID, CASH_EUR_ID, AAPL_ID, IBM_ID}
+            )
+        ),
+    )
 
 @pytest.mark.dependency()
 def test_prerequisites_are_loaded(setup_prerequisites, db_engine: Engine):
@@ -86,7 +95,7 @@ def test_day_2_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     """
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_2}]})
     transactions_payload = { "transactions": [
-        {"transaction_id": "TXN_DAY2_BUY_AAPL_01", "portfolio_id": PORTFOLIO_ID, "security_id": AAPL_ID, "instrument_id": "AAPL", "transaction_date": f"{DAY_2}T11:00:00Z", "transaction_type": "BUY", "quantity": 1000, "price": 175.0, "gross_transaction_amount": 175000.0, "trade_fee": 25.50, "trade_currency": "USD", "currency": "USD" },
+        {"transaction_id": "TXN_DAY2_BUY_AAPL_01", "portfolio_id": PORTFOLIO_ID, "security_id": AAPL_ID, "instrument_id": AAPL_ID, "transaction_date": f"{DAY_2}T11:00:00Z", "transaction_type": "BUY", "quantity": 1000, "price": 175.0, "gross_transaction_amount": 175000.0, "trade_fee": 25.50, "trade_currency": "USD", "currency": "USD" },
         {"transaction_id": "TXN_DAY2_CASH_SETTLE_01", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_2}T11:00:00Z", "transaction_type": "SELL", "quantity": 175025.50, "price": 1.0, "gross_transaction_amount": 175025.50, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)
@@ -109,7 +118,7 @@ def test_day_3_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     """
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_3}]})
     transactions_payload = {"transactions": [
-        {"transaction_id": "TXN_DAY3_BUY_IBM_01", "portfolio_id": PORTFOLIO_ID, "security_id": IBM_ID, "instrument_id": "IBM", "transaction_date": f"{DAY_3}T12:00:00Z", "transaction_type": "BUY", "quantity": 500, "price": 140.0, "gross_transaction_amount": 70000.0, "trade_fee": 15.00, "trade_currency": "USD", "currency": "USD"},
+        {"transaction_id": "TXN_DAY3_BUY_IBM_01", "portfolio_id": PORTFOLIO_ID, "security_id": IBM_ID, "instrument_id": IBM_ID, "transaction_date": f"{DAY_3}T12:00:00Z", "transaction_type": "BUY", "quantity": 500, "price": 140.0, "gross_transaction_amount": 70000.0, "trade_fee": 15.00, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "TXN_DAY3_CASH_SETTLE_02", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_3}T12:00:00Z", "transaction_type": "SELL", "quantity": 70015.00, "price": 1.0, "gross_transaction_amount": 70015.00, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)
@@ -133,7 +142,7 @@ def test_day_4_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     """
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_4}]})
     transactions_payload = {"transactions": [
-        {"transaction_id": "TXN_DAY4_SELL_AAPL_01", "portfolio_id": PORTFOLIO_ID, "security_id": AAPL_ID, "instrument_id": "AAPL", "transaction_date": f"{DAY_4}T13:00:00Z", "transaction_type": "SELL", "quantity": 200, "price": 182.0, "gross_transaction_amount": 36400.0, "trade_fee": 5.00, "trade_currency": "USD", "currency": "USD"},
+        {"transaction_id": "TXN_DAY4_SELL_AAPL_01", "portfolio_id": PORTFOLIO_ID, "security_id": AAPL_ID, "instrument_id": AAPL_ID, "transaction_date": f"{DAY_4}T13:00:00Z", "transaction_type": "SELL", "quantity": 200, "price": 182.0, "gross_transaction_amount": 36400.0, "trade_fee": 5.00, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "TXN_DAY4_CASH_SETTLE_03", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_4}T13:00:00Z", "transaction_type": "BUY", "quantity": 36395.00, "price": 1.0, "gross_transaction_amount": 36395.00, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)
@@ -160,7 +169,7 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     """
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_5}]})
     transactions_payload = {"transactions": [
-        {"transaction_id": "TXN_DAY5_DIV_IBM_01", "portfolio_id": PORTFOLIO_ID, "security_id": IBM_ID, "instrument_id": "IBM", "transaction_date": f"{DAY_5}T09:00:00Z", "transaction_type": "DIVIDEND", "quantity": 0, "price": 0, "gross_transaction_amount": 750.0, "trade_currency": "USD", "currency": "USD"},
+        {"transaction_id": "TXN_DAY5_DIV_IBM_01", "portfolio_id": PORTFOLIO_ID, "security_id": IBM_ID, "instrument_id": IBM_ID, "transaction_date": f"{DAY_5}T09:00:00Z", "transaction_type": "DIVIDEND", "quantity": 0, "price": 0, "gross_transaction_amount": 750.0, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "TXN_DAY5_CASH_SETTLE_04", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_5}T09:00:00Z", "transaction_type": "BUY", "quantity": 750.00, "price": 1.0, "gross_transaction_amount": 750.00, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)

@@ -46,10 +46,11 @@ def test_compose_up_retries_on_existing_image_conflict() -> None:
         runner=runner,
     )
 
-    assert calls[0][-2:] == ["down", "--remove-orphans"]
-    assert calls[1][-2:] == ["up", "-d"]
-    assert calls[2][-2:] == ["down", "--remove-orphans"]
-    assert calls[3][-2:] == ["up", "-d"]
+    assert calls[0][0:4] == ["docker", "ps", "-aq", "--filter"]
+    assert calls[1][-2:] == ["down", "--remove-orphans"]
+    assert calls[2][-2:] == ["up", "-d"]
+    assert calls[3][-2:] == ["down", "--remove-orphans"]
+    assert calls[4][-2:] == ["up", "-d"]
 
 
 def test_compose_up_retries_on_migration_runner_exit() -> None:
@@ -73,10 +74,11 @@ def test_compose_up_retries_on_migration_runner_exit() -> None:
         runner=runner,
     )
 
-    assert calls[0][-2:] == ["down", "--remove-orphans"]
-    assert calls[1][-2:] == ["up", "-d"]
-    assert calls[2][-2:] == ["down", "--remove-orphans"]
-    assert calls[3][-2:] == ["up", "-d"]
+    assert calls[0][0:4] == ["docker", "ps", "-aq", "--filter"]
+    assert calls[1][-2:] == ["down", "--remove-orphans"]
+    assert calls[2][-2:] == ["up", "-d"]
+    assert calls[3][-2:] == ["down", "--remove-orphans"]
+    assert calls[4][-2:] == ["up", "-d"]
 
 
 def test_wait_for_migration_runner_success() -> None:

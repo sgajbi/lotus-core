@@ -51,6 +51,7 @@ def compose_up(
     retry_wait_seconds: int = 5,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> None:
+    _remove_stale_project_containers(compose_file, runner)
     try:
         runner(
             ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
@@ -200,6 +201,34 @@ def _remove_conflicting_named_containers(
         runner(["docker", "rm", "-f", container_name], check=False, capture_output=True)
         removed_any = True
     return removed_any
+
+
+def _remove_stale_project_containers(
+    compose_file: str,
+    runner: Callable[..., subprocess.CompletedProcess],
+) -> None:
+    project_name = os.getenv("COMPOSE_PROJECT_NAME")
+    if not project_name:
+        project_name = Path(compose_file).resolve().parent.name
+    name_filter = f"{project_name}-"
+    try:
+        ps = runner(
+            ["docker", "ps", "-aq", "--filter", f"name={name_filter}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return
+
+    if not ps.stdout:
+        return
+
+    container_ids = [line.strip() for line in ps.stdout.splitlines() if line.strip()]
+    if not container_ids:
+        return
+
+    runner(["docker", "rm", "-f", *container_ids], check=False, capture_output=True)
 
 
 def resolve_compose_file(project_root: str) -> str:

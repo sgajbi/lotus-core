@@ -1,6 +1,7 @@
 # tests/e2e/test_analytics_input_summary_pipeline.py
 import pytest
 from .api_client import E2EApiClient
+from .assertions import assert_legacy_endpoint_status
 
 # --- Test Data Constants ---
 PORTFOLIO_ID = "E2E_SUM_PORT_01"
@@ -71,9 +72,9 @@ def test_analytics_input_summary_contract_returns_expected_dataset(setup_summary
         "allocation_dimensions": ["ASSET_CLASS", "SECTOR", "COUNTRY_OF_RISK"]
     }
 
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-report"
-    assert data["target_endpoint"] == "/reports/portfolios/{portfolio_id}/summary"
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
+    assert_legacy_endpoint_status(
+        response,
+        target_service="lotus-report",
+        target_endpoint="/reports/portfolios/{portfolio_id}/summary",
+    )

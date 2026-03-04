@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-unit test-unit-db test-integration-lite test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full security-audit check coverage-gate ci ci-local docker-build clean
+.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate security-audit check coverage-gate ci ci-local docker-build clean
 
 install:
 	python scripts/bootstrap_dev.py
@@ -40,6 +40,27 @@ migration-apply:
 test:
 	$(MAKE) test-unit
 
+test-fast:
+	$(MAKE) lint
+	$(MAKE) typecheck
+	$(MAKE) warning-gate
+	$(MAKE) test-unit
+
+test-medium:
+	$(MAKE) test-unit-db
+	$(MAKE) test-integration-lite
+	$(MAKE) test-ops-contract
+	$(MAKE) test-transaction-buy-contract
+	$(MAKE) test-transaction-sell-contract
+
+test-heavy:
+	$(MAKE) test-e2e-smoke
+	$(MAKE) test-docker-smoke
+	$(MAKE) test-latency-gate
+	$(MAKE) test-performance-load-gate
+	$(MAKE) test-performance-load-gate-full
+	$(MAKE) test-failure-recovery-gate
+
 test-unit:
 	python scripts/test_manifest.py --suite unit --quiet
 
@@ -79,6 +100,9 @@ test-performance-load-gate:
 
 test-performance-load-gate-full:
 	python scripts/performance_load_gate.py --build --profile-tier full --enforce
+
+test-failure-recovery-gate:
+	python scripts/failure_recovery_gate.py --build --enforce
 
 security-audit:
 	python -m pip_audit -r tests/requirements.txt
