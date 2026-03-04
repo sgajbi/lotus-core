@@ -1,10 +1,10 @@
-# RFC 046 - Portfolio Foundation Explorer and What-If Snapshot APIs
+# RFC 046B - Portfolio Foundation Explorer and What-If Snapshot APIs
 
 | Metadata | Value |
 | --- | --- |
 | Status | Partially Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` |
 | Depends On | RFC 046A, RFC 058, core snapshot + simulation contracts |
 | Scope | Explorer-grade portfolio read models and iterative what-if API surfaces |

@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate security-audit check coverage-gate ci ci-local docker-build clean
+.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack security-audit check coverage-gate ci ci-local docker-build clean
 
 install:
 	python scripts/bootstrap_dev.py
@@ -107,6 +107,9 @@ test-performance-load-gate-full:
 
 test-failure-recovery-gate:
 	python scripts/failure_recovery_gate.py --build --enforce
+
+test-institutional-signoff-pack:
+	python scripts/institutional_signoff_pack.py --require-all --max-age-hours 24
 
 security-audit:
 	python -m pip_audit -r tests/requirements.txt

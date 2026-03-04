@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-02-27 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | lotus-core ingestion and operations maintainers |
 | Depends On | RFC 065 throughput/operability controls |
 | Related Standards | RFC-0067 OpenAPI quality and vocabulary governance; durability/consistency standards |
@@ -45,8 +45,8 @@ The RFC document was stale; this revision aligns it with current implementation 
 3. Expanded ingestion-ops surface increases complexity but provides stronger operational control and auditable recovery.
 
 ## Gap Assessment
-1. RFC narrative still reflected only slices 1-2 and did not capture completed operational scope.
-2. A formal statement of idempotency semantics (header propagation vs strict dedupe guarantees by endpoint) should remain explicit to avoid consumer misinterpretation.
+1. RFC narrative previously reflected only slices 1-2; this revision captures current operational scope.
+2. No blocking implementation gap remains for semantic clarity after adding endpoint-level idempotency matrix below.
 
 ## Deviations and Evolution Since Original RFC
 1. Original non-goal excluded job-status API; implementation now includes full job-status/retry suite.
@@ -54,7 +54,18 @@ The RFC document was stale; this revision aligns it with current implementation 
 
 ## Proposed Changes
 1. Rebaseline RFC 060 as implemented ingestion contract + operations hardening record.
-2. Add explicit semantic matrix (best-effort key propagation vs deterministic dedupe behaviors) per ingestion path in follow-on docs.
+2. Keep endpoint-level semantic matrix in this RFC synchronized with ingestion router/repository behavior.
+
+## Endpoint Idempotency Semantics Matrix
+| Endpoint Family | Idempotency Header Accepted | Persistence Deduplication Guarantee | Notes |
+| --- | --- | --- | --- |
+| `/ingest/portfolios` | Yes (`X-Idempotency-Key`) | Deterministic upsert by business key (`portfolio_id`) | Duplicate requests converge to same portfolio state. |
+| `/ingest/instruments` | Yes (`X-Idempotency-Key`) | Deterministic upsert by business key (`security_id`) | Duplicate requests converge to same instrument state. |
+| `/ingest/transactions` | Yes (`X-Idempotency-Key`) | Deterministic upsert by business key (`transaction_id`) + consumer idempotency guard | Replay-safe for both transaction row and consumer processing stage. |
+| `/ingest/market-prices` | Yes (`X-Idempotency-Key`) | Deterministic upsert by (`security_id`, `price_date`) | Same key/date payloads are idempotent. |
+| `/ingest/fx-rates` | Yes (`X-Idempotency-Key`) | Deterministic upsert by (`from_currency`, `to_currency`, `rate_date`) | Same pair/date payloads are idempotent. |
+| `/ingest/business-dates` | Yes (`X-Idempotency-Key`) | Deterministic upsert by (`calendar_code`, `date`) | Safe replay for calendar/day ingestion. |
+| `/ingestion/jobs/*` operations | Job-scoped controls (not payload idempotency header) | Idempotent read/retry semantics via durable `job_id` and replay audit identifiers | Control-plane idempotency is job-context based. |
 
 ## Test and Validation Evidence
 1. `tests/integration/services/ingestion_service/test_ingestion_routers.py`
@@ -78,5 +89,5 @@ The RFC document was stale; this revision aligns it with current implementation 
 2. Should replay-policy controls be codified as platform-wide standards to align all Lotus apps?
 
 ## Next Actions
-1. Publish explicit idempotency-semantics documentation per endpoint family.
-2. Keep ingestion-ops API contract tests as required gate for future ingestion changes.
+1. Keep ingestion-ops API contract tests as required gate for future ingestion changes.
+2. Update this matrix whenever endpoint semantics change.

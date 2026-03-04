@@ -2,9 +2,9 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` integration boundary governance |
 | Depends On | RFC 036, RFC 063 |
 | Scope | Remove analytics ownership from core-snapshot and provide raw analytics inputs for lotus-performance |
@@ -16,7 +16,7 @@ RFC 049 intent is clear and mostly realized at architectural direction level, bu
 2. Raw analytics input surface exists under integration analytics endpoints (`/integration/portfolios/{portfolio_id}/analytics/...`), not the exact original `performance-input` endpoint name.
 3. RFC text still references governance behaviors and warning semantics not present as explicit snapshot warning fields in current contract.
 
-Classification: `Partially implemented (requires enhancement)`.
+Classification: `Fully implemented and aligned` after rebaselining to the delivered RFC-063 contract family.
 
 ## Original Requested Requirements (Preserved)
 
@@ -35,9 +35,9 @@ Implemented:
    - `/integration/portfolios/{portfolio_id}/analytics/reference`
 3. DTOs and service implementations for these analytics input contracts are present and test-covered.
 
-Not fully aligned to original text:
-1. Endpoint naming/schema in RFC (`performance-input` with field aliases like `perfDate`, `beginMv`) differs from implemented RFC-063 style contract (`rfc_063_v1` structured DTOs).
-2. Explicit snapshot warning code semantics described here are not represented in current core-snapshot response model.
+Superseded details from original text:
+1. Endpoint naming/schema in this RFC (`performance-input` with compact aliases like `perfDate`, `beginMv`) was superseded by implemented RFC-063 style contracts (`portfolio-timeseries`, `position-timeseries`, `reference`) with typed lineage and diagnostics.
+2. Snapshot governance behavior is now covered by RFC-043 policy enforcement and metadata (`freshness`, `governance`, strict-mode section filtering/blocking), replacing earlier warning-only framing.
 
 Evidence:
 - `src/services/query_service/app/dtos/core_snapshot_dto.py`
@@ -52,7 +52,7 @@ Evidence:
 | --- | --- | --- |
 | Remove analytics sections from core-snapshot | Implemented | `CoreSnapshotSection` enum |
 | Provide raw analytics input contract | Implemented with evolved endpoint family and schema | analytics inputs router/DTO/service |
-| Snapshot filter/warn governance semantics | Partially implemented / not explicit in snapshot response | snapshot DTO/service behavior |
+| Snapshot governance semantics when analytics sections are requested | Implemented through strict policy enforcement and governance metadata in core-snapshot | `src/services/query_service/app/routers/integration.py`; `src/services/query_service/app/dtos/core_snapshot_dto.py`; RFC-043 evidence |
 
 ## Design Reasoning and Trade-offs
 
@@ -64,19 +64,21 @@ Trade-off:
 
 ## Gap Assessment
 
-Remaining delta:
-1. Rebaseline RFC 049 to current implemented RFC-063-style analytics input contract and explicitly document superseded endpoint naming/schema.
-2. Decide whether snapshot warning semantics are required and, if not, remove from RFC to avoid false expectations.
+No blocking delta remains after this contract mapping rebaseline.
 
 ## Deviations and Evolution Since Original RFC
 
 1. Implementation evolved from a single `performance-input` endpoint concept to a broader analytics-input contract family.
 2. Contract terms moved toward explicit typed metadata (`contract_version`, lineage diagnostics) rather than compact alias fields.
 
-## Proposed Changes
+## Final Contract Mapping (Original -> Implemented)
 
-1. Keep classification as `Partially implemented`.
-2. Publish a consolidated “final contract mapping” section in this RFC linking original proposal to implemented endpoints.
+| Original RFC-049 Contract Concept | Implemented Contract |
+| --- | --- |
+| `POST /integration/portfolios/{portfolio_id}/performance-input` | `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` |
+| Position-level analytics payload embedded in same family | `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries` |
+| Reference metadata included ad-hoc in performance-input payload | `POST /integration/portfolios/{portfolio_id}/analytics/reference` |
+| Snapshot warning semantics for analytics section requests | RFC-043 governed section filtering/strict rejection + governance provenance metadata |
 
 ## Test and Validation Evidence
 
@@ -88,7 +90,7 @@ Remaining delta:
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned.
+Aligned through evolved contract family and governance supersession.
 
 ## Rollout and Backward Compatibility
 
@@ -96,10 +98,9 @@ No runtime change introduced by this documentation retrofit.
 
 ## Open Questions
 
-1. Should RFC 049 be merged/superseded by RFC 063 documentation to eliminate duplicate contract narratives?
+1. None blocking for lotus-core implementation scope.
 
 ## Next Actions
 
-1. Reconcile RFC 049 with current analytics-input endpoint naming and schema.
-2. Explicitly document snapshot warning behavior as implemented or removed.
+1. Keep this RFC as a bridge document pointing to RFC-063 and RFC-043 as the active contract authorities.
 
