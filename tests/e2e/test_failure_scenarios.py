@@ -11,6 +11,17 @@ import requests
 from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_DLQ_TOPIC
 from .api_client import E2EApiClient
 
+CORE_SERVICE_HEALTH_URLS = [
+    "http://localhost:8080/health/ready",  # persistence_service
+    "http://localhost:8081/health/ready",  # position_calculator_service
+    "http://localhost:8082/health/ready",  # cashflow_calculator_service
+    "http://localhost:8083/health/ready",  # cost_calculator_service
+    "http://localhost:8084/health/ready",  # position_valuation_calculator
+    "http://localhost:8085/health/ready",  # timeseries_generator_service
+    "http://localhost:8200/health/ready",  # ingestion_service
+    "http://localhost:8201/health/ready",  # query_service
+]
+
 def wait_for_postgres_ready(db_engine, timeout=30):
     """Waits for the PostgreSQL container to be ready for connections."""
     start_time = time.time()
@@ -58,7 +69,7 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     dlq_consumer.subscribe([KAFKA_PERSISTENCE_DLQ_TOPIC])
 
     # 3. ARRANGE: Ingest prerequisite portfolio data
-    portfolio_payload = {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "FAIL_CIF", "status": "ACTIVE", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]}
+    portfolio_payload = {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "FAIL_CIF", "status": "ACTIVE", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]}
     e2e_api_client.ingest("/ingest/portfolios", portfolio_payload)
 
     # 4. ACT: Ingest the target transaction, which will be consumed by persistence-service
@@ -97,6 +108,29 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     print("\n--- Verifying DLQ is empty ---")
     msg = dlq_consumer.poll(timeout=10)
     dlq_consumer.close()
-    
+
     assert msg is None, f"A message was unexpectedly found in the DLQ: {msg.value() if msg else 'None'}"
     print("\n--- DLQ verified to be empty ---")
+
+    # 9. RECOVERY BARRIER: restart all core services and wait for end-to-end readiness
+    print("\n--- Restarting all core services after DB outage scenario ---")
+    subprocess.run(
+        [
+            "docker",
+            "compose",
+            "restart",
+            "ingestion_service",
+            "query_service",
+            "persistence_service",
+            "position_calculator_service",
+            "cashflow_calculator_service",
+            "cost_calculator_service",
+            "position_valuation_calculator",
+            "timeseries_generator_service",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    for health_url in CORE_SERVICE_HEALTH_URLS:
+        wait_for_service_ready(health_url, timeout=120)
+    print("\n--- Core services fully recovered after outage test ---")
