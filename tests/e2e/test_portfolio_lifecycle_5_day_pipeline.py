@@ -1,4 +1,4 @@
-# tests/e2e/test_5_day_workflow.py
+# tests/e2e/test_portfolio_lifecycle_5_day_pipeline.py
 import pytest
 from decimal import Decimal
 from sqlalchemy.orm import Session

@@ -1,4 +1,4 @@
-# tests/e2e/test_timeseries_pipeline.py
+# tests/e2e/test_analytics_input_timeseries_pipeline.py
 import pytest
 from decimal import Decimal
 from sqlalchemy.orm import Session

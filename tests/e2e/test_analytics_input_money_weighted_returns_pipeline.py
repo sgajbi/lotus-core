@@ -1,4 +1,4 @@
-# tests/e2e/test_mwr_pipeline.py
+# tests/e2e/test_analytics_input_money_weighted_returns_pipeline.py
 import pytest
 import time
 from decimal import Decimal

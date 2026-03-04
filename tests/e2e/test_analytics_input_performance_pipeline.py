@@ -1,4 +1,4 @@
-# tests/e2e/test_performance_pipeline.py
+# tests/e2e/test_analytics_input_performance_pipeline.py
 import pytest
 
 from tests.e2e.api_client import E2EApiClient
