@@ -88,8 +88,8 @@ jobs:
           - suite: unit-db
           - suite: integration-lite
           - suite: ops-contract
-          - suite: buy-rfc
-          - suite: sell-rfc
+          - suite: transaction-buy-contract
+          - suite: transaction-sell-contract
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
