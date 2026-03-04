@@ -117,6 +117,37 @@ def _call(
         return None
 
 
+def _record_contract_check(
+    results: list[CheckResult],
+    *,
+    name: str,
+    url: str,
+    ok: bool,
+    note: str,
+    response: Any,
+) -> None:
+    results.append(
+        CheckResult(
+            name=name,
+            method="CONTRACT",
+            url=url,
+            status=200 if ok else 0,
+            ok=ok,
+            note=note,
+            response=response,
+        )
+    )
+
+
+def _response_json_or_none(response: requests.Response | None) -> Any:
+    if response is None:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
 def _wait_ready(base_url: str, timeout_seconds: int) -> None:
     ready_url = f"{base_url}/health/ready"
     deadline = time.time() + timeout_seconds
@@ -598,6 +629,160 @@ def main() -> int:
         expected={200},
         headers=ops_headers,
     )
+    operating_band_response = _call(
+        results,
+        name="health operating band",
+        method="GET",
+        url=f"{ingest}/ingestion/health/operating-band",
+        expected={200},
+        headers=ops_headers,
+    )
+    policy_response = _call(
+        results,
+        name="health policy",
+        method="GET",
+        url=f"{ingest}/ingestion/health/policy",
+        expected={200},
+        headers=ops_headers,
+    )
+    reprocessing_queue_response = _call(
+        results,
+        name="health reprocessing queue",
+        method="GET",
+        url=f"{ingest}/ingestion/health/reprocessing-queue",
+        expected={200},
+        headers=ops_headers,
+    )
+    backlog_breakdown_response = _call(
+        results,
+        name="health backlog breakdown",
+        method="GET",
+        url=f"{ingest}/ingestion/health/backlog-breakdown",
+        expected={200},
+        headers=ops_headers,
+    )
+    stalled_jobs_response = _call(
+        results,
+        name="health stalled jobs",
+        method="GET",
+        url=f"{ingest}/ingestion/health/stalled-jobs",
+        expected={200},
+        headers=ops_headers,
+    )
+    capacity_response = _call(
+        results,
+        name="health capacity",
+        method="GET",
+        url=f"{ingest}/ingestion/health/capacity",
+        expected={200},
+        headers=ops_headers,
+    )
+
+    policy_payload = _response_json_or_none(policy_response)
+    if isinstance(policy_payload, dict):
+        required_policy_keys = {
+            "policy_version",
+            "policy_fingerprint",
+            "calculator_peak_lag_age_seconds",
+            "replay_isolation_mode",
+            "partition_growth_strategy",
+        }
+        missing_policy_keys = sorted(required_policy_keys - set(policy_payload))
+        _record_contract_check(
+            results,
+            name="health policy contract",
+            url=f"{ingest}/ingestion/health/policy",
+            ok=not missing_policy_keys,
+            note=(
+                "all required policy keys present"
+                if not missing_policy_keys
+                else f"missing policy keys: {', '.join(missing_policy_keys)}"
+            ),
+            response=policy_payload,
+        )
+
+    capacity_payload = _response_json_or_none(capacity_response)
+    if isinstance(capacity_payload, dict):
+        required_capacity_keys = {
+            "as_of",
+            "lookback_minutes",
+            "assumed_replicas",
+            "total_backlog_records",
+            "groups",
+        }
+        missing_capacity_keys = sorted(required_capacity_keys - set(capacity_payload))
+        group_contract_ok = True
+        group_contract_note = "capacity contract fields present"
+        groups = capacity_payload.get("groups")
+        if isinstance(groups, list) and groups:
+            required_group_keys = {
+                "lambda_in_events_per_second",
+                "mu_msg_per_replica_events_per_second",
+                "effective_capacity_events_per_second",
+                "utilization_ratio",
+                "headroom_ratio",
+                "saturation_state",
+            }
+            missing_group_keys = sorted(required_group_keys - set(groups[0]))
+            if missing_group_keys:
+                group_contract_ok = False
+                group_contract_note = f"missing capacity group keys: {', '.join(missing_group_keys)}"
+        elif missing_capacity_keys:
+            group_contract_ok = False
+        _record_contract_check(
+            results,
+            name="health capacity contract",
+            url=f"{ingest}/ingestion/health/capacity",
+            ok=(not missing_capacity_keys) and group_contract_ok,
+            note=(
+                group_contract_note
+                if not missing_capacity_keys
+                else f"missing capacity keys: {', '.join(missing_capacity_keys)}"
+            ),
+            response=capacity_payload,
+        )
+
+    operating_band_payload = _response_json_or_none(operating_band_response)
+    if operating_band_response is not None:
+        _record_contract_check(
+            results,
+            name="health operating band contract",
+            url=f"{ingest}/ingestion/health/operating-band",
+            ok=isinstance(operating_band_payload, dict),
+            note="operating band payload captured",
+            response=operating_band_payload,
+        )
+    reprocessing_queue_payload = _response_json_or_none(reprocessing_queue_response)
+    if reprocessing_queue_response is not None:
+        _record_contract_check(
+            results,
+            name="health reprocessing queue contract",
+            url=f"{ingest}/ingestion/health/reprocessing-queue",
+            ok=isinstance(reprocessing_queue_payload, dict),
+            note="reprocessing queue payload captured",
+            response=reprocessing_queue_payload,
+        )
+    backlog_breakdown_payload = _response_json_or_none(backlog_breakdown_response)
+    if backlog_breakdown_response is not None:
+        _record_contract_check(
+            results,
+            name="health backlog breakdown contract",
+            url=f"{ingest}/ingestion/health/backlog-breakdown",
+            ok=isinstance(backlog_breakdown_payload, dict),
+            note="backlog breakdown payload captured",
+            response=backlog_breakdown_payload,
+        )
+    stalled_jobs_payload = _response_json_or_none(stalled_jobs_response)
+    if stalled_jobs_response is not None:
+        _record_contract_check(
+            results,
+            name="health stalled jobs contract",
+            url=f"{ingest}/ingestion/health/stalled-jobs",
+            ok=isinstance(stalled_jobs_payload, dict),
+            note="stalled jobs payload captured",
+            response=stalled_jobs_payload,
+        )
+
     _call(
         results,
         name="dlq list",
