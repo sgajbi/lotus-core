@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2026-03-04 |
 | Last Updated | 2026-03-04 |
 | Owners | lotus-core engineering; lotus-platform governance |
