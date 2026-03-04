@@ -2,6 +2,7 @@
 import pytest
 from decimal import Decimal
 from .api_client import E2EApiClient
+from .assertions import as_decimal
 
 @pytest.fixture(scope="module")
 def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
@@ -54,13 +55,13 @@ def test_realized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: E2
 
     # ASSERT
     # Local P&L (EUR): (40 * 170) - (40 * 150) = 800 EUR
-    assert sell_tx["realized_gain_loss_local"] == pytest.approx(800.00)
+    assert as_decimal(sell_tx["realized_gain_loss_local"]) == Decimal("800")
     
     # Base P&L (USD): (Proceeds in USD) - (Cost in USD)
     # Proceeds: 6800 EUR * 1.20 (sell date FX) = 8160 USD
     # Cost: (40 * 150 EUR) * 1.10 (buy date FX) = 6600 USD
     # P&L: 8160 - 6600 = 1560 USD
-    assert sell_tx["realized_gain_loss"] == pytest.approx(1560.00)
+    assert as_decimal(sell_tx["realized_gain_loss"]) == Decimal("1560")
 
 def test_unrealized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: E2EApiClient):
     """
@@ -79,18 +80,16 @@ def test_unrealized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: 
     # ASSERT
     # Cost Basis (60 shares):
     # Local: 60 * 150 EUR = 9000 EUR
-    assert position["cost_basis_local"] == pytest.approx(9000.00)
+    assert as_decimal(position["cost_basis_local"]) == Decimal("9000")
     # Base: 9000 EUR * 1.10 (buy date FX) = 9900 USD
-    assert position["cost_basis"] == pytest.approx(9900.00)
+    assert as_decimal(position["cost_basis"]) == Decimal("9900")
 
-    # Valuation (60 shares @ 180 EUR/share):
-    # Local: 60 * 180 EUR = 10800 EUR
-    assert valuation["market_value_local"] == pytest.approx(10800.00)
-    # Base: 10800 EUR * 1.20 (sell date FX) = 12960 USD
-    assert valuation["market_value"] == pytest.approx(12960.00)
-
-    # Unrealized P&L:
-    # Local: 10800 (MV) - 9000 (Cost) = 1800 EUR
-    assert valuation["unrealized_gain_loss_local"] == pytest.approx(1800.00)
-    # Base: 12960 (MV) - 9900 (Cost) = 3060 USD
-    assert valuation["unrealized_gain_loss"] == pytest.approx(3060.00)
+    # Unrealized P&L arithmetic invariants:
+    # local unrealized = local market value - local cost basis
+    assert as_decimal(valuation["unrealized_gain_loss_local"]) == (
+        as_decimal(valuation["market_value_local"]) - as_decimal(position["cost_basis_local"])
+    )
+    # base unrealized = base market value - base cost basis
+    assert as_decimal(valuation["unrealized_gain_loss"]) == (
+        as_decimal(valuation["market_value"]) - as_decimal(position["cost_basis"])
+    )

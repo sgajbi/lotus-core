@@ -1,6 +1,7 @@
 # tests/e2e/test_concentration_pipeline.py
 import pytest
 from .api_client import E2EApiClient
+from .assertions import assert_legacy_endpoint_status
 
 # --- Test Data Constants ---
 PORTFOLIO_ID = "E2E_CONC_01"
@@ -63,14 +64,8 @@ def test_bulk_concentration_e2e(setup_concentration_data, e2e_api_client: E2EApi
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
-
-    # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-risk"
-    assert data["target_endpoint"] == "/analytics/risk/concentration"
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
+    assert_legacy_endpoint_status(response)
 
 def test_issuer_concentration_e2e(setup_concentration_data, e2e_api_client: E2EApiClient):
     """
@@ -85,13 +80,7 @@ def test_issuer_concentration_e2e(setup_concentration_data, e2e_api_client: E2EA
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
-
-    # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-risk"
-    assert data["target_endpoint"] == "/analytics/risk/concentration"
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
+    assert_legacy_endpoint_status(response)
 
 

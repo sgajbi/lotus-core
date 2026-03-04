@@ -27,15 +27,15 @@ def setup_review_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_unt
         {"transaction_id": "REVIEW_DEPOSIT_01", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-20T09:00:00Z", "transaction_type": "DEPOSIT", "quantity": 100000, "price": 1, "gross_transaction_amount": 100000, "trade_currency": "USD", "currency": "USD"},
         
         # Apple Purchase
-        {"transaction_id": "REVIEW_BUY_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "AAPL", "security_id": "SEC_AAPL", "transaction_date": "2025-08-20T10:00:00Z", "transaction_type": "BUY", "quantity": 100, "price": 150, "gross_transaction_amount": 15000, "trade_currency": "USD", "currency": "USD"},
+        {"transaction_id": "REVIEW_BUY_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "SEC_AAPL", "security_id": "SEC_AAPL", "transaction_date": "2025-08-20T10:00:00Z", "transaction_type": "BUY", "quantity": 100, "price": 150, "gross_transaction_amount": 15000, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "REVIEW_CASH_SETTLE_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-20T10:00:00Z", "transaction_type": "SELL", "quantity": 15000, "price": 1, "gross_transaction_amount": 15000, "trade_currency": "USD", "currency": "USD"},
         
         # Bond Purchase
-        {"transaction_id": "REVIEW_BUY_BOND", "portfolio_id": PORTFOLIO_ID, "instrument_id": "UST", "security_id": "SEC_BOND", "transaction_date": "2025-08-20T11:00:00Z", "transaction_type": "BUY", "quantity": 10, "price": 980, "gross_transaction_amount": 9800, "trade_currency": "USD", "currency": "USD"},
+        {"transaction_id": "REVIEW_BUY_BOND", "portfolio_id": PORTFOLIO_ID, "instrument_id": "SEC_BOND", "security_id": "SEC_BOND", "transaction_date": "2025-08-20T11:00:00Z", "transaction_type": "BUY", "quantity": 10, "price": 980, "gross_transaction_amount": 9800, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "REVIEW_CASH_SETTLE_BOND", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-20T11:00:00Z", "transaction_type": "SELL", "quantity": 9800, "price": 1, "gross_transaction_amount": 9800, "trade_currency": "USD", "currency": "USD"},
 
         # Dividend Payment
-        {"transaction_id": "REVIEW_DIV_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "AAPL", "security_id": "SEC_AAPL", "transaction_date": "2025-08-25T10:00:00Z", "transaction_type": "DIVIDEND", "quantity": 0, "price": 0, "gross_transaction_amount": 120, "trade_currency": "USD", "currency": "USD"},
+        {"transaction_id": "REVIEW_DIV_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "SEC_AAPL", "security_id": "SEC_AAPL", "transaction_date": "2025-08-25T10:00:00Z", "transaction_type": "DIVIDEND", "quantity": 0, "price": 0, "gross_transaction_amount": 120, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "REVIEW_CASH_SETTLE_DIV", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-25T10:00:00Z", "transaction_type": "BUY", "quantity": 120, "price": 1, "gross_transaction_amount": 120, "trade_currency": "USD", "currency": "USD"}
     ]
     e2e_api_client.ingest("/ingest/transactions", {"transactions": transactions})
@@ -47,13 +47,16 @@ def setup_review_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_unt
         {"securityId": "CASH_USD", "priceDate": AS_OF_DATE, "price": 1.0, "currency": "USD"}
     ]})
     
-    # 4. Poll until the final day's timeseries is generated
-    poll_db_until(
-        query="SELECT 1 FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date",
-        params={"pid": PORTFOLIO_ID, "date": AS_OF_DATE},
-        validation_func=lambda r: r is not None,
+    # 4. Poll until positions are fully queryable with valuation payload
+    e2e_api_client.poll_for_data(
+        f"/portfolios/{PORTFOLIO_ID}/positions",
+        lambda data: (
+            data.get("positions")
+            and any(p.get("security_id") == "SEC_AAPL" for p in data["positions"])
+            and all(p.get("valuation") for p in data["positions"])
+        ),
         timeout=180,
-        fail_message=f"Pipeline did not generate portfolio_timeseries for {AS_OF_DATE}."
+        fail_message=f"Pipeline did not generate queryable valued positions for {AS_OF_DATE}.",
     )
     return {"portfolio_id": PORTFOLIO_ID}
 

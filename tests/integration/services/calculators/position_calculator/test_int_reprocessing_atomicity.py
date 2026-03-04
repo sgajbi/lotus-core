@@ -23,8 +23,22 @@ SECURITY_ID = "SEC_REPRO_ATOM_01"
 async def setup_repro_atomicity_data(async_db_session: AsyncSession):
     """Sets up the initial state for the atomicity test."""
     # Clean up before test
-    for table in ["outbox_events", "position_state", "transactions", "portfolios"]:
-        await async_db_session.execute(text(f"DELETE FROM {table}"))
+    await async_db_session.execute(
+        text(
+            """
+            TRUNCATE TABLE
+                outbox_events,
+                daily_position_snapshots,
+                position_history,
+                position_timeseries,
+                portfolio_timeseries,
+                position_state,
+                transactions,
+                portfolios
+            RESTART IDENTITY CASCADE
+            """
+        )
+    )
     
     # ARRANGE: Create initial state
     async_db_session.add(

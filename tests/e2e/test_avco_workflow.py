@@ -2,6 +2,7 @@
 import pytest
 from decimal import Decimal
 from .api_client import E2EApiClient
+from .assertions import as_decimal
 
 @pytest.fixture(scope="module")
 def setup_avco_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until):
@@ -59,4 +60,4 @@ def test_avco_realized_pnl(setup_avco_data, e2e_api_client: E2EApiClient):
     # COGS for the sale of 50 shares = 50 * $11 = $550.
     # Proceeds from the sale = 50 * $15 = $750.
     # Realized P&L = $750 (Proceeds) - $550 (COGS) = $200.
-    assert sell_tx["realized_gain_loss"] == pytest.approx(200.0)
+    assert as_decimal(sell_tx["realized_gain_loss"]) == Decimal("200")
