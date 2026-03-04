@@ -144,6 +144,7 @@ async def test_openapi_declares_core_snapshot_contract(async_test_client):
     assert endpoint in paths
     responses = paths[endpoint]["post"]["responses"]
     assert "400" in responses
+    assert "403" in responses
     assert "404" in responses
     assert "409" in responses
     assert "422" in responses

@@ -45,6 +45,8 @@ async def test_analytics_timeseries_repository_methods() -> None:
                 SimpleNamespace(rate_date=date(2025, 1, 2), rate=Decimal("1.1300000000")),
             ]
         ),
+        _FakeExecuteResult([3]),
+        _FakeExecuteResult([2]),
     ]
     repo = AnalyticsTimeseriesRepository(db)
 
@@ -92,3 +94,20 @@ async def test_analytics_timeseries_repository_methods() -> None:
         end_date=date(2025, 1, 31),
     )
     assert fx_map[date(2025, 1, 1)] == Decimal("1.1200000000")
+
+    portfolio_snapshot_epoch = await repo.get_portfolio_snapshot_epoch(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+    assert portfolio_snapshot_epoch == 3
+
+    position_snapshot_epoch = await repo.get_position_snapshot_epoch(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        security_ids=["SEC_A"],
+        position_ids=["P1:SEC_A"],
+        dimension_filters={"asset_class": {"Equity"}, "sector": {"Technology"}, "country": {"US"}},
+    )
+    assert position_snapshot_epoch == 2

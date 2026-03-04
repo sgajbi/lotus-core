@@ -145,6 +145,76 @@ class CoreSnapshotSimulationMetadata(BaseModel):
     )
 
 
+class CoreSnapshotPolicyProvenance(BaseModel):
+    policy_version: str = Field(
+        ...,
+        description="Version label for the resolved integration policy.",
+        examples=["tenant-default-v1"],
+    )
+    policy_source: str = Field(
+        ...,
+        description="Policy source level used for snapshot governance resolution.",
+        examples=["tenant"],
+    )
+    matched_rule_id: str = Field(
+        ...,
+        description="Deterministic identifier of the matched governance rule.",
+        examples=["tenant.tenant_sg_pb.consumers.lotus-performance"],
+    )
+    strict_mode: bool = Field(
+        ...,
+        description="Whether strict section gating was enforced.",
+        examples=[True],
+    )
+
+
+class CoreSnapshotGovernanceMetadata(BaseModel):
+    consumer_system: str = Field(
+        ...,
+        description="Canonical downstream consumer identity used for policy resolution.",
+        examples=["lotus-performance"],
+    )
+    tenant_id: str = Field(
+        ...,
+        description="Tenant identifier used for policy resolution.",
+        examples=["tenant_sg_pb"],
+    )
+    requested_sections: list[CoreSnapshotSection] = Field(
+        ...,
+        description="Original section list requested by caller before policy application.",
+    )
+    applied_sections: list[CoreSnapshotSection] = Field(
+        ...,
+        description="Section list applied after policy evaluation.",
+    )
+    dropped_sections: list[CoreSnapshotSection] = Field(
+        default_factory=list,
+        description="Requested sections removed by policy evaluation.",
+    )
+    policy_provenance: CoreSnapshotPolicyProvenance = Field(
+        ...,
+        description="Policy lineage and strict-mode attributes used in this response.",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Governance warnings emitted during policy evaluation.",
+        examples=[["NO_ALLOWED_SECTION_RESTRICTION"]],
+    )
+
+
+class CoreSnapshotFreshnessMetadata(BaseModel):
+    freshness_status: str = Field(
+        ...,
+        description="Freshness classification for baseline snapshot resolution.",
+        examples=["CURRENT_SNAPSHOT"],
+    )
+    baseline_source: str = Field(
+        ...,
+        description="Baseline source used to assemble positions.",
+        examples=["position_state"],
+    )
+
+
 class CoreSnapshotPositionRecord(BaseModel):
     security_id: str = Field(
         ...,
@@ -346,6 +416,14 @@ class CoreSnapshotResponse(BaseModel):
         ...,
         description="UTC timestamp when lotus-core generated the snapshot response.",
         examples=["2026-02-27T10:30:00Z"],
+    )
+    freshness: CoreSnapshotFreshnessMetadata = Field(
+        ...,
+        description="Freshness and baseline lineage metadata for snapshot assembly.",
+    )
+    governance: CoreSnapshotGovernanceMetadata = Field(
+        ...,
+        description="Section governance and policy provenance metadata for this snapshot response.",
     )
     valuation_context: CoreSnapshotValuationContext = Field(
         ...,

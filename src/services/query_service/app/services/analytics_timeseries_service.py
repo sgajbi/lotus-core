@@ -186,6 +186,16 @@ class AnalyticsTimeseriesService:
             inception_date=portfolio.open_date,
         )
         reporting_currency = request.reporting_currency or portfolio.base_currency
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "endpoint": "portfolio-timeseries",
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "resolved_window": resolved_window.model_dump(mode="json"),
+                "frequency": request.frequency,
+                "reporting_currency": reporting_currency,
+            }
+        )
         fx_rates = await self._get_conversion_rates(
             portfolio_currency=portfolio.base_currency,
             reporting_currency=reporting_currency,
@@ -194,15 +204,29 @@ class AnalyticsTimeseriesService:
         )
 
         cursor = self._decode_page_token(request.page.page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope is not None and token_scope != request_scope_fingerprint:
+            raise AnalyticsInputError("INVALID_REQUEST", "Page token does not match request scope.")
         cursor_date = (
             date.fromisoformat(cursor["valuation_date"]) if cursor.get("valuation_date") else None
         )
+        snapshot_epoch = int(cursor["snapshot_epoch"]) if cursor.get("snapshot_epoch") else None
+        if snapshot_epoch is None:
+            if hasattr(self.repo, "get_portfolio_snapshot_epoch"):
+                snapshot_epoch = await self.repo.get_portfolio_snapshot_epoch(
+                    portfolio_id=portfolio_id,
+                    start_date=resolved_window.start_date,
+                    end_date=resolved_window.end_date,
+                )
+            else:
+                snapshot_epoch = 0
         rows = await self.repo.list_portfolio_timeseries_rows(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
             page_size=request.page.page_size,
             cursor_date=cursor_date,
+            snapshot_epoch=snapshot_epoch,
         )
 
         has_more = len(rows) > request.page.page_size
@@ -243,7 +267,11 @@ class AnalyticsTimeseriesService:
         next_page_token: str | None = None
         if has_more and rows_page:
             next_page_token = self._encode_page_token(
-                {"valuation_date": rows_page[-1].valuation_date.isoformat()}
+                {
+                    "valuation_date": rows_page[-1].valuation_date.isoformat(),
+                    "snapshot_epoch": snapshot_epoch,
+                    "scope_fingerprint": request_scope_fingerprint,
+                }
             )
 
         latest_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
@@ -294,6 +322,23 @@ class AnalyticsTimeseriesService:
             inception_date=portfolio.open_date,
         )
         reporting_currency = request.reporting_currency or portfolio.base_currency
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "endpoint": "position-timeseries",
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "resolved_window": resolved_window.model_dump(mode="json"),
+                "frequency": request.frequency,
+                "reporting_currency": reporting_currency,
+                "security_ids": request.filters.security_ids,
+                "position_ids": request.filters.position_ids,
+                "dimension_filters": [
+                    f.model_dump(mode="json") for f in request.filters.dimension_filters
+                ],
+                "dimensions": request.dimensions,
+                "include_cash_flows": request.include_cash_flows,
+            }
+        )
         fx_rates = await self._get_conversion_rates(
             portfolio_currency=portfolio.base_currency,
             reporting_currency=reporting_currency,
@@ -302,6 +347,9 @@ class AnalyticsTimeseriesService:
         )
 
         cursor = self._decode_page_token(request.page.page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope is not None and token_scope != request_scope_fingerprint:
+            raise AnalyticsInputError("INVALID_REQUEST", "Page token does not match request scope.")
         cursor_date = (
             date.fromisoformat(cursor["valuation_date"]) if cursor.get("valuation_date") else None
         )
@@ -309,6 +357,19 @@ class AnalyticsTimeseriesService:
         dimension_filters = {
             item.dimension: set(item.values) for item in request.filters.dimension_filters
         }
+        snapshot_epoch = int(cursor["snapshot_epoch"]) if cursor.get("snapshot_epoch") else None
+        if snapshot_epoch is None:
+            if hasattr(self.repo, "get_position_snapshot_epoch"):
+                snapshot_epoch = await self.repo.get_position_snapshot_epoch(
+                    portfolio_id=portfolio_id,
+                    start_date=resolved_window.start_date,
+                    end_date=resolved_window.end_date,
+                    security_ids=request.filters.security_ids,
+                    position_ids=request.filters.position_ids,
+                    dimension_filters=dimension_filters,
+                )
+            else:
+                snapshot_epoch = 0
         rows = await self.repo.list_position_timeseries_rows(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
@@ -319,6 +380,7 @@ class AnalyticsTimeseriesService:
             security_ids=request.filters.security_ids,
             position_ids=request.filters.position_ids,
             dimension_filters=dimension_filters,
+            snapshot_epoch=snapshot_epoch,
         )
 
         has_more = len(rows) > request.page.page_size
@@ -396,7 +458,12 @@ class AnalyticsTimeseriesService:
         if has_more and rows_page:
             last = rows_page[-1]
             next_page_token = self._encode_page_token(
-                {"valuation_date": last.valuation_date.isoformat(), "security_id": last.security_id}
+                {
+                    "valuation_date": last.valuation_date.isoformat(),
+                    "security_id": last.security_id,
+                    "snapshot_epoch": snapshot_epoch,
+                    "scope_fingerprint": request_scope_fingerprint,
+                }
             )
 
         fingerprint = self._request_fingerprint(

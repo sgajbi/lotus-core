@@ -8,7 +8,9 @@ from src.services.query_service.app.dtos.core_snapshot_dto import (
     CoreSnapshotSection,
 )
 from src.services.query_service.app.dtos.integration_dto import (
+    EffectiveIntegrationPolicyResponse,
     InstrumentEnrichmentBulkRequest,
+    PolicyProvenanceMetadata,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
@@ -101,6 +103,20 @@ def test_get_core_snapshot_service_factory_returns_service() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_router_function() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="default",
+            matched_rule_id="default",
+            strict_mode=False,
+        ),
+        allowed_sections=["POSITIONS_BASELINE"],
+        warnings=[],
+    )
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
@@ -124,6 +140,7 @@ async def test_create_core_snapshot_router_function() -> None:
         portfolio_id="PORT_001",
         request=request,
         service=mock_service,
+        integration_service=mock_integration_service,
     )
 
     mock_service.get_core_snapshot.assert_called_once()
@@ -133,6 +150,20 @@ async def test_create_core_snapshot_router_function() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_not_found_to_404() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="default",
+            matched_rule_id="default",
+            strict_mode=False,
+        ),
+        allowed_sections=["POSITIONS_BASELINE"],
+        warnings=[],
+    )
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
@@ -145,6 +176,7 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
             portfolio_id="PORT_404",
             request=request,
             service=mock_service,
+            integration_service=mock_integration_service,
         )
 
     assert exc_info.value.status_code == 404
@@ -153,6 +185,20 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="default",
+            matched_rule_id="default",
+            strict_mode=False,
+        ),
+        allowed_sections=["POSITIONS_BASELINE"],
+        warnings=[],
+    )
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
@@ -165,6 +211,7 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
             portfolio_id="PORT_001",
             request=request,
             service=mock_service,
+            integration_service=mock_integration_service,
         )
 
     assert exc_info.value.status_code == 400
@@ -173,6 +220,20 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_conflict_to_409() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="default",
+            matched_rule_id="default",
+            strict_mode=False,
+        ),
+        allowed_sections=["POSITIONS_PROJECTED"],
+        warnings=[],
+    )
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.SIMULATION,
@@ -186,6 +247,7 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
             portfolio_id="PORT_001",
             request=request,
             service=mock_service,
+            integration_service=mock_integration_service,
         )
 
     assert exc_info.value.status_code == 409
@@ -194,6 +256,20 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="default",
+            matched_rule_id="default",
+            strict_mode=False,
+        ),
+        allowed_sections=["POSITIONS_PROJECTED"],
+        warnings=[],
+    )
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.SIMULATION,
@@ -207,9 +283,108 @@ async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
             portfolio_id="PORT_001",
             request=request,
             service=mock_service,
+            integration_service=mock_integration_service,
         )
 
     assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_core_snapshot_maps_policy_block_to_403() -> None:
+    mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="tenant",
+            matched_rule_id="tenant.default",
+            strict_mode=True,
+        ),
+        allowed_sections=[],
+        warnings=[],
+    )
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_core_snapshot(
+            portfolio_id="PORT_001",
+            request=request,
+            service=mock_service,
+            integration_service=mock_integration_service,
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_core_snapshot_filters_sections_in_non_strict_mode() -> None:
+    mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_service.get_core_snapshot.return_value = {
+        "portfolio_id": "PORT_001",
+        "as_of_date": "2026-02-27",
+        "snapshot_mode": "BASELINE",
+        "generated_at": "2026-02-27T00:00:00Z",
+        "freshness": {"freshness_status": "CURRENT_SNAPSHOT", "baseline_source": "position_state"},
+        "governance": {
+            "consumer_system": "lotus-performance",
+            "tenant_id": "default",
+            "requested_sections": ["positions_baseline", "portfolio_totals"],
+            "applied_sections": ["positions_baseline"],
+            "dropped_sections": ["portfolio_totals"],
+            "policy_provenance": {
+                "policy_version": "tenant-default-v1",
+                "policy_source": "tenant",
+                "matched_rule_id": "tenant.default",
+                "strict_mode": False,
+            },
+            "warnings": ["SECTIONS_DROPPED_NON_STRICT_MODE"],
+        },
+        "valuation_context": {
+            "portfolio_currency": "USD",
+            "reporting_currency": "USD",
+            "position_basis": "market_value_base",
+            "weight_basis": "total_market_value_base",
+        },
+        "sections": {"positions_baseline": []},
+    }
+
+    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="tenant",
+            matched_rule_id="tenant.default",
+            strict_mode=False,
+        ),
+        allowed_sections=["POSITIONS_BASELINE"],
+        warnings=[],
+    )
+
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE, CoreSnapshotSection.PORTFOLIO_TOTALS],
+    )
+
+    await create_core_snapshot(
+        portfolio_id="PORT_001",
+        request=request,
+        service=mock_service,
+        integration_service=mock_integration_service,
+    )
+
+    called_request = mock_service.get_core_snapshot.call_args.kwargs["request"]
+    assert called_request.sections == [CoreSnapshotSection.POSITIONS_BASELINE]
 
 
 @pytest.mark.asyncio
