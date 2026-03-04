@@ -2,7 +2,7 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Outdated |
+| Status | Partially Implemented |
 | Created | 2025-09-01 |
 | Last Updated | 2026-03-04 |
 | Owners | `position_valuation_calculator`, `portfolio-common` |
@@ -19,7 +19,7 @@ Current system evolved along a different path:
 1. Job lifecycle/observability hardening exists, but missing-position cases are explicitly terminally skipped (`SKIPPED_NO_POSITION`) rather than retried.
 2. Scheduler remains in `position_valuation_calculator` service; workload isolation is handled with internal component separation and additional worker paths.
 
-Because the design intent and current implementation diverged, this RFC is classified as `Outdated (requires revision)`.
+Because the design intent and current implementation diverged historically, this RFC has now been rebaselined to current architecture and is classified as `Partially implemented (requires enhancement)`.
 
 ## Original Requested Requirements (Preserved)
 
@@ -37,6 +37,7 @@ Implemented in current codebase:
 3. `ValuationConsumer` treats missing position history as `SKIPPED_NO_POSITION` terminal state, not PENDING retry.
 4. Missing critical reference entities can mark job `FAILED`.
 5. Scheduler remains in-process with valuation service (`consumer_manager` starts scheduler directly).
+6. Explicit valuation failure-policy matrix is now codified in the consumer path (terminal `FAILED` vs `COMPLETE` decision derived from `valuation_status`).
 
 Evidence:
 - `src/libs/portfolio-common/portfolio_common/database_models.py`
@@ -47,11 +48,22 @@ Evidence:
 - `tests/unit/services/calculators/position_valuation_calculator/consumers/test_valuation_consumer.py`
 - `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
 
+### Implemented Valuation Failure Policy Matrix
+
+| Condition | Valuation Snapshot Status | Job Status | Retry Behavior |
+| --- | --- | --- | --- |
+| No position history for `(portfolio_id, security_id, epoch, valuation_date)` | N/A (no snapshot) | `SKIPPED_NO_POSITION` | Terminal skip (no retry/DLQ) |
+| Missing instrument or portfolio reference data | N/A (no snapshot) | `FAILED` | Terminal failure (no retry) |
+| Cross-currency valuation and required FX unavailable | `FAILED` | `FAILED` | Terminal failure (no retry) |
+| Price unavailable on valuation date (or before date lookup) | `UNVALUED` | `COMPLETE` | Completes as unvalued snapshot |
+| Valuation logic returns no result | `FAILED` | `FAILED` | Terminal failure (no retry) |
+| DB operational/transient error | N/A | unchanged in failed attempt | Retried by consumer retry policy |
+
 ## Requirement-to-Implementation Traceability
 
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
-| Retry transient data-gap jobs as PENDING with backoff | Not implemented as specified; missing-position path is terminal skip (`SKIPPED_NO_POSITION`) | `valuation_consumer.py`; consumer tests |
+| Retry transient data-gap jobs as PENDING with backoff | Not implemented as specified; terminal/complete policy matrix is explicit and enforced | `valuation_consumer.py`; consumer tests |
 | Attempt/failure metadata for operations | Implemented | `database_models.py`; `valuation_repository.py` |
 | Dedicated scheduler microservice split | Not implemented; scheduler runs in same service process | `consumer_manager.py`; `valuation_scheduler.py` |
 | Improve valuation operability/visibility | Implemented partially through job fields, status transitions, and metrics | repository + monitoring usage |
@@ -67,10 +79,9 @@ Trade-off:
 
 ## Gap Assessment
 
-Primary gap is architectural/documentation drift, not immediate correctness breakage:
-1. RFC text does not reflect current terminal-skip semantics.
-2. RFC text describes a microservice split that was not adopted.
-3. Potential future enhancement remains: explicit policy for when missing FX/price should trigger delayed retry versus terminal status.
+Remaining gap is architectural optionality, not correctness drift:
+1. Dedicated scheduler microservice split remains deferred.
+2. Current policy intentionally treats missing FX as terminal failure rather than delayed pending retries.
 
 ## Deviations and Evolution Since Original RFC
 
@@ -79,8 +90,8 @@ Primary gap is architectural/documentation drift, not immediate correctness brea
 
 ## Proposed Changes
 
-1. Rebaseline RFC 020 as a current-state valuation resilience record.
-2. Explicitly codify policy matrix for terminal vs retryable valuation failure modes (missing position, missing FX, missing instrument/portfolio, DB transient faults).
+1. Keep RFC 020 as current-state valuation resilience record.
+2. Maintain explicit policy matrix for terminal vs retryable valuation failure modes.
 3. Keep microservice split as optional future architecture decision, not assumed baseline.
 
 ## Test and Validation Evidence
@@ -96,7 +107,8 @@ Primary gap is architectural/documentation drift, not immediate correctness brea
 
 Partially aligned:
 1. Lifecycle metadata/operability are present.
-2. Proposed retry semantics and service split are not implemented as written.
+2. Explicit terminal vs retry policy matrix is implemented.
+3. Dedicated scheduler microservice split is not implemented (deferred).
 
 ## Rollout and Backward Compatibility
 
@@ -109,5 +121,5 @@ No runtime change introduced by this documentation retrofit.
 
 ## Next Actions
 
-1. Track policy clarification and optional implementation under `RFC-020` deltas in `RFC-DELTA-BACKLOG.md`.
-2. Keep current code behavior unchanged until policy decision is approved.
+1. Keep `RFC-020-D02` deferred until workload evidence justifies scheduler extraction.
+2. Reassess FX retry policy only if operational data shows transient-market-data lag is materially impacting valuation quality.
