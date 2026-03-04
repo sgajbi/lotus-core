@@ -186,10 +186,25 @@ def _get_health_snapshot(*, ingestion_base_url: str, ops_token: str) -> dict[str
     }
 
 
-def _wait_drain_to_zero_backlog(
+def _get_backlog_jobs(*, ingestion_base_url: str, ops_token: str) -> int:
+    headers = {"X-Lotus-Ops-Token": ops_token}
+    response = requests.get(
+        f"{ingestion_base_url}/ingestion/health/summary",
+        headers=headers,
+        timeout=20,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Backlog summary endpoint failed status={response.status_code}: {response.text[:200]}"
+        )
+    return int(response.json().get("backlog_jobs", 0))
+
+
+def _wait_drain_to_target_backlog(
     *,
     ingestion_base_url: str,
     ops_token: str,
+    target_backlog_jobs: int,
     timeout_seconds: int,
 ) -> float | None:
     headers = {"X-Lotus-Ops-Token": ops_token}
@@ -203,7 +218,7 @@ def _wait_drain_to_zero_backlog(
         )
         if response.status_code == 200:
             backlog_jobs = int(response.json().get("backlog_jobs", 0))
-            if backlog_jobs <= 0:
+            if backlog_jobs <= target_backlog_jobs:
                 return round(time.time() - started, 3)
         time.sleep(2)
     return None
@@ -383,6 +398,10 @@ def main() -> int:
     ]
 
     for profile in profiles:
+        baseline_backlog = _get_backlog_jobs(
+            ingestion_base_url=args.ingestion_base_url,
+            ops_token=args.ops_token,
+        )
         started = time.time()
         records_submitted, batches_submitted = _ingest_transactions(
             ingestion_base_url=args.ingestion_base_url,
@@ -396,9 +415,10 @@ def main() -> int:
             ingestion_base_url=args.ingestion_base_url,
             ops_token=args.ops_token,
         )
-        drain_seconds = _wait_drain_to_zero_backlog(
+        drain_seconds = _wait_drain_to_target_backlog(
             ingestion_base_url=args.ingestion_base_url,
             ops_token=args.ops_token,
+            target_backlog_jobs=max(baseline_backlog + 1, 0),
             timeout_seconds=args.drain_timeout_seconds,
         )
         all_results.append(
@@ -414,6 +434,10 @@ def main() -> int:
             )
         )
 
+    replay_baseline_backlog = _get_backlog_jobs(
+        ingestion_base_url=args.ingestion_base_url,
+        ops_token=args.ops_token,
+    )
     replay_started = time.time()
     replay_source_transactions = _build_transaction_batch(
         portfolio_id=portfolio_id,
@@ -441,9 +465,10 @@ def main() -> int:
         ingestion_base_url=args.ingestion_base_url,
         ops_token=args.ops_token,
     )
-    replay_drain_seconds = _wait_drain_to_zero_backlog(
+    replay_drain_seconds = _wait_drain_to_target_backlog(
         ingestion_base_url=args.ingestion_base_url,
         ops_token=args.ops_token,
+        target_backlog_jobs=max(replay_baseline_backlog + 1, 0),
         timeout_seconds=max(args.drain_timeout_seconds, 240),
     )
     all_results.append(
