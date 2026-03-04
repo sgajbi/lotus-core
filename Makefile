@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-unit test-unit-db test-integration-lite test-ops-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full security-audit check coverage-gate ci ci-local docker-build clean
+.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-unit test-unit-db test-integration-lite test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full security-audit check coverage-gate ci ci-local docker-build clean
 
 install:
 	python scripts/bootstrap_dev.py
@@ -55,11 +55,15 @@ test-integration-lite:
 test-ops-contract:
 	python scripts/test_manifest.py --suite ops-contract --quiet
 
-test-buy-rfc:
-	python scripts/test_manifest.py --suite buy-rfc --quiet
+test-transaction-buy-contract:
+	python scripts/test_manifest.py --suite transaction-buy-contract --quiet
 
-test-sell-rfc:
-	python scripts/test_manifest.py --suite sell-rfc --quiet
+test-buy-rfc: test-transaction-buy-contract
+
+test-transaction-sell-contract:
+	python scripts/test_manifest.py --suite transaction-sell-contract --quiet
+
+test-sell-rfc: test-transaction-sell-contract
 
 test-e2e-smoke:
 	python scripts/test_manifest.py --suite e2e-smoke --quiet

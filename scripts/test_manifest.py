@@ -31,7 +31,7 @@ SUITES: dict[str, list[str]] = {
         "tests/e2e/test_query_service_observability.py",
         "tests/e2e/test_complex_portfolio_lifecycle.py",
     ],
-    "buy-rfc": [
+    "transaction-buy-contract": [
         "tests/unit/transaction_specs/test_buy_slice0_characterization.py",
         "tests/unit/libs/portfolio_common/test_buy_validation.py",
         "tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py",
@@ -44,7 +44,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py",
         "tests/integration/services/query_service/test_buy_state_router.py",
     ],
-    "sell-rfc": [
+    "transaction-sell-contract": [
         "tests/unit/transaction_specs/test_sell_slice0_characterization.py",
         "tests/unit/libs/portfolio_common/test_sell_validation.py",
         "tests/unit/libs/portfolio_common/test_sell_linkage.py",
@@ -55,6 +55,10 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/query_service/test_sell_state_router.py",
     ],
 }
+
+# Backward-compatible aliases for previous suite names.
+SUITES["buy-rfc"] = SUITES["transaction-buy-contract"]
+SUITES["sell-rfc"] = SUITES["transaction-sell-contract"]
 
 SOURCE = "src/services/query_service/app"
 SUITE_PYTEST_ARGS: dict[str, list[str]] = {
