@@ -12,7 +12,7 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
     portfolio_id = f"E2E_API_TEST_{uuid.uuid4()}"
     
     # Ingest Portfolio
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "API_CIF", "status": "ACTIVE", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "API_CIF", "status": "ACTIVE", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]})
 
     # Ingest a diverse set of transactions for filtering and sorting
     transactions = [

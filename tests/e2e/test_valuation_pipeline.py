@@ -16,13 +16,13 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
     tx_date = "2025-07-27"
 
     # 1. Ingest prerequisite data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "riskExposure": "Medium", "investmentTimeHorizon": "Long", "portfolioType": "Advisory", "bookingCenter": "NY", "cifId": "VAL_CIF", "status": "ACTIVE"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": security_id, "name": "Valuation Test Stock", "isin": "VAL12345", "instrumentCurrency": "USD", "productType": "Equity"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "risk_exposure": "Medium", "investment_time_horizon": "Long", "portfolio_type": "Advisory", "booking_center_code": "NY", "client_id": "VAL_CIF", "status": "ACTIVE"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": security_id, "name": "Valuation Test Stock", "isin": "VAL12345", "currency": "USD", "product_type": "Equity"}]})
 
     # 2. Ingest transaction, market price, AND the business date to trigger the scheduler
     e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": "E2E_VAL_BUY_01", "portfolio_id": portfolio_id, "instrument_id": "E2E_VAL", "security_id": security_id, "transaction_date": f"{tx_date}T10:00:00Z", "transaction_type": "BUY", "quantity": 10, "price": 100.0, "gross_transaction_amount": 1000.0, "trade_currency": "USD", "currency": "USD"}]})
-    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"securityId": security_id, "priceDate": tx_date, "price": 110.0, "currency": "USD"}]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": tx_date}]})
+    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"security_id": security_id, "price_date": tx_date, "price": 110.0, "currency": "USD"}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": tx_date}]})
 
 
     # 3. Poll the database until the daily_position_snapshot is fully valued.

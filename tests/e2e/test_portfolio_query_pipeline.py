@@ -10,9 +10,9 @@ def setup_portfolio_data(clean_db_module, e2e_api_client: E2EApiClient):
     and waits for them to be available via the query API.
     """
     payload = {"portfolios": [
-        {"portfolioId": "E2E_QUERY_01", "baseCurrency": "USD", "openDate": "2024-01-01", "riskExposure": "High", "investmentTimeHorizon": "Long", "portfolioType": "Discretionary", "bookingCenter": "Singapore", "cifId": "CIF_100", "status": "Active"},
-        {"portfolioId": "E2E_QUERY_02", "baseCurrency": "CHF", "openDate": "2024-02-01", "riskExposure": "Medium", "investmentTimeHorizon": "Medium", "portfolioType": "Advisory", "bookingCenter": "Singapore", "cifId": "CIF_100", "status": "Active"},
-        {"portfolioId": "E2E_QUERY_03", "baseCurrency": "EUR", "openDate": "2024-03-01", "riskExposure": "Low", "investmentTimeHorizon": "Short", "portfolioType": "Execution-only", "bookingCenter": "Zurich", "cifId": "CIF_200", "status": "Closed"}
+        {"portfolio_id": "E2E_QUERY_01", "base_currency": "USD", "open_date": "2024-01-01", "risk_exposure": "High", "investment_time_horizon": "Long", "portfolio_type": "Discretionary", "booking_center_code": "Singapore", "client_id": "CIF_100", "status": "Active"},
+        {"portfolio_id": "E2E_QUERY_02", "base_currency": "CHF", "open_date": "2024-02-01", "risk_exposure": "Medium", "investment_time_horizon": "Medium", "portfolio_type": "Advisory", "booking_center_code": "Singapore", "client_id": "CIF_100", "status": "Active"},
+        {"portfolio_id": "E2E_QUERY_03", "base_currency": "EUR", "open_date": "2024-03-01", "risk_exposure": "Low", "investment_time_horizon": "Short", "portfolio_type": "Execution-only", "booking_center_code": "Zurich", "client_id": "CIF_200", "status": "Closed"}
     ]}
 
     e2e_api_client.ingest("/ingest/portfolios", payload)

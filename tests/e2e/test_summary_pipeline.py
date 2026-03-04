@@ -16,14 +16,14 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
     A module-scoped fixture that ingests all necessary data for the summary E2E test.
     """
     # 1. Ingest prerequisite data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": PORTFOLIO_ID, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "SUM_CIF", "status": "ACTIVE", "riskExposure":"a", "investmentTimeHorizon":"b", "portfolioType":"c", "bookingCenter":"d"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": PORTFOLIO_ID, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "SUM_CIF", "status": "ACTIVE", "risk_exposure":"a", "investment_time_horizon":"b", "portfolio_type":"c", "booking_center_code":"d"}]})
     e2e_api_client.ingest("/ingest/instruments", {"instruments": [
-        {"securityId": CASH_ID, "name": "US Dollar", "isin": "CASH_USD_ISIN", "instrumentCurrency": "USD", "productType": "Cash", "assetClass": "Cash"},
-        {"securityId": MSFT_ID, "name": "Microsoft", "isin": "US_MSFT_SUM", "instrumentCurrency": "USD", "productType": "Equity", "assetClass": "Equity", "sector": "Technology", "countryOfRisk": "US"},
-        {"securityId": IBM_ID, "name": "IBM", "isin": "US_IBM_SUM", "instrumentCurrency": "USD", "productType": "Equity", "assetClass": "Equity", "sector": "Technology", "countryOfRisk": "US"}
+        {"security_id": CASH_ID, "name": "US Dollar", "isin": "CASH_USD_ISIN", "currency": "USD", "product_type": "Cash", "asset_class": "Cash"},
+        {"security_id": MSFT_ID, "name": "Microsoft", "isin": "US_MSFT_SUM", "currency": "USD", "product_type": "Equity", "asset_class": "Equity", "sector": "Technology", "country_of_risk": "US"},
+        {"security_id": IBM_ID, "name": "IBM", "isin": "US_IBM_SUM", "currency": "USD", "product_type": "Equity", "asset_class": "Equity", "sector": "Technology", "country_of_risk": "US"}
     ]})
     all_dates = ["2025-07-31", PERIOD_START, "2025-08-05", "2025-08-10", "2025-08-15", "2025-08-20", "2025-08-22", "2025-08-26", "2025-08-27", AS_OF_DATE]
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": d} for d in all_dates]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": d} for d in all_dates]})
 
     # 2. Ingest a comprehensive list of transactions
     transactions = [
@@ -43,9 +43,9 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
     
     # 3. Ingest market prices
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": MSFT_ID, "priceDate": AS_OF_DATE, "price": 340.0, "currency": "USD"},
-        {"securityId": IBM_ID, "priceDate": AS_OF_DATE, "price": 155.0, "currency": "USD"},
-        {"securityId": CASH_ID, "priceDate": AS_OF_DATE, "price": 1.0, "currency": "USD"}
+        {"security_id": MSFT_ID, "price_date": AS_OF_DATE, "price": 340.0, "currency": "USD"},
+        {"security_id": IBM_ID, "price_date": AS_OF_DATE, "price": 155.0, "currency": "USD"},
+        {"security_id": CASH_ID, "price_date": AS_OF_DATE, "price": 1.0, "currency": "USD"}
     ]})
     
     # 4. Poll until the final snapshot is valued

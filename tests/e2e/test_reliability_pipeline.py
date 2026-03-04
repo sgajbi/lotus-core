@@ -10,7 +10,7 @@ def test_instrument_ingestion_is_idempotent(e2e_api_client: E2EApiClient, clean_
     """
     # ARRANGE
     security_id = f"SEC_IDEMPOTENT_{uuid.uuid4()}"
-    ingest_payload = {"instruments": [{"securityId": security_id, "name": "Idempotent Test Instrument", "isin": f"ISIN_{uuid.uuid4()}", "instrumentCurrency": "JPY", "productType": "Future"}]}
+    ingest_payload = {"instruments": [{"security_id": security_id, "name": "Idempotent Test Instrument", "isin": f"ISIN_{uuid.uuid4()}", "currency": "JPY", "product_type": "Future"}]}
 
     # ACT: Ingest the same payload twice
     assert e2e_api_client.ingest("/ingest/instruments", ingest_payload).status_code == 202
@@ -29,8 +29,8 @@ def test_portfolio_update_persistence(e2e_api_client: E2EApiClient, clean_db):
     """
     # ARRANGE
     portfolio_id = f"E2E_UPDATE_PORT_{uuid.uuid4()}"
-    initial_payload = {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "AUD", "status": "PENDING", "openDate": "2024-01-01", "cifId": "CIF_U_1", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]}
-    update_payload = {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "AUD", "status": "ACTIVE", "openDate": "2024-01-01", "cifId": "CIF_U_1", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]}
+    initial_payload = {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "AUD", "status": "PENDING", "open_date": "2024-01-01", "client_id": "CIF_U_1", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]}
+    update_payload = {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "AUD", "status": "ACTIVE", "open_date": "2024-01-01", "client_id": "CIF_U_1", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]}
     
     e2e_api_client.ingest("/ingest/portfolios", initial_payload)
     poll_url = f"/portfolios?portfolio_id={portfolio_id}"
@@ -50,7 +50,7 @@ def test_transaction_persists_after_portfolio_arrives(e2e_api_client: E2EApiClie
     portfolio_id = f"E2E_RETRY_PORT_{uuid.uuid4()}"
     transaction_id = f"TXN_RETRY_{uuid.uuid4()}"
     transaction_payload = {"transactions": [{"transaction_id": transaction_id, "portfolio_id": portfolio_id, "instrument_id": "RETRY", "security_id": "SEC_RETRY", "transaction_date": "2025-08-01T10:00:00Z", "transaction_type": "BUY", "quantity": 10, "price": 1, "gross_transaction_amount": 10, "trade_currency": "USD", "currency": "USD"}]}
-    portfolio_payload = {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2024-01-01", "cifId": "CIF_R_1", "status": "ACTIVE", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]}
+    portfolio_payload = {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2024-01-01", "client_id": "CIF_R_1", "status": "ACTIVE", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]}
 
     # ACT: Ingest the transaction first, then wait briefly before ingesting the portfolio it depends on.
     assert e2e_api_client.ingest("/ingest/transactions", transaction_payload).status_code == 202

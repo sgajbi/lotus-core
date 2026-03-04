@@ -14,14 +14,14 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     day1, day4 = "2025-09-11", "2025-09-14"
 
     # 1. Ingest prerequisites
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "RAPID_REPRO_CIF", "status": "ACTIVE", "riskExposure":"a", "investmentTimeHorizon":"b", "portfolioType":"c", "bookingCenter":"d"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": security_id, "name": "Rapid Repro Stock", "isin": "US_RAPID_REPRO", "instrumentCurrency": "USD", "productType": "Equity"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "RAPID_REPRO_CIF", "status": "ACTIVE", "risk_exposure":"a", "investment_time_horizon":"b", "portfolio_type":"c", "booking_center_code":"d"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": security_id, "name": "Rapid Repro Stock", "isin": "US_RAPID_REPRO", "currency": "USD", "product_type": "Equity"}]})
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [
-        {"businessDate": "2025-09-11"}, {"businessDate": "2025-09-12"},
-        {"businessDate": "2025-09-13"}, {"businessDate": "2025-09-14"}
+        {"business_date": "2025-09-11"}, {"business_date": "2025-09-12"},
+        {"business_date": "2025-09-13"}, {"business_date": "2025-09-14"}
     ]})
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": security_id, "priceDate": day4, "price": 100.0, "currency": "USD"}
+        {"security_id": security_id, "price_date": day4, "price": 100.0, "currency": "USD"}
     ]})
 
     # 2. Ingest initial transactions on Day 1 and Day 4

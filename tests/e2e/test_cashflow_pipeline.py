@@ -16,8 +16,8 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
     transaction_id = "E2E_CASHFLOW_BUY_01"
 
     # 1. Ingest prerequisite data (Portfolio and Instrument)
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "riskExposure": "High", "investmentTimeHorizon": "Long", "portfolioType": "Discretionary", "bookingCenter": "SG", "cifId": "CASHFLOW_CIF", "status": "Active"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": security_id, "name": "Cashflow Test Stock", "isin": "CSHFLW123", "instrumentCurrency": "USD", "productType": "Equity"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "risk_exposure": "High", "investment_time_horizon": "Long", "portfolio_type": "Discretionary", "booking_center_code": "SG", "client_id": "CASHFLOW_CIF", "status": "Active"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": security_id, "name": "Cashflow Test Stock", "isin": "CSHFLW123", "currency": "USD", "product_type": "Equity"}]})
 
     # 2. Define and ingest the transaction payload
     buy_payload = {"transactions": [{

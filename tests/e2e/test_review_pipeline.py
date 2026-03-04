@@ -13,13 +13,13 @@ def setup_review_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_unt
     portfolio review E2E test.
     """
     # 1. Ingest prerequisite data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": PORTFOLIO_ID, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "REVIEW_CIF", "status": "ACTIVE", "riskExposure":"Growth", "investmentTimeHorizon":"b", "portfolioType":"Discretionary", "bookingCenter":"d"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": PORTFOLIO_ID, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "REVIEW_CIF", "status": "ACTIVE", "risk_exposure":"Growth", "investment_time_horizon":"b", "portfolio_type":"Discretionary", "booking_center_code":"d"}]})
     e2e_api_client.ingest("/ingest/instruments", {"instruments": [
-        {"securityId": "CASH_USD", "name": "US Dollar", "isin": "CASH_USD_ISIN", "instrumentCurrency": "USD", "productType": "Cash", "assetClass": "Cash"},
-        {"securityId": "SEC_AAPL", "name": "Apple Inc.", "isin": "US_AAPL_REVIEW", "instrumentCurrency": "USD", "productType": "Equity", "assetClass": "Equity"},
-        {"securityId": "SEC_BOND", "name": "US Treasury Bond", "isin": "US_BOND_REVIEW", "instrumentCurrency": "USD", "productType": "Bond", "assetClass": "Fixed Income"}
+        {"security_id": "CASH_USD", "name": "US Dollar", "isin": "CASH_USD_ISIN", "currency": "USD", "product_type": "Cash", "asset_class": "Cash"},
+        {"security_id": "SEC_AAPL", "name": "Apple Inc.", "isin": "US_AAPL_REVIEW", "currency": "USD", "product_type": "Equity", "asset_class": "Equity"},
+        {"security_id": "SEC_BOND", "name": "US Treasury Bond", "isin": "US_BOND_REVIEW", "currency": "USD", "product_type": "Bond", "asset_class": "Fixed Income"}
     ]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": "2025-08-20"}, {"businessDate": "2025-08-25"}, {"businessDate": AS_OF_DATE}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": "2025-08-20"}, {"business_date": "2025-08-25"}, {"business_date": AS_OF_DATE}]})
 
     # 2. Ingest transactions to build a history
     transactions = [
@@ -41,9 +41,9 @@ def setup_review_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_unt
     
     # 3. Ingest market prices for valuation
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": "SEC_AAPL", "priceDate": AS_OF_DATE, "price": 160.0, "currency": "USD"},
-        {"securityId": "SEC_BOND", "priceDate": AS_OF_DATE, "price": 995.0, "currency": "USD"},
-        {"securityId": "CASH_USD", "priceDate": AS_OF_DATE, "price": 1.0, "currency": "USD"}
+        {"security_id": "SEC_AAPL", "price_date": AS_OF_DATE, "price": 160.0, "currency": "USD"},
+        {"security_id": "SEC_BOND", "price_date": AS_OF_DATE, "price": 995.0, "currency": "USD"},
+        {"security_id": "CASH_USD", "price_date": AS_OF_DATE, "price": 1.0, "currency": "USD"}
     ]})
     
     # 4. Poll until the final day's timeseries is generated
@@ -90,8 +90,8 @@ def test_portfolio_review_for_empty_portfolio(clean_db, e2e_api_client: E2EApiCl
     as_of = "2025-08-31"
     
     # 1. Ingest only the portfolio and a business date
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": empty_portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "REVIEW_EMPTY_CIF", "status": "ACTIVE", "riskExposure":"Balanced", "investmentTimeHorizon":"c", "portfolioType":"d", "bookingCenter":"e"}]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": as_of}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": empty_portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "REVIEW_EMPTY_CIF", "status": "ACTIVE", "risk_exposure":"Balanced", "investment_time_horizon":"c", "portfolio_type":"d", "booking_center_code":"e"}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": as_of}]})
     
     # 2. Wait for the portfolio to be queryable
     e2e_api_client.poll_for_data(

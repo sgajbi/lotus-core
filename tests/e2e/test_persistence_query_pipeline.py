@@ -15,15 +15,15 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
     price_date = date.today().isoformat()
     
     # Ingest one of each entity type using the new client
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "SGD", "openDate": "2024-01-01", "cifId": "CIF_PQ_1", "status": "ACTIVE", "riskExposure":"a", "investmentTimeHorizon":"b", "portfolioType":"c", "bookingCenter":"d"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "SGD", "open_date": "2024-01-01", "client_id": "CIF_PQ_1", "status": "ACTIVE", "risk_exposure":"a", "investment_time_horizon":"b", "portfolio_type":"c", "booking_center_code":"d"}]})
     e2e_api_client.ingest("/ingest/instruments", {"instruments": [
-        {"securityId": security_id, "name": "Test Instrument PQ", "isin": f"ISIN_{security_id}", "instrumentCurrency": "USD", "productType": "Equity"},
-        {"securityId": "SEC_NO_PRICE", "name": "Unpriced Instrument", "isin": "ISIN_NO_PRICE", "instrumentCurrency": "USD", "productType": "Equity"}
+        {"security_id": security_id, "name": "Test Instrument PQ", "isin": f"ISIN_{security_id}", "currency": "USD", "product_type": "Equity"},
+        {"security_id": "SEC_NO_PRICE", "name": "Unpriced Instrument", "isin": "ISIN_NO_PRICE", "currency": "USD", "product_type": "Equity"}
     ]})
-    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"securityId": security_id, "priceDate": price_date, "price": 123.45, "currency": "HKD"}]})
+    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"security_id": security_id, "price_date": price_date, "price": 123.45, "currency": "HKD"}]})
     e2e_api_client.ingest("/ingest/fx-rates", {"fx_rates": [
-        {"fromCurrency": "USD", "toCurrency": "EUR", "rateDate": price_date, "rate": 0.95},
-        {"fromCurrency": "USD", "toCurrency": "SGD", "rateDate": price_date, "rate": 1.35}
+        {"from_currency": "USD", "to_currency": "EUR", "rate_date": price_date, "rate": 0.95},
+        {"from_currency": "USD", "to_currency": "SGD", "rate_date": price_date, "rate": 1.35}
     ]})
     e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": transaction_id, "portfolio_id": portfolio_id, "instrument_id": "TEST", "security_id": security_id, "transaction_date": f"{price_date}T10:00:00Z", "transaction_type": "BUY", "quantity": 100, "price": 10, "gross_transaction_amount": 1000, "trade_currency": "USD", "currency": "USD"}]})
 

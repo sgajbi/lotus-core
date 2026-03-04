@@ -26,9 +26,9 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
     # Ingest Portfolio
     portfolio_payload = {
         "portfolios": [{
-          "portfolioId": PORTFOLIO_ID, "baseCurrency": "USD", "openDate": "2025-01-01",
-          "cifId": "E2E_WF_CIF_01", "status": "ACTIVE", "riskExposure": "High",
-          "investmentTimeHorizon": "Long", "portfolioType": "Discretionary", "bookingCenter": "SG"
+          "portfolio_id": PORTFOLIO_ID, "base_currency": "USD", "open_date": "2025-01-01",
+          "client_id": "E2E_WF_CIF_01", "status": "ACTIVE", "risk_exposure": "High",
+          "investment_time_horizon": "Long", "portfolio_type": "Discretionary", "booking_center_code": "SG"
         }]
     }
     e2e_api_client.ingest("/ingest/portfolios", portfolio_payload)
@@ -36,10 +36,10 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
     # Ingest Instruments
     instruments_payload = {
         "instruments": [
-            {"securityId": CASH_USD_ID, "name": "US Dollar", "isin": "CASH_USD_ISIN", "instrumentCurrency": "USD", "productType": "Cash"},
-            {"securityId": CASH_EUR_ID, "name": "Euro", "isin": "CASH_EUR_ISIN", "instrumentCurrency": "EUR", "productType": "Cash"},
-            {"securityId": AAPL_ID, "name": "Apple Inc.", "isin": "US0378331005_E2E", "instrumentCurrency": "USD", "productType": "Equity"},
-            {"securityId": IBM_ID, "name": "IBM Corp.", "isin": "US4592001014_E2E", "instrumentCurrency": "USD", "productType": "Equity"}
+            {"security_id": CASH_USD_ID, "name": "US Dollar", "isin": "CASH_USD_ISIN", "currency": "USD", "product_type": "Cash"},
+            {"security_id": CASH_EUR_ID, "name": "Euro", "isin": "CASH_EUR_ISIN", "currency": "EUR", "product_type": "Cash"},
+            {"security_id": AAPL_ID, "name": "Apple Inc.", "isin": "US0378331005_E2E", "currency": "USD", "product_type": "Equity"},
+            {"security_id": IBM_ID, "name": "IBM Corp.", "isin": "US4592001014_E2E", "currency": "USD", "product_type": "Equity"}
         ]
     }
     e2e_api_client.ingest("/ingest/instruments", instruments_payload)
@@ -70,9 +70,9 @@ def test_day_1_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     Tests Day 1: Ingests a business date, a deposit, and a cash price,
     then verifies the final state of the daily snapshot.
     """
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_1}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_1}]})
     e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": "TXN_DAY1_DEPOSIT_01", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": CASH_USD_ID, "transaction_date": f"{DAY_1}T10:00:00Z", "transaction_type": "DEPOSIT", "quantity": 1000000, "price": 1.0, "gross_transaction_amount": 1000000.0, "trade_currency": "USD", "currency": "USD"}]})
-    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"securityId": CASH_USD_ID, "priceDate": DAY_1, "price": 1.0, "currency": "USD"}]})
+    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"security_id": CASH_USD_ID, "price_date": DAY_1, "price": 1.0, "currency": "USD"}]})
     
     query = "SELECT valuation_status FROM daily_position_snapshots WHERE portfolio_id = :pid AND security_id = :sid AND date = :date"
     params = {"pid": PORTFOLIO_ID, "sid": CASH_USD_ID, "date": DAY_1}
@@ -84,15 +84,15 @@ def test_day_2_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     Tests Day 2: Ingests a stock purchase and verifies the final state
     of the portfolio time series.
     """
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_2}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_2}]})
     transactions_payload = { "transactions": [
         {"transaction_id": "TXN_DAY2_BUY_AAPL_01", "portfolio_id": PORTFOLIO_ID, "security_id": AAPL_ID, "instrument_id": "AAPL", "transaction_date": f"{DAY_2}T11:00:00Z", "transaction_type": "BUY", "quantity": 1000, "price": 175.0, "gross_transaction_amount": 175000.0, "trade_fee": 25.50, "trade_currency": "USD", "currency": "USD" },
         {"transaction_id": "TXN_DAY2_CASH_SETTLE_01", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_2}T11:00:00Z", "transaction_type": "SELL", "quantity": 175025.50, "price": 1.0, "gross_transaction_amount": 175025.50, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)
     prices_payload = {"market_prices": [
-        {"securityId": AAPL_ID, "priceDate": DAY_2, "price": 178.0, "currency": "USD"},
-        {"securityId": CASH_USD_ID, "priceDate": DAY_2, "price": 1.0, "currency": "USD"}
+        {"security_id": AAPL_ID, "price_date": DAY_2, "price": 178.0, "currency": "USD"},
+        {"security_id": CASH_USD_ID, "price_date": DAY_2, "price": 1.0, "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
 
@@ -107,16 +107,16 @@ def test_day_3_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     Tests Day 3: Ingests another stock purchase and verifies the final state
     of the portfolio time series.
     """
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_3}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_3}]})
     transactions_payload = {"transactions": [
         {"transaction_id": "TXN_DAY3_BUY_IBM_01", "portfolio_id": PORTFOLIO_ID, "security_id": IBM_ID, "instrument_id": "IBM", "transaction_date": f"{DAY_3}T12:00:00Z", "transaction_type": "BUY", "quantity": 500, "price": 140.0, "gross_transaction_amount": 70000.0, "trade_fee": 15.00, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "TXN_DAY3_CASH_SETTLE_02", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_3}T12:00:00Z", "transaction_type": "SELL", "quantity": 70015.00, "price": 1.0, "gross_transaction_amount": 70015.00, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)
     prices_payload = {"market_prices": [
-        {"securityId": AAPL_ID, "priceDate": DAY_3, "price": 180.0, "currency": "USD"},
-        {"securityId": IBM_ID, "priceDate": DAY_3, "price": 142.0, "currency": "USD"},
-        {"securityId": CASH_USD_ID, "priceDate": DAY_3, "price": 1.0, "currency": "USD"}
+        {"security_id": AAPL_ID, "price_date": DAY_3, "price": 180.0, "currency": "USD"},
+        {"security_id": IBM_ID, "price_date": DAY_3, "price": 142.0, "currency": "USD"},
+        {"security_id": CASH_USD_ID, "price_date": DAY_3, "price": 1.0, "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
     
@@ -131,16 +131,16 @@ def test_day_4_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     Tests Day 4: Ingests a stock sale and verifies the calculated
     realized gain/loss is correct.
     """
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_4}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_4}]})
     transactions_payload = {"transactions": [
         {"transaction_id": "TXN_DAY4_SELL_AAPL_01", "portfolio_id": PORTFOLIO_ID, "security_id": AAPL_ID, "instrument_id": "AAPL", "transaction_date": f"{DAY_4}T13:00:00Z", "transaction_type": "SELL", "quantity": 200, "price": 182.0, "gross_transaction_amount": 36400.0, "trade_fee": 5.00, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "TXN_DAY4_CASH_SETTLE_03", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_4}T13:00:00Z", "transaction_type": "BUY", "quantity": 36395.00, "price": 1.0, "gross_transaction_amount": 36395.00, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)
     prices_payload = {"market_prices": [
-        {"securityId": AAPL_ID, "priceDate": DAY_4, "price": 181.0, "currency": "USD"},
-        {"securityId": IBM_ID, "priceDate": DAY_4, "price": 141.0, "currency": "USD"},
-        {"securityId": CASH_USD_ID, "priceDate": DAY_4, "price": 1.0, "currency": "USD"}
+        {"security_id": AAPL_ID, "price_date": DAY_4, "price": 181.0, "currency": "USD"},
+        {"security_id": IBM_ID, "price_date": DAY_4, "price": 141.0, "currency": "USD"},
+        {"security_id": CASH_USD_ID, "price_date": DAY_4, "price": 1.0, "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
 
@@ -158,16 +158,16 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     """
     Tests Day 5: Ingests a dividend and verifies the final portfolio value.
     """
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_5}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": DAY_5}]})
     transactions_payload = {"transactions": [
         {"transaction_id": "TXN_DAY5_DIV_IBM_01", "portfolio_id": PORTFOLIO_ID, "security_id": IBM_ID, "instrument_id": "IBM", "transaction_date": f"{DAY_5}T09:00:00Z", "transaction_type": "DIVIDEND", "quantity": 0, "price": 0, "gross_transaction_amount": 750.0, "trade_currency": "USD", "currency": "USD"},
         {"transaction_id": "TXN_DAY5_CASH_SETTLE_04", "portfolio_id": PORTFOLIO_ID, "security_id": CASH_USD_ID, "instrument_id": "CASH_USD", "transaction_date": f"{DAY_5}T09:00:00Z", "transaction_type": "BUY", "quantity": 750.00, "price": 1.0, "gross_transaction_amount": 750.00, "trade_currency": "USD", "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/transactions", transactions_payload)
     prices_payload = {"market_prices": [
-        {"securityId": AAPL_ID, "priceDate": DAY_5, "price": 185.0, "currency": "USD"},
-        {"securityId": IBM_ID, "priceDate": DAY_5, "price": 140.0, "currency": "USD"},
-        {"securityId": CASH_USD_ID, "priceDate": DAY_5, "price": 1.0, "currency": "USD"}
+        {"security_id": AAPL_ID, "price_date": DAY_5, "price": 185.0, "currency": "USD"},
+        {"security_id": IBM_ID, "price_date": DAY_5, "price": 140.0, "currency": "USD"},
+        {"security_id": CASH_USD_ID, "price_date": DAY_5, "price": 1.0, "currency": "USD"}
     ]}
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
 

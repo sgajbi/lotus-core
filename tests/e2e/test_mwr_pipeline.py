@@ -19,14 +19,14 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
     portfolio_id = "E2E_MWR_PERF_01"
     
     # --- Ingest Prerequisite Data ---
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "MWR_CIF", "status": "ACTIVE", "riskExposure":"a", "investmentTimeHorizon":"b", "portfolioType":"c", "bookingCenter":"d"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": "CASH_USD", "name": "US Dollar", "isin": "CASH_USD_ISIN", "instrumentCurrency": "USD", "productType": "Cash"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "MWR_CIF", "status": "ACTIVE", "risk_exposure":"a", "investment_time_horizon":"b", "portfolio_type":"c", "booking_center_code":"d"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": "CASH_USD", "name": "US Dollar", "isin": "CASH_USD_ISIN", "currency": "USD", "product_type": "Cash"}]})
 
     # Ingest all business dates up front to ensure schedulers can work
     all_dates = []
     current_date = date(2025, 1, 1)
     while current_date <= date(2025, 1, 31):
-        all_dates.append({"businessDate": current_date.isoformat()})
+        all_dates.append({"business_date": current_date.isoformat()})
         current_date += timedelta(days=1)
     if all_dates:
         e2e_api_client.ingest("/ingest/business-dates", {"business_dates": all_dates})
@@ -37,8 +37,8 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
         {"transaction_id": "MWR_DEPOSIT_02", "portfolio_id": portfolio_id, "instrument_id": "CASH", "security_id": "CASH_USD", "transaction_date": "2025-01-15T10:00:00Z", "transaction_type": "DEPOSIT", "quantity": 200, "price": 1, "gross_transaction_amount": 200, "trade_currency": "USD", "currency": "USD"}
     ]})
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": "CASH_USD", "priceDate": "2025-01-01", "price": 1.0, "currency": "USD"},
-        {"securityId": "CASH_USD", "priceDate": "2025-01-31", "price": 1.04166667, "currency": "USD"}
+        {"security_id": "CASH_USD", "price_date": "2025-01-01", "price": 1.0, "currency": "USD"},
+        {"security_id": "CASH_USD", "price_date": "2025-01-31", "price": 1.04166667, "currency": "USD"}
     ]})
     
     # Poll until the timeseries for the last day is fully generated.
