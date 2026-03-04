@@ -5,12 +5,12 @@ def test_build_demo_bundle_contains_multi_product_coverage():
     bundle = demo_data_pack.build_demo_bundle()
 
     assert len(bundle["portfolios"]) == 5
-    assert len(bundle["businessDates"]) >= 6
+    assert len(bundle["business_dates"]) >= 6
     assert len(bundle["transactions"]) >= 36
-    assert len(bundle["marketPrices"]) > len(bundle["instruments"])
-    assert len(bundle["fxRates"]) >= 40
+    assert len(bundle["market_prices"]) > len(bundle["instruments"])
+    assert len(bundle["fx_rates"]) >= 40
 
-    product_types = {item["productType"] for item in bundle["instruments"]}
+    product_types = {item["product_type"] for item in bundle["instruments"]}
     assert {"Cash", "Equity", "Bond", "ETF", "Fund", "ETC"}.issubset(product_types)
 
     tx_types = {item["transaction_type"] for item in bundle["transactions"]}
@@ -29,7 +29,8 @@ def test_expectations_cover_five_portfolios_with_terminal_holdings():
     for item in demo_data_pack.DEMO_EXPECTATIONS:
         assert item.min_transactions >= 7
         assert len(item.expected_terminal_quantities) >= 3
-        assert all(quantity > 0 for _, quantity in item.expected_terminal_quantities)
+        # Demo expectations may include short/negative terminal quantities.
+        assert all(quantity != 0 for _, quantity in item.expected_terminal_quantities)
 
 
 def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
