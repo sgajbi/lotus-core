@@ -14,10 +14,7 @@ ALLOWED_OS_GETENV_PATHS = {
     Path("src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py"),
     Path("src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py"),
     Path("src/services/ingestion_service/app/settings.py"),
-    Path("src/services/query_service/app/enterprise_readiness.py"),
-    Path("src/services/query_service/app/services/analytics_timeseries_service.py"),
-    Path("src/services/query_service/app/services/capabilities_service.py"),
-    Path("src/services/query_service/app/services/integration_service.py"),
+    Path("src/services/query_service/app/settings.py"),
 }
 
 

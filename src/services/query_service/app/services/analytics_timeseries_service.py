@@ -5,7 +5,6 @@ import gzip
 import hashlib
 import hmac
 import json
-import os
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
@@ -40,6 +39,7 @@ from ..dtos.analytics_input_dto import (
 )
 from ..repositories.analytics_export_repository import AnalyticsExportRepository
 from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRepository
+from ..settings import load_query_service_settings
 
 
 class AnalyticsInputError(RuntimeError):
@@ -53,7 +53,7 @@ class AnalyticsTimeseriesService:
         self.db = db
         self.repo = AnalyticsTimeseriesRepository(db)
         self.export_repo = AnalyticsExportRepository(db)
-        self._page_token_secret = os.getenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "lotus-core-local-dev")
+        self._page_token_secret = load_query_service_settings().page_token_secret
 
     def _request_fingerprint(self, payload: dict) -> str:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))

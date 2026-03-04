@@ -19,7 +19,7 @@ The platform has implemented a meaningful portion of this architecture:
 3. Some typed runtime settings already exist (for example in calculator engine modules).
 
 However, full convergence is incomplete:
-1. Ingestion hotspot modules are migrated to typed settings, but this pattern is not yet uniformly rolled out to all services.
+1. Ingestion and query-service hotspot modules are migrated to typed settings, but this pattern is not yet uniformly rolled out to all services.
 2. Repository-wide configuration guardrail enforcement now exists, with an approved allowlist baseline for remaining direct env access.
 
 RFC 002 therefore remains **Partially Implemented**.
@@ -48,6 +48,12 @@ The original RFC requested:
    - `src/services/ingestion_service/app/ops_controls.py`
    - `src/services/ingestion_service/app/services/ingestion_job_service.py`
    - `src/services/ingestion_service/app/settings.py`
+5. Query-service control modules now consume centralized typed settings:
+   - `src/services/query_service/app/settings.py`
+   - `src/services/query_service/app/services/capabilities_service.py`
+   - `src/services/query_service/app/services/integration_service.py`
+   - `src/services/query_service/app/services/analytics_timeseries_service.py`
+   - `src/services/query_service/app/enterprise_readiness.py`
 
 ### Why the implemented approach is better than the historical wording
 1. The system converged on `portfolio_common.config` rather than introducing a second config package name, reducing indirection.
@@ -108,7 +114,7 @@ This algorithm is partially implemented today and is the required standard for c
    - Ingestion runtime env parsing consolidated into typed settings module.
 2. `RFC-002-D02` (done):
    - Repository-wide config guardrail now enforces no new direct env parsing outside approved modules.
-3. `RFC-002-D04` (open):
+3. `RFC-002-D04` (in progress):
    - Reduce allowlisted legacy direct env access by migrating remaining service modules to typed settings.
 
 These are still relevant and should be implemented before RFC 002 can be marked `Implemented`.
@@ -129,6 +135,12 @@ Current evidence supporting partial completion:
 6. Config access guardrail:
    - `scripts/config_access_guard.py`
    - `Makefile` (`config-access-guard`)
+7. Query-service typed settings migration:
+   - `src/services/query_service/app/settings.py`
+   - `tests/unit/services/query_service/test_enterprise_readiness.py`
+   - `tests/unit/services/query_service/services/test_capabilities_service.py`
+   - `tests/unit/services/query_service/services/test_integration_service.py`
+   - `tests/unit/services/query_service/services/test_analytics_timeseries_service.py`
 
 ## Acceptance Criteria Alignment
 1. Typed service configuration everywhere: **not yet aligned**.
