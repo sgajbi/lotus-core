@@ -3,6 +3,7 @@ import pytest
 from decimal import Decimal
 from datetime import date
 from .api_client import E2EApiClient
+from .assertions import assert_decimal_approx
 
 @pytest.fixture(scope="module")
 def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until):
@@ -15,13 +16,13 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
     day1, day2, day3 = "2025-09-01", "2025-09-02", "2025-09-03"
 
     # 1. Ingest prerequisites
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "REPRO_CIF", "status": "ACTIVE", "riskExposure":"a", "investmentTimeHorizon":"b", "portfolioType":"c", "bookingCenter":"d"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": security_id, "name": "Apple Repro", "isin": "US0378331005_REPRO", "instrumentCurrency": "USD", "productType": "Equity"}]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": day1}, {"businessDate": day2}, {"businessDate": day3}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "REPRO_CIF", "status": "ACTIVE", "risk_exposure":"a", "investment_time_horizon":"b", "portfolio_type":"c", "booking_center_code":"d"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": security_id, "name": "Apple Repro", "isin": "US0378331005_REPRO", "currency": "USD", "product_type": "Equity"}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": day1}, {"business_date": day2}, {"business_date": day3}]})
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": security_id, "priceDate": day1, "price": 200.0, "currency": "USD"},
-        {"securityId": security_id, "priceDate": day2, "price": 215.0, "currency": "USD"},
-        {"securityId": security_id, "priceDate": day3, "price": 220.0, "currency": "USD"},
+        {"security_id": security_id, "price_date": day1, "price": 200.0, "currency": "USD"},
+        {"security_id": security_id, "price_date": day2, "price": 215.0, "currency": "USD"},
+        {"security_id": security_id, "price_date": day3, "price": 220.0, "currency": "USD"},
     ]})
 
     # 2. Ingest initial transactions on Day 1 and Day 3
@@ -91,4 +92,4 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     position = data["positions"][0]
     
     assert position["quantity"] == pytest.approx(110.00)
-    assert position["cost_basis"] == pytest.approx(23000.00)
+    assert_decimal_approx(position["cost_basis"], 23000.00)

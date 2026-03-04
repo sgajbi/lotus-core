@@ -1,6 +1,7 @@
 # tests/e2e/test_concentration_pipeline.py
 import pytest
 from .api_client import E2EApiClient
+from .assertions import assert_legacy_endpoint_status
 
 # --- Test Data Constants ---
 PORTFOLIO_ID = "E2E_CONC_01"
@@ -16,13 +17,13 @@ def setup_concentration_data(clean_db_module, e2e_api_client: E2EApiClient, poll
     concentration E2E test and waits for the pipeline to complete.
     """
     # 1. Ingest prerequisite data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": PORTFOLIO_ID, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "CONC_CIF", "status": "ACTIVE", "riskExposure":"a", "investmentTimeHorizon":"b", "portfolioType":"c", "bookingCenter":"d"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": PORTFOLIO_ID, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "CONC_CIF", "status": "ACTIVE", "risk_exposure":"a", "investment_time_horizon":"b", "portfolio_type":"c", "booking_center_code":"d"}]})
     e2e_api_client.ingest("/ingest/instruments", {"instruments": [
-        {"securityId": SEC_A_ID, "name": "CONC_A", "isin": "ISIN_CONC_A", "instrumentCurrency": "USD", "productType": "Equity", "assetClass": "Equity", "issuerId": "ISS_XYZ", "ultimateParentIssuerId": "PARENT_XYZ"},
-        {"securityId": SEC_B_ID, "name": "CONC_B", "isin": "ISIN_CONC_B", "instrumentCurrency": "USD", "productType": "Equity", "assetClass": "Equity", "issuerId": "ISS_XYZ_SUB", "ultimateParentIssuerId": "PARENT_XYZ"},
-        {"securityId": SEC_C_ID, "name": "CONC_C", "isin": "ISIN_CONC_C", "instrumentCurrency": "USD", "productType": "Equity", "assetClass": "Equity", "issuerId": "ISS_ABC", "ultimateParentIssuerId": "PARENT_ABC"}
+        {"security_id": SEC_A_ID, "name": "CONC_A", "isin": "ISIN_CONC_A", "currency": "USD", "product_type": "Equity", "asset_class": "Equity", "issuer_id": "ISS_XYZ", "ultimate_parent_issuer_id": "PARENT_XYZ"},
+        {"security_id": SEC_B_ID, "name": "CONC_B", "isin": "ISIN_CONC_B", "currency": "USD", "product_type": "Equity", "asset_class": "Equity", "issuer_id": "ISS_XYZ_SUB", "ultimate_parent_issuer_id": "PARENT_XYZ"},
+        {"security_id": SEC_C_ID, "name": "CONC_C", "isin": "ISIN_CONC_C", "currency": "USD", "product_type": "Equity", "asset_class": "Equity", "issuer_id": "ISS_ABC", "ultimate_parent_issuer_id": "PARENT_ABC"}
     ]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": AS_OF_DATE}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": AS_OF_DATE}]})
 
     # 2. Ingest transactions to create positions
     transactions = [
@@ -34,9 +35,9 @@ def setup_concentration_data(clean_db_module, e2e_api_client: E2EApiClient, poll
     
     # 3. Ingest market prices that will result in the desired weights
     prices = [
-        {"securityId": SEC_A_ID, "priceDate": AS_OF_DATE, "price": 600.0, "currency": "USD"}, # 60,000
-        {"securityId": SEC_B_ID, "priceDate": AS_OF_DATE, "price": 250.0, "currency": "USD"}, # 25,000
-        {"securityId": SEC_C_ID, "priceDate": AS_OF_DATE, "price": 150.0, "currency": "USD"}  # 15,000
+        {"security_id": SEC_A_ID, "price_date": AS_OF_DATE, "price": 600.0, "currency": "USD"}, # 60,000
+        {"security_id": SEC_B_ID, "price_date": AS_OF_DATE, "price": 250.0, "currency": "USD"}, # 25,000
+        {"security_id": SEC_C_ID, "price_date": AS_OF_DATE, "price": 150.0, "currency": "USD"}  # 15,000
     ] # Total Market Value = 100,000
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": prices})
     
@@ -63,14 +64,14 @@ def test_bulk_concentration_e2e(setup_concentration_data, e2e_api_client: E2EApi
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
 
     # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-risk"
-    assert data["target_endpoint"] == "/analytics/risk/concentration"
+    assert_legacy_endpoint_status(
+        response,
+        target_service="lotus-risk",
+        target_endpoint="/analytics/risk/concentration",
+    )
 
 def test_issuer_concentration_e2e(setup_concentration_data, e2e_api_client: E2EApiClient):
     """
@@ -85,13 +86,13 @@ def test_issuer_concentration_e2e(setup_concentration_data, e2e_api_client: E2EA
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
 
     # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-risk"
-    assert data["target_endpoint"] == "/analytics/risk/concentration"
+    assert_legacy_endpoint_status(
+        response,
+        target_service="lotus-risk",
+        target_endpoint="/analytics/risk/concentration",
+    )
 
 

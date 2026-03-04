@@ -3,6 +3,7 @@ import pytest
 
 from tests.e2e.api_client import E2EApiClient
 from tests.conftest import poll_db_until
+from tests.e2e.assertions import assert_legacy_endpoint_status
 
 @pytest.fixture(scope="module")
 def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until):
@@ -15,17 +16,17 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     day1, day2 = "2025-03-10", "2025-03-11"
 
     # Ingest prerequisite data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "PERF_CIF", "status": "ACTIVE", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": "CASH_USD", "name": "US Dollar", "isin": "CASH_USD_ISIN", "instrumentCurrency": "USD", "productType": "Cash"}]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": day1}, {"businessDate": day2}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "PERF_CIF", "status": "ACTIVE", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": "CASH_USD", "name": "US Dollar", "isin": "CASH_USD_ISIN", "currency": "USD", "product_type": "Cash"}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": day1}, {"business_date": day2}]})
     
     # Ingest transactions and prices
     e2e_api_client.ingest("/ingest/transactions", {"transactions": [
         {"transaction_id": "PERF_DEPOSIT_01", "portfolio_id": portfolio_id, "instrument_id": "CASH", "security_id": "CASH_USD", "transaction_date": f"{day1}T08:00:00Z", "transaction_type": "DEPOSIT", "quantity": 10000, "price": 1, "gross_transaction_amount": 10000, "trade_currency": "USD", "currency": "USD"}
     ]})
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": "CASH_USD", "priceDate": day1, "price": 1.02, "currency": "USD"}, # End of Day 1
-        {"securityId": "CASH_USD", "priceDate": day2, "price": 1.05, "currency": "USD"}  # End of Day 2
+        {"security_id": "CASH_USD", "price_date": day1, "price": 1.02, "currency": "USD"}, # End of Day 1
+        {"security_id": "CASH_USD", "price_date": day2, "price": 1.05, "currency": "USD"}  # End of Day 2
     ]})
 
     # Poll until the timeseries for the final day is fully generated.
@@ -70,12 +71,12 @@ def test_advanced_performance_api(setup_performance_data, e2e_api_client: E2EApi
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
 
     # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-performance"
-    assert data["target_endpoint"] == "/portfolios/{portfolio_id}/performance"
+    assert_legacy_endpoint_status(
+        response,
+        target_service="lotus-performance",
+        target_endpoint="/portfolios/{portfolio_id}/performance",
+    )
  

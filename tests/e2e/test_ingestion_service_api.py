@@ -3,6 +3,7 @@ import pytest
 import requests
 from .api_client import E2EApiClient
 
+
 def test_ingest_empty_transaction_list_succeeds(e2e_api_client: E2EApiClient):
     """
     GIVEN an empty list of transactions
@@ -17,7 +18,16 @@ def test_ingest_empty_transaction_list_succeeds(e2e_api_client: E2EApiClient):
 
     # ASSERT
     assert response.status_code == 202
-    assert response.json() == {"message": "Successfully queued 0 transactions for processing."}
+    body = response.json()
+    assert body["message"] == "Transactions accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 0
+    assert body["job_id"]
+    assert body["correlation_id"].startswith("ING:")
+    assert body["request_id"].startswith("REQ:")
+    assert body["trace_id"]
+    assert body["idempotency_key"] is None
+
 
 def test_ingest_malformed_transaction_payload_fails(e2e_api_client: E2EApiClient):
     """

@@ -2,6 +2,7 @@
 import pytest
 from decimal import Decimal
 from .api_client import E2EApiClient
+from .assertions import assert_decimal_approx
 
 @pytest.fixture(scope="module")
 def setup_avco_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until):
@@ -14,12 +15,12 @@ def setup_avco_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until
     
     # 1. Ingest prerequisite data, explicitly setting the cost basis method to AVCO
     e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{
-        "portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01",
-        "cifId": "AVCO_CIF", "status": "ACTIVE", "riskExposure": "High",
-        "investmentTimeHorizon": "Long", "portfolioType": "Discretionary", "bookingCenter": "SG",
-        "costBasisMethod": "AVCO"
+        "portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01",
+        "client_id": "AVCO_CIF", "status": "ACTIVE", "risk_exposure": "High",
+        "investment_time_horizon": "Long", "portfolio_type": "Discretionary", "booking_center_code": "SG",
+        "cost_basis_method": "AVCO"
     }]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": security_id, "name": "AVCO Test Stock", "isin": "AVCO123", "instrumentCurrency": "USD", "productType": "Equity"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": security_id, "name": "AVCO Test Stock", "isin": "AVCO123", "currency": "USD", "product_type": "Equity"}]})
 
     # 2. Ingest transactions: two buys at different prices, then a sell
     transactions = [
@@ -59,4 +60,4 @@ def test_avco_realized_pnl(setup_avco_data, e2e_api_client: E2EApiClient):
     # COGS for the sale of 50 shares = 50 * $11 = $550.
     # Proceeds from the sale = 50 * $15 = $750.
     # Realized P&L = $750 (Proceeds) - $550 (COGS) = $200.
-    assert sell_tx["realized_gain_loss"] == pytest.approx(200.0)
+    assert_decimal_approx(sell_tx["realized_gain_loss"], 200.0)

@@ -2,6 +2,7 @@
 import pytest
 from decimal import Decimal
 from .api_client import E2EApiClient
+from .assertions import assert_decimal_approx
 
 @pytest.fixture(scope="module")
 def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
@@ -14,10 +15,10 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
     buy_date, sell_date = "2025-08-10", "2025-08-15"
 
     # 1. Ingest prerequisite reference data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "DC_CIF", "status": "ACTIVE", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"securityId": security_id, "name": "Daimler AG", "isin": "DE0007100000", "instrumentCurrency": "EUR", "productType": "Equity"}]})
-    e2e_api_client.ingest("/ingest/fx-rates", {"fx_rates": [{"fromCurrency": "EUR", "toCurrency": "USD", "rateDate": buy_date, "rate": "1.10"}, {"fromCurrency": "EUR", "toCurrency": "USD", "rateDate": sell_date, "rate": "1.20"}]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": buy_date}, {"businessDate": sell_date}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "DC_CIF", "status": "ACTIVE", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]})
+    e2e_api_client.ingest("/ingest/instruments", {"instruments": [{"security_id": security_id, "name": "Daimler AG", "isin": "DE0007100000", "currency": "EUR", "product_type": "Equity"}]})
+    e2e_api_client.ingest("/ingest/fx-rates", {"fx_rates": [{"from_currency": "EUR", "to_currency": "USD", "rate_date": buy_date, "rate": "1.10"}, {"from_currency": "EUR", "to_currency": "USD", "rate_date": sell_date, "rate": "1.20"}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": buy_date}, {"business_date": sell_date}]})
 
     # 2. Ingest transactions
     e2e_api_client.ingest("/ingest/transactions", {"transactions": [
@@ -26,7 +27,7 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
     ]})
     
     # 3. Ingest market price for final valuation
-    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"securityId": security_id, "priceDate": sell_date, "price": 180.0, "currency": "EUR"}]})
+    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"security_id": security_id, "price_date": sell_date, "price": 180.0, "currency": "EUR"}]})
 
     # 4. Poll until the final position is valued, ensuring the pipeline has completed
     pos_url = f'/portfolios/{portfolio_id}/positions'
@@ -54,13 +55,13 @@ def test_realized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: E2
 
     # ASSERT
     # Local P&L (EUR): (40 * 170) - (40 * 150) = 800 EUR
-    assert sell_tx["realized_gain_loss_local"] == pytest.approx(800.00)
+    assert_decimal_approx(sell_tx["realized_gain_loss_local"], 800.00)
     
     # Base P&L (USD): (Proceeds in USD) - (Cost in USD)
     # Proceeds: 6800 EUR * 1.20 (sell date FX) = 8160 USD
     # Cost: (40 * 150 EUR) * 1.10 (buy date FX) = 6600 USD
     # P&L: 8160 - 6600 = 1560 USD
-    assert sell_tx["realized_gain_loss"] == pytest.approx(1560.00)
+    assert_decimal_approx(sell_tx["realized_gain_loss"], 1560.00)
 
 def test_unrealized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: E2EApiClient):
     """
@@ -79,18 +80,18 @@ def test_unrealized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: 
     # ASSERT
     # Cost Basis (60 shares):
     # Local: 60 * 150 EUR = 9000 EUR
-    assert position["cost_basis_local"] == pytest.approx(9000.00)
+    assert_decimal_approx(position["cost_basis_local"], 9000.00)
     # Base: 9000 EUR * 1.10 (buy date FX) = 9900 USD
-    assert position["cost_basis"] == pytest.approx(9900.00)
+    assert_decimal_approx(position["cost_basis"], 9900.00)
 
     # Valuation (60 shares @ 180 EUR/share):
     # Local: 60 * 180 EUR = 10800 EUR
-    assert valuation["market_value_local"] == pytest.approx(10800.00)
+    assert_decimal_approx(valuation["market_value_local"], 10800.00)
     # Base: 10800 EUR * 1.20 (sell date FX) = 12960 USD
-    assert valuation["market_value"] == pytest.approx(12960.00)
+    assert_decimal_approx(valuation["market_value"], 12960.00)
 
     # Unrealized P&L:
     # Local: 10800 (MV) - 9000 (Cost) = 1800 EUR
-    assert valuation["unrealized_gain_loss_local"] == pytest.approx(1800.00)
+    assert_decimal_approx(valuation["unrealized_gain_loss_local"], 1800.00)
     # Base: 12960 (MV) - 9900 (Cost) = 3060 USD
-    assert valuation["unrealized_gain_loss"] == pytest.approx(3060.00)
+    assert_decimal_approx(valuation["unrealized_gain_loss"], 3060.00)
