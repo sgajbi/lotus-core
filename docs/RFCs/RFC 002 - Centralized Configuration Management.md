@@ -19,8 +19,8 @@ The platform has implemented a meaningful portion of this architecture:
 3. Some typed runtime settings already exist (for example in calculator engine modules).
 
 However, full convergence is incomplete:
-1. Ingestion runtime policy/control planes still contain significant direct `os.getenv` parsing.
-2. Repository-wide configuration layering and enforcement guardrails are not fully codified in CI.
+1. Ingestion hotspot modules are migrated to typed settings, but this pattern is not yet uniformly rolled out to all services.
+2. Configuration guardrails exist for ingestion hotspot modules, but repository-wide enforcement is still pending.
 
 RFC 002 therefore remains **Partially Implemented**.
 
@@ -44,9 +44,10 @@ The original RFC requested:
 2. Config-aware services/routers consume shared constants and helpers.
 3. Typed settings are present in some domains:
    - `src/libs/financial-calculator-engine/src/core/config/settings.py`
-4. But ingestion control modules still perform heavy direct env parsing:
+4. Ingestion control modules now consume centralized typed settings:
    - `src/services/ingestion_service/app/ops_controls.py`
    - `src/services/ingestion_service/app/services/ingestion_job_service.py`
+   - `src/services/ingestion_service/app/settings.py`
 
 ### Why the implemented approach is better than the historical wording
 1. The system converged on `portfolio_common.config` rather than introducing a second config package name, reducing indirection.
@@ -65,8 +66,8 @@ Legacy/outdated naming in earlier RFC language has been normalized:
 | Shared config library | Shared defaults/topics/runtime knobs centralized | Implemented | `src/libs/portfolio-common/portfolio_common/config.py` |
 | Typed settings usage | Exists in select modules but not repo-wide | Partial | `src/libs/financial-calculator-engine/src/core/config/settings.py` |
 | Fail-fast startup validation | Present in slices; not consistently enforced for all service config classes | Partial | service startup/runtime behavior patterns |
-| Eliminate ad-hoc env access | Not complete; direct env parsing remains in ingestion controls | Gap | `ops_controls.py`; `ingestion_job_service.py` |
-| Consistent conventions and governance | Some consistency; repo-wide layering guardrail not fully enforced | Gap | open delta `RFC-002-D02` |
+| Eliminate ad-hoc env access | Completed for ingestion hotspot modules via typed settings | Partial | `src/services/ingestion_service/app/settings.py`; `ops_controls.py`; `ingestion_job_service.py` |
+| Consistent conventions and governance | Ingestion-focused guardrail implemented; repo-wide guardrail still pending | Partial | `scripts/config_access_guard.py`; `Makefile`; open delta `RFC-002-D02` |
 
 ## Configuration Layering Model (Target Standard)
 The target model clarified by this RFC:
@@ -103,10 +104,10 @@ This algorithm is partially implemented today and is the required standard for c
    - Cons: stricter startup can surface more deployment-time failures until config hygiene is complete.
 
 ## Gaps Still Open (Relevant and Pending)
-1. `RFC-002-D01` (open):
-   - Consolidate ingestion runtime env parsing into typed settings modules.
-2. `RFC-002-D02` (open):
-   - Establish repo-wide config layering pattern and CI guardrail to prevent new drift.
+1. `RFC-002-D01` (done):
+   - Ingestion runtime env parsing consolidated into typed settings module.
+2. `RFC-002-D02` (in progress):
+   - Guardrail exists for ingestion hotspot modules; repository-wide config layering/guardrail still to be completed.
 
 These are still relevant and should be implemented before RFC 002 can be marked `Implemented`.
 
@@ -120,6 +121,12 @@ Current evidence supporting partial completion:
    - `tests/integration/services/ingestion_service/test_ingestion_routers.py`
 4. Shared config and runtime override handling:
    - `src/libs/portfolio-common/portfolio_common/config.py`
+5. Typed ingestion settings and migration coverage:
+   - `src/services/ingestion_service/app/settings.py`
+   - `tests/unit/services/ingestion_service/test_settings.py`
+6. Config access guardrail:
+   - `scripts/config_access_guard.py`
+   - `Makefile` (`config-access-guard`)
 
 ## Acceptance Criteria Alignment
 1. Typed service configuration everywhere: **not yet aligned**.
@@ -143,5 +150,5 @@ Completion work is additive/refactoring in nature and should not require API con
 
 ## Next Actions
 1. Keep RFC 002 status as `Partially Implemented`.
-2. Execute `RFC-002-D01` and `RFC-002-D02`.
-3. Reclassify RFC 002 to `Implemented` only after direct env parsing hotspots are migrated and CI guardrails are active.
+2. Complete `RFC-002-D02` with repository-wide configuration layering and guardrail enforcement.
+3. Reclassify RFC 002 to `Implemented` once the typed settings + guardrail pattern is broadly enforced across services.
