@@ -16,7 +16,8 @@ RFC 010 extends lotus-core quality from component correctness to system resilien
 It is partially implemented:
 1. Strong unit/integration/e2e baseline exists.
 2. Deterministic load and failure-recovery gates exist.
-3. Several advanced goals remain open (broader chaos matrix, offline independent integrity auditor, property-based financial invariants).
+3. Property-based financial invariants are now implemented for cost-basis engines.
+4. Remaining advanced goals are broader chaos matrix and offline independent integrity auditor.
 
 ## Original Requested Requirements (Preserved)
 
@@ -48,11 +49,13 @@ Implemented evidence:
    - `scripts/performance_load_gate.py`
    - `scripts/failure_recovery_gate.py`
    - `scripts/institutional_signoff_pack.py`
+5. Property-based invariant coverage for financial calculator engine:
+   - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_property_invariants.py`
+   - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_strategies.py`
 
 Still missing versus original full ambition:
 1. No recurring broader chaos suite beyond controlled gate scenarios.
 2. No independent offline integrity auditor that recomputes end-state from raw ledger input.
-3. No property-based invariant suite (`hypothesis`) for financial engines.
 
 ## Requirement-to-Implementation Traceability
 
@@ -64,13 +67,13 @@ Still missing versus original full ambition:
 | Failure injection/recovery testing | Deterministic interruption/recovery gate | Implemented (initial) | `failure_recovery_gate.py` |
 | Full chaos matrix automation | Not yet broad/scheduled as requested | Partial gap | backlog delta RFC-010-D01 |
 | Independent offline integrity auditor | Not implemented | Gap | backlog delta RFC-010-D02 |
-| Property-based financial invariants | Not implemented | Gap | backlog delta RFC-010-D03 |
+| Property-based financial invariants | Hypothesis-driven invariants for FIFO/AVCO cost-basis logic | Implemented | `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_property_invariants.py` |
 
 ## Design Reasoning and Trade-offs
 
 1. **Why staged implementation**: deterministic gates gave fast operational value while deeper tooling remained open.
 2. **Why offline auditor is important**: pipeline-coupled tests can still miss silent drift; independent recomputation provides stronger assurance.
-3. **Why property-based tests matter**: financial invariant space is large and example-based tests are insufficient alone.
+3. **Why property-based tests matter**: financial invariant space is large and example-based tests are insufficient alone; implemented invariants now cover quantity conservation and AVCO split/combined sell consistency.
 4. **Trade-off**: advanced resilience tooling increases maintenance cost but directly supports institutional readiness claims.
 
 ## Gap Assessment
@@ -90,7 +93,6 @@ Open deltas are high-value and still relevant to current platform maturity goals
 2. Execute existing tracked deltas:
    - `RFC-010-D01` chaos suite expansion
    - `RFC-010-D02` independent integrity auditor
-   - `RFC-010-D03` property-based invariants
 3. Tie closure evidence to recurring operational signoff workflows.
 
 ## Test and Validation Evidence
@@ -99,10 +101,12 @@ Open deltas are high-value and still relevant to current platform maturity goals
    - `tests/unit/`
    - `tests/integration/`
    - `tests/e2e/`
-2. Load/failure deterministic gates:
+2. Property-based invariants:
+   - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_property_invariants.py`
+3. Load/failure deterministic gates:
    - `scripts/performance_load_gate.py`
    - `scripts/failure_recovery_gate.py`
-3. Consolidated signoff:
+4. Consolidated signoff:
    - `scripts/institutional_signoff_pack.py`
 
 ## Original Acceptance Criteria Alignment
@@ -111,8 +115,9 @@ Alignment status:
 1. Foundational test-gap closure: largely achieved.
 2. System can handle controlled failure/recovery scenarios: partially achieved (targeted gate scenarios).
 3. Performance baseline gates established: achieved.
-4. Independent integrity auditor: not achieved.
-5. Full system-level resilience suite as initially envisioned: partially achieved.
+4. Property-based financial invariants: achieved.
+5. Independent integrity auditor: not achieved.
+6. Full system-level resilience suite as initially envisioned: partially achieved.
 
 ## Rollout and Backward Compatibility
 
@@ -127,4 +132,4 @@ Remaining work adds verification capability without breaking existing interfaces
 ## Next Actions
 
 1. Keep RFC 010 classification as `Partially implemented (requires enhancement)`.
-2. Execute and close `RFC-010-D01..D03` with concrete code/test artifacts.
+2. Execute and close `RFC-010-D01..D02` with concrete code/test artifacts.
