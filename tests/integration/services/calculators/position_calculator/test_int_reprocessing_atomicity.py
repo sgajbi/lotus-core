@@ -20,12 +20,8 @@ PORTFOLIO_ID = "E2E_REPRO_ATOM_01"
 SECURITY_ID = "SEC_REPRO_ATOM_01"
 
 @pytest_asyncio.fixture(scope="function")
-async def setup_repro_atomicity_data(async_db_session: AsyncSession):
+async def setup_repro_atomicity_data(clean_db, async_db_session: AsyncSession):
     """Sets up the initial state for the atomicity test."""
-    # Clean up before test
-    for table in ["outbox_events", "position_state", "transactions", "portfolios"]:
-        await async_db_session.execute(text(f"DELETE FROM {table}"))
-    
     # ARRANGE: Create initial state
     async_db_session.add(
         Portfolio(
@@ -117,6 +113,7 @@ async def test_reprocessing_is_atomic_on_outbox_failure(
 
         # 2. No outbox events should have been created
         outbox_result = await new_session.execute(
-            text("SELECT COUNT(*) FROM outbox_events")
+            text("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = :pid"),
+            {"pid": PORTFOLIO_ID},
         )
         assert outbox_result.scalar_one() == 0
