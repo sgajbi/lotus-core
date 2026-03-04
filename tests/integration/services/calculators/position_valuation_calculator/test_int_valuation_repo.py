@@ -4,7 +4,7 @@ import pytest_asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from portfolio_common.database_models import PortfolioValuationJob, DailyPositionSnapshot, Portfolio, MarketPrice, PositionHistory, Transaction
@@ -193,13 +193,25 @@ async def test_find_and_reset_stale_jobs(clean_db, setup_stale_job_data, session
     assert reset_count == 1
 
     async with session_factory() as session:
-        job1 = await session.get(PortfolioValuationJob, 1)
+        result = await session.execute(
+            select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P1")
+        )
+        job1 = result.scalar_one()
         assert job1.status == "PENDING"
-        job2 = await session.get(PortfolioValuationJob, 2)
+        result = await session.execute(
+            select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P2")
+        )
+        job2 = result.scalar_one()
         assert job2.status == "PROCESSING"
-        job3 = await session.get(PortfolioValuationJob, 3)
+        result = await session.execute(
+            select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P3")
+        )
+        job3 = result.scalar_one()
         assert job3.status == "PENDING"
-        job4 = await session.get(PortfolioValuationJob, 4)
+        result = await session.execute(
+            select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P4")
+        )
+        job4 = result.scalar_one()
         assert job4.status == "COMPLETE"
 
 async def test_get_first_open_dates_for_keys(clean_db, setup_first_open_date_data, async_db_session: AsyncSession):

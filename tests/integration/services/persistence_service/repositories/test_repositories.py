@@ -20,21 +20,21 @@ pytestmark = pytest.mark.asyncio
 @pytest.fixture
 def instrument_event_buy():
     return InstrumentEvent(
-        securityId="SEC_AAPL_001",
+        security_id="SEC_AAPL_001",
         name="Apple Inc. (Test)",
         isin="US0378331005",
-        instrumentCurrency="USD",
-        productType="Equity"
+        currency="USD",
+        product_type="Equity"
     )
 
 @pytest.fixture
 def instrument_event_update():
     return InstrumentEvent(
-        securityId="SEC_AAPL_001",
+        security_id="SEC_AAPL_001",
         name="Apple Inc. (Updated)", # Name changed
         isin="US0378331005_NEW", # ISIN changed
-        instrumentCurrency="USD",
-        productType="Equity_Updated" # Product type changed
+        currency="USD",
+        product_type="Equity_Updated" # Product type changed
     )
 
 # --- Integration Tests for InstrumentRepository (Now Async) ---
@@ -46,11 +46,11 @@ async def test_instrument_repository_create_new_instrument(clean_db, async_db_se
     repo = InstrumentRepository(async_db_session)
     
     event = InstrumentEvent(
-        securityId="TEST_SEC_NEW",
+        security_id="TEST_SEC_NEW",
         name="Test New Instrument",
         isin="TESTISIN123",
-        instrumentCurrency="SGD",
-        productType="Bond"
+        currency="SGD",
+        product_type="Bond"
     )
     
     await repo.create_or_update_instrument(event)
@@ -112,13 +112,13 @@ async def test_instrument_repository_upserts_with_new_issuer_fields(clean_db, as
     # ARRANGE
     repo = InstrumentRepository(async_db_session)
     event_with_new_fields = InstrumentEvent(
-        securityId="SEC_TEST_ISSUER",
+        security_id="SEC_TEST_ISSUER",
         name="Issuer Test Instrument",
         isin="XS_ISSUER_TEST",
-        instrumentCurrency="USD",
-        productType="Note",
-        issuerId="ISSUER_ABC",
-        ultimateParentIssuerId="ULTIMATE_XYZ"
+        currency="USD",
+        product_type="Note",
+        issuer_id="ISSUER_ABC",
+        ultimate_parent_issuer_id="ULTIMATE_XYZ"
     )
 
     # ACT
@@ -144,16 +144,16 @@ async def test_portfolio_repository_persists_cost_basis_method(clean_db, async_d
     # ARRANGE
     repo = PortfolioRepository(async_db_session)
     event = PortfolioEvent(
-        portfolioId="PORT_AVCO_TEST_01",
-        baseCurrency="USD",
-        openDate=date(2025, 1, 1),
-        cifId="CIF_AVCO_1",
+        portfolio_id="PORT_AVCO_TEST_01",
+        base_currency="USD",
+        open_date=date(2025, 1, 1),
+        client_id="CIF_AVCO_1",
         status="ACTIVE",
-        riskExposure="High",
-        investmentTimeHorizon="Long",
-        portfolioType="Discretionary",
-        bookingCenter="SG",
-        costBasisMethod="AVCO"  # Explicitly set the new field
+        risk_exposure="High",
+        investment_time_horizon="Long",
+        portfolio_type="Discretionary",
+        booking_center_code="SG",
+        cost_basis_method="AVCO"  # Explicitly set the new field
     )
 
     # ACT
@@ -271,5 +271,6 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     await async_db_session.commit()
 
     persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
+    await async_db_session.refresh(persisted_after_upsert)
     assert persisted_after_upsert.calculation_policy_version == "1.0.1"
     assert persisted_after_upsert.source_system == "OMS_FALLBACK"

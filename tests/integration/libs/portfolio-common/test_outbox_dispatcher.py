@@ -4,11 +4,10 @@ import asyncio
 import json
 import uuid
 from unittest.mock import MagicMock
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# Import async session tools
-from portfolio_common.db import AsyncSessionLocal
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
@@ -35,27 +34,29 @@ def smart_mock_kafka_producer() -> MagicMock:
     return mock
 
 @pytest.mark.asyncio
-async def test_create_outbox_event_fails_with_missing_aggregate_id(db_engine, clean_db):
+async def test_create_outbox_event_fails_with_missing_aggregate_id(
+    clean_db,
+    async_db_session: AsyncSession,
+):
     """
     GIVEN an attempt to create an outbox event with a missing or empty aggregate_id
     WHEN create_outbox_event is called
     THEN it should raise a ValueError.
     """
-    async with AsyncSessionLocal() as session:
-        repo = OutboxRepository(session)
-        
-        match_str = "aggregate_id \\(portfolio_id\\) is required for outbox events"
+    repo = OutboxRepository(async_db_session)
 
-        with pytest.raises(ValueError, match=match_str):
-            await repo.create_outbox_event(
-                aggregate_type="Test", aggregate_id=None, event_type="TestEvent",
-                topic="test.topic", payload={}
-            )
-        with pytest.raises(ValueError, match=match_str):
-            await repo.create_outbox_event(
-                aggregate_type="Test", aggregate_id="", event_type="TestEvent",
-                topic="test.topic", payload={}
-            )
+    match_str = "aggregate_id \\(portfolio_id\\) is required for outbox events"
+
+    with pytest.raises(ValueError, match=match_str):
+        await repo.create_outbox_event(
+            aggregate_type="Test", aggregate_id=None, event_type="TestEvent",
+            topic="test.topic", payload={}
+        )
+    with pytest.raises(ValueError, match=match_str):
+        await repo.create_outbox_event(
+            aggregate_type="Test", aggregate_id="", event_type="TestEvent",
+            topic="test.topic", payload={}
+        )
 
 def test_dispatcher_processes_and_updates_pending_events(db_engine, clean_db, smart_mock_kafka_producer):
     """

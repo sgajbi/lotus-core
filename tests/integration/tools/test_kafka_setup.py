@@ -1,9 +1,9 @@
 # tests/integration/tools/test_kafka_setup.py
 import pytest
-import os
 from confluent_kafka.admin import AdminClient
 
 # Import the main function and topic list from the script we are testing
+import tools.kafka_setup as kafka_setup
 from tools.kafka_setup import main as create_all_topics
 from tools.kafka_setup import TOPICS_TO_CREATE
 
@@ -38,6 +38,7 @@ async def test_kafka_setup_ensures_topics_exist_and_is_idempotent(kafka_admin_cl
     # ACT
     # Run the topic creation logic again to test for idempotency.
     # If the script is not idempotent, this call might raise an exception.
+    kafka_setup.KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
     create_all_topics()
 
 
