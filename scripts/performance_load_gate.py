@@ -353,6 +353,12 @@ def main() -> int:
     parser.add_argument("--skip-compose", action="store_true")
     parser.add_argument("--ready-timeout-seconds", type=int, default=240)
     parser.add_argument("--drain-timeout-seconds", type=int, default=180)
+    parser.add_argument(
+        "--profile-tier",
+        choices=("fast", "full"),
+        default="full",
+        help="fast: PR-friendly quick gate, full: institutional load profile gate.",
+    )
     parser.add_argument("--enforce", action="store_true")
     args = parser.parse_args()
 
@@ -368,40 +374,76 @@ def main() -> int:
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     portfolio_id = f"PERF_LOAD_{run_id}"
     all_results: list[ProfileResult] = []
-    profiles = [
-        {
-            "name": "steady_state",
-            "batches": 5,
-            "batch_size": 40,
-            "sleep_seconds": 0.5,
-            "thresholds": {
-                "min_throughput_rps": 10.0,
-                "max_backlog_age_seconds": 1200.0,
-                "max_dlq_pressure_ratio": 5.0,
-                "max_replay_pressure_ratio": 5.0,
-                "max_drain_seconds": 600.0,
+    if args.profile_tier == "fast":
+        profiles = [
+            {
+                "name": "steady_state",
+                "batches": 2,
+                "batch_size": 20,
+                "sleep_seconds": 0.2,
+                "wait_for_drain": False,
+                "thresholds": {
+                    "min_throughput_rps": 5.0,
+                    "max_backlog_age_seconds": 1800.0,
+                    "max_dlq_pressure_ratio": 5.0,
+                    "max_replay_pressure_ratio": 5.0,
+                    "max_drain_seconds": None,
+                },
             },
-        },
-        {
-            "name": "burst",
-            "batches": 8,
-            "batch_size": 80,
-            "sleep_seconds": 0.0,
-            "thresholds": {
-                "min_throughput_rps": 20.0,
-                "max_backlog_age_seconds": 1800.0,
-                "max_dlq_pressure_ratio": 5.0,
-                "max_replay_pressure_ratio": 5.0,
-                "max_drain_seconds": 900.0,
+            {
+                "name": "burst",
+                "batches": 3,
+                "batch_size": 40,
+                "sleep_seconds": 0.0,
+                "wait_for_drain": False,
+                "thresholds": {
+                    "min_throughput_rps": 10.0,
+                    "max_backlog_age_seconds": 2400.0,
+                    "max_dlq_pressure_ratio": 5.0,
+                    "max_replay_pressure_ratio": 5.0,
+                    "max_drain_seconds": None,
+                },
             },
-        },
-    ]
+        ]
+    else:
+        profiles = [
+            {
+                "name": "steady_state",
+                "batches": 5,
+                "batch_size": 40,
+                "sleep_seconds": 0.5,
+                "wait_for_drain": True,
+                "thresholds": {
+                    "min_throughput_rps": 10.0,
+                    "max_backlog_age_seconds": 1200.0,
+                    "max_dlq_pressure_ratio": 5.0,
+                    "max_replay_pressure_ratio": 5.0,
+                    "max_drain_seconds": 600.0,
+                },
+            },
+            {
+                "name": "burst",
+                "batches": 8,
+                "batch_size": 80,
+                "sleep_seconds": 0.0,
+                "wait_for_drain": True,
+                "thresholds": {
+                    "min_throughput_rps": 20.0,
+                    "max_backlog_age_seconds": 1800.0,
+                    "max_dlq_pressure_ratio": 5.0,
+                    "max_replay_pressure_ratio": 5.0,
+                    "max_drain_seconds": 900.0,
+                },
+            },
+        ]
 
     for profile in profiles:
-        baseline_backlog = _get_backlog_jobs(
-            ingestion_base_url=args.ingestion_base_url,
-            ops_token=args.ops_token,
-        )
+        baseline_backlog = 0
+        if profile["wait_for_drain"]:
+            baseline_backlog = _get_backlog_jobs(
+                ingestion_base_url=args.ingestion_base_url,
+                ops_token=args.ops_token,
+            )
         started = time.time()
         records_submitted, batches_submitted = _ingest_transactions(
             ingestion_base_url=args.ingestion_base_url,
@@ -415,12 +457,14 @@ def main() -> int:
             ingestion_base_url=args.ingestion_base_url,
             ops_token=args.ops_token,
         )
-        drain_seconds = _wait_drain_to_target_backlog(
-            ingestion_base_url=args.ingestion_base_url,
-            ops_token=args.ops_token,
-            target_backlog_jobs=max(baseline_backlog + 1, 0),
-            timeout_seconds=args.drain_timeout_seconds,
-        )
+        drain_seconds: float | None = None
+        if profile["wait_for_drain"]:
+            drain_seconds = _wait_drain_to_target_backlog(
+                ingestion_base_url=args.ingestion_base_url,
+                ops_token=args.ops_token,
+                target_backlog_jobs=max(baseline_backlog + 1, 0),
+                timeout_seconds=args.drain_timeout_seconds,
+            )
         all_results.append(
             _evaluate_profile(
                 profile_name=profile["name"],
@@ -434,10 +478,13 @@ def main() -> int:
             )
         )
 
-    replay_baseline_backlog = _get_backlog_jobs(
-        ingestion_base_url=args.ingestion_base_url,
-        ops_token=args.ops_token,
-    )
+    replay_baseline_backlog = 0
+    replay_wait_for_drain = args.profile_tier == "full"
+    if replay_wait_for_drain:
+        replay_baseline_backlog = _get_backlog_jobs(
+            ingestion_base_url=args.ingestion_base_url,
+            ops_token=args.ops_token,
+        )
     replay_started = time.time()
     replay_source_transactions = _build_transaction_batch(
         portfolio_id=portfolio_id,
@@ -454,38 +501,42 @@ def main() -> int:
         raise RuntimeError(
             f"Replay source ingestion failed status={response.status_code}: {response.text[:300]}"
         )
+    replay_bursts = 4 if args.profile_tier == "fast" else 12
+    replay_burst_size = 15 if args.profile_tier == "fast" else 30
     _trigger_replay_storm(
         ingestion_base_url=args.ingestion_base_url,
         transaction_ids=replay_ids,
-        bursts=12,
-        burst_size=30,
+        bursts=replay_bursts,
+        burst_size=replay_burst_size,
     )
     replay_ended = time.time()
     replay_health = _get_health_snapshot(
         ingestion_base_url=args.ingestion_base_url,
         ops_token=args.ops_token,
     )
-    replay_drain_seconds = _wait_drain_to_target_backlog(
-        ingestion_base_url=args.ingestion_base_url,
-        ops_token=args.ops_token,
-        target_backlog_jobs=max(replay_baseline_backlog + 1, 0),
-        timeout_seconds=max(args.drain_timeout_seconds, 240),
-    )
+    replay_drain_seconds: float | None = None
+    if replay_wait_for_drain:
+        replay_drain_seconds = _wait_drain_to_target_backlog(
+            ingestion_base_url=args.ingestion_base_url,
+            ops_token=args.ops_token,
+            target_backlog_jobs=max(replay_baseline_backlog + 1, 0),
+            timeout_seconds=max(args.drain_timeout_seconds, 240),
+        )
     all_results.append(
         _evaluate_profile(
             profile_name="replay_storm",
             records_submitted=120,
-            batches_submitted=13,
+            batches_submitted=1 + replay_bursts,
             started_at=replay_started,
             ended_at=replay_ended,
             health=replay_health,
             drain_seconds=replay_drain_seconds,
             thresholds={
-                "min_throughput_rps": 8.0,
-                "max_backlog_age_seconds": 2400.0,
+                "min_throughput_rps": 8.0 if args.profile_tier == "full" else 4.0,
+                "max_backlog_age_seconds": 2400.0 if args.profile_tier == "full" else 3600.0,
                 "max_dlq_pressure_ratio": 5.0,
                 "max_replay_pressure_ratio": 5.0,
-                "max_drain_seconds": 1200.0,
+                "max_drain_seconds": 1200.0 if args.profile_tier == "full" else None,
             },
         )
     )

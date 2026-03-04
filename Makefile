@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-unit test-unit-db test-integration-lite test-ops-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate security-audit check coverage-gate ci ci-local docker-build clean
+.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-unit test-unit-db test-integration-lite test-ops-contract test-buy-rfc test-sell-rfc test-e2e-smoke test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full security-audit check coverage-gate ci ci-local docker-build clean
 
 install:
 	python scripts/bootstrap_dev.py
@@ -71,7 +71,10 @@ test-latency-gate:
 	python scripts/latency_profile.py --build --enforce
 
 test-performance-load-gate:
-	python scripts/performance_load_gate.py --build --enforce
+	python scripts/performance_load_gate.py --profile-tier fast --enforce
+
+test-performance-load-gate-full:
+	python scripts/performance_load_gate.py --build --profile-tier full --enforce
 
 security-audit:
 	python -m pip_audit -r tests/requirements.txt
