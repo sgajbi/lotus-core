@@ -57,7 +57,8 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     """
     # 1. ARRANGE: Define test data
     portfolio_id = f"E2E_FAIL_PORT_{uuid.uuid4()}"
-    transaction_id = f"E2E_FAIL_TXN_{uuid.uuid4()}"
+    transaction_id_before = f"E2E_FAIL_TXN_BEFORE_{uuid.uuid4()}"
+    transaction_id_after = f"E2E_FAIL_TXN_AFTER_{uuid.uuid4()}"
 
     # 2. ARRANGE: Set up a Kafka consumer for the DLQ topic
     dlq_consumer_conf = {
@@ -72,18 +73,24 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     portfolio_payload = {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "FAIL_CIF", "status": "ACTIVE", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]}
     e2e_api_client.ingest("/ingest/portfolios", portfolio_payload)
 
-    # 4. ACT: Ingest the target transaction, which will be consumed by persistence-service
-    transaction_payload = {"transactions": [{"transaction_id": transaction_id, "portfolio_id": portfolio_id, "instrument_id": "FAIL_INST", "security_id": "SEC_FAIL", "transaction_date": "2025-08-05T10:00:00Z", "transaction_type": "BUY", "quantity": 1, "price": 1, "gross_transaction_amount": 1, "trade_currency": "USD", "currency": "USD"}]}
-    e2e_api_client.ingest("/ingest/transactions", transaction_payload)
-    print(f"\n--- Ingested transaction '{transaction_id}' ---")
-    
-    # 5. ACT: Simulate database outage
+    # 4. ARRANGE: Persist one transaction before outage.
+    transaction_payload_before = {"transactions": [{"transaction_id": transaction_id_before, "portfolio_id": portfolio_id, "instrument_id": "FAIL_INST", "security_id": "SEC_FAIL", "transaction_date": "2025-08-05T10:00:00Z", "transaction_type": "BUY", "quantity": 1, "price": 1, "gross_transaction_amount": 1, "trade_currency": "USD", "currency": "USD"}]}
+    e2e_api_client.ingest("/ingest/transactions", transaction_payload_before)
+    poll_db_until(
+        query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
+        params={"txn_id": transaction_id_before},
+        validation_func=lambda r: r is not None,
+        timeout=60,
+        fail_message=f"Pre-outage transaction '{transaction_id_before}' was not persisted.",
+    )
+
+    # 5. ACT: Simulate database outage.
     print("\n--- Stopping PostgreSQL container ---")
     subprocess.run(["docker", "compose", "stop", "postgres"], check=True, capture_output=True)
-    
-    # Give a moment for the service to notice the DB is gone
-    time.sleep(5) 
-    
+
+    # Give a moment for persistence-service to observe the outage.
+    time.sleep(5)
+
     print("\n--- Starting PostgreSQL container ---")
     subprocess.run(["docker", "compose", "start", "postgres"], check=True, capture_output=True)
     wait_for_postgres_ready(db_engine)
@@ -94,15 +101,17 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     # 6. ACT: Wait for the persistence service to become healthy again
     wait_for_service_ready("http://localhost:8080/health/ready")
 
-    # 7. ASSERT: Verify the transaction is eventually persisted using the robust polling utility
+    # 7. ACT/ASSERT: Ingest and persist a new transaction after recovery.
+    transaction_payload_after = {"transactions": [{"transaction_id": transaction_id_after, "portfolio_id": portfolio_id, "instrument_id": "FAIL_INST", "security_id": "SEC_FAIL", "transaction_date": "2025-08-05T10:05:00Z", "transaction_type": "BUY", "quantity": 1, "price": 1, "gross_transaction_amount": 1, "trade_currency": "USD", "currency": "USD"}]}
+    e2e_api_client.ingest("/ingest/transactions", transaction_payload_after)
     poll_db_until(
         query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
-        params={"txn_id": transaction_id},
+        params={"txn_id": transaction_id_after},
         validation_func=lambda r: r is not None,
-        timeout=60, # The service should recover and process well within this time
-        fail_message=f"Transaction '{transaction_id}' was not persisted after DB recovery."
+        timeout=60,  # The service should recover and process well within this time.
+        fail_message=f"Transaction '{transaction_id_after}' was not persisted after DB recovery.",
     )
-    print(f"\n--- Transaction '{transaction_id}' successfully persisted ---")
+    print(f"\n--- Transaction '{transaction_id_after}' successfully persisted after recovery ---")
 
     # 8. ASSERT: Verify the DLQ is empty
     print("\n--- Verifying DLQ is empty ---")
