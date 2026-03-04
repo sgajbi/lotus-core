@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import subprocess
 import sys
 import time
@@ -223,8 +224,12 @@ def main() -> int:
     parser.add_argument(
         "--compose-file", default="docker-compose.yml", help="Docker compose file path."
     )
-    parser.add_argument("--ingestion-base-url", default="http://localhost:8200")
-    parser.add_argument("--query-base-url", default="http://localhost:8201")
+    parser.add_argument(
+        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
+    )
+    parser.add_argument(
+        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
+    )
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument(
         "--reset-volumes", action="store_true", help="Run docker compose down -v first."

@@ -3,9 +3,8 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     hostname: zookeeper
-    container_name: zookeeper
     ports:
-      - "2181:2181"
+      - "${LOTUS_ZOOKEEPER_PORT:-2181}:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -23,10 +22,9 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     hostname: kafka
-    container_name: kafka
     ports:
-      - "9092:9092"
-      - "9093:9093"
+      - "${LOTUS_KAFKA_EXTERNAL_PORT:-9092}:9092"
+      - "${LOTUS_KAFKA_INTERNAL_PORT:-9093}:9093"
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -34,7 +32,7 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9093,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9093,PLAINTEXT_HOST://localhost:${LOTUS_KAFKA_EXTERNAL_PORT:-9092}
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
@@ -53,7 +51,6 @@ services:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
     hostname: kafka-topic-creator
-    container_name: kafka-topic-creator
     depends_on:
        kafka:
         condition: service_healthy
@@ -66,9 +63,8 @@ services:
   postgres:
     image: postgres:16-alpine
     hostname: postgres
-    container_name: postgres
     ports:
-      - "55432:5432"
+      - "${LOTUS_POSTGRES_HOST_PORT:-55432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-portfolio_db}
       POSTGRES_USER: ${POSTGRES_USER:-user}
@@ -88,7 +84,6 @@ services:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
     hostname: migration-runner
-    container_name: migration-runner
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -104,9 +99,8 @@ services:
       context: .
       dockerfile: ./src/services/ingestion_service/Dockerfile
     hostname: ingestion_service
-    container_name: ingestion_service
     ports:
-      - "8200:8000"
+      - "${LOTUS_INGESTION_HOST_PORT:-8200}:8000"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
     depends_on:
@@ -139,9 +133,8 @@ services:
       context: .
       dockerfile: ./src/services/query_service/Dockerfile
     hostname: query_service
-    container_name: query_service
     ports:
-      - "8201:8001"
+      - "${LOTUS_QUERY_HOST_PORT:-8201}:8001"
     environment:
       DATABASE_URL: ${QUERY_DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -166,9 +159,8 @@ services:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
     hostname: persistence_service
-    container_name: persistence_service
     ports:
-      - "8080:8080"
+      - "${LOTUS_PERSISTENCE_HOST_PORT:-8080}:8080"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
@@ -196,9 +188,8 @@ services:
       context: .
       dockerfile: ./src/services/calculators/cost_calculator_service/Dockerfile
     hostname: cost_calculator_service
-    container_name: cost_calculator_service
     ports:
-      - "8083:8083"
+      - "${LOTUS_COST_CALCULATOR_HOST_PORT:-8083}:8083"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
@@ -227,9 +218,8 @@ services:
       context: .
       dockerfile: ./src/services/calculators/cashflow_calculator_service/Dockerfile
     hostname: cashflow_calculator_service
-    container_name: cashflow_calculator_service
     ports:
-     - "8082:8082"
+     - "${LOTUS_CASHFLOW_CALCULATOR_HOST_PORT:-8082}:8082"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
@@ -257,9 +247,8 @@ services:
       context: .
       dockerfile: ./src/services/calculators/position_calculator/Dockerfile
     hostname: position_calculator_service
-    container_name: position_calculator_service
     ports:
-      - "8081:8081"
+      - "${LOTUS_POSITION_CALCULATOR_HOST_PORT:-8081}:8081"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
@@ -287,9 +276,8 @@ services:
       context: .
       dockerfile: ./src/services/calculators/position_valuation_calculator/Dockerfile
     hostname: position_valuation_calculator
-    container_name: position_valuation_calculator
     ports:
-      - "8084:8084"
+      - "${LOTUS_POSITION_VALUATION_HOST_PORT:-8084}:8084"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
@@ -318,9 +306,8 @@ services:
       context: .
       dockerfile: ./src/services/timeseries_generator_service/Dockerfile
     hostname: timeseries_generator_service
-    container_name: timeseries_generator_service
     ports:
-      - "8085:8085"
+      - "${LOTUS_TIMESERIES_GENERATOR_HOST_PORT:-8085}:8085"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
@@ -348,7 +335,6 @@ services:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
     hostname: demo_data_loader
-    container_name: demo_data_loader
     environment:
       DEMO_DATA_PACK_ENABLED: ${DEMO_DATA_PACK_ENABLED:-true}
     depends_on:
@@ -383,9 +369,8 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.47.2
-    container_name: prometheus
     ports:
-      - "9190:9090"
+      - "${LOTUS_PROMETHEUS_HOST_PORT:-9190}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
@@ -404,9 +389,8 @@ services:
 
   grafana:
     image: grafana/grafana:10.1.5
-    container_name: grafana
     ports:
-      - "3300:3000"
+      - "${LOTUS_GRAFANA_HOST_PORT:-3300}:3000"
     volumes:
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
@@ -427,3 +411,4 @@ volumes:
 networks:
   app_network:
     driver: bridge
+

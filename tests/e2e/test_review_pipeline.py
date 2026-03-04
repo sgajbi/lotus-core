@@ -1,6 +1,7 @@
 # tests/e2e/test_review_pipeline.py
 import pytest
 from .api_client import E2EApiClient
+from .assertions import assert_legacy_endpoint_status
 
 # --- Test Data Constants ---
 PORTFOLIO_ID = "E2E_REVIEW_01"
@@ -71,14 +72,14 @@ def test_portfolio_review_endpoint(setup_review_data, e2e_api_client: E2EApiClie
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
 
     # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-report"
-    assert data["target_endpoint"] == "/reports/portfolios/{portfolio_id}/review"
+    assert_legacy_endpoint_status(
+        response,
+        target_service="lotus-report",
+        target_endpoint="/reports/portfolios/{portfolio_id}/review",
+    )
 
 
 def test_portfolio_review_for_empty_portfolio(clean_db, e2e_api_client: E2EApiClient):
@@ -107,11 +108,11 @@ def test_portfolio_review_for_empty_portfolio(clean_db, e2e_api_client: E2EApiCl
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
 
     # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-report"
-    assert data["target_endpoint"] == "/reports/portfolios/{portfolio_id}/review"
+    assert_legacy_endpoint_status(
+        response,
+        target_service="lotus-report",
+        target_endpoint="/reports/portfolios/{portfolio_id}/review",
+    )

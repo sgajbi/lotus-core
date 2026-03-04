@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -16,6 +17,9 @@ class DockerStackError(RuntimeError):
 def _is_retryable_compose_up_error(stderr: str) -> bool:
     retryable_markers = (
         "already exists",
+        "container name",
+        "is already in use",
+        "no such container",
         "pulling",
         "didn't complete successfully: exit",
         "context deadline exceeded",
@@ -42,14 +46,28 @@ def compose_up(
     compose_file: str,
     *,
     build: bool,
+    services: list[str] | None = None,
     retries: int = 2,
     retry_wait_seconds: int = 5,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> None:
+    _remove_stale_project_containers(compose_file, runner)
+    try:
+        runner(
+            ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
+            check=False,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError:
+        # Best-effort cleanup only. Continue with bring-up retries.
+        pass
+
     args = ["docker", "compose", "-f", compose_file, "up"]
     if build:
         args.append("--build")
     args.append("-d")
+    if services:
+        args.extend(services)
 
     attempts = max(1, retries + 1)
     last_error: subprocess.CalledProcessError | None = None
@@ -60,12 +78,17 @@ def compose_up(
         except subprocess.CalledProcessError as exc:
             last_error = exc
             stderr = (exc.stderr or b"").decode("utf-8", errors="ignore").lower()
-            if _is_retryable_compose_up_error(stderr):
-                runner(
-                    ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
-                    check=False,
-                    capture_output=True,
-                )
+            removed_conflicts = _remove_conflicting_named_containers(stderr, runner)
+            if removed_conflicts or _is_retryable_compose_up_error(stderr):
+                try:
+                    runner(
+                        ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
+                        check=False,
+                        capture_output=True,
+                    )
+                except subprocess.CalledProcessError:
+                    # Retry path should not fail due to cleanup issues.
+                    pass
                 if retry_wait_seconds > 0:
                     time.sleep(retry_wait_seconds)
                 continue
@@ -166,6 +189,46 @@ def compose_down(compose_file: str) -> None:
         check=False,
         capture_output=True,
     )
+
+
+def _remove_conflicting_named_containers(
+    stderr: str,
+    runner: Callable[..., subprocess.CompletedProcess],
+) -> bool:
+    removed_any = False
+    matches = re.findall(r'container name "/([^"]+)" is already in use', stderr)
+    for container_name in matches:
+        runner(["docker", "rm", "-f", container_name], check=False, capture_output=True)
+        removed_any = True
+    return removed_any
+
+
+def _remove_stale_project_containers(
+    compose_file: str,
+    runner: Callable[..., subprocess.CompletedProcess],
+) -> None:
+    project_name = os.getenv("COMPOSE_PROJECT_NAME")
+    if not project_name:
+        project_name = Path(compose_file).resolve().parent.name
+    name_filter = f"{project_name}-"
+    try:
+        ps = runner(
+            ["docker", "ps", "-aq", "--filter", f"name={name_filter}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return
+
+    if not ps.stdout:
+        return
+
+    container_ids = [line.strip() for line in ps.stdout.splitlines() if line.strip()]
+    if not container_ids:
+        return
+
+    runner(["docker", "rm", "-f", *container_ids], check=False, capture_output=True)
 
 
 def resolve_compose_file(project_root: str) -> str:

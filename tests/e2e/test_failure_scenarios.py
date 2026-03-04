@@ -1,4 +1,5 @@
 # tests/e2e/test_failure_scenarios.py
+import os
 import pytest
 import time
 import uuid
@@ -10,6 +11,26 @@ import requests
 
 from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_DLQ_TOPIC
 from .api_client import E2EApiClient
+
+PERSISTENCE_HOST_PORT = os.getenv("LOTUS_PERSISTENCE_HOST_PORT", "8080")
+POSITION_CALCULATOR_HOST_PORT = os.getenv("LOTUS_POSITION_CALCULATOR_HOST_PORT", "8081")
+CASHFLOW_CALCULATOR_HOST_PORT = os.getenv("LOTUS_CASHFLOW_CALCULATOR_HOST_PORT", "8082")
+COST_CALCULATOR_HOST_PORT = os.getenv("LOTUS_COST_CALCULATOR_HOST_PORT", "8083")
+POSITION_VALUATION_HOST_PORT = os.getenv("LOTUS_POSITION_VALUATION_HOST_PORT", "8084")
+TIMESERIES_GENERATOR_HOST_PORT = os.getenv("LOTUS_TIMESERIES_GENERATOR_HOST_PORT", "8085")
+INGESTION_HOST_PORT = os.getenv("LOTUS_INGESTION_HOST_PORT", "8200")
+QUERY_HOST_PORT = os.getenv("LOTUS_QUERY_HOST_PORT", "8201")
+
+CORE_SERVICE_HEALTH_URLS = [
+    f"http://localhost:{PERSISTENCE_HOST_PORT}/health/ready",  # persistence_service
+    f"http://localhost:{POSITION_CALCULATOR_HOST_PORT}/health/ready",  # position_calculator_service
+    f"http://localhost:{CASHFLOW_CALCULATOR_HOST_PORT}/health/ready",  # cashflow_calculator_service
+    f"http://localhost:{COST_CALCULATOR_HOST_PORT}/health/ready",  # cost_calculator_service
+    f"http://localhost:{POSITION_VALUATION_HOST_PORT}/health/ready",  # position_valuation_calculator
+    f"http://localhost:{TIMESERIES_GENERATOR_HOST_PORT}/health/ready",  # timeseries_generator_service
+    f"http://localhost:{INGESTION_HOST_PORT}/health/ready",  # ingestion_service
+    f"http://localhost:{QUERY_HOST_PORT}/health/ready",  # query_service
+]
 
 def wait_for_postgres_ready(db_engine, timeout=30):
     """Waits for the PostgreSQL container to be ready for connections."""
@@ -46,33 +67,40 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     """
     # 1. ARRANGE: Define test data
     portfolio_id = f"E2E_FAIL_PORT_{uuid.uuid4()}"
-    transaction_id = f"E2E_FAIL_TXN_{uuid.uuid4()}"
+    transaction_id_before = f"E2E_FAIL_TXN_BEFORE_{uuid.uuid4()}"
+    transaction_id_after = f"E2E_FAIL_TXN_AFTER_{uuid.uuid4()}"
 
     # 2. ARRANGE: Set up a Kafka consumer for the DLQ topic
     dlq_consumer_conf = {
         'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
         'group.id': f'test-dlq-checker-{uuid.uuid4()}',
-        'auto.offset.reset': 'earliest'
+        'auto.offset.reset': 'latest'
     }
     dlq_consumer = Consumer(dlq_consumer_conf)
     dlq_consumer.subscribe([KAFKA_PERSISTENCE_DLQ_TOPIC])
 
     # 3. ARRANGE: Ingest prerequisite portfolio data
-    portfolio_payload = {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "FAIL_CIF", "status": "ACTIVE", "riskExposure": "a", "investmentTimeHorizon": "b", "portfolioType": "c", "bookingCenter": "d"}]}
+    portfolio_payload = {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "client_id": "FAIL_CIF", "status": "ACTIVE", "risk_exposure": "a", "investment_time_horizon": "b", "portfolio_type": "c", "booking_center_code": "d"}]}
     e2e_api_client.ingest("/ingest/portfolios", portfolio_payload)
 
-    # 4. ACT: Ingest the target transaction, which will be consumed by persistence-service
-    transaction_payload = {"transactions": [{"transaction_id": transaction_id, "portfolio_id": portfolio_id, "instrument_id": "FAIL_INST", "security_id": "SEC_FAIL", "transaction_date": "2025-08-05T10:00:00Z", "transaction_type": "BUY", "quantity": 1, "price": 1, "gross_transaction_amount": 1, "trade_currency": "USD", "currency": "USD"}]}
-    e2e_api_client.ingest("/ingest/transactions", transaction_payload)
-    print(f"\n--- Ingested transaction '{transaction_id}' ---")
-    
-    # 5. ACT: Simulate database outage
+    # 4. ARRANGE: Persist one transaction before outage.
+    transaction_payload_before = {"transactions": [{"transaction_id": transaction_id_before, "portfolio_id": portfolio_id, "instrument_id": "FAIL_INST", "security_id": "SEC_FAIL", "transaction_date": "2025-08-05T10:00:00Z", "transaction_type": "BUY", "quantity": 1, "price": 1, "gross_transaction_amount": 1, "trade_currency": "USD", "currency": "USD"}]}
+    e2e_api_client.ingest("/ingest/transactions", transaction_payload_before)
+    poll_db_until(
+        query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
+        params={"txn_id": transaction_id_before},
+        validation_func=lambda r: r is not None,
+        timeout=60,
+        fail_message=f"Pre-outage transaction '{transaction_id_before}' was not persisted.",
+    )
+
+    # 5. ACT: Simulate database outage.
     print("\n--- Stopping PostgreSQL container ---")
     subprocess.run(["docker", "compose", "stop", "postgres"], check=True, capture_output=True)
-    
-    # Give a moment for the service to notice the DB is gone
-    time.sleep(5) 
-    
+
+    # Give a moment for persistence-service to observe the outage.
+    time.sleep(5)
+
     print("\n--- Starting PostgreSQL container ---")
     subprocess.run(["docker", "compose", "start", "postgres"], check=True, capture_output=True)
     wait_for_postgres_ready(db_engine)
@@ -81,22 +109,47 @@ def test_db_outage_recovery(docker_services, db_engine, clean_db_module, e2e_api
     subprocess.run(["docker", "compose", "restart", "persistence_service"], check=True, capture_output=True)
     
     # 6. ACT: Wait for the persistence service to become healthy again
-    wait_for_service_ready("http://localhost:8080/health/ready")
+    wait_for_service_ready(f"http://localhost:{PERSISTENCE_HOST_PORT}/health/ready")
 
-    # 7. ASSERT: Verify the transaction is eventually persisted using the robust polling utility
+    # 7. ACT/ASSERT: Ingest and persist a new transaction after recovery.
+    transaction_payload_after = {"transactions": [{"transaction_id": transaction_id_after, "portfolio_id": portfolio_id, "instrument_id": "FAIL_INST", "security_id": "SEC_FAIL", "transaction_date": "2025-08-05T10:05:00Z", "transaction_type": "BUY", "quantity": 1, "price": 1, "gross_transaction_amount": 1, "trade_currency": "USD", "currency": "USD"}]}
+    e2e_api_client.ingest("/ingest/transactions", transaction_payload_after)
     poll_db_until(
         query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
-        params={"txn_id": transaction_id},
+        params={"txn_id": transaction_id_after},
         validation_func=lambda r: r is not None,
-        timeout=60, # The service should recover and process well within this time
-        fail_message=f"Transaction '{transaction_id}' was not persisted after DB recovery."
+        timeout=60,  # The service should recover and process well within this time.
+        fail_message=f"Transaction '{transaction_id_after}' was not persisted after DB recovery.",
     )
-    print(f"\n--- Transaction '{transaction_id}' successfully persisted ---")
+    print(f"\n--- Transaction '{transaction_id_after}' successfully persisted after recovery ---")
 
     # 8. ASSERT: Verify the DLQ is empty
     print("\n--- Verifying DLQ is empty ---")
     msg = dlq_consumer.poll(timeout=10)
     dlq_consumer.close()
-    
+
     assert msg is None, f"A message was unexpectedly found in the DLQ: {msg.value() if msg else 'None'}"
     print("\n--- DLQ verified to be empty ---")
+
+    # 9. RECOVERY BARRIER: restart all core services and wait for end-to-end readiness
+    print("\n--- Restarting all core services after DB outage scenario ---")
+    subprocess.run(
+        [
+            "docker",
+            "compose",
+            "restart",
+            "ingestion_service",
+            "query_service",
+            "persistence_service",
+            "position_calculator_service",
+            "cashflow_calculator_service",
+            "cost_calculator_service",
+            "position_valuation_calculator",
+            "timeseries_generator_service",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    for health_url in CORE_SERVICE_HEALTH_URLS:
+        wait_for_service_ready(health_url, timeout=120)
+    print("\n--- Core services fully recovered after outage test ---")

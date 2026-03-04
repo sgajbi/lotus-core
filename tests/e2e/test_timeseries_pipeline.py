@@ -1,4 +1,4 @@
-# tests/e2e/test_timeseries_pipeline.py
+# tests/e2e/test_analytics_input_timeseries_pipeline.py
 import pytest
 from decimal import Decimal
 from sqlalchemy.orm import Session
@@ -15,29 +15,29 @@ def setup_timeseries_data(clean_db_module, db_engine, e2e_api_client: E2EApiClie
     portfolio_id = "E2E_TS_PORT"
     
     # Ingest all base data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "riskExposure": "High", "investmentTimeHorizon": "Long", "portfolioType": "Discretionary", "bookingCenter": "SG", "cifId": "TS_CIF", "status": "Active"}]})
+    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolio_id": portfolio_id, "base_currency": "USD", "open_date": "2025-01-01", "risk_exposure": "High", "investment_time_horizon": "Long", "portfolio_type": "Discretionary", "booking_center_code": "SG", "client_id": "TS_CIF", "status": "Active"}]})
     e2e_api_client.ingest("/ingest/instruments", {"instruments": [
-        {"securityId": "SEC_EUR_STOCK", "name": "Euro Stock", "isin": "EU123", "instrumentCurrency": "EUR", "productType": "Equity"},
-        {"securityId": "CASH", "name": "US Dollar", "isin": "USD_CASH", "instrumentCurrency": "USD", "productType": "Cash"}
+        {"security_id": "SEC_EUR_STOCK", "name": "Euro Stock", "isin": "EU123", "currency": "EUR", "product_type": "Equity"},
+        {"security_id": "CASH", "name": "US Dollar", "isin": "USD_CASH", "currency": "USD", "product_type": "Cash"}
     ]})
-    e2e_api_client.ingest("/ingest/fx-rates", {"fx_rates": [{"fromCurrency": "EUR", "toCurrency": "USD", "rateDate": "2025-07-28", "rate": "1.1"}, {"fromCurrency": "EUR", "toCurrency": "USD", "rateDate": "2025-07-29", "rate": "1.2"}]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": "2025-07-28"}, {"businessDate": "2025-07-29"}]})
+    e2e_api_client.ingest("/ingest/fx-rates", {"fx_rates": [{"from_currency": "EUR", "to_currency": "USD", "rate_date": "2025-08-28", "rate": "1.1"}, {"from_currency": "EUR", "to_currency": "USD", "rate_date": "2025-08-29", "rate": "1.2"}]})
+    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"business_date": "2025-08-28"}, {"business_date": "2025-08-29"}]})
 
-    # --- Day 1 (2025-07-28) ---
-    e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": "TS_BUY_01", "portfolio_id": portfolio_id, "instrument_id": "EUR_STOCK", "security_id": "SEC_EUR_STOCK", "transaction_date": "2025-07-28T00:00:00Z", "transaction_type": "BUY", "quantity": 100, "price": 50, "gross_transaction_amount": 5000, "trade_currency": "EUR", "currency": "EUR"}]})
-    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"securityId": "SEC_EUR_STOCK", "priceDate": "2025-07-28", "price": 52, "currency": "EUR"}]})
+    # --- Day 1 (2025-08-28) ---
+    e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": "TS_BUY_01", "portfolio_id": portfolio_id, "instrument_id": "SEC_EUR_STOCK", "security_id": "SEC_EUR_STOCK", "transaction_date": "2025-08-28T00:00:00Z", "transaction_type": "BUY", "quantity": 100, "price": 50, "gross_transaction_amount": 5000, "trade_currency": "EUR", "currency": "EUR"}]})
+    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [{"security_id": "SEC_EUR_STOCK", "price_date": "2025-08-28", "price": 52, "currency": "EUR"}]})
     
-    # --- Day 2 (2025-07-29) ---
-    e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": "TS_FEE_01", "portfolio_id": portfolio_id, "instrument_id": "CASH", "security_id": "CASH", "transaction_date": "2025-07-29T00:00:00Z", "transaction_type": "FEE", "quantity": 1, "price": 25, "gross_transaction_amount": 25, "trade_currency": "USD", "currency": "USD"}]})
+    # --- Day 2 (2025-08-29) ---
+    e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": "TS_FEE_01", "portfolio_id": portfolio_id, "instrument_id": "CASH", "security_id": "CASH", "transaction_date": "2025-08-29T00:00:00Z", "transaction_type": "FEE", "quantity": 1, "price": 25, "gross_transaction_amount": 25, "trade_currency": "USD", "currency": "USD"}]})
     e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": "SEC_EUR_STOCK", "priceDate": "2025-07-29", "price": 55, "currency": "EUR"},
-        {"securityId": "CASH", "priceDate": "2025-07-29", "price": 1, "currency": "USD"}
+        {"security_id": "SEC_EUR_STOCK", "price_date": "2025-08-29", "price": 55, "currency": "EUR"},
+        {"security_id": "CASH", "price_date": "2025-08-29", "price": 1, "currency": "USD"}
     ]})
     
     # Poll for the final value of Day 2 to ensure the full pipeline is complete
     poll_db_until(
         query="SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date",
-        params={"pid": portfolio_id, "date": date(2025, 7, 29)},
+        params={"pid": portfolio_id, "date": date(2025, 8, 29)},
         validation_func=lambda r: r is not None and r.eod_market_value == Decimal("6575.0000000000"),
         timeout=180,
         fail_message="Pipeline did not generate correct portfolio_timeseries for Day 2."
@@ -45,11 +45,11 @@ def setup_timeseries_data(clean_db_module, db_engine, e2e_api_client: E2EApiClie
     
     return {"db_engine": db_engine}
 
-def test_timeseries_day_1(setup_timeseries_data):
+def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(setup_timeseries_data):
     """Verify the portfolio time series record for the first day."""
     with Session(setup_timeseries_data["db_engine"]) as session:
         query = text("SELECT bod_market_value, bod_cashflow, eod_cashflow, eod_market_value, fees FROM portfolio_timeseries WHERE portfolio_id = :portfolio_id AND date = :date")
-        result = session.execute(query, {"portfolio_id": "E2E_TS_PORT", "date": "2025-07-28"}).fetchone()
+        result = session.execute(query, {"portfolio_id": "E2E_TS_PORT", "date": "2025-08-28"}).fetchone()
 
     assert result is not None, "Time series record for day 1 was not found."
     bod_mv, bod_cf, eod_cf, eod_mv, fees = result
@@ -63,11 +63,11 @@ def test_timeseries_day_1(setup_timeseries_data):
     assert eod_mv == Decimal("5720.0000000000")
     assert fees == Decimal("0.0000000000")
 
-def test_timeseries_day_2(setup_timeseries_data):
+def test_analytics_input_timeseries_contract_day_2_returns_expected_rows(setup_timeseries_data):
     """Verify the portfolio time series record for the second day."""
     with Session(setup_timeseries_data["db_engine"]) as session:
         query = text("SELECT bod_market_value, bod_cashflow, eod_cashflow, eod_market_value, fees FROM portfolio_timeseries WHERE portfolio_id = :portfolio_id AND date = :date")
-        result = session.execute(query, {"portfolio_id": "E2E_TS_PORT", "date": "2025-07-29"}).fetchone()
+        result = session.execute(query, {"portfolio_id": "E2E_TS_PORT", "date": "2025-08-29"}).fetchone()
 
     assert result is not None, "Time series record for day 2 was not found."
     bod_mv, bod_cf, eod_cf, eod_mv, fees = result
@@ -82,11 +82,11 @@ def test_timeseries_day_2(setup_timeseries_data):
     assert eod_mv == Decimal("6575.0000000000")
     assert fees == Decimal("25.0000000000")
 
-def test_position_timeseries_day_2(setup_timeseries_data):
+def test_analytics_input_position_timeseries_contract_day_2_returns_expected_rows(setup_timeseries_data):
     """Verify the individual position time series records for the second day."""
     with Session(setup_timeseries_data["db_engine"]) as session:
         query = text("SELECT security_id, eod_market_value, bod_cashflow_portfolio, eod_cashflow_portfolio FROM position_timeseries WHERE portfolio_id = :portfolio_id AND date = :date")
-        results = session.execute(query, {"portfolio_id": "E2E_TS_PORT", "date": "2025-07-29"}).fetchall()
+        results = session.execute(query, {"portfolio_id": "E2E_TS_PORT", "date": "2025-08-29"}).fetchall()
 
     assert len(results) >= 2, "Expected at least two position time series records for day 2"
     

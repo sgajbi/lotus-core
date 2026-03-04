@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import subprocess
 import time
@@ -450,8 +451,12 @@ def _enforce_gate(results: list[dict[str, Any]]) -> tuple[bool, list[str]]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run lotus-core endpoint latency profiling.")
-    parser.add_argument("--ingestion-base-url", default="http://localhost:8200")
-    parser.add_argument("--query-base-url", default="http://localhost:8201")
+    parser.add_argument(
+        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
+    )
+    parser.add_argument(
+        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
+    )
     parser.add_argument("--portfolio-id", default="DEMO_DPM_EUR_001")
     parser.add_argument("--benchmark-id", default="BMK_GLOBAL_BALANCED_60_40")
     parser.add_argument("--warmup-runs", type=int, default=3)
