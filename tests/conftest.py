@@ -27,6 +27,80 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+_TEST_ENV_PROFILES = {
+    "unit": {
+        "LOTUS_ZOOKEEPER_PORT": "2181",
+        "LOTUS_KAFKA_EXTERNAL_PORT": "9092",
+        "LOTUS_KAFKA_INTERNAL_PORT": "9093",
+        "LOTUS_POSTGRES_HOST_PORT": "55432",
+        "LOTUS_INGESTION_HOST_PORT": "8200",
+        "LOTUS_QUERY_HOST_PORT": "8201",
+        "LOTUS_PERSISTENCE_HOST_PORT": "8080",
+        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8081",
+        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8082",
+        "LOTUS_COST_CALCULATOR_HOST_PORT": "8083",
+        "LOTUS_POSITION_VALUATION_HOST_PORT": "8084",
+        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8085",
+    },
+    "integration": {
+        "LOTUS_ZOOKEEPER_PORT": "2281",
+        "LOTUS_KAFKA_EXTERNAL_PORT": "9192",
+        "LOTUS_KAFKA_INTERNAL_PORT": "9193",
+        "LOTUS_POSTGRES_HOST_PORT": "56432",
+        "LOTUS_INGESTION_HOST_PORT": "8300",
+        "LOTUS_QUERY_HOST_PORT": "8301",
+        "LOTUS_PERSISTENCE_HOST_PORT": "8180",
+        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8181",
+        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8182",
+        "LOTUS_COST_CALCULATOR_HOST_PORT": "8183",
+        "LOTUS_POSITION_VALUATION_HOST_PORT": "8184",
+        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8185",
+    },
+    "e2e": {
+        "LOTUS_ZOOKEEPER_PORT": "2381",
+        "LOTUS_KAFKA_EXTERNAL_PORT": "9292",
+        "LOTUS_KAFKA_INTERNAL_PORT": "9293",
+        "LOTUS_POSTGRES_HOST_PORT": "57432",
+        "LOTUS_INGESTION_HOST_PORT": "8400",
+        "LOTUS_QUERY_HOST_PORT": "8401",
+        "LOTUS_PERSISTENCE_HOST_PORT": "8280",
+        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8281",
+        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8282",
+        "LOTUS_COST_CALCULATOR_HOST_PORT": "8283",
+        "LOTUS_POSITION_VALUATION_HOST_PORT": "8284",
+        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8285",
+    },
+}
+
+
+def _apply_test_env_profile_defaults() -> None:
+    profile_name = os.getenv("LOTUS_TEST_ENV_PROFILE", "unit").strip().lower()
+    profile = _TEST_ENV_PROFILES.get(profile_name, _TEST_ENV_PROFILES["unit"])
+    for key, value in profile.items():
+        os.environ.setdefault(key, value)
+
+
+_apply_test_env_profile_defaults()
+
+# Ensure host-routable defaults for any modules initialized during test import.
+host_db_port = os.environ["LOTUS_POSTGRES_HOST_PORT"]
+ingestion_port = os.environ["LOTUS_INGESTION_HOST_PORT"]
+query_port = os.environ["LOTUS_QUERY_HOST_PORT"]
+kafka_port = os.environ["LOTUS_KAFKA_EXTERNAL_PORT"]
+os.environ.setdefault(
+    "HOST_DATABASE_URL",
+    f"postgresql://user:password@localhost:{host_db_port}/portfolio_db",
+)
+os.environ.setdefault(
+    "HOST_QUERY_DATABASE_URL",
+    f"postgresql://user:password@localhost:{host_db_port}/portfolio_db",
+)
+os.environ.setdefault("E2E_INGESTION_URL", f"http://localhost:{ingestion_port}")
+os.environ.setdefault("E2E_QUERY_URL", f"http://localhost:{query_port}")
+os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", f"localhost:{kafka_port}")
+# Keep demo ingestion sidecar disabled for deterministic integration/e2e tests.
+os.environ.setdefault("DEMO_DATA_PACK_ENABLED", "false")
+
 
 def _env_int(name: str, default: int) -> int:
     raw_value = os.getenv(name)
@@ -36,6 +110,13 @@ def _env_int(name: str, default: int) -> int:
         return int(raw_value)
     except ValueError:
         return default
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 # REFACTORED: Use subprocess directly for more control over Docker Compose
@@ -52,9 +133,25 @@ def docker_services(request):  # noqa: ARG001
     health_timeout = _env_int("LOTUS_TESTS_HEALTH_TIMEOUT_SECONDS", 180)
 
     try:
+        test_services = [
+            "zookeeper",
+            "kafka",
+            "kafka-topic-creator",
+            "postgres",
+            "migration-runner",
+            "ingestion_service",
+            "query_service",
+            "persistence_service",
+            "cost_calculator_service",
+            "cashflow_calculator_service",
+            "position_calculator_service",
+            "position_valuation_calculator",
+            "timeseries_generator_service",
+        ]
         compose_up(
             compose_file,
             build=should_build_images(),
+            services=test_services,
             retries=compose_retries,
             retry_wait_seconds=compose_retry_wait,
         )
@@ -119,7 +216,7 @@ def db_engine(docker_services):
     )
 
     # Wait for the database to be connectable
-    engine = create_engine(db_url)
+    engine = create_engine(db_url, pool_pre_ping=True)
     timeout = _env_int("LOTUS_TESTS_DB_CONNECT_TIMEOUT_SECONDS", 120)
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -191,15 +288,25 @@ def clean_db(db_engine):
     """
     print("\n--- Cleaning database tables (function scope) ---")
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
+    terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
+
+    def _terminate_for_deadlock_retry() -> None:
+        with db_engine.begin() as connection:
+            connection.execute(terminate_sessions_query)
+        db_engine.dispose()
 
     def _run() -> None:
         with db_engine.begin() as connection:
-            connection.execute(terminate_sessions_query)
+            if terminate_sessions:
+                connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)
             if truncate_sql:
                 connection.execute(text(truncate_sql))
 
-    truncate_with_deadlock_retry(_run)
+    truncate_with_deadlock_retry(
+        _run,
+        on_deadlock_retry=_terminate_for_deadlock_retry if not terminate_sessions else None,
+    )
     yield
 
 
@@ -211,15 +318,25 @@ def clean_db_module(db_engine):
     """
     print("\n--- Cleaning database tables (module scope) ---")
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
+    terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
+
+    def _terminate_for_deadlock_retry() -> None:
+        with db_engine.begin() as connection:
+            connection.execute(terminate_sessions_query)
+        db_engine.dispose()
 
     def _run() -> None:
         with db_engine.begin() as connection:
-            connection.execute(terminate_sessions_query)
+            if terminate_sessions:
+                connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)
             if truncate_sql:
                 connection.execute(text(truncate_sql))
 
-    truncate_with_deadlock_retry(_run)
+    truncate_with_deadlock_retry(
+        _run,
+        on_deadlock_retry=_terminate_for_deadlock_retry if not terminate_sessions else None,
+    )
     yield
 
 
