@@ -40,7 +40,7 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     return {"portfolio_id": portfolio_id}
 
 
-def test_advanced_performance_api(setup_performance_data, e2e_api_client: E2EApiClient):
+def test_analytics_input_performance_contract_dataset_is_queryable(setup_performance_data, e2e_api_client: E2EApiClient):
     """
     Verifies lotus-core performance endpoint is hard-disabled and directs callers to lotus-performance.
     """

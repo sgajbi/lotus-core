@@ -52,7 +52,7 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
     
     return {"portfolio_id": portfolio_id}
 
-def test_mwr_api_calculates_correctly(setup_mwr_data, e2e_api_client: E2EApiClient):
+def test_analytics_input_mwr_contract_dataset_is_queryable(setup_mwr_data, e2e_api_client: E2EApiClient):
     """
     Tests the full MWR pipeline by calling the new endpoint and verifying the result.
     The test scenario is:

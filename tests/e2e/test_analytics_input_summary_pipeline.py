@@ -58,7 +58,7 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
     )
     return {"portfolio_id": PORTFOLIO_ID}
 
-def test_portfolio_summary_endpoint(setup_summary_data, e2e_api_client: E2EApiClient):
+def test_analytics_input_summary_contract_returns_expected_dataset(setup_summary_data, e2e_api_client: E2EApiClient):
     """
     Verifies lotus-core summary endpoint is hard-disabled and directs callers to lotus-report.
     """

@@ -45,7 +45,7 @@ def setup_timeseries_data(clean_db_module, db_engine, e2e_api_client: E2EApiClie
     
     return {"db_engine": db_engine}
 
-def test_timeseries_day_1(setup_timeseries_data):
+def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(setup_timeseries_data):
     """Verify the portfolio time series record for the first day."""
     with Session(setup_timeseries_data["db_engine"]) as session:
         query = text("SELECT bod_market_value, bod_cashflow, eod_cashflow, eod_market_value, fees FROM portfolio_timeseries WHERE portfolio_id = :portfolio_id AND date = :date")
@@ -63,7 +63,7 @@ def test_timeseries_day_1(setup_timeseries_data):
     assert eod_mv == Decimal("5720.0000000000")
     assert fees == Decimal("0.0000000000")
 
-def test_timeseries_day_2(setup_timeseries_data):
+def test_analytics_input_timeseries_contract_day_2_returns_expected_rows(setup_timeseries_data):
     """Verify the portfolio time series record for the second day."""
     with Session(setup_timeseries_data["db_engine"]) as session:
         query = text("SELECT bod_market_value, bod_cashflow, eod_cashflow, eod_market_value, fees FROM portfolio_timeseries WHERE portfolio_id = :portfolio_id AND date = :date")
@@ -82,7 +82,7 @@ def test_timeseries_day_2(setup_timeseries_data):
     assert eod_mv == Decimal("6575.0000000000")
     assert fees == Decimal("25.0000000000")
 
-def test_position_timeseries_day_2(setup_timeseries_data):
+def test_analytics_input_position_timeseries_contract_day_2_returns_expected_rows(setup_timeseries_data):
     """Verify the individual position time series records for the second day."""
     with Session(setup_timeseries_data["db_engine"]) as session:
         query = text("SELECT security_id, eod_market_value, bod_cashflow_portfolio, eod_cashflow_portfolio FROM position_timeseries WHERE portfolio_id = :portfolio_id AND date = :date")

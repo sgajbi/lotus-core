@@ -57,7 +57,7 @@ def setup_review_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_unt
     return {"portfolio_id": PORTFOLIO_ID}
 
 
-def test_portfolio_review_endpoint(setup_review_data, e2e_api_client: E2EApiClient):
+def test_analytics_input_review_contract_returns_expected_dataset(setup_review_data, e2e_api_client: E2EApiClient):
     """
     Verifies lotus-core review endpoint is hard-disabled and directs callers to lotus-report.
     """
@@ -81,7 +81,7 @@ def test_portfolio_review_endpoint(setup_review_data, e2e_api_client: E2EApiClie
     assert data["target_endpoint"] == "/reports/portfolios/{portfolio_id}/review"
 
 
-def test_portfolio_review_for_empty_portfolio(clean_db, e2e_api_client: E2EApiClient):
+def test_analytics_input_review_contract_handles_empty_portfolio(clean_db, e2e_api_client: E2EApiClient):
     """
     Verifies empty-portfolio calls also receive 410 migration guidance.
     """
