@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.db import get_async_db_session
 
-from ..dtos.core_snapshot_dto import CoreSnapshotRequest, CoreSnapshotResponse
+from ..dtos.core_snapshot_dto import (
+    CoreSnapshotRequest,
+    CoreSnapshotResponse,
+    CoreSnapshotSection,
+)
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse
 from ..dtos.integration_dto import (
     InstrumentEnrichmentBulkRequest,
