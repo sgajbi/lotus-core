@@ -11,111 +11,137 @@
 | Scope | In repo (`lotus-core`) |
 
 ## Executive Summary
-
 RFC 002 defines a centralized, validated configuration model across lotus-core services.
-The objective is fail-fast startup safety, consistency, and maintainability as service count grows.
 
-Current state is partially implemented: common config primitives and typed settings exist, but full repository-wide convergence is not complete.
+The platform has implemented a meaningful portion of this architecture:
+1. Shared config primitives (`portfolio_common.config`) are established and widely consumed.
+2. Strong schema validation exists at API/DTO/event boundaries.
+3. Some typed runtime settings already exist (for example in calculator engine modules).
+
+However, full convergence is incomplete:
+1. Ingestion runtime policy/control planes still contain significant direct `os.getenv` parsing.
+2. Repository-wide configuration layering and enforcement guardrails are not fully codified in CI.
+
+RFC 002 therefore remains **Partially Implemented**.
 
 ## Original Requested Requirements (Preserved)
-
 The original RFC requested:
-1. Service configuration modeled with schema validation (Pydantic-style typed settings).
+1. Service configuration modeled with schema validation (typed settings).
 2. Shared configuration library for cross-service defaults/utilities.
-3. Unified loading at startup with strict validation and fail-fast behavior.
-4. Reduced decentralized env parsing to improve consistency and maintainability.
-5. Operationally clearer and more auditable config behavior across services.
+3. Unified startup loading with strict validation and fail-fast semantics.
+4. Elimination of decentralized env parsing.
+5. Operationally auditable, consistent configuration behavior.
 
-## Current Implementation Reality
+## Original Proposal vs Implemented Reality
+### Originally Proposed
+1. Uniform typed settings pattern across services.
+2. Centralized config package and startup validation flow.
+3. Minimal ad-hoc environment parsing in service modules.
 
-Centralization is present, but not uniform.
+### Implemented Reality
+1. Shared package exists and is in production use:
+   - `src/libs/portfolio-common/portfolio_common/config.py`
+2. Config-aware services/routers consume shared constants and helpers.
+3. Typed settings are present in some domains:
+   - `src/libs/financial-calculator-engine/src/core/config/settings.py`
+4. But ingestion control modules still perform heavy direct env parsing:
+   - `src/services/ingestion_service/app/ops_controls.py`
+   - `src/services/ingestion_service/app/services/ingestion_job_service.py`
 
-Implemented parts:
-1. Shared configuration module exists in `portfolio_common.config`.
-2. Multiple services consume shared config constants (Kafka topics, calendar defaults, runtime overrides).
-3. DTO-level validation is strong across ingestion/query contracts (Pydantic models).
-4. Some domains already use typed settings (`financial-calculator-engine` with `BaseSettings`).
+### Why the implemented approach is better than the historical wording
+1. The system converged on `portfolio_common.config` rather than introducing a second config package name, reducing indirection.
+2. Runtime policy complexity (capacity bands, replay controls, auth modes) matured materially and required practical staged migration instead of forced big-bang centralization.
+3. Existing design preserves backward compatibility while enabling incremental hardening.
 
-Evidence:
-- `src/libs/portfolio-common/portfolio_common/config.py`
-- `src/libs/financial-calculator-engine/src/core/config/settings.py`
-- `src/services/ingestion_service/app/DTOs/*.py`
-- `src/services/query_service/app/repositories/*` (imports from shared config)
+## Terminology and Naming Normalization
+Legacy/outdated naming in earlier RFC language has been normalized:
+1. `portfolio-config` -> `portfolio_common.config` (actual implementation package).
+2. "all env loaded only at startup" -> "typed startup validation target; currently mixed with module-level env reads in selected services".
+3. "centralized complete" -> "centralized base with partial service convergence".
 
 ## Requirement-to-Implementation Traceability
-
-| Original Requirement | Current Implementation | Status | Evidence |
+| Requirement | Current Implementation | Status | Evidence |
 | --- | --- | --- | --- |
-| Shared config library | `portfolio_common.config` provides shared defaults/topics/guards | Implemented | `portfolio_common/config.py` |
-| Typed settings usage | Present in calculator engine and parts of services | Partial | `financial-calculator-engine/src/core/config/settings.py` |
-| Fail-fast startup validation | Present in selected service paths; not fully uniform repo-wide | Partial | service startup/runtime checks |
-| Eliminate ad-hoc env access | Not fully achieved; direct env reads remain in key modules | Gap | `ingestion_service/app/ops_controls.py`; `ingestion_job_service.py` |
-| Consistent config conventions | Improved but still mixed patterns across services | Partial | cross-service config usage patterns |
+| Shared config library | Shared defaults/topics/runtime knobs centralized | Implemented | `src/libs/portfolio-common/portfolio_common/config.py` |
+| Typed settings usage | Exists in select modules but not repo-wide | Partial | `src/libs/financial-calculator-engine/src/core/config/settings.py` |
+| Fail-fast startup validation | Present in slices; not consistently enforced for all service config classes | Partial | service startup/runtime behavior patterns |
+| Eliminate ad-hoc env access | Not complete; direct env parsing remains in ingestion controls | Gap | `ops_controls.py`; `ingestion_job_service.py` |
+| Consistent conventions and governance | Some consistency; repo-wide layering guardrail not fully enforced | Gap | open delta `RFC-002-D02` |
 
-## Design Reasoning and Trade-offs
+## Configuration Layering Model (Target Standard)
+The target model clarified by this RFC:
+1. **Layer 1 (Platform shared)**:
+   - Cross-service defaults, topic names, common guardrails in `portfolio_common.config`.
+2. **Layer 2 (Service typed settings)**:
+   - Service-local typed wrappers validate environment values and policy JSON structures.
+3. **Layer 3 (Runtime usage)**:
+   - Business logic reads typed settings objects, not raw environment values.
+4. **Layer 4 (Governance/CI)**:
+   - CI/lint guardrails prevent new direct `os.getenv` usage outside approved settings modules.
 
-1. **Centralized contract first**: shared config primitives reduce drift for cross-service values (topics, common thresholds, policies).
-2. **Service-local typed wrappers**: necessary for service-specific policy semantics without polluting common library.
-3. **Fail-fast over runtime surprises**: startup validation is preferred for high-signal operational reliability.
-4. **Trade-off**: migration from ad-hoc env access to typed settings requires staged rollout to avoid contract regressions.
+## Deterministic Configuration Resolution Algorithm
+For each configurable runtime parameter `P`:
+1. Resolve raw input from environment or default source.
+2. Parse and type-coerce into strict typed schema.
+3. Validate range/domain constraints (for example non-negative thresholds, enum values, JSON schema).
+4. On invalid value:
+   - fail fast at startup for critical controls, or
+   - reject request-path override with deterministic error.
+5. Expose effective values through operations/config endpoints for auditable runtime behavior.
 
-## Gap Assessment
+This algorithm is partially implemented today and is the required standard for completion.
 
-The RFC target is not fully achieved yet.
+## Architectural Trade-offs
+1. **Staged migration vs big-bang rewrite**:
+   - Pros: avoids broad regressions and preserves endpoint behavior.
+   - Cons: temporary mixed config patterns persist.
+2. **Shared constants vs service autonomy**:
+   - Pros: reduces duplication and drift.
+   - Cons: requires clear boundaries to avoid overloading the shared module.
+3. **Fail-fast strictness**:
+   - Pros: higher operational reliability.
+   - Cons: stricter startup can surface more deployment-time failures until config hygiene is complete.
 
-1. Runtime config is still partly decentralized:
-   - `src/services/ingestion_service/app/ops_controls.py` reads env directly.
-   - `src/services/ingestion_service/app/services/ingestion_job_service.py` contains many service-local env reads and policy parsing.
-2. No single repo-wide typed settings contract is enforced for all services.
-3. The original RFC language references a new library name (`portfolio-config`) that does not match current implementation (`portfolio_common.config`).
+## Gaps Still Open (Relevant and Pending)
+1. `RFC-002-D01` (open):
+   - Consolidate ingestion runtime env parsing into typed settings modules.
+2. `RFC-002-D02` (open):
+   - Establish repo-wide config layering pattern and CI guardrail to prevent new drift.
 
-## Deviations and Evolution Since Original RFC
-
-1. Implementation standardized on `portfolio_common.config` rather than creating a separate `portfolio-config` package.
-2. Runtime policy-heavy ingestion modules evolved faster than config convergence, leaving concentrated env parsing hotspots.
-3. Later operational RFCs expanded policy/config complexity (capacity bands, replay controls), increasing need for typed consolidation.
-
-## Proposed Changes
-
-1. Keep `portfolio_common.config` as canonical shared runtime config package (no need to introduce a second library name).
-2. Introduce typed settings wrappers for ingestion ops/policy config to replace scattered `os.getenv` blocks.
-3. Standardize startup validation behavior and fail-fast semantics across services with typed settings.
-4. Document configuration ownership boundaries:
-   - shared platform-level defaults in `portfolio_common.config`
-   - service-specific typed settings modules consuming shared defaults
+These are still relevant and should be implemented before RFC 002 can be marked `Implemented`.
 
 ## Test and Validation Evidence
-
-Current evidence of config-contract quality:
-1. Ingestion policy/guardrail config endpoints and contract tests:
+Current evidence supporting partial completion:
+1. Ingestion policy and guardrail contract tests:
    - `tests/unit/services/ingestion_service/services/test_ingestion_job_service_guardrails.py`
-   - `tests/integration/services/ingestion_service/test_ingestion_routers.py`
-2. Capacity policy math and contract tests:
+2. Capacity operating-band and status tests:
    - `tests/unit/services/ingestion_service/services/test_ingestion_job_service_capacity_status.py`
-3. Shared config runtime override sanitization in common library:
+3. Ingestion integration contract coverage:
+   - `tests/integration/services/ingestion_service/test_ingestion_routers.py`
+4. Shared config and runtime override handling:
    - `src/libs/portfolio-common/portfolio_common/config.py`
 
-## Original Acceptance Criteria Alignment
+## Acceptance Criteria Alignment
+1. Typed service configuration everywhere: **not yet aligned**.
+2. Fully centralized and auditable config loading: **partially aligned**.
+3. Elimination of ad-hoc env parsing: **not yet aligned**.
+4. Clear cross-service configuration conventions: **partially aligned**.
 
-Alignment status against original intent:
-1. Services loading config via typed models: **partial**.
-2. Fail-fast invalid configuration behavior: **partial**.
-3. Consistent and manageable cross-service configuration: **partial**.
-4. Documentation alignment to current pattern: **partially complete**, further governance clarity still needed.
+## Proposed Completion Plan (Implementation-Oriented)
+1. Implement typed settings wrappers for:
+   - ingestion ops controls
+   - ingestion job service policy and thresholds
+2. Refactor runtime modules to consume those wrappers (remove direct raw env reads).
+3. Add CI guard/check for unauthorized `os.getenv` usage outside approved settings modules.
+4. Keep endpoint contracts stable while migrating internals.
 
-## Rollout and Backward Compatibility
+## Backward Compatibility
+Completion work is additive/refactoring in nature and should not require API contract changes if done correctly.
 
-Changes should be non-breaking if done in phases:
-1. Introduce typed settings in parallel with current env access.
-2. Migrate service modules incrementally.
-3. Remove legacy direct env access only after tests and endpoint contracts remain green.
-
-## Open Questions
-
-1. Should we enforce a lint/check rule that blocks new service code from direct `os.getenv` access outside approved settings modules?
+## Open Question
+1. Should CI guardrails allow a temporary explicit allowlist for legacy modules during migration, or enforce immediate hard-fail once typed settings wrappers are introduced?
 
 ## Next Actions
-
-1. Classify RFC 002 as `Partially implemented (requires enhancement)`.
-2. Create a migration slice to consolidate ingestion service env parsing into typed settings modules.
-3. Define a repository-level configuration pattern standard and CI check to prevent config drift.
+1. Keep RFC 002 status as `Partially Implemented`.
+2. Execute `RFC-002-D01` and `RFC-002-D02`.
+3. Reclassify RFC 002 to `Implemented` only after direct env parsing hotspots are migrated and CI guardrails are active.
