@@ -2,6 +2,7 @@
 import pytest
 
 from tests.e2e.api_client import E2EApiClient
+from tests.e2e.assertions import assert_legacy_endpoint_status
 from tests.conftest import poll_db_until
 
 @pytest.fixture(scope="module")
@@ -70,12 +71,6 @@ def test_advanced_performance_api(setup_performance_data, e2e_api_client: E2EApi
     }
 
     # ACT
-    response = e2e_api_client.post_query(api_url, request_payload)
-    data = response.json()["detail"]
-
-    # ASSERT
-    assert response.status_code == 410
-    assert data["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert data["target_service"] == "lotus-performance"
-    assert data["target_endpoint"] == "/portfolios/{portfolio_id}/performance"
+    response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
+    assert_legacy_endpoint_status(response)
  

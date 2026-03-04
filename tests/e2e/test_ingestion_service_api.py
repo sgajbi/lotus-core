@@ -17,7 +17,11 @@ def test_ingest_empty_transaction_list_succeeds(e2e_api_client: E2EApiClient):
 
     # ASSERT
     assert response.status_code == 202
-    assert response.json() == {"message": "Successfully queued 0 transactions for processing."}
+    body = response.json()
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 0
+    assert "job_id" in body
+    assert body["message"] == "Transactions accepted for asynchronous ingestion processing."
 
 def test_ingest_malformed_transaction_payload_fails(e2e_api_client: E2EApiClient):
     """

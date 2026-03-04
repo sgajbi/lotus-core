@@ -2,6 +2,7 @@
 import requests
 import time
 import pytest
+import re
 from typing import List, Dict, Any, Callable
 from requests.exceptions import RequestException
 
@@ -12,10 +13,40 @@ class E2EApiClient:
         self.query_url = query_url
         self.session = requests.Session()
 
+    @staticmethod
+    def _camel_to_snake(value: str) -> str:
+        if "_" in value:
+            return value
+        step1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", value)
+        return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", step1).lower()
+
+    @classmethod
+    def _canonical_key(cls, key: str) -> str:
+        normalized = cls._camel_to_snake(key)
+        legacy_alias_map = {
+            "cif_id": "client_id",
+            "booking_center": "booking_center_code",
+            "instrument_currency": "currency",
+        }
+        return legacy_alias_map.get(normalized, normalized)
+
+    @classmethod
+    def _normalize_payload_keys(cls, data: Any) -> Any:
+        """Recursively normalize payload keys to snake_case for canonical ingestion APIs."""
+        if isinstance(data, dict):
+            return {
+                cls._canonical_key(str(key)): cls._normalize_payload_keys(value)
+                for key, value in data.items()
+            }
+        if isinstance(data, list):
+            return [cls._normalize_payload_keys(item) for item in data]
+        return data
+
     def ingest(self, endpoint: str, payload: Dict[str, List[Dict[str, Any]]]) -> requests.Response:
         """Sends data to a specified ingestion endpoint."""
         url = f"{self.ingestion_url}{endpoint}"
-        response = self.session.post(url, json=payload, timeout=10)
+        normalized_payload = self._normalize_payload_keys(payload)
+        response = self.session.post(url, json=normalized_payload, timeout=10)
         response.raise_for_status()
         return response
 

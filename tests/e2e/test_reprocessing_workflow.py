@@ -1,8 +1,8 @@
 # tests/e2e/test_reprocessing_workflow.py
 import pytest
 from decimal import Decimal
-from datetime import date
 from .api_client import E2EApiClient
+from .assertions import as_decimal
 
 @pytest.fixture(scope="module")
 def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until):
@@ -90,5 +90,5 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     assert len(data["positions"]) == 1
     position = data["positions"][0]
     
-    assert position["quantity"] == pytest.approx(110.00)
-    assert position["cost_basis"] == pytest.approx(23000.00)
+    assert as_decimal(position["quantity"]) == Decimal("110")
+    assert as_decimal(position["cost_basis"]) == Decimal("23000")
