@@ -9,6 +9,7 @@ def truncate_with_deadlock_retry(
     *,
     max_attempts: int = 5,
     backoff_seconds: float = 0.25,
+    on_deadlock_retry: Callable[[], None] | None = None,
 ) -> None:
     """Retry cleanup if PostgreSQL reports transient deadlock."""
     attempts = max(1, max_attempts)
@@ -22,6 +23,8 @@ def truncate_with_deadlock_retry(
             last_error = exc
             if "deadlock detected" not in str(exc).lower() or attempt == attempts:
                 raise
+            if on_deadlock_retry is not None:
+                on_deadlock_retry()
             time.sleep(backoff_seconds * attempt)
 
     if last_error:

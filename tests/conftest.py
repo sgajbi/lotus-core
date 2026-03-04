@@ -38,6 +38,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # REFACTORED: Use subprocess directly for more control over Docker Compose
 @pytest.fixture(scope="session")
 def docker_services(request):  # noqa: ARG001
@@ -119,7 +126,7 @@ def db_engine(docker_services):
     )
 
     # Wait for the database to be connectable
-    engine = create_engine(db_url)
+    engine = create_engine(db_url, pool_pre_ping=True)
     timeout = _env_int("LOTUS_TESTS_DB_CONNECT_TIMEOUT_SECONDS", 120)
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -191,15 +198,25 @@ def clean_db(db_engine):
     """
     print("\n--- Cleaning database tables (function scope) ---")
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
+    terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
+
+    def _terminate_for_deadlock_retry() -> None:
+        with db_engine.begin() as connection:
+            connection.execute(terminate_sessions_query)
+        db_engine.dispose()
 
     def _run() -> None:
         with db_engine.begin() as connection:
-            connection.execute(terminate_sessions_query)
+            if terminate_sessions:
+                connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)
             if truncate_sql:
                 connection.execute(text(truncate_sql))
 
-    truncate_with_deadlock_retry(_run)
+    truncate_with_deadlock_retry(
+        _run,
+        on_deadlock_retry=_terminate_for_deadlock_retry if not terminate_sessions else None,
+    )
     yield
 
 
@@ -211,15 +228,25 @@ def clean_db_module(db_engine):
     """
     print("\n--- Cleaning database tables (module scope) ---")
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
+    terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
+
+    def _terminate_for_deadlock_retry() -> None:
+        with db_engine.begin() as connection:
+            connection.execute(terminate_sessions_query)
+        db_engine.dispose()
 
     def _run() -> None:
         with db_engine.begin() as connection:
-            connection.execute(terminate_sessions_query)
+            if terminate_sessions:
+                connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)
             if truncate_sql:
                 connection.execute(text(truncate_sql))
 
-    truncate_with_deadlock_retry(_run)
+    truncate_with_deadlock_retry(
+        _run,
+        on_deadlock_retry=_terminate_for_deadlock_retry if not terminate_sessions else None,
+    )
     yield
 
 

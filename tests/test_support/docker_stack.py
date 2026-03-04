@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -46,6 +47,12 @@ def compose_up(
     retry_wait_seconds: int = 5,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> None:
+    runner(
+        ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
+        check=False,
+        capture_output=True,
+    )
+
     args = ["docker", "compose", "-f", compose_file, "up"]
     if build:
         args.append("--build")
@@ -60,6 +67,7 @@ def compose_up(
         except subprocess.CalledProcessError as exc:
             last_error = exc
             stderr = (exc.stderr or b"").decode("utf-8", errors="ignore").lower()
+            _remove_conflicting_named_containers(stderr, runner)
             if _is_retryable_compose_up_error(stderr):
                 runner(
                     ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
@@ -166,6 +174,15 @@ def compose_down(compose_file: str) -> None:
         check=False,
         capture_output=True,
     )
+
+
+def _remove_conflicting_named_containers(
+    stderr: str,
+    runner: Callable[..., subprocess.CompletedProcess],
+) -> None:
+    matches = re.findall(r'container name "/([^"]+)" is already in use', stderr)
+    for container_name in matches:
+        runner(["docker", "rm", "-f", container_name], check=False, capture_output=True)
 
 
 def resolve_compose_file(project_root: str) -> str:
