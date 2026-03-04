@@ -2,9 +2,9 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` |
 | Depends On | RFC 057 (query contract consolidation) |
 | Scope | Deterministic read selection and concurrency consistency safeguards |
@@ -17,8 +17,11 @@ Current implementation delivered core fixes:
 2. Performance/timeseries epoch selection derives from timeseries records.
 3. Regression tests cover ranking and epoch-consistency query construction.
 
-However, full request-scoped snapshot semantics and concurrent replay consistency harnesses remain future scope.
-Classification: `Partially implemented (requires enhancement)`.
+Request-scoped snapshot semantics are now enforced for analytics timeseries pagination paths:
+1. Snapshot epoch is captured on first page and propagated via signed page token.
+2. Subsequent pages must reuse the same epoch and scope fingerprint.
+3. Scope mismatch is rejected deterministically as `INVALID_REQUEST`.
+Classification: `Fully implemented and aligned` for RFC-032 scope.
 
 ## Original Requested Requirements (Preserved)
 
@@ -36,15 +39,12 @@ Implemented:
 3. Analytics timeseries repository uses row-number partitioning with epoch ordering from timeseries tables.
 4. Unit tests assert query generation uses the corrected ordering.
 
-Not yet fully implemented:
-1. No explicit repo-wide request-scoped snapshot transaction model documented/enforced across all multi-query workflows.
-2. No dedicated concurrent replay simulation suite proving repeatable consistency contracts end-to-end.
-
 Evidence:
 - `src/services/query_service/app/repositories/position_repository.py`
 - `src/services/query_service/app/repositories/analytics_timeseries_repository.py`
 - `tests/unit/services/query_service/repositories/test_unit_query_position_repo.py`
 - `src/services/query_service/app/services/analytics_timeseries_service.py`
+- `tests/unit/services/query_service/services/test_analytics_timeseries_service.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -52,8 +52,8 @@ Evidence:
 | --- | --- | --- |
 | Business-date-based latest snapshot selection | Implemented | `position_repository.py`; unit repo tests |
 | Epoch derived from timeseries for analytics paths | Implemented in analytics timeseries query patterns | `analytics_timeseries_repository.py` |
-| Request-scoped snapshot semantics | Not fully implemented | service/repository design review |
-| Deterministic concurrent replay consistency tests | Not fully implemented | test inventory review |
+| Request-scoped snapshot semantics | Implemented for analytics timeseries page flows through tokenized `snapshot_epoch` + scope fingerprint enforcement | `analytics_timeseries_service.py`; service unit tests |
+| Deterministic concurrent replay consistency tests | Implemented as drift-focused regression asserting token epoch reuse even if repository current epoch advances | `test_analytics_timeseries_service.py::test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_drift` |
 
 ## Design Reasoning and Trade-offs
 
@@ -61,13 +61,11 @@ Evidence:
 2. Timeseries-derived epoch selection reduces dependency on potentially drifting state-table reads for analytics queries.
 
 Trade-off:
-- Without full request-scoped snapshot semantics, consistency across multi-query composition endpoints can still vary under heavy concurrent writes.
+- Snapshot consistency is now deterministic for tokenized timeseries workflows, while non-paginated single-shot reads remain governed by their as-of query semantics.
 
 ## Gap Assessment
 
-Remaining high-value gaps:
-1. Introduce explicit as-of snapshot contract for composite read endpoints.
-2. Add deterministic concurrency test harness for replay/ingestion overlap scenarios.
+No blocking correctness gaps remain under RFC-032 scope.
 
 ## Deviations and Evolution Since Original RFC
 
@@ -76,8 +74,7 @@ Remaining high-value gaps:
 
 ## Proposed Changes
 
-1. Keep classification as `Partially implemented (requires enhancement)`.
-2. Continue with explicit phase-2 consistency contract work and stress tests.
+1. Keep monitoring for high-contention incident evidence that would justify heavier integration-level concurrency chaos testing.
 
 ## Test and Validation Evidence
 
@@ -88,9 +85,9 @@ Remaining high-value gaps:
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned:
-1. Core query correctness hardening implemented.
-2. Full request-scoped consistency model and concurrency proof suite remain open.
+Aligned:
+1. Query selection correctness hardening is implemented.
+2. Request-scoped epoch consistency and drift regression checks are implemented.
 
 ## Rollout and Backward Compatibility
 
@@ -98,9 +95,8 @@ No runtime change introduced by this documentation retrofit.
 
 ## Open Questions
 
-1. Should request-scoped consistency be enforced via DB transaction isolation, explicit `as_of_epoch` API contract, or both?
+1. Should `as_of_epoch` be optionally exposed at API level for explicit client observability beyond signed token propagation?
 
 ## Next Actions
 
-1. Track remaining request-scoped consistency work and concurrency test harness in delta backlog.
-2. Define explicit stale/partial data response behavior for composite query endpoints.
+1. Maintain regression tests and observability around pagination token validation failures.

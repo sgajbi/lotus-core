@@ -2,9 +2,9 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` integration contracts |
 | Depends On | RFC 036, RFC 044 |
 | Scope | Snapshot metadata hardening and section-governance policy |
@@ -12,13 +12,13 @@
 ## Executive Summary
 
 RFC 043 targeted stronger snapshot metadata and policy-governed section access.
-Current implementation only partially aligns with the original request:
+Current implementation now aligns with the original request:
 1. `core-snapshot` endpoint is implemented and mature for baseline/simulation sections.
-2. Snapshot policy data structures exist in integration policy service.
-3. But requested metadata fields (`freshness_status`, lineage refs, section-governance metadata in snapshot response) are not present in current `CoreSnapshotResponse`.
-4. Requested strict policy gating on snapshot section requests is not enforced directly in `create_core_snapshot`.
+2. Snapshot governance now evaluates effective integration policy for consumer/tenant context.
+3. `CoreSnapshotResponse` now carries freshness and governance metadata (including policy provenance).
+4. Strict-mode section gating is enforced directly in `create_core_snapshot` with `403` behavior for blocked sections.
 
-Classification: `Partially implemented (requires enhancement)`.
+Classification: `Fully implemented and aligned`.
 
 ## Original Requested Requirements (Preserved)
 
@@ -34,9 +34,10 @@ Implemented:
 2. Integration policy framework (including `LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON`) exists and powers `/integration/policy/effective`.
 3. Policy provenance structures are implemented in integration DTO/service layers.
 
-Not yet implemented in snapshot response/flow:
-1. No dedicated snapshot metadata block carrying freshness/lineage fields requested by RFC text.
-2. No direct policy-aware section gating in `create_core_snapshot` path (no `403` strict rejection flow tied to section policy in that endpoint).
+Implemented in snapshot response/flow:
+1. Snapshot freshness metadata block in `CoreSnapshotResponse.freshness`.
+2. Snapshot governance metadata block in `CoreSnapshotResponse.governance`, including policy provenance.
+3. Direct policy-aware section gating in `create_core_snapshot` with strict-mode `403` behavior and non-strict section filtering.
 
 Evidence:
 - `src/services/query_service/app/routers/integration.py`
@@ -50,9 +51,9 @@ Evidence:
 
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
-| Freshness/lineage metadata in snapshot response | Not fully implemented | `core_snapshot_dto.py` response schema |
-| Section governance policy model | Partially implemented in integration policy service | `integration_service.py` |
-| Strict-mode rejection for disallowed snapshot sections | Not implemented in core-snapshot router/service path | `integration.py` + `core_snapshot_service.py` |
+| Freshness/lineage metadata in snapshot response | Implemented (`freshness`, `governance`) | `core_snapshot_dto.py`; `core_snapshot_service.py` |
+| Section governance policy model | Implemented via policy evaluation before snapshot assembly | `integration.py`; `integration_service.py` |
+| Strict-mode rejection for disallowed snapshot sections | Implemented (`403` contract) | `integration.py`; `test_integration_router.py`; `test_main_app.py` |
 
 ## Design Reasoning and Trade-offs
 
@@ -64,9 +65,7 @@ Trade-off:
 
 ## Gap Assessment
 
-Remaining deltas:
-1. Add explicit snapshot metadata block for freshness/lineage/governance signals.
-2. Enforce section allow-list policy in core-snapshot request processing with deterministic strict-mode behavior.
+No blocking delta remains for RFC-043 scope.
 
 ## Deviations and Evolution Since Original RFC
 
@@ -88,7 +87,7 @@ Remaining deltas:
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned.
+Aligned.
 
 ## Rollout and Backward Compatibility
 
@@ -100,6 +99,5 @@ No runtime change introduced by this documentation retrofit.
 
 ## Next Actions
 
-1. Resolve architecture decision on where section governance must be enforced.
-2. Implement missing metadata/enforcement path or rebaseline RFC accordingly.
+1. Maintain regression coverage for snapshot governance/provenance in query-service test suites.
 

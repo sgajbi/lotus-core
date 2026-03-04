@@ -2,9 +2,9 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2025-09-02 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | Cross-service test architecture (`tests/`, service unit/integration suites) |
 | Depends On | RFC 010 |
 | Scope | Higher-fidelity unit testing and consumer-boundary integration coverage |
@@ -16,10 +16,10 @@ RFC 028 aimed to reduce production risk by:
 2. Adding a dedicated consumer-level integration layer between unit and E2E.
 3. Formalizing testing strategy and incident-to-coverage traceability docs.
 
-Current implementation is partial:
+Current implementation is now complete against RFC-028 scope:
 1. Unit suites widely use real `TransactionEvent`/Pydantic models.
 2. Core test infrastructure is stronger (manifest-driven suites, docker-backed fixtures).
-3. But RFC-specific artifacts (testing strategy doc, incident coverage doc, dedicated consumer-integration layer with ephemeral broker fixtures) are not fully present.
+3. RFC-specific artifacts are now present (`docs/testing_strategy.md`, `docs/incidents/incident_to_coverage.md`) and consumer-boundary integration is codified via persistence consume-process-persist tests.
 
 ## Original Requested Requirements (Preserved)
 
@@ -36,18 +36,15 @@ Implemented:
 2. Test execution uses standardized suite manifests and CI matrixed test runs.
 3. Shared test fixtures in `tests/conftest.py` provide robust docker/db orchestration for integration/E2E.
 
-Not yet implemented as RFC written:
-1. No `docs/testing_strategy.md` present.
-2. No `docs/incidents/incident_to_coverage.md` present.
-3. No explicit consumer-level integration test layer with ephemeral Kafka fixture pattern in root fixtures.
-4. No dedicated persistence consumer integration suite demonstrating consume-process-persist boundary loop.
-
 Evidence:
 - `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
 - `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
 - `tests/unit/transaction_specs/test_buy_slice0_characterization.py`
 - `tests/unit/transaction_specs/test_sell_slice0_characterization.py`
 - `tests/conftest.py`
+- `docs/testing_strategy.md`
+- `docs/incidents/incident_to_coverage.md`
+- `tests/integration/services/persistence_service/consumers/test_transaction_consumer_boundary.py`
 - `scripts/test_manifest.py`
 - `.github/workflows/ci.yml`
 
@@ -56,9 +53,9 @@ Evidence:
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
 | Domain-valid event models in unit tests | Broadly implemented in major suites | unit tests listed above |
-| Consumer-level integration layer with ephemeral broker | Not implemented as dedicated layer | `tests/conftest.py`; integration test layout |
-| Testing strategy doc | Not implemented | docs scan |
-| Incident-to-coverage mapping doc | Not implemented | docs scan |
+| Consumer-level integration layer with ephemeral broker | Implemented as dedicated consume-process-persist boundary coverage (DB-backed, consumer entrypoint) | `tests/integration/services/persistence_service/consumers/test_transaction_consumer_boundary.py`; `tests/conftest.py` |
+| Testing strategy doc | Implemented | `docs/testing_strategy.md` |
+| Incident-to-coverage mapping doc | Implemented | `docs/incidents/incident_to_coverage.md` |
 
 ## Design Reasoning and Trade-offs
 
@@ -70,9 +67,7 @@ Trade-off:
 
 ## Gap Assessment
 
-Remaining deltas:
-1. Add formal test architecture docs and incident traceability mapping.
-2. Implement a lightweight consumer-boundary integration pattern (targeted, faster than full E2E).
+No open deltas remain for RFC-028.
 
 ## Deviations and Evolution Since Original RFC
 
@@ -81,8 +76,7 @@ Remaining deltas:
 
 ## Proposed Changes
 
-1. Keep classification as `Partially implemented (requires enhancement)`.
-2. Implement missing docs and explicit consumer-level integration design as a focused follow-up.
+1. Mark RFC-028 as implemented and keep artifacts as living documents.
 
 ## Test and Validation Evidence
 
@@ -93,9 +87,9 @@ Remaining deltas:
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned:
-1. Event-model usage direction mostly satisfied.
-2. Consumer-level integration layer and required docs remain incomplete.
+Aligned:
+1. Event-model usage is established in unit suites.
+2. Consumer-boundary integration pattern and required docs are now in place.
 
 ## Rollout and Backward Compatibility
 
@@ -103,9 +97,8 @@ No runtime change introduced by this documentation retrofit.
 
 ## Open Questions
 
-1. Should consumer-boundary integration layer run with in-memory broker abstraction or containerized Kafka per suite for stronger fidelity?
+1. Should additional consumer-boundary suites be added for non-transaction topics (portfolio/instrument/market price) in the same pattern?
 
 ## Next Actions
 
-1. Track RFC-028 remaining artifacts and consumer-boundary layer in delta backlog.
-2. Add docs and pilot one service boundary suite (persistence consumer) before scaling pattern repo-wide.
+1. Extend the same boundary pattern incrementally to additional consumers where incident history warrants deeper coverage.

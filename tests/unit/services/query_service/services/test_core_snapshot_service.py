@@ -142,6 +142,8 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.sections.instrument_enrichment[0].issuer_name is not None
     assert response.sections.instrument_enrichment[0].ultimate_parent_issuer_id is not None
     assert response.sections.instrument_enrichment[0].ultimate_parent_issuer_name is not None
+    assert response.freshness.baseline_source == "position_state"
+    assert response.governance.policy_provenance.policy_version == "snapshot.policy.inline.default"
 
 
 async def test_get_instrument_enrichment_bulk_preserves_order_and_unknowns(mock_dependencies):
@@ -372,7 +374,7 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
         )
     ]
     service = CoreSnapshotService(AsyncMock())
-    rows = await service._resolve_baseline_positions(
+    rows, source = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
         reporting_fx=Decimal("1"),
@@ -380,6 +382,7 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
         include_zero=True,
     )
     assert rows["SEC_BOND_US"]["market_value_base"] == Decimal("45")
+    assert source == "position_history"
 
 
 async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dependencies):
@@ -389,7 +392,7 @@ async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dep
         (_snapshot_row("SEC_ZERO", Decimal("0"), Decimal("0"), Decimal("0")), _instrument("SEC_ZERO", "USD", "EQUITY"), SimpleNamespace(status="CURRENT")),
     ]
     service = CoreSnapshotService(AsyncMock())
-    rows = await service._resolve_baseline_positions(
+    rows, _source = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
         reporting_fx=Decimal("1"),

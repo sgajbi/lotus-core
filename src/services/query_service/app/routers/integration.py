@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.db import get_async_db_session
 
-from ..dtos.core_snapshot_dto import CoreSnapshotRequest, CoreSnapshotResponse
+from ..dtos.core_snapshot_dto import (
+    CoreSnapshotRequest,
+    CoreSnapshotResponse,
+    CoreSnapshotSection,
+)
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse
 from ..dtos.integration_dto import (
     InstrumentEnrichmentBulkRequest,
@@ -37,6 +41,7 @@ from ..dtos.reference_integration_dto import (
 from ..services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
+    SnapshotGovernanceContext,
     CoreSnapshotNotFoundError,
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
@@ -88,6 +93,9 @@ async def get_effective_integration_policy(
         status.HTTP_400_BAD_REQUEST: {
             "description": "Invalid request payload or invalid section/mode combination."
         },
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Requested sections are blocked by strict integration policy."
+        },
         status.HTTP_404_NOT_FOUND: {"description": "Portfolio or simulation session not found."},
         status.HTTP_409_CONFLICT: {
             "description": "Simulation expected version mismatch or portfolio/session conflict."
@@ -105,10 +113,67 @@ async def get_effective_integration_policy(
 async def create_core_snapshot(
     portfolio_id: str,
     request: CoreSnapshotRequest,
+    consumer_system: str = Query("lotus-performance"),
+    tenant_id: str = Query("default"),
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
+    integration_service: IntegrationService = Depends(get_integration_service),
 ) -> CoreSnapshotResponse:
+    requested_sections = list(request.sections)
+    requested_policy_sections = [section.value.upper() for section in requested_sections]
+    policy = integration_service.get_effective_policy(
+        consumer_system=consumer_system,
+        tenant_id=tenant_id,
+        include_sections=requested_policy_sections,
+    )
+    allowed_policy_sections = set(policy.allowed_sections)
+    if "NO_ALLOWED_SECTION_RESTRICTION" in policy.warnings:
+        applied_sections = requested_sections
+        dropped_sections: list[CoreSnapshotSection] = []
+        warnings = list(policy.warnings)
+    else:
+        applied_sections = [
+            section for section in requested_sections if section.value.upper() in allowed_policy_sections
+        ]
+        dropped_sections = [
+            section for section in requested_sections if section.value.upper() not in allowed_policy_sections
+        ]
+        warnings = list(policy.warnings)
+        if dropped_sections and not policy.policy_provenance.strict_mode:
+            warnings.append("SECTIONS_DROPPED_NON_STRICT_MODE")
+
+    if dropped_sections and policy.policy_provenance.strict_mode:
+        dropped = ", ".join(section.value for section in dropped_sections)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: {dropped}",
+        )
+
+    if not applied_sections:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No sections remain after policy evaluation.",
+        )
+
+    effective_request = request.model_copy(update={"sections": applied_sections})
+    governance = SnapshotGovernanceContext(
+        consumer_system=policy.consumer_system,
+        tenant_id=policy.tenant_id,
+        requested_sections=requested_sections,
+        applied_sections=applied_sections,
+        dropped_sections=dropped_sections,
+        policy_version=policy.policy_provenance.policy_version,
+        policy_source=policy.policy_provenance.policy_source,
+        matched_rule_id=policy.policy_provenance.matched_rule_id,
+        strict_mode=policy.policy_provenance.strict_mode,
+        warnings=warnings,
+    )
+
     try:
-        response = await service.get_core_snapshot(portfolio_id=portfolio_id, request=request)
+        response = await service.get_core_snapshot(
+            portfolio_id=portfolio_id,
+            request=effective_request,
+            governance=governance,
+        )
         return cast(CoreSnapshotResponse, response)
     except CoreSnapshotBadRequestError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

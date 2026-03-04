@@ -124,6 +124,7 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
                 ),
             ]
         ),
+        get_position_snapshot_epoch=AsyncMock(return_value=7),
         get_fx_rates_map=AsyncMock(return_value={}),
     )
 
@@ -138,6 +139,9 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
 
     assert len(response.rows) == 1
     assert response.page.next_page_token is not None
+    token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
+    assert token_payload["snapshot_epoch"] == 7
+    assert "scope_fingerprint" in token_payload
 
 
 @pytest.mark.asyncio
@@ -163,6 +167,125 @@ async def test_invalid_page_token_raises_invalid_request() -> None:
             ),
         )
     assert exc_info.value.code == "INVALID_REQUEST"
+
+
+@pytest.mark.asyncio
+async def test_page_token_scope_mismatch_raises_invalid_request() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="DEMO_DPM_EUR_001",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_portfolio_timeseries_rows=AsyncMock(return_value=[]),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        get_portfolio_snapshot_epoch=AsyncMock(return_value=5),
+    )
+    token = service._encode_page_token(  # pylint: disable=protected-access
+        {
+            "valuation_date": "2025-01-01",
+            "snapshot_epoch": 5,
+            "scope_fingerprint": "different-scope",
+        }
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service.get_portfolio_timeseries(
+            portfolio_id="DEMO_DPM_EUR_001",
+            request=PortfolioAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+                page=PageRequest(page_size=10, page_token=token),
+            ),
+        )
+
+    assert exc_info.value.code == "INVALID_REQUEST"
+
+
+@pytest.mark.asyncio
+async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_drift() -> None:
+    service = make_service()
+    list_rows = AsyncMock(
+        side_effect=[
+            [
+                SimpleNamespace(
+                    security_id="SEC_A",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("1"),
+                    epoch=7,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_A",
+                    valuation_date=date(2025, 1, 2),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                fees=Decimal("0"),
+                quantity=Decimal("1"),
+                epoch=7,
+                asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+            ],
+            [],
+        ]
+    )
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="DEMO_DPM_EUR_001",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=list_rows,
+        get_position_snapshot_epoch=AsyncMock(side_effect=[7, 99]),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    first_page = await service.get_position_timeseries(
+        portfolio_id="DEMO_DPM_EUR_001",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-12-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            page=PageRequest(page_size=1),
+        ),
+    )
+    assert first_page.page.next_page_token is not None
+
+    await service.get_position_timeseries(
+        portfolio_id="DEMO_DPM_EUR_001",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-12-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            page=PageRequest(page_size=1, page_token=first_page.page.next_page_token),
+        ),
+    )
+
+    assert list_rows.await_count == 2
+    assert list_rows.await_args_list[1].kwargs["snapshot_epoch"] == 7
 
 
 @pytest.mark.asyncio

@@ -39,7 +39,15 @@ class AnalyticsTimeseriesRepository:
         end_date: date,
         page_size: int,
         cursor_date: date | None,
+        snapshot_epoch: int | None = None,
     ) -> list[Any]:
+        predicates = [
+            PortfolioTimeseries.portfolio_id == portfolio_id,
+            PortfolioTimeseries.date >= start_date,
+            PortfolioTimeseries.date <= end_date,
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(PortfolioTimeseries.epoch <= snapshot_epoch)
         ranked = (
             select(
                 PortfolioTimeseries.date.label("valuation_date"),
@@ -56,11 +64,7 @@ class AnalyticsTimeseriesRepository:
                 )
                 .label("rn"),
             )
-            .where(
-                PortfolioTimeseries.portfolio_id == portfolio_id,
-                PortfolioTimeseries.date >= start_date,
-                PortfolioTimeseries.date <= end_date,
-            )
+            .where(*predicates)
             .subquery()
         )
 
@@ -84,7 +88,15 @@ class AnalyticsTimeseriesRepository:
         security_ids: list[str],
         position_ids: list[str],
         dimension_filters: dict[str, set[str]],
+        snapshot_epoch: int | None = None,
     ) -> list[Any]:
+        predicates = [
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.date >= start_date,
+            PositionTimeseries.date <= end_date,
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
         ranked = (
             select(
                 PositionTimeseries.security_id.label("security_id"),
@@ -110,11 +122,7 @@ class AnalyticsTimeseriesRepository:
                 .label("rn"),
             )
             .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
-            .where(
-                PositionTimeseries.portfolio_id == portfolio_id,
-                PositionTimeseries.date >= start_date,
-                PositionTimeseries.date <= end_date,
-            )
+            .where(*predicates)
             .subquery()
         )
 
@@ -155,6 +163,64 @@ class AnalyticsTimeseriesRepository:
         )
         result = await self.db.execute(stmt)
         return result.all()
+
+    async def get_portfolio_snapshot_epoch(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> int:
+        stmt = select(func.max(PortfolioTimeseries.epoch)).where(
+            PortfolioTimeseries.portfolio_id == portfolio_id,
+            PortfolioTimeseries.date >= start_date,
+            PortfolioTimeseries.date <= end_date,
+        )
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one_or_none() or 0)
+
+    async def get_position_snapshot_epoch(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        security_ids: list[str],
+        position_ids: list[str],
+        dimension_filters: dict[str, set[str]],
+    ) -> int:
+        stmt = (
+            select(func.max(PositionTimeseries.epoch))
+            .select_from(PositionTimeseries)
+            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .where(
+                PositionTimeseries.portfolio_id == portfolio_id,
+                PositionTimeseries.date >= start_date,
+                PositionTimeseries.date <= end_date,
+            )
+        )
+
+        if security_ids:
+            stmt = stmt.where(PositionTimeseries.security_id.in_(security_ids))
+
+        if position_ids:
+            security_from_position_ids = [
+                pid.split(":", 1)[1]
+                for pid in position_ids
+                if ":" in pid and pid.split(":", 1)[0] == portfolio_id
+            ]
+            if security_from_position_ids:
+                stmt = stmt.where(PositionTimeseries.security_id.in_(security_from_position_ids))
+
+        if "asset_class" in dimension_filters:
+            stmt = stmt.where(Instrument.asset_class.in_(dimension_filters["asset_class"]))
+        if "sector" in dimension_filters:
+            stmt = stmt.where(Instrument.sector.in_(dimension_filters["sector"]))
+        if "country" in dimension_filters:
+            stmt = stmt.where(Instrument.country_of_risk.in_(dimension_filters["country"]))
+
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one_or_none() or 0)
 
     async def get_fx_rates_map(
         self,

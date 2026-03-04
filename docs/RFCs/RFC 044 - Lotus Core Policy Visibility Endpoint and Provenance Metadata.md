@@ -2,9 +2,9 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` integration contracts |
 | Depends On | RFC 043 |
 | Scope | Policy diagnostics endpoint and provenance metadata propagation |
@@ -12,12 +12,12 @@
 ## Executive Summary
 
 RFC 044 introduced policy visibility requirements.
-Current implementation is partially aligned:
+Current implementation is aligned:
 1. `GET /integration/policy/effective` is implemented and returns policy provenance.
 2. Provenance metadata model is implemented in integration DTOs and service logic.
-3. But requested provenance embedding in `core-snapshot` response metadata is not present in current snapshot response contract.
+3. Provenance metadata is now embedded in `core-snapshot` response governance metadata.
 
-Classification: `Partially implemented (requires enhancement)`.
+Classification: `Fully implemented and aligned`.
 
 ## Original Requested Requirements (Preserved)
 
@@ -33,8 +33,8 @@ Implemented:
 2. Response includes `policy_provenance` with version/source/rule/strict attributes.
 3. Unit tests cover policy resolution behavior and environment-policy parsing.
 
-Not fully implemented:
-1. Core snapshot response schema does not include policy provenance metadata block requested by RFC text.
+Fully implemented:
+1. Core snapshot response schema includes governance metadata with policy provenance block.
 
 Evidence:
 - `src/services/query_service/app/routers/integration.py`
@@ -50,7 +50,7 @@ Evidence:
 | --- | --- | --- |
 | Effective policy diagnostics endpoint | Implemented | `integration.py` route + service |
 | Provenance metadata model | Implemented in policy endpoint response | `integration_dto.py` |
-| Provenance fields in core-snapshot response | Not implemented | `core_snapshot_dto.py` |
+| Provenance fields in core-snapshot response | Implemented in snapshot governance metadata | `core_snapshot_dto.py`; `integration.py`; `core_snapshot_service.py` |
 
 ## Design Reasoning and Trade-offs
 
@@ -62,18 +62,17 @@ Trade-off:
 
 ## Gap Assessment
 
-Remaining delta:
-1. Add optional/explicit policy provenance metadata to `core-snapshot` response, or explicitly document two-step policy contract model as final design.
+No blocking delta remains for RFC-044 scope.
 
 ## Deviations and Evolution Since Original RFC
 
 1. Policy visibility endpoint is in place and strong.
-2. Snapshot metadata propagation goal remains incomplete in current contract.
+2. Snapshot metadata propagation goal is now implemented through `CoreSnapshotResponse.governance.policy_provenance`.
 
 ## Proposed Changes
 
-1. Keep classification as `Partially implemented`.
-2. Decide final policy-provenance propagation model and align docs/code accordingly.
+1. Keep classification as `Fully implemented and aligned`.
+2. Maintain compatibility and regression checks as policy contract evolves.
 
 ## Test and Validation Evidence
 
@@ -82,7 +81,7 @@ Remaining delta:
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned.
+Aligned.
 
 ## Rollout and Backward Compatibility
 
@@ -94,5 +93,5 @@ No runtime change introduced by this documentation retrofit.
 
 ## Next Actions
 
-1. Implement or formally waive snapshot metadata propagation with explicit architecture decision.
+1. Maintain regression coverage for provenance propagation in snapshot response contracts.
 
