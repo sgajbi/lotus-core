@@ -126,3 +126,24 @@ RFC-065 remains the foundational scalability roadmap. RFC-066 is the production-
 - `test-performance-load-gate` (fast tier)
 - `test-performance-load-gate-full` (full tier)
 4. Reduced PR lead time without dropping quality, while preserving heavyweight evidence collection for production readiness.
+
+### Slice C - Failure Injection and Recovery (Completed in this change set)
+1. Added deterministic failure-recovery runner: `scripts/failure_recovery_gate.py`.
+2. Implemented controlled interruption workflow:
+- baseline backlog capture
+- continuous transaction ingestion under interruption
+- targeted worker pause/unpause (`persistence_service` default)
+- bounded drain verification back to baseline backlog envelope
+3. Added enforceable recovery checks:
+- backlog growth under interruption
+- drain timeout ceiling
+- post-recovery backlog-age ceiling
+- post-recovery DLQ pressure ceiling
+- post-recovery replay pressure ceiling
+4. Added JSON/Markdown artifact generation:
+- `output/task-runs/*failure-recovery-gate*.json`
+- `output/task-runs/*failure-recovery-gate*.md`
+5. Added make target and CI wiring:
+- `make test-failure-recovery-gate`
+- CI job `Failure Recovery Gate` on schedule/manual/main.
+6. Moved `E2E Smoke` to heavy-tier execution only (schedule/manual/main) so PR path remains fast while retaining nightly institutional assurance.
