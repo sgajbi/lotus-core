@@ -99,6 +99,30 @@ async def test_get_buy_cash_linkage(mock_buy_state_repo: AsyncMock):
         assert response.cashflow_classification == "INVESTMENT_OUTFLOW"
 
 
+async def test_get_position_lots_raises_when_portfolio_missing(mock_buy_state_repo: AsyncMock):
+    with patch(
+        "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
+        return_value=mock_buy_state_repo,
+    ):
+        mock_buy_state_repo.portfolio_exists.return_value = False
+        service = BuyStateService(AsyncMock())
+        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+            await service.get_position_lots("P404", "US0378331005")
+
+
+async def test_get_accrued_offsets_success(mock_buy_state_repo: AsyncMock):
+    with patch(
+        "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
+        return_value=mock_buy_state_repo,
+    ):
+        service = BuyStateService(AsyncMock())
+        response = await service.get_accrued_offsets("PORT-1", "US0378331005")
+        assert response.portfolio_id == "PORT-1"
+        assert response.security_id == "US0378331005"
+        assert len(response.offsets) == 1
+        assert response.offsets[0].offset_id == "AIO-TXN-1"
+
+
 async def test_get_accrued_offsets_raises_when_portfolio_missing(mock_buy_state_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.buy_state_service.BuyStateRepository",

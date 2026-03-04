@@ -29,9 +29,7 @@ def main() -> int:
             violations.append(str(relative))
 
     if violations:
-        print(
-            "Configuration access guard failed. Direct os.getenv usage is not allowed in:"
-        )
+        print("Configuration access guard failed. Direct os.getenv usage is not allowed in:")
         for item in sorted(violations):
             print(f"- {item}")
         print(
