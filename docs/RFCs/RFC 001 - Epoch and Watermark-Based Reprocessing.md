@@ -75,6 +75,39 @@ Evidence:
 3. **Why scheduler-owned advancement**: A single authority avoids split-brain progress updates across workers.
 4. **Trade-off**: Reprocessing increases write amplification for affected keys, but dramatically improves correctness and auditability.
 
+## Deterministic Invariants and Processing Algorithm
+
+### Core invariants
+For each key `k = (portfolio_id, security_id)`:
+1. **Epoch monotonicity**:
+   `epoch(k, t+1) >= epoch(k, t)`
+2. **Snapshot uniqueness by epoch**:
+   a snapshot row is uniquely identified by `(portfolio_id, security_id, date, epoch)`
+3. **Current-read correctness**:
+   query-path reads for key `k` are restricted to `epoch = max_epoch(k)`
+4. **Stale-event safety**:
+   if event epoch `< current epoch(k)`, event is discarded and must not mutate state
+5. **Watermark monotonic advancement under current epoch**:
+   scheduler may move `watermark_date(k)` forward only after required inputs for the next date window are satisfied
+
+### Processing algorithm (high-level)
+1. Receive event for key `k`.
+2. Resolve or create `position_state(k)` and evaluate epoch fence.
+3. If stale:
+   - record observability signal
+   - return without mutation.
+4. If back-dated transaction requiring replay:
+   - increment `epoch(k)`, reset watermark
+   - re-emit historical stream + triggering event under new epoch
+   - process in deterministic order.
+5. Persist snapshots/history tagged with active epoch.
+6. Scheduler advances watermark and publishes valuation/timeseries work only for the active epoch.
+
+### Why this is stronger than the original baseline wording
+1. The original RFC described the conceptual model; current implementation codifies reusable fencing primitives (`EpochFencer`) and durable job-based reprocessing controls.
+2. The implementation now has explicit atomicity/recovery coverage proving no partial epoch mutation on failure paths.
+3. Operational controls (queue health, capacity and backlog visibility) make the model production-governable at institutional scale.
+
 ## Gap Assessment
 
 The original RFC 001 text is directionally correct but did not reflect later hardening decisions:
