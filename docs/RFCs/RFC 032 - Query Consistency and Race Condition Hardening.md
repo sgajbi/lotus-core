@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Partially Implemented |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` |
 | Depends On | RFC 057 (query contract consolidation) |
 | Scope | Deterministic read selection and concurrency consistency safeguards |
@@ -104,3 +104,4 @@ No runtime change introduced by this documentation retrofit.
 
 1. Track remaining request-scoped consistency work and concurrency test harness in delta backlog.
 2. Define explicit stale/partial data response behavior for composite query endpoints.
+3. Keep status as `Partially Implemented` until `RFC-032-D01` is closed in `RFC-DELTA-BACKLOG`.

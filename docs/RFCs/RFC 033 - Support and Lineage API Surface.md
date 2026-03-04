@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Partially Implemented |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` operations support surface |
 | Depends On | RFC 057, API-first operations governance |
 | Scope | Support and lineage APIs replacing direct DB troubleshooting dependence |
@@ -37,10 +37,12 @@ Implemented:
 3. Additional operational endpoints (`valuation-jobs`, `aggregation-jobs`, `lineage keys`) beyond initial phase 1 summary.
 4. OpenAPI tests and router dependency tests validate behavior and error mappings.
 
-Not yet implemented:
+Not yet implemented in query-service surface:
 1. Correlation-id trace API across outbox/consumer lifecycle.
-2. Dedicated support endpoints for DLQ state and replay audit history in query-service surface.
-3. Role-based access policy tied to future authn/authz stream.
+2. Role-based access policy tied to future authn/authz stream.
+
+Implemented via ingestion-service operational surface (not query-service route family):
+1. DLQ state and replay-audit APIs were delivered under ingestion operations contracts.
 
 Evidence:
 - `src/services/query_service/app/routers/operations.py`
@@ -58,7 +60,7 @@ Evidence:
 | Lineage API for one key | Implemented | operations router/service/repo |
 | OpenAPI quality on support endpoints | Implemented with explicit summaries/descriptions + tests | routers + integration tests |
 | Correlation trace API | Not implemented | endpoint inventory |
-| DLQ/replay support API | Not implemented as dedicated query-service endpoint surface | endpoint inventory |
+| DLQ/replay support API | Implemented in ingestion-service operations surface; not exposed as query-service route family | `src/services/ingestion_service/app/routers/ingestion_jobs.py`; `RFC-DELTA-BACKLOG` (`RFC-033-D02`) |
 | Role-based policy integration | Pending broader authn/authz RFC stream | governance dependency |
 
 ## Design Reasoning and Trade-offs
@@ -72,9 +74,8 @@ Trade-off:
 ## Gap Assessment
 
 Remaining deltas:
-1. Add correlation trace API with deterministic event lineage timeline.
-2. Add DLQ/replay observability API surfaces.
-3. Integrate access policy controls once authn/authz baseline is available.
+1. Add correlation trace API with deterministic event lineage timeline (or formally keep deferred).
+2. Integrate access policy controls once authn/authz baseline is available.
 
 ## Deviations and Evolution Since Original RFC
 
@@ -84,7 +85,7 @@ Remaining deltas:
 ## Proposed Changes
 
 1. Keep classification as `Partially implemented (requires enhancement)`.
-2. Execute phase-2 operational observability endpoints as next increment.
+2. Treat query-service DLQ/replay endpoint expansion as optional unless ingestion-service APIs prove insufficient.
 
 ## Test and Validation Evidence
 
@@ -111,5 +112,5 @@ No runtime change introduced by this documentation retrofit.
 
 ## Next Actions
 
-1. Track phase-2 support/lineage deltas in backlog.
+1. Track phase-2 support/lineage deltas in backlog (`RFC-033-D01` deferred, `RFC-033-D02` done).
 2. Align rollout with authn/authz RFC for access controls.

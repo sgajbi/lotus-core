@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Partially Implemented |
 | Created | 2025-09-02 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | Cross-service test architecture (`tests/`, service unit/integration suites) |
 | Depends On | RFC 010 |
 | Scope | Higher-fidelity unit testing and consumer-boundary integration coverage |
@@ -109,3 +109,4 @@ No runtime change introduced by this documentation retrofit.
 
 1. Track RFC-028 remaining artifacts and consumer-boundary layer in delta backlog.
 2. Add docs and pilot one service boundary suite (persistence consumer) before scaling pattern repo-wide.
+3. Keep status as `Partially Implemented` until RFC-028 deltas (`RFC-028-D01`, `RFC-028-D02`) are closed in `RFC-DELTA-BACKLOG`.

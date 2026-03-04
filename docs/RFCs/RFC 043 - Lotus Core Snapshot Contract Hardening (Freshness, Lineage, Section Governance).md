@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Partially Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `query-service` integration contracts |
 | Depends On | RFC 036, RFC 044 |
 | Scope | Snapshot metadata hardening and section-governance policy |
@@ -67,6 +67,7 @@ Trade-off:
 Remaining deltas:
 1. Add explicit snapshot metadata block for freshness/lineage/governance signals.
 2. Enforce section allow-list policy in core-snapshot request processing with deterministic strict-mode behavior.
+3. Resolve alignment with RFC-044 provenance strategy (`RFC-043-D01` + `RFC-044-D01` in `RFC-DELTA-BACKLOG`).
 
 ## Deviations and Evolution Since Original RFC
 
@@ -102,4 +103,5 @@ No runtime change introduced by this documentation retrofit.
 
 1. Resolve architecture decision on where section governance must be enforced.
 2. Implement missing metadata/enforcement path or rebaseline RFC accordingly.
+3. Keep status as `Partially Implemented` until snapshot governance/provenance deltas close.
 
