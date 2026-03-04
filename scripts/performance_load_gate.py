@@ -354,8 +354,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run deterministic performance load gate.")
     parser.add_argument("--repo-root", default=".", help="Path to lotus-core repository root.")
     parser.add_argument("--compose-file", default="docker-compose.yml")
-    parser.add_argument("--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200"))
-    parser.add_argument("--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201"))
+    parser.add_argument(
+        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
+    )
+    parser.add_argument(
+        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
+    )
     parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
@@ -576,4 +580,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
