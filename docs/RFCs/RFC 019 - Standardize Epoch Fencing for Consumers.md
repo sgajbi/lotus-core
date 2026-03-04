@@ -1,111 +1,109 @@
-### **RFC 019: Standardize Epoch Fencing for Consumers**
+# RFC 019 - Standardize Epoch Fencing for Consumers
 
-  * **Status**: **Final**
-  * **Date**: 2025-09-01
-  * **Services Affected**: `portfolio-common`, `position_calculator`, `timeseries_generator_service`, `cashflow_calculator_service`
-  * **Related RFCs**: [RFC 001 - Epoch and Watermark-Based Reprocessing](https://www.google.com/search?q=docs/RFCs/RFC%2520001%2520-%2520Epoch%2520and%2520Watermark-Based%2520Reprocessing.md)
+| Metadata | Value |
+| --- | --- |
+| Status | Implemented |
+| Created | 2025-09-01 |
+| Last Updated | 2026-03-04 |
+| Owners | `portfolio-common`, calculator consumers, `timeseries_generator_service` |
+| Depends On | RFC 001 |
+| Scope | Shared epoch-fencing utility and consumer adoption |
 
------
+## Executive Summary
 
-## 1\. Summary
+RFC 019 standardized stale-event protection by centralizing epoch-fencing behavior into a reusable utility. The implementation is complete and in active use:
+1. `EpochFencer` is implemented in shared library code.
+2. Reprocessing-aware consumers use it in message paths.
+3. Standard metric/log behavior is emitted for stale drops.
+4. Developer docs and tests cover usage and behavior.
 
-Epoch fencing is the system's most critical pattern for guaranteeing data integrity during reprocessing flows. Its current implementation is manual, with boilerplate logic duplicated across multiple consumers (`PositionTimeseriesConsumer` , `PositionCalculator` consumer, etc.). This approach is error-prone, increases the cognitive load on developers, and violates the DRY (Don't Repeat Yourself) principle.
+## Original Requested Requirements (Preserved)
 
-This RFC finalizes the proposal to abstract the epoch fencing logic into a reusable, robust, and observable utility class within the `portfolio-common` library. This will standardize the implementation, reduce code duplication, and simplify the development of all current and future "reprocessing-aware" consumers.
+Original RFC 019 requested:
+1. Create reusable `EpochFencer` in `portfolio-common`.
+2. Remove duplicated/manual fencing logic in consumers.
+3. Ensure standardized stale-event metric emission.
+4. Add unit tests and usage documentation.
 
------
+## Current Implementation Reality
 
-## 2\. Architectural Assessment
+Current behavior:
+1. Shared utility exists: `portfolio_common.reprocessing.EpochFencer` and `FencedEvent` protocol.
+2. `position_calculator`, `cashflow_calculator_service`, and `timeseries_generator_service` consumers call `EpochFencer.check(...)` before business logic.
+3. Stale events increment `epoch_mismatch_dropped_total` with service and key labels.
+4. Unit tests cover fresh/stale paths and consumer integration points.
+5. Reprocessing developer guide documents required usage for new consumers.
 
-This change represents a significant improvement in the maintainability and reliability of our event-driven architecture.
+Evidence:
+- `src/libs/portfolio-common/portfolio_common/reprocessing.py`
+- `src/libs/portfolio-common/portfolio_common/monitoring.py`
+- `src/services/calculators/position_calculator/app/core/position_logic.py`
+- `src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py`
+- `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`
+- `tests/unit/libs/portfolio-common/test_reprocessing.py`
+- `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
+- `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
+- `tests/unit/services/timeseries_generator_service/timeseries-generator-service/consumers/test_position_timeseries_consumer.py`
+- `docs/features/reprocessing_engine/05_Developer_Guide.md`
 
-### **Pros**:
+## Requirement-to-Implementation Traceability
 
-  * **Robustness & Correctness**: Centralizing the logic into a single, well-tested class eliminates the risk of subtle bugs or inconsistencies that can arise from manually re-implementing the check in multiple places.
-  * **Reduced Boilerplate**: Consumers are simplified to a single check (`if not await fencer.check(event): return`), making them cleaner, easier to read, and faster to write.
-  * **Simplified Development**: Developers creating new consumers no longer need to understand the low-level details of fetching `PositionState` or interacting with the repository. They only need to use the simple `EpochFencer` interface.
-  * **Centralized Observability**: All logging and metric increments for stale, dropped messages are handled within the utility. This ensures that every fenced consumer reports these events in a consistent, standardized way using the existing `epoch_mismatch_dropped_total` metric.
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Shared utility abstraction | `EpochFencer` + `FencedEvent` in shared library | `reprocessing.py` |
+| Consumer adoption | Position, cashflow, timeseries consumers call fencer | consumer paths + unit tests |
+| Centralized stale metric behavior | `epoch_mismatch_dropped_total` incremented in fencer | `monitoring.py`; `reprocessing.py` |
+| Documentation and testability | Unit tests + developer guide | `test_reprocessing.py`; feature guide |
 
-### **Cons / Trade-offs**:
+## Design Reasoning and Trade-offs
 
-  * **Performance Consideration**: Each epoch check requires an asynchronous database call to the `position_state` table. This is an inherent and necessary cost of the epoch/watermark pattern. By centralizing this call, we create a single point for future optimization (e.g., adding a short-lived cache for `PositionState`) if it ever becomes a performance bottleneck.
+1. Centralizing epoch comparison removes repeated, error-prone boilerplate.
+2. Embedding metric/log behavior in one place improves observability consistency.
+3. Protocol-based event contract keeps utility generic across services.
 
------
+Trade-off:
+- Each check requires state lookup; this is accepted to preserve correctness under replay races.
 
-## 3\. High-Level Design
+## Gap Assessment
 
-### 3.1. New `EpochFencer` Utility
+No material gap remains for RFC 019 in the current architecture.
 
-A new class, `EpochFencer`, will be created in the `portfolio-common` library.
+## Deviations and Evolution Since Original RFC
 
-  * **Location**: `src/libs/portfolio-common/portfolio_common/reprocessing.py`
-  * **Dependencies**: It will be initialized with an `AsyncSession` and will internally use the existing `PositionStateRepository`.
-  * **Event Contract**: The `check` method will expect an event object that has `portfolio_id`, `security_id`, and `epoch` attributes. This contract will be enforced via a simple structural type check (`typing.Protocol`).
-  * **Functionality**: The `check(event)` method will encapsulate the entire fencing process:
-    1.  Extract the key (`portfolio_id`, `security_id`) and `epoch` from the event.
-    2.  Call `PositionStateRepository.get_or_create_state` to get the current state for the key.
-    3.  Compare the event's epoch to the state's epoch (`event.epoch < state.epoch`).
-    4.  If the event is stale, it will automatically log a standardized warning and increment the `epoch_mismatch_dropped_total` metric.
-    5.  It will return `False` if the message is stale and should be discarded, and `True` otherwise.
+1. Adoption includes both calculator and downstream consumer paths.
+2. RFC 001 and RFC 004 documentation now treat shared fencing as the baseline implementation pattern.
 
-### 3.2. Example Usage
+## Proposed Changes
 
-All relevant consumers will be refactored to use the new utility at the beginning of their message processing logic.
+1. Keep RFC 019 classification as `Fully implemented and aligned`.
+2. Continue compliance checks whenever new reprocessing-aware consumers are introduced.
 
-```python
-// In a consumer's process_message method:
-from portfolio_common.reprocessing import EpochFencer
+## Test and Validation Evidence
 
-# ...
+1. Shared utility unit tests:
+   - `tests/unit/libs/portfolio-common/test_reprocessing.py`
+2. Consumer-level usage tests:
+   - position/cashflow/timeseries unit suites listed above
+3. End-to-end replay safety coverage:
+   - `tests/e2e/test_rapid_reprocessing.py`
 
-async for db in get_async_db_session():
-    async with db.begin():
-        # ... setup repositories
-        
-        fencer = EpochFencer(db)
-        if not await fencer.check(event):
-            # The fencer handles all logging and metrics.
-            # We just need to acknowledge and exit.
-            return
-        
-        # ... proceed with business logic ...
-```
+## Original Acceptance Criteria Alignment
 
------
+Acceptance criteria are met:
+1. Shared utility exists and is tested.
+2. Target consumers are refactored to use it.
+3. Stale drop metric behavior is standardized.
+4. Developer guide exists.
 
-## 4\. Implementation Plan
+## Rollout and Backward Compatibility
 
-1.  **Phase 1: Implement `EpochFencer` in `portfolio-common`**
+No runtime change introduced by this documentation retrofit.
 
-      * Create the new file `src/libs/portfolio-common/portfolio_common/reprocessing.py`.
-      * Define a `FencedEvent` protocol that requires `portfolio_id`, `security_id`, and `epoch` attributes.
-      * Implement the `EpochFencer` class with its `check(event: FencedEvent)` method.
-      * Add comprehensive unit tests in `tests/unit/libs/portfolio-common/` covering success, stale event, and new key scenarios. Ensure 100% test coverage for the new class.
+## Open Questions
 
-2.  **Phase 2: Refactor Existing Consumers**
+1. Should future non-calculator consumers that depend on epoched data be explicitly listed in a central compliance checklist?
 
-      * Identify all consumers that currently perform manual epoch fencing.
-          * `PositionTimeseriesConsumer` in `timeseries_generator_service` 
-          * `TransactionEventConsumer` in `position_calculator` 
-          * `CashflowCalculatorConsumer` in `cashflow_calculator_service` (which currently passes epoch through but should have an explicit fence )
-      * Modify each consumer listed above to instantiate and use the `EpochFencer`.
-      * Remove the old, duplicated fencing logic from each consumer.
-      * Update the unit tests for each refactored consumer to ensure the `EpochFencer` is called and that the consumer correctly exits when the fencer returns `False`.
+## Next Actions
 
-3.  **Phase 3: Validation & Documentation**
-
-      * Run the full E2E test suite, paying special attention to `test_reprocessing_workflow.py` and `test_rapid_reprocessing.py`, to provide end-to-end validation that the new, standardized implementation works correctly.
-      * Create a new developer guide in the documentation.
-
------
-
-## 5\. Acceptance Criteria
-
-  * The `EpochFencer` class is implemented in `portfolio-common` as described and has 100% unit test coverage.
-  * The `PositionTimeseriesConsumer`, `TransactionEventConsumer` (in `position_calculator`), and `CashflowCalculatorConsumer` are all refactored to use the `EpochFencer`.
-  * All manual epoch fencing logic is removed from the refactored consumers.
-  * The `epoch_mismatch_dropped_total` metric is correctly incremented by the `EpochFencer` when a stale message is detected.
-  * All existing E2E tests, particularly those covering reprocessing, pass without regressions.
-  * A new developer guide, `docs/features/reprocessing_engine/05_Developer_Guide.md`, is created, explaining the epoch/watermark model and demonstrating the correct usage of the `EpochFencer` utility for building new consumers.
-
- 
+1. Maintain current baseline.
+2. Gate future consumer additions on mandatory `EpochFencer` usage where epoched state applies.

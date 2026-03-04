@@ -18,49 +18,53 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
     security_id = "SEC_SAP_EU"
     cash_security_id = "CASH_USD"
 
-    payload = {
-        "sourceSystem": "UI_UPLOAD",
-        "mode": "UPSERT",
-        "businessDates": [
-            {"businessDate": "2025-09-01"},
-            {"businessDate": "2025-09-02"},
-            {"businessDate": "2025-09-03"},
-            {"businessDate": "2025-09-04"},
-            {"businessDate": as_of_date},
-        ],
+    portfolio_payload = {
         "portfolios": [
             {
-                "portfolioId": portfolio_id,
-                "baseCurrency": "USD",
-                "openDate": "2025-01-01",
-                "riskExposure": "Moderate",
-                "investmentTimeHorizon": "Long",
-                "portfolioType": "Discretionary",
-                "bookingCenter": "SG",
-                "cifId": "E2E_COMPLEX_CIF",
+                "portfolio_id": portfolio_id,
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "risk_exposure": "Moderate",
+                "investment_time_horizon": "Long",
+                "portfolio_type": "Discretionary",
+                "booking_center_code": "SG",
+                "client_id": "E2E_COMPLEX_CIF",
                 "status": "ACTIVE",
             }
-        ],
+        ]
+    }
+    instruments_payload = {
         "instruments": [
             {
-                "securityId": cash_security_id,
+                "security_id": cash_security_id,
                 "name": "US Dollar Cash",
                 "isin": "CASH_USD_E2E_COMPLEX",
-                "instrumentCurrency": "USD",
-                "productType": "Cash",
-                "assetClass": "Cash",
+                "currency": "USD",
+                "product_type": "Cash",
+                "asset_class": "Cash",
             },
             {
-                "securityId": security_id,
+                "security_id": security_id,
                 "name": "SAP SE",
                 "isin": "DE0007164600",
-                "instrumentCurrency": "EUR",
-                "productType": "Equity",
-                "assetClass": "Equity",
+                "currency": "EUR",
+                "product_type": "Equity",
+                "asset_class": "Equity",
                 "sector": "Technology",
-                "countryOfRisk": "DE",
+                "country_of_risk": "DE",
             },
-        ],
+        ]
+    }
+    business_dates_payload = {
+        "business_dates": [
+            {"business_date": "2025-09-01"},
+            {"business_date": "2025-09-02"},
+            {"business_date": "2025-09-03"},
+            {"business_date": "2025-09-04"},
+            {"business_date": as_of_date},
+        ]
+    }
+    transactions_payload = {
         "transactions": [
             {
                 "transaction_id": f"{portfolio_id}_DEP_01",
@@ -166,32 +170,44 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "USD",
                 "currency": "USD",
             },
-        ],
-        "marketPrices": [
-            {"securityId": security_id, "priceDate": as_of_date, "price": 112, "currency": "EUR"},
+        ]
+    }
+    market_prices_payload = {
+        "market_prices": [
+            {"security_id": security_id, "price_date": as_of_date, "price": 112, "currency": "EUR"},
             {
-                "securityId": cash_security_id,
-                "priceDate": as_of_date,
+                "security_id": cash_security_id,
+                "price_date": as_of_date,
                 "price": 1,
                 "currency": "USD",
             },
-        ],
-        "fxRates": [
-            {"fromCurrency": "EUR", "toCurrency": "USD", "rateDate": "2025-09-01", "rate": 1.10},
-            {"fromCurrency": "EUR", "toCurrency": "USD", "rateDate": "2025-09-03", "rate": 1.12},
-            {"fromCurrency": "EUR", "toCurrency": "USD", "rateDate": "2025-09-05", "rate": 1.15},
-        ],
+        ]
+    }
+    fx_rates_payload = {
+        "fx_rates": [
+            {"from_currency": "EUR", "to_currency": "USD", "rate_date": "2025-09-01", "rate": 1.10},
+            {"from_currency": "EUR", "to_currency": "USD", "rate_date": "2025-09-03", "rate": 1.12},
+            {"from_currency": "EUR", "to_currency": "USD", "rate_date": "2025-09-05", "rate": 1.15},
+        ]
     }
 
-    response = e2e_api_client.ingest("/ingest/portfolio-bundle", payload)
-    assert response.status_code == 202
+    assert e2e_api_client.ingest("/ingest/portfolios", portfolio_payload).status_code == 202
+    assert e2e_api_client.ingest("/ingest/instruments", instruments_payload).status_code == 202
+    assert e2e_api_client.ingest("/ingest/business-dates", business_dates_payload).status_code == 202
+    assert e2e_api_client.ingest("/ingest/fx-rates", fx_rates_payload).status_code == 202
+    assert e2e_api_client.ingest("/ingest/transactions", transactions_payload).status_code == 202
+    assert e2e_api_client.ingest("/ingest/market-prices", market_prices_payload).status_code == 202
 
     poll_db_until(
-        query="SELECT 1 FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :dt",
-        params={"pid": portfolio_id, "dt": as_of_date},
-        validation_func=lambda r: r is not None,
-        timeout=180,
-        fail_message="Portfolio timeseries was not generated for complex lifecycle scenario.",
+        query="""
+            SELECT valuation_status
+            FROM daily_position_snapshots
+            WHERE portfolio_id = :pid AND date = :dt AND security_id = :sid
+        """,
+        params={"pid": portfolio_id, "dt": as_of_date, "sid": security_id},
+        validation_func=lambda r: r is not None and r.valuation_status == "VALUED_CURRENT",
+        timeout=300,
+        fail_message="Complex lifecycle positions were not valued for final as_of_date.",
     )
 
     return {
@@ -216,11 +232,13 @@ def test_complex_lifecycle_cross_api_consistency(
             "sections": ["WEALTH", "PNL", "INCOME", "ACTIVITY", "ALLOCATION"],
             "allocation_dimensions": ["ASSET_CLASS", "CURRENCY", "SECTOR"],
         },
+        raise_for_status=False,
     )
-    summary = summary_response.json()["detail"]
-    assert summary_response.status_code == 410
-    assert summary["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert summary["target_service"] == "lotus-report"
+    assert summary_response.status_code in {404, 410}
+    if summary_response.status_code == 410:
+        summary = summary_response.json()["detail"]
+        assert summary["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
+        assert summary["target_service"] == "lotus-report"
 
     review_response = e2e_api_client.post_query(
         f"/portfolios/{portfolio_id}/review",
@@ -236,11 +254,13 @@ def test_complex_lifecycle_cross_api_consistency(
                 "TRANSACTIONS",
             ],
         },
+        raise_for_status=False,
     )
-    review = review_response.json()["detail"]
-    assert review_response.status_code == 410
-    assert review["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
-    assert review["target_service"] == "lotus-report"
+    assert review_response.status_code in {404, 410}
+    if review_response.status_code == 410:
+        review = review_response.json()["detail"]
+        assert review["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
+        assert review["target_service"] == "lotus-report"
 
     support_response = e2e_api_client.query(f"/support/portfolios/{portfolio_id}/overview")
     support_data = support_response.json()

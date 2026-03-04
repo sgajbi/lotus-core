@@ -1,63 +1,97 @@
-# RFC 042 - Tenant-Aware lotus-core Integration Capability Policy Overrides
+# RFC 042 - Tenant-Aware Lotus Core Integration Capability Policy Overrides
 
-- Status: IMPLEMENTED
-- Date: 2026-02-24
-- Owners: lotus-core Query Service
+| Metadata | Value |
+| --- | --- |
+| Status | Implemented |
+| Created | 2026-02-24 |
+| Last Updated | 2026-03-04 |
+| Owners | `query-service` |
+| Depends On | RFC 038 |
+| Scope | Tenant-level overrides for `/integration/capabilities` policy resolution |
 
-## Context
+## Executive Summary
 
-`GET /integration/capabilities` is the contract used by lotus-gateway/UI and peer services
-to understand lotus-core feature/workflow availability. The previous implementation only
-supported global environment flags and one global policy version, which limited:
+RFC 042 is implemented.
+Capabilities resolution now supports tenant-aware overrides with deterministic fallback behavior:
+1. Global feature defaults resolve first.
+2. Tenant overrides apply next when present and valid.
+3. Consumer/default input mode overrides are resolved from tenant policy.
 
-- tenant-specific rollout control,
-- backend-driven configurability depth,
-- productized operating modes across clients.
+Classification: `Fully implemented and aligned`.
 
-## Decision
+## Original Requested Requirements (Preserved)
 
-Add tenant-aware policy overrides to lotus-core capabilities resolution via:
+Original RFC 042 requested:
+1. Tenant-aware policy overrides for integration capabilities.
+2. Stable API contract shape while allowing backend-controlled rollout variance.
+3. Validation/fallback behavior for malformed policy inputs.
 
-- `LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON` environment variable.
+## Current Implementation Reality
 
-The service now resolves capabilities in this order:
+Implemented:
+1. `LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON` is parsed by capabilities service with robust invalid-input fallback.
+2. Supported override dimensions are applied:
+   - `policy_version`,
+   - feature flags,
+   - workflow flags,
+   - consumer/default supported input modes.
+3. Integration capabilities response reflects resolved tenant context and policy metadata.
+4. Unit and integration tests cover default, overridden, and invalid override scenarios.
 
-1. Global feature defaults from existing env flags.
-2. Tenant override block (if configured).
-3. Consumer-specific `supported_input_modes` override (with `default` fallback).
-
-Supported tenant override keys:
-
-- `policy_version`
-- `features` (map: feature key -> boolean)
-- `workflows` (map: workflow key -> boolean)
-- `supported_input_modes` (map: consumer system key -> list of input modes)
-
-## Rationale
-
-- Keeps configurability in lotus-core backend, not in lotus-gateway/UI.
-- Improves integration readiness for multi-tenant deployments.
-- Preserves stable contract shape while enabling policy-driven behavior.
-
-## Consequences
-
-Positive:
-
-- Tenant-level capability behavior can be changed without code changes.
-- lotus-gateway/UI can remain contract-driven while lotus-core controls rollout semantics.
-
-Trade-offs:
-
-- Misconfigured override JSON could silently drift intent without tests.
-  Mitigated by validation + fallback behavior and unit coverage.
-
-## Tests
-
-Added/updated tests:
-
+Evidence:
+- `src/services/query_service/app/services/capabilities_service.py`
+- `src/services/query_service/app/routers/capabilities.py`
+- `src/services/query_service/app/dtos/capabilities_dto.py`
 - `tests/unit/services/query_service/services/test_capabilities_service.py`
-  - default behavior
-  - global env overrides
-  - tenant override application
-  - invalid override JSON fallback
+- `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+
+## Requirement-to-Implementation Traceability
+
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Tenant-aware capability policy | Implemented | capabilities service override loader/resolution |
+| Stable contract shape | Implemented | capabilities DTO and router |
+| Safe fallback for malformed overrides | Implemented | invalid JSON/object handling + unit tests |
+
+## Design Reasoning and Trade-offs
+
+1. Backend-owned tenant policy keeps UI/gateway behavior contract-driven and avoids client-side feature logic sprawl.
+2. Override model enables controlled rollout and per-tenant operating mode differences without code deployments.
+
+Trade-off:
+- Environment JSON policy management can become difficult to govern at scale without centralized policy infrastructure.
+
+## Gap Assessment
+
+No high-value implementation gap for RFC 042 scope.
+
+## Deviations and Evolution Since Original RFC
+
+1. Runtime implementation includes richer workflow derivation and input-mode filtering behavior tied to feature dependencies.
+
+## Proposed Changes
+
+1. Keep classification as `Fully implemented and aligned`.
+2. Treat centralized policy service migration as future architecture enhancement.
+
+## Test and Validation Evidence
+
+1. `tests/unit/services/query_service/services/test_capabilities_service.py`
+2. `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+
+## Original Acceptance Criteria Alignment
+
+Aligned.
+
+## Rollout and Backward Compatibility
+
+No runtime change introduced by this documentation retrofit.
+
+## Open Questions
+
+1. None for baseline RFC 042 scope.
+
+## Next Actions
+
+1. Keep tenant override behaviors covered as feature catalog grows.
 

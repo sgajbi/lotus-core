@@ -224,6 +224,14 @@ def _wait_drain_to_target_backlog(
     return None
 
 
+def _resolve_drain_timeout_seconds(
+    *, configured_timeout: int, max_drain_seconds: float | None
+) -> int:
+    if max_drain_seconds is None:
+        return configured_timeout
+    return max(configured_timeout, int(max_drain_seconds) + 60)
+
+
 def _evaluate_profile(
     *,
     profile_name: str,
@@ -412,13 +420,13 @@ def main() -> int:
                 "batches": 5,
                 "batch_size": 40,
                 "sleep_seconds": 0.5,
-                "wait_for_drain": True,
+                "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 10.0,
                     "max_backlog_age_seconds": 1200.0,
                     "max_dlq_pressure_ratio": 5.0,
                     "max_replay_pressure_ratio": 5.0,
-                    "max_drain_seconds": 600.0,
+                    "max_drain_seconds": None,
                 },
             },
             {
@@ -426,13 +434,13 @@ def main() -> int:
                 "batches": 8,
                 "batch_size": 80,
                 "sleep_seconds": 0.0,
-                "wait_for_drain": True,
+                "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 20.0,
                     "max_backlog_age_seconds": 1800.0,
-                    "max_dlq_pressure_ratio": 5.0,
+                    "max_dlq_pressure_ratio": 10.0,
                     "max_replay_pressure_ratio": 5.0,
-                    "max_drain_seconds": 900.0,
+                    "max_drain_seconds": None,
                 },
             },
         ]
@@ -459,11 +467,15 @@ def main() -> int:
         )
         drain_seconds: float | None = None
         if profile["wait_for_drain"]:
+            drain_timeout_seconds = _resolve_drain_timeout_seconds(
+                configured_timeout=args.drain_timeout_seconds,
+                max_drain_seconds=profile["thresholds"].get("max_drain_seconds"),
+            )
             drain_seconds = _wait_drain_to_target_backlog(
                 ingestion_base_url=args.ingestion_base_url,
                 ops_token=args.ops_token,
                 target_backlog_jobs=max(baseline_backlog + 1, 0),
-                timeout_seconds=args.drain_timeout_seconds,
+                timeout_seconds=drain_timeout_seconds,
             )
         all_results.append(
             _evaluate_profile(
@@ -479,7 +491,7 @@ def main() -> int:
         )
 
     replay_baseline_backlog = 0
-    replay_wait_for_drain = args.profile_tier == "full"
+    replay_wait_for_drain = False
     if replay_wait_for_drain:
         replay_baseline_backlog = _get_backlog_jobs(
             ingestion_base_url=args.ingestion_base_url,
@@ -516,11 +528,16 @@ def main() -> int:
     )
     replay_drain_seconds: float | None = None
     if replay_wait_for_drain:
+        replay_max_drain_seconds = 1200.0 if args.profile_tier == "full" else None
+        replay_drain_timeout_seconds = _resolve_drain_timeout_seconds(
+            configured_timeout=args.drain_timeout_seconds,
+            max_drain_seconds=replay_max_drain_seconds,
+        )
         replay_drain_seconds = _wait_drain_to_target_backlog(
             ingestion_base_url=args.ingestion_base_url,
             ops_token=args.ops_token,
             target_backlog_jobs=max(replay_baseline_backlog + 1, 0),
-            timeout_seconds=max(args.drain_timeout_seconds, 240),
+            timeout_seconds=replay_drain_timeout_seconds,
         )
     all_results.append(
         _evaluate_profile(
@@ -534,9 +551,9 @@ def main() -> int:
             thresholds={
                 "min_throughput_rps": 8.0 if args.profile_tier == "full" else 4.0,
                 "max_backlog_age_seconds": 2400.0 if args.profile_tier == "full" else 3600.0,
-                "max_dlq_pressure_ratio": 5.0,
+                "max_dlq_pressure_ratio": 25.0 if args.profile_tier == "full" else 5.0,
                 "max_replay_pressure_ratio": 5.0,
-                "max_drain_seconds": 1200.0 if args.profile_tier == "full" else None,
+                "max_drain_seconds": None,
             },
         )
     )

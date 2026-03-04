@@ -1,49 +1,100 @@
-# RFC 030 - CI Coverage Gate and lotus-manage Pipeline Parity Phase 2
+# RFC 030 - CI Coverage Gate and DPM Pipeline Parity Phase 2
 
-- Status: Proposed
-- Date: 2026-02-23
-- Depends on: RFC 029
+| Metadata | Value |
+| --- | --- |
+| Status | Implemented |
+| Created | 2026-02-23 |
+| Last Updated | 2026-03-04 |
+| Owners | Platform engineering, CI governance |
+| Depends On | RFC 029 |
+| Scope | Matrixed test execution, coverage artifact flow, combined coverage enforcement |
 
-## Context
+## Executive Summary
 
-RFC 029 established a lotus-manage-style baseline, but CI remained basic in two areas:
+RFC 030 moved CI from baseline checks to stronger suite partitioning and coverage enforcement.
+Current implementation is present and, in some aspects, stricter than originally proposed:
+1. Matrixed suites are active.
+2. Coverage artifacts are uploaded per suite and combined in gate job.
+3. Combined coverage threshold is enforced at `99` (higher than RFC text’s `84`).
 
-- no matrixed test suites with artifactized coverage data
-- no explicit combined coverage gate
+## Original Requested Requirements (Preserved)
 
-Also, some integration tests currently depend on full Docker orchestration and are not yet stable for mandatory CI gates.
-
-## Decision
-
-Adopt lotus-manage-style phased CI hardening:
-
-1. Add test matrix jobs:
-   - `Tests (unit)`
-   - `Tests (integration-lite)`
+Original RFC 030 requested:
+1. Add matrix test jobs (`unit`, `integration-lite`).
 2. Upload per-suite coverage artifacts.
-3. Add `Coverage Gate (Combined)` job enforcing `--fail-under=84`.
-4. Keep `Lint, Typecheck, Unit Tests` and `Validate Docker Build` as protected required checks.
-5. Keep Docker-dependent integration tests out of required gate until migration-runner/docker-compose reliability is hardened.
+3. Add combined coverage gate with `--fail-under=84`.
+4. Keep docker-dependent unstable suites outside required baseline while hardening continues.
+5. Align local make commands (`test-integration-lite`, `coverage-gate`, `ci-local`).
 
-## Why 84% Now
+## Current Implementation Reality
 
-- Current stable combined scope (unit + integration-lite) reaches ~85% with expanded router tests.
-- 84% creates a real guardrail without introducing CI flakiness.
-- Threshold can be ratcheted upward once additional routers/services and Docker-dependent integration tests are stabilized.
+Implemented:
+1. CI test matrix runs multiple suites (unit, unit-db, integration-lite, ops-contract, buy-rfc, sell-rfc).
+2. Coverage artifacts per suite uploaded and merged in dedicated `Coverage Gate (Combined)` job.
+3. Combined coverage gate enforces `--fail-under=99`.
+4. Makefile includes `test-integration-lite`, `coverage-gate`, and `ci-local` commands.
 
-## Makefile Alignment
+Operational note:
+1. Docker-dependent gates exist as additional jobs; required-check policy is repository governance outside this file.
 
-Add standardized commands:
+Evidence:
+- `.github/workflows/ci.yml`
+- `Makefile`
+- `scripts/coverage_gate.py`
+- `scripts/test_manifest.py`
 
-- `make test-integration-lite`
-- `make coverage-gate`
-- `make ci-local`
+## Requirement-to-Implementation Traceability
 
-This keeps local validation aligned with GitHub Actions.
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Matrix test jobs | Implemented (expanded matrix) | `ci.yml` |
+| Coverage artifact upload | Implemented | `ci.yml` |
+| Combined coverage gate | Implemented, stricter threshold (`99`) | `ci.yml` |
+| Local command parity | Implemented | `Makefile` |
+| Keep unstable docker-dependent tests out of core mandatory path | Partially governance-dependent; additional jobs exist with conditional triggers | `ci.yml` |
 
-## Next Ratchet (Phase 3)
+## Design Reasoning and Trade-offs
 
-1. Fix Docker-dependent integration failures in CI (`migration-runner`/env wiring).
-2. Promote selected integration tests into required matrix.
-3. Raise combined coverage gate to `85%+`.
-4. Introduce full-suite coverage gating once non-determinism is removed.
+1. Artifact-based coverage merge improves auditability and deterministic gating.
+2. Higher threshold raises quality bar but can increase PR friction if scope/test stability drifts.
+3. Expanded suite matrix gives broader confidence while keeping suite segmentation manageable.
+
+## Gap Assessment
+
+No material implementation gap in repository for RFC 030 intent; enforcement policy of which checks are mandatory remains branch-protection governance.
+
+## Deviations and Evolution Since Original RFC
+
+1. Coverage threshold is stronger than original proposal (`99` vs `84`).
+2. Matrix scope broadened beyond original two-suite plan.
+
+## Proposed Changes
+
+1. Keep RFC 030 as `Fully implemented and aligned` with documented threshold evolution.
+2. Maintain explicit rationale for elevated threshold in CI docs to avoid confusion with original RFC text.
+
+## Test and Validation Evidence
+
+1. CI matrix and coverage gate job definitions:
+   - `.github/workflows/ci.yml`
+2. Local parity commands:
+   - `Makefile`
+3. Coverage gate utility and suite manifest:
+   - `scripts/coverage_gate.py`, `scripts/test_manifest.py`
+
+## Original Acceptance Criteria Alignment
+
+Core acceptance criteria are met and exceeded on threshold strictness.
+
+## Rollout and Backward Compatibility
+
+No runtime change introduced by this documentation retrofit.
+
+## Open Questions
+
+1. Should the RFC explicitly record the date and rationale for moving from `84` to `99` to preserve policy lineage?
+
+## Next Actions
+
+1. Keep threshold and suite-partition contracts stable unless an explicit governance RFC changes them.
+2. Continue hardening docker-dependent suites for predictable inclusion in required-check policy.
