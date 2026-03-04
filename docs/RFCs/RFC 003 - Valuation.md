@@ -1,114 +1,72 @@
-# RFC 003 - Robust, Resilient, and Scalable Valuation Pipeline
 
-| Metadata | Value |
-| --- | --- |
-| Status | Implemented |
-| Created | Historical RFC baseline (date not recorded in file) |
-| Last Updated | 2026-03-04 |
-| Owners | lotus-core valuation and calculator services |
-| Depends On | RFC 001 |
-| Related Standards | `docs/standards/scalability-availability.md`, `docs/standards/durability-consistency.md` |
-| Scope | In repo (`lotus-core`) |
+# RFC 003 : Robust, Resilient & Scalable Valuation Pipeline 
 
-## Executive Summary
+## 1. Summary
 
-RFC 003 hardens valuation orchestration so the pipeline remains deterministic and operationally stable under data timing gaps and reprocessing pressure.
+The current valuation pipeline is not resilient to data timing issues. The scheduler creates valuation jobs for dates before a position actually exists, leading to `DataNotFoundError` exceptions in the consumer. These errors are incorrectly treated as retryable, which pollutes the Dead-Letter Queue (DLQ), causes consumer instability, and creates significant operational noise.
 
-Core outcomes are implemented:
-1. Durable valuation job lifecycle fields (`attempt_count`, `failure_reason`).
-2. Position-aware backfill scheduling based on first-open-date boundaries.
-3. Intelligent consumer behavior that marks expected no-position jobs as terminal skip instead of poisoning DLQ flows.
+This proposal outlines a plan to make the pipeline robust by introducing **position-aware job scheduling**, a **durable job lifecycle**, and **smarter consumer error handling**.
 
-## Original Requested Requirements (Preserved)
+---
 
-The original RFC requested:
-1. Stop treating missing-position valuation as generic retryable failure.
-2. Add durable valuation job lifecycle metadata (`attempt_count`, `failure_reason`).
-3. Prevent scheduler from creating valuation jobs before the position exists.
-4. Distinguish terminal expected no-position scenarios from transient infrastructure failures.
-5. Improve observability of valuation job outcomes and reduce operational noise.
+## 2. Architectural Assessment & Refinements
 
-## Current Implementation Reality
+This approach is a significant architectural improvement that simplifies the system while making it more robust.
 
-RFC 003 behavior is implemented and active.
+* **Simplicity & Determinism**: The `position_state` table makes the state of each `(portfolio_id, security_id)` key **explicit and centralized**, moving away from a complex, implicit state spread across event streams. This makes the system's behavior deterministic and easier to reason about.
+* **Resilience & Concurrency**: **Epoch fencing** is the core mechanism for safety, elegantly solving potential race conditions between a live data flow and a back-dated replay.
+* **Scalability**: By scoping all reprocessing to an individual key, this design avoids disruptive, system-wide recalculations.
+* **Observability**: The explicit state in the `position_state` table makes it trivial to monitor keys that are stuck in a `REPROCESSING` state or have a lagging `watermark_date`.
 
-1. Lifecycle columns exist on `portfolio_valuation_jobs`.
-2. Valuation scheduler creates backfill from `max(watermark_date + 1, first_open_date)`.
-3. Consumer marks missing-position cases as `SKIPPED_NO_POSITION` with failure reason and no DLQ escalation.
-4. Watermark advancement remains scheduler-owned and tied to contiguous snapshot completion.
+### 2.1. Refinements for Edge Cases
 
-Evidence:
-- `alembic/versions/b25f9ec89ae3_feat_add_lifecycle_columns_to_valuation_.py`
-- `src/libs/portfolio-common/portfolio_common/database_models.py` (`PortfolioValuationJob`)
-- `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`
-- `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`
-- `src/services/calculators/position_valuation_calculator/app/consumers/valuation_consumer.py`
+The following refinements will be incorporated into the implementation to handle specific edge cases:
 
-## Requirement-to-Implementation Traceability
+1.  **Watermark Advancement Authority**:
+    * **Refinement**: The **`ValuationScheduler` will be the sole authority** responsible for advancing the `watermark_date`. It will only do so after confirming that all valuation jobs for a contiguous date range have successfully completed.
+2.  **"Thundering Herd" on Price Updates**:
+    * **Refinement**: The `ValuationScheduler` must handle a sudden influx of reprocessing triggers gracefully. Its logic will batch queries on the `position_state` table and stagger the enqueuing of new valuation jobs to avoid overwhelming Kafka or downstream services.
+3.  **API Read Experience During Reprocessing**:
+    * **Refinement**: The API response for a key in a `REPROCESSING` state will be enhanced to include a status flag (e.g., `{"reprocessing_status": "IN_PROGRESS"}`) to inform the user that the data is being updated.
+4.  **Rapid Back-to-Back Reprocessing**:
+    * **Refinement**: The design handles this via chained epoch increments (e.g., `N` -> `N+1` -> `N+2`). The atomic `UPDATE` on the `position_state` table and epoch fencing in consumers are critical. This will be a priority for integration testing.
 
-| Original Requirement | Current Implementation | Evidence |
-| --- | --- | --- |
-| Durable lifecycle fields on valuation jobs | Implemented with schema/model support | `b25f9ec89ae3...`; `database_models.py` |
-| Position-aware scheduling start | Implemented using `max(watermark+1, first_open_date)` | `valuation_scheduler.py` |
-| Non-retryable missing-position handling | Implemented as `SKIPPED_NO_POSITION` terminal state | `valuation_consumer.py`; consumer tests |
-| Keep transient failures retry/DLQ eligible | Implemented through failure path handling | consumer tests; repository status updates |
-| Reduce DLQ noise from expected data timing | Achieved by terminal skip semantics | unit tests + valuation pipeline behavior |
+---
 
-## Design Reasoning and Trade-offs
+## 3. Proposed Changes
 
-1. **Why position-aware scheduling**: Scheduling work before existence creates false failures and operational noise.
-2. **Why explicit terminal skip state**: It preserves auditability without misclassifying expected domain conditions as incidents.
-3. **Why durable lifecycle metadata**: Enables retry governance and failure forensics at job level.
-4. **Trade-off**: More status semantics in job lifecycle, but significantly cleaner operations and triage.
+### 3.1. Database Schema Enhancement
 
-## Gap Assessment
+We will introduce a durable lifecycle for valuation jobs by adding columns to the `portfolio_valuation_jobs` table.
 
-The original RFC text is mostly implemented but was stale in presentation:
-1. It remained framed as a proposal instead of implemented contract.
-2. It mixed valuation-specific scope with broader reprocessing architecture narrative that is now covered in later RFCs/ADRs.
+* **New Columns**:
+    * `attempt_count` (INTEGER)
+    * `failure_reason` (TEXT)
+* **New Statuses**:
+    * The `status` field will be leveraged to include new terminal states like `SKIPPED_NO_POSITION`.
 
-No critical implementation gaps were identified for this RFC’s primary commitments.
+### 3.2. Position-Aware Job Scheduling
 
-## Deviations and Evolution Since Original RFC
+The `ValuationScheduler` will be modified to prevent creating jobs for dates where no position exists.
 
-1. Broader reprocessing scalability mechanics are now handled by later RFCs/ADRs (e.g., RFC 018, ADR 002), keeping RFC 003 focused on valuation correctness.
-2. Operational expectations around job-state distributions are now stronger due to RFC 065/066 readiness posture.
+* **Fetch First Open Date**: The scheduler will determine the `first_open_date` for each `(portfolio, security, epoch)` key.
+* **Adjust Backfill Start**: The job creation loop will start from `max(watermark_date + 1, first_open_date)`.
 
-## Proposed Changes
+### 3.3. Intelligent Consumer Error Handling
 
-1. Keep RFC 003 as implemented valuation hardening baseline.
-2. Keep subsequent large-scale queue/reprocessing fan-out evolution referenced via RFC 018 and ADR 002 (extension path, not contradiction).
-3. Preserve explicit terminal handling semantics for non-retryable missing-position conditions.
+The `ValuationConsumer` will be updated to distinguish between transient and permanent errors.
 
-## Test and Validation Evidence
+* **Retryable Errors**: Transient issues (e.g., DB connection errors) will remain retryable.
+* **Permanent Errors (`DataNotFoundError`)**: When no position history is found, the consumer will mark the job `SKIPPED_NO_POSITION` and will **not** send the message to the DLQ.
 
-1. Consumer skip semantics and terminal status behavior:
-   - `tests/unit/services/calculators/position_valuation_calculator/consumers/test_valuation_consumer.py`
-2. Position-aware scheduler behavior and watermark advancement:
-   - `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
-3. End-to-end valuation pipeline completion:
-   - `tests/e2e/test_valuation_pipeline.py`
-4. Repository and integration behavior:
-   - `tests/integration/services/calculators/position_valuation_calculator/test_int_valuation_repo.py`
+---
 
-## Original Acceptance Criteria Alignment
+## 4. High-Level Implementation Plan
 
-Original intent is satisfied:
-1. Lifecycle fields exist and are used.
-2. Scheduler avoids pre-open-date over-scheduling.
-3. Missing-position path is terminal and does not pollute DLQ.
-4. Unit/integration/e2e evidence exists for scheduler, consumer, and pipeline behavior.
+1.  **DB Migration**: Add the `attempt_count` and `failure_reason` columns.
+2.  **Consumer Logic**: Update the `ValuationConsumer` with the new error handling.
+3.  **Repository Enhancement**: Add a method to find the `first_open_date` for securities.
+4.  **Scheduler Logic**: Update the `ValuationScheduler` with position-aware logic.
+5.  **Observability**: Add Prometheus metrics to monitor the new states.
 
-## Rollout and Backward Compatibility
-
-No breaking API contract changes are introduced by this refresh.
-Current behavior is production-compatible with existing job and snapshot contracts.
-
-## Open Questions
-
-1. Should `SKIPPED_NO_POSITION` trend thresholds be explicitly added to operational runbooks as early drift signals?
-
-## Next Actions
-
-1. Keep RFC 003 classification as `Fully implemented and aligned`.
-2. Monitor valuation job terminal-state distributions (`COMPLETE`, `FAILED`, `SKIPPED_NO_POSITION`) as part of routine operations quality checks.
+ 

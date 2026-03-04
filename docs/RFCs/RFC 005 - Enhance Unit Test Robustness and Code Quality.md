@@ -1,100 +1,53 @@
-# RFC 005 - Enhance Unit Test Robustness and Code Quality
+## RFC 005: Enhance Unit Test Robustness and Code Quality
 
-| Metadata | Value |
-| --- | --- |
-| Status | Implemented |
-| Created | 2025-08-29 |
-| Last Updated | 2026-03-04 |
-| Owners | lotus-core engineering |
-| Depends On | RFC 003, RFC 004 |
-| Related Standards | `docs/standards/enterprise-readiness.md` |
-| Scope | In repo (`lotus-core`) |
+* **Date**: 2025-08-29
+* **Services Affected**: `portfolio-common`, `position-valuation-calculator`
 
-## Executive Summary
+### 1. Summary (TL;DR)
 
-RFC 005 was a focused quality-hardening slice:
-1. Fix a repository defect surfaced by unit tests.
-2. Add missing test coverage for valuation scheduler dispatch path.
-3. Add missing test coverage for valuation consumer unexpected-failure behavior.
+A unit test for `PositionStateRepository.bulk_update_states` is failing due to an `AttributeError`, revealing a bug in how the number of updated rows is retrieved. Furthermore, our previous code review identified missing unit tests for critical logic in the `ValuationScheduler` (job dispatching) and `ValuationConsumer` (failure handling).
 
-The requested fixes and test additions are implemented.
+This RFC proposes to:
+1.  **Fix the bug** in the `PositionStateRepository`.
+2.  **Add the missing unit tests** to cover untested code paths and edge cases, improving our confidence in the system's reliability.
 
-## Original Requested Requirements (Preserved)
+### 2. Motivation
 
-The original RFC requested:
-1. Fix `PositionStateRepository.bulk_update_states` row-count defect causing failing tests.
-2. Add a unit test for valuation scheduler dispatching claimed jobs to Kafka.
-3. Add a unit test for valuation consumer generic exception path (`FAILED` + DLQ behavior).
-4. Improve confidence in these critical control paths through explicit coverage.
+A robust unit test suite is our first line of defense against regressions and production defects.
+* **Correctness**: The current test failure indicates a code defect that must be fixed to ensure methods behave as expected.
+* **Reliability**: The `ValuationScheduler` is a critical background component. Untested code paths, such as the actual dispatching of jobs to Kafka, represent a significant operational risk.
+* **Completeness**: Explicitly testing all logical outcomes, including failure paths in consumers, ensures the system is resilient and behaves predictably under stress.
 
-## Current Implementation Reality
+### 3. Proposed Technical Changes
 
-Implemented outcomes:
-1. `bulk_update_states` updates are handled correctly and covered by tests.
-2. Valuation scheduler dispatch path is unit-tested.
-3. Valuation consumer unexpected-error path is unit-tested and exercises failure handling.
+#### 3.1. Fix `bulk_update_states` `AttributeError`
 
-Evidence:
-- `src/libs/portfolio-common/portfolio_common/position_state_repository.py`
-- `tests/unit/libs/portfolio-common/test_position_state_repository.py`
-- `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
-- `tests/unit/services/calculators/position_valuation_calculator/consumers/test_valuation_consumer.py`
+The method incorrectly attempts to access `.rowcount` on the `IteratorResult` object.
 
-## Requirement-to-Implementation Traceability
+* **File to Modify**: `src/libs/portfolio-common/portfolio_common/position_state_repository.py`
+* **Change**: Update the return statement to correctly access the row count from the underlying cursor result.
 
-| Original Requirement | Current Implementation | Evidence |
-| --- | --- | --- |
-| Fix bulk update row-count behavior | Repository implementation and tests now stable | `position_state_repository.py`; repo unit tests |
-| Add scheduler dispatch unit test | Dispatch path covered in scheduler tests | `test_valuation_scheduler.py` |
-| Add consumer unexpected-error unit test | Failure status + DLQ behavior covered | `test_valuation_consumer.py` |
-| Raise confidence in critical paths | Coverage exists on the previously missing paths | same test modules |
+    * [cite_start]**From**: `return result.rowcount` [cite: 547]
+    * **To**: `return result.rowcount`
 
-## Design Reasoning and Trade-offs
+#### 3.2. Add Unit Test for `ValuationScheduler` Job Dispatching
 
-1. **Why this RFC mattered**: small defects in orchestration and status paths can create high operational noise.
-2. **Why test-first hardening**: these paths are control-plane critical; regressions are costly and hard to diagnose late.
-3. **Trade-off**: added tests increase maintenance overhead slightly but greatly improve regression signal quality.
+The scheduler's logic for claiming jobs is tested, but the final step of publishing them is not.
 
-## Gap Assessment
+* **File to Modify**: `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
+* **New Test**: `test_scheduler_dispatches_claimed_jobs`
+    * **Logic**: This test will mock the `_dispatch_jobs` method's input (a list of `PortfolioValuationJob` objects). It will assert that the `KafkaProducer.publish_message` method is called the correct number of times. It will also inspect the `value` argument to ensure the `PortfolioValuationRequiredEvent` is created with the correct data (`portfolio_id`, `security_id`, `epoch`, etc.) from the job object.
 
-No open gap remains tied to RFC 005 scope.
+#### 3.3. Add Unit Test for `ValuationConsumer` Failure Path
 
-## Deviations and Evolution Since Original RFC
+The consumer's "happy path" and `DataNotFoundError` path are tested, but the generic failure path is not.
 
-1. Scope stayed intentionally narrow and tactical.
-2. Broader test-strategy evolution now continues under later RFC waves (e.g., RFC 010, RFC 028, RFC 050+).
+* **File to Modify**: `tests/unit/services/calculators/position_valuation_calculator/consumers/test_valuation_consumer.py`
+* **New Test**: `test_consumer_handles_unexpected_error`
+    * **Logic**: This test will mock the `ValuationLogic.calculate_valuation` method to raise a generic `Exception`. It will assert that the `ValuationRepository.update_job_status` method is called with a status of `'FAILED'` and that the consumer's `_send_to_dlq_async` method is called exactly once.
 
-## Proposed Changes
+### 4. Acceptance Criteria
 
-1. Keep RFC 005 as completed historical quality baseline.
-2. Do not reopen scope unless regressions indicate renewed risk in these same paths.
-
-## Test and Validation Evidence
-
-1. Position state repository behavior:
-   - `tests/unit/libs/portfolio-common/test_position_state_repository.py`
-2. Scheduler dispatch behavior:
-   - `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
-3. Consumer unexpected-failure behavior:
-   - `tests/unit/services/calculators/position_valuation_calculator/consumers/test_valuation_consumer.py`
-
-## Original Acceptance Criteria Alignment
-
-Original acceptance intent is satisfied:
-1. Previously failing `bulk_update_states` path is corrected and covered.
-2. Missing scheduler dispatch test exists.
-3. Missing consumer failure-path test exists.
-4. Quality signal for targeted modules improved.
-
-## Rollout and Backward Compatibility
-
-Documentation retrofit only; no runtime contract change.
-
-## Open Questions
-
-1. Should micro-RFC quality slices be systematically grouped into a quality ledger to reduce future traceability overhead?
-
-## Next Actions
-
-1. Keep RFC 005 classification as `Fully implemented and aligned`.
-2. Treat this RFC as historical evidence of targeted hardening completion.
+* All 156 unit tests pass, including the currently failing `test_bulk_update_states`.
+* New unit tests for the `ValuationScheduler` and `ValuationConsumer` are implemented and pass.
+* Running the test suite with coverage shows an increase in coverage for `position_state_repository.py`, `valuation_scheduler.py`, and `valuation_consumer.py`.

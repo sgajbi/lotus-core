@@ -1,82 +1,165 @@
 # RFC 066 - Institutional-Scale Production Readiness and Performance Assurance
 
-| Field | Value |
-| --- | --- |
-| Status | Partially Implemented |
-| Created | 2026-03-04 |
-| Last Updated | 2026-03-04 |
-| Owners | lotus-core engineering; lotus-platform governance |
-| Depends On | RFC 065 |
-| Related Standards | production-readiness and operational governance standards |
-| Scope | In repo |
+## Status
+In Progress
 
-## Executive Summary
-RFC 066 builds on RFC 065 by enforcing institutional readiness through deterministic runtime gates, failure-recovery checks, and auditable sign-off artifacts.
+## Date
+2026-03-04
 
-Most planned slices are implemented (load gate, failure-recovery gate, sign-off pack generation), but end-to-end institutional sign-off governance closure in CI/release flow still needs explicit finalization.
+## Owners
+- lotus-core: execution and operational contracts
+- lotus-platform: cross-service governance and standards
 
-## Original Requested Requirements (Preserved)
-1. Enforce production SLO envelopes under steady, burst, and replay-storm conditions.
-2. Validate deterministic recovery under controlled failure injection.
-3. Make runtime policy and capacity contracts introspectable and drift-resistant.
-4. Produce auditable sign-off evidence for go-live decisions.
-5. Gate regressions pre-merge or pre-release with deterministic automation.
+## 1. Summary
+This RFC defines the post-RFC-065 path to make lotus-core institution-ready for unknown production load profiles. The objective is not only correctness, but sustained performance, resilience, and operational predictability under extreme load.
 
-## Current Implementation Reality
-1. Deterministic load profile gate script exists and is wired in CI with fast/full tiers.
-2. Deterministic failure-recovery gate script exists and is wired for heavy-tier CI contexts.
-3. Institutional sign-off pack generator and runbook exist.
-4. CI runs multiple readiness gates and publishes artifacts.
-5. Institutional sign-off pack generation is available via `make` target but not yet a dedicated CI required check for final release approval.
+## 2. Problem Statement
+Functional correctness alone is insufficient for bank/fintech deployments. We must prevent late-stage architectural rework by enforcing:
+1. measurable performance envelopes,
+2. deterministic scaling behavior,
+3. replay/failure isolation under stress,
+4. CI-enforced operational contracts.
 
-## Requirement-to-Implementation Traceability
-| Requirement | Current State | Evidence |
-| --- | --- | --- |
-| Load-profile gating (steady/burst/replay-storm) | Implemented | `scripts/performance_load_gate.py`; `.github/workflows/ci.yml`; `Makefile` targets |
-| Failure injection and bounded recovery validation | Implemented | `scripts/failure_recovery_gate.py`; CI `failure-recovery-gate` job |
-| Policy/capacity contract visibility | Implemented (via RFC-065 endpoints, reused in 066 gates) | ingestion ops endpoints + smoke/load scripts |
-| Auditable sign-off artifact generation | Implemented | `scripts/institutional_signoff_pack.py`; `docs/operations/Institutional-Signoff-Runbook.md` |
-| CI-enforced final institutional sign-off gate | Partially implemented | sign-off script exists and make target exists, but no dedicated CI required-check job for sign-off pack |
+## 3. Goals
+1. Establish enforceable production SLO/SLA envelopes for high-load scenarios.
+2. Validate scaling and replay behavior under steady-state, burst, and replay-storm workloads.
+3. Detect regressions pre-merge through deterministic automation.
+4. Make runtime operating policy introspectable and drift-resistant.
 
-## Design Reasoning and Trade-offs
-1. Fast/full tier split keeps PR cycle velocity while preserving heavy institutional assurance on schedule/main/manual paths.
-2. Artifact-first gates improve auditability and release governance.
-3. Trade-off: if final sign-off artifact generation is not enforced in CI release policy, manual steps can drift.
+## 4. Non-Goals
+1. Move risk/performance analytics computation into lotus-core.
+2. Replace existing calculators with new engines in a single release.
+3. Introduce non-canonical terminology or API aliases.
 
-## Gap Assessment
-1. Dedicated, policy-enforced institutional sign-off CI gate is not clearly finalized.
-2. Release governance should explicitly require recent sign-off artifacts before promotion.
+## 5. Target Readiness Model
+1. **Performance contracts**: p95/p99 latency, lag age, drain-time, DLQ pressure, replay pressure.
+2. **Capacity contracts**: explicit `lambda_in`, `mu_msg`, `rho`, `headroom`, `T_drain` signals.
+3. **Policy contracts**: all critical runtime thresholds available via API (`/ingestion/health/policy`).
+4. **Operational contracts**: deterministic smoke and latency gates that fail on drift.
+5. **Resilience contracts**: replay isolation mode + partition growth strategy must be explicit decisions.
 
-## Deviations and Evolution Since Original RFC
-1. RFC started as "In Progress" and quickly achieved broad implementation across slices.
-2. Residual work is governance closure and release-policy hardening rather than core tooling absence.
+## 6. Delivery Slices
 
-## Proposed Changes
-1. Add explicit CI job for institutional sign-off pack as required gate on main/release promotion path.
-2. Tie artifact recency and gate pass criteria to release workflow checks.
+### Slice A - Contract Hardening (Completed in this change set)
+1. Extend deterministic docker smoke to validate ingestion ops endpoints:
+- `/ingestion/health/operating-band`
+- `/ingestion/health/policy`
+- `/ingestion/health/reprocessing-queue`
+- `/ingestion/health/backlog-breakdown`
+- `/ingestion/health/stalled-jobs`
+- `/ingestion/health/capacity`
+2. Add contract-level checks in smoke output for:
+- policy decision fields (`calculator_peak_lag_age_seconds`, `replay_isolation_mode`, `partition_growth_strategy`)
+- capacity signal fields (`lambda_in_events_per_second`, `mu_msg_per_replica_events_per_second`, `utilization_ratio`, `headroom_ratio`, `saturation_state`)
 
-## Test and Validation Evidence
-1. `scripts/performance_load_gate.py`
-2. `scripts/failure_recovery_gate.py`
-3. `scripts/institutional_signoff_pack.py`
-4. `.github/workflows/ci.yml`
-5. `Makefile` (`test-performance-load-gate`, `test-performance-load-gate-full`, `test-failure-recovery-gate`, `test-institutional-signoff-pack`)
-6. `docs/operations/Institutional-Signoff-Runbook.md`
+### Slice B - Load Profile Gate
+1. Add deterministic load profile runner for:
+- steady-state
+- burst
+- replay-storm
+2. Add CI gate to assert no SLO regression vs baseline envelope.
 
-## Original Acceptance Criteria Alignment
-1. Load and failure-recovery gates with deterministic thresholds: aligned.
-2. Runtime policy introspection and drift-resistant readiness signals: aligned.
-3. Institutional sign-off generation and checklist: aligned.
-4. Final CI-required sign-off enforcement: partially aligned.
+### Slice C - Failure Injection and Recovery
+1. Add controlled chaos scenarios:
+- Kafka slowdown / backlog surge
+- worker interruption
+- replay collision flood
+2. Verify recovery SLO:
+- bounded drain time
+- no correctness drift
+- no runaway DLQ pressure.
 
-## Rollout and Backward Compatibility
-1. Gate tooling is additive and operationally oriented.
-2. Adoption primarily affects CI/release processes and readiness governance.
+### Slice D - Institutional Sign-Off Pack
+1. Publish runbooks and quantitative evidence pack.
+2. Add explicit go-live checklist for customer onboarding readiness.
 
-## Open Questions
-1. Should institutional sign-off become mandatory for every main-branch release candidate, or only production-tag promotions?
-2. Should artifact retention and recency thresholds be centralized in platform-wide release policy?
+## 7. Acceptance Criteria
+1. All runtime policy decisions visible via API and covered by tests.
+2. Docker smoke verifies both endpoint availability and contract fields.
+3. Latency and load gates run in CI with deterministic thresholds.
+4. Replay and scaling behavior remain deterministic under stress.
+5. No unresolved Sev-1/Sev-2 performance risks for launch.
 
-## Next Actions
-1. Implement CI-enforced sign-off pack job and make it a required release gate.
-2. Document release-policy coupling for artifact recency and gate pass criteria.
+## 8. Risks and Mitigations
+1. **False confidence from light tests**
+- Mitigation: enforce heavy-profile gates (Slice B/C) before GA sign-off.
+2. **Policy drift across environments**
+- Mitigation: fingerprinted policy endpoint + CI drift checks.
+3. **Hot-key portfolio skew**
+- Mitigation: partition strategy decision is explicit and testable.
+
+## 9. Implementation Notes
+RFC-065 remains the foundational scalability roadmap. RFC-066 is the production-readiness enforcement layer that turns those decisions into auditable, CI-gated operating guarantees.
+
+## 10. Progress (2026-03-04)
+
+### Slice A - Completed
+1. Deterministic docker smoke expanded to cover ingestion operations and policy/capacity contracts.
+2. Contract checks now fail explicitly on missing institutional policy fields or missing capacity signals.
+
+### Slice B - Completed in this change set
+1. Added deterministic load profile runner: `scripts/performance_load_gate.py`.
+2. Implemented three profiles:
+- `steady_state`
+- `burst`
+- `replay_storm`
+3. Added enforceable threshold evaluation with per-profile failure reasons:
+- throughput floor
+- backlog-age ceiling
+- DLQ pressure ceiling
+- replay pressure ceiling
+- backlog drain-time ceiling
+4. Added JSON/Markdown artifact generation:
+- `output/task-runs/*performance-load-gate*.json`
+- `output/task-runs/*performance-load-gate*.md`
+5. Added CI job `Performance Load Gate` in `.github/workflows/ci.yml`.
+6. Added make target `test-performance-load-gate` and wired lint/format coverage for the new script.
+
+### Slice B.1 - CI Strategy Hardening (Completed in this change set)
+1. Split load testing into two tiers:
+- `fast` profile tier for PR gating (quick signal, low runtime, no drain wait enforcement).
+- `full` profile tier for institutional verification (includes drain invariants and heavier replay stress).
+2. Updated pipeline strategy:
+- PR/push path runs `Performance Load Gate (Fast)`.
+- Scheduled/manual/main path runs `Performance Load Gate (Full)`.
+3. Added explicit make targets:
+- `test-performance-load-gate` (fast tier)
+- `test-performance-load-gate-full` (full tier)
+4. Reduced PR lead time without dropping quality, while preserving heavyweight evidence collection for production readiness.
+
+### Slice C - Failure Injection and Recovery (Completed in this change set)
+1. Added deterministic failure-recovery runner: `scripts/failure_recovery_gate.py`.
+2. Implemented controlled interruption workflow:
+- baseline backlog capture
+- continuous transaction ingestion under interruption
+- targeted worker pause/unpause (`persistence_service` default)
+- bounded drain verification back to baseline backlog envelope
+3. Added enforceable recovery checks:
+- backlog growth under interruption
+- drain timeout ceiling
+- post-recovery backlog-age ceiling
+- post-recovery DLQ pressure ceiling
+- post-recovery replay pressure ceiling
+4. Added JSON/Markdown artifact generation:
+- `output/task-runs/*failure-recovery-gate*.json`
+- `output/task-runs/*failure-recovery-gate*.md`
+5. Added make target and CI wiring:
+- `make test-failure-recovery-gate`
+- CI job `Failure Recovery Gate` on schedule/manual/main.
+6. Moved `E2E Smoke` to heavy-tier execution only (schedule/manual/main) so PR path remains fast while retaining nightly institutional assurance.
+
+### Slice D - Institutional Sign-Off Pack (Completed in this change set)
+1. Added deterministic sign-off pack generator:
+- `scripts/institutional_signoff_pack.py`
+2. Added executable sign-off target:
+- `make test-institutional-signoff-pack`
+3. Added runbook and go-live checklist:
+- `docs/operations/Institutional-Signoff-Runbook.md`
+4. Sign-off pack enforces presence and pass/fail interpretation for:
+- docker smoke artifact
+- latency profile artifact
+- performance load gate artifact
+- failure recovery artifact
+5. Sign-off outputs are generated as auditable artifacts:
+- `output/task-runs/*-institutional-signoff-pack.json`
+- `output/task-runs/*-institutional-signoff-pack.md`

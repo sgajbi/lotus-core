@@ -1,92 +1,63 @@
-# RFC 050 - Query Service Simulation Coverage Hardening Wave 1
+RFC-050: Query Service Simulation Coverage Hardening Wave 1
 
-| Metadata | Value |
-| --- | --- |
-| Status | Implemented |
-| Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
-| Owners | `query-service` test quality |
-| Depends On | RFC 046A |
-| Scope | First-wave simulation-focused test hardening for query-service |
+Status: Implemented
+Date: 2026-02-24
+Owner: lotus-core Team
 
-## Executive Summary
+## Context
 
-RFC 050 delivered targeted simulation test hardening and is implemented:
-1. Repository unit tests cover key simulation persistence edge behavior.
-2. Service unit tests cover lifecycle/guard/projection branches.
-3. Router integration tests cover service-error to HTTP mapping for simulation endpoints.
-4. Test dependency completeness concern (`openpyxl`) is resolved in test requirements.
+The lotus-core query-service coverage gate currently reports 94% and the lowest-covered modules are concentrated in simulation flows:
 
-Classification: `Fully implemented and aligned`.
+- `app/repositories/simulation_repository.py`
+- `app/services/simulation_service.py`
+- `app/routers/simulation.py`
 
-## Original Requested Requirements (Preserved)
+These modules are central to sandbox proposal workflows consumed by lotus-gateway and need stronger regression protection.
 
-Original RFC 050 requested:
-1. Harden simulation module coverage via focused repository/service/router test additions.
-2. Reduce regression risk around guardrails and error mapping.
-3. Ensure test collection dependencies are complete.
+## Problem Statement
 
-## Current Implementation Reality
+Simulation coverage is insufficient across error paths and guard-rails:
 
-Implemented:
-1. Simulation repository tests cover create/get/close/add/delete and rollback behavior.
-2. Simulation service tests cover session validation, change semantics, and projection paths.
-3. Simulation router dependency tests verify request/response mappings and expected error status behavior.
-4. `openpyxl` is present in `tests/requirements.txt`.
+- Session lifecycle validation and expired/inactive checks.
+- Repository rollback path on missing delete target.
+- Router-level HTTP status mapping for service exceptions.
+- Projection edge cases (unknown instruments, non-positive projected quantity filtering).
 
-Evidence:
-- `tests/unit/services/query_service/repositories/test_simulation_repository.py`
-- `tests/unit/services/query_service/services/test_simulation_service.py`
-- `tests/integration/services/query_service/test_simulation_router_dependency.py`
-- `tests/requirements.txt`
+This creates elevated regression risk for session state, projected positions, and policy-evaluation flows.
 
-## Requirement-to-Implementation Traceability
+## Decision
 
-| Original Requirement | Current Implementation in lotus-core | Evidence |
-| --- | --- | --- |
-| Repository simulation branch tests | Implemented | simulation repository test suite |
-| Service guard/projection tests | Implemented | simulation service test suite |
-| Router error/status mapping tests | Implemented | simulation router dependency tests |
-| Dependency completeness for collection | Implemented | `tests/requirements.txt` includes `openpyxl` |
+Add a focused simulation test hardening wave:
 
-## Design Reasoning and Trade-offs
+1. Add dedicated unit tests for simulation repository behavior.
+2. Expand simulation service tests for guard branches and projection variants.
+3. Expand simulation router integration tests for error-to-HTTP mapping.
+4. Ensure local test dependency completeness for test collection (`openpyxl` required by upload ingestion tests).
 
-1. Focused branch coverage in high-risk simulation modules provides disproportionate quality gains.
-2. Explicit router mapping tests prevent silent HTTP contract drift.
+## Scope
 
-Trade-off:
-- Additional targeted tests slightly increase runtime but materially reduce regression risk.
+In scope:
 
-## Gap Assessment
+- lotus-core query-service tests and RFC documentation.
+- Test dependency update in `tests/requirements.txt`.
 
-No high-value implementation gap identified for RFC 050 wave-1 scope.
+Out of scope:
 
-## Deviations and Evolution Since Original RFC
+- Functional behavior changes to simulation business logic.
+- API contract changes.
 
-1. Broader query-service coverage hardening continued in later RFCs (051-055), making this RFC a completed first wave in a larger sequence.
+## Risks and Trade-offs
 
-## Proposed Changes
+- Additional tests increase runtime moderately.
+- Branch-focused tests increase coupling to current guard behavior, accepted for deterministic quality control.
 
-1. Keep classification as `Fully implemented and aligned`.
+## Validation
 
-## Test and Validation Evidence
+- `python scripts/coverage_gate.py`
+- `python -m pytest tests/unit/services/query_service/services/test_simulation_service.py`
+- `python -m pytest tests/integration/services/query_service/test_simulation_router_dependency.py`
+- `python -m pytest tests/unit/services/query_service/repositories/test_simulation_repository.py`
 
-1. `tests/unit/services/query_service/repositories/test_simulation_repository.py`
-2. `tests/unit/services/query_service/services/test_simulation_service.py`
-3. `tests/integration/services/query_service/test_simulation_router_dependency.py`
+## Follow-up
 
-## Original Acceptance Criteria Alignment
-
-Aligned.
-
-## Rollout and Backward Compatibility
-
-No runtime change introduced by this documentation retrofit.
-
-## Open Questions
-
-1. None for wave-1 scope; subsequent coverage hardening is tracked in later RFCs.
-
-## Next Actions
-
-1. Maintain simulation test depth as session/snapshot contracts evolve.
+Wave 2 should target remaining lower-coverage query-service modules (integration, position, capabilities, and operations routers/services) to move lotus-core from 94% toward the platform 99% target.

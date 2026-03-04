@@ -1,92 +1,59 @@
-# RFC 025 - Refactor Performance Engine and Enhance Monitoring
+# RFC 026: Refactor TWR Performance Engine for Maintainability and Performance
 
-| Metadata | Value |
-| --- | --- |
-| Status | Archived |
-| Created | 2025-09-01 |
-| Last Updated | 2026-03-04 |
-| Owners | Historical lotus-core performance analytics surface (retired) |
-| Depends On | RFC 057 (ownership and module retirement) |
-| Scope | Historical proposal for in-core performance-engine refactor and query performance endpoint metrics |
+* **Status**: Proposed
+* **Date**: 2025-09-01
+* **Related RFCs**: RFC 025
 
-## Executive Summary
+## 1. Summary
 
-RFC 025 proposed refactoring an in-core performance engine and instrumenting performance analytics endpoints in lotus-core.
-This proposal no longer matches current repository boundaries:
-1. Legacy in-core performance module was retired in RFC 057.
-2. Legacy performance endpoints are removed from lotus-core query-service.
-3. Performance analytics ownership moved out of lotus-core.
+This RFC proposes a targeted refactoring of the Time-Weighted Return (TWR) `performance-calculator-engine`. The current implementation, while functionally correct, is built on a complex, stateful, row-by-row iteration that is difficult to maintain and debug.
 
-Therefore RFC 025 is archived as a historical record and is `No longer relevant to this repository`.
+We will replace this iterative logic with a modern, vectorized implementation using the pandas library. This will be a **behaviorally identical refactor**, meaning the output must be bit-for-bit the same as the current engine. The goal is to significantly improve code clarity, maintainability, and likely performance, without altering the sophisticated, proprietary methodology. Additionally, we will enhance the `query_service` with specific metrics to improve the observability of our performance endpoints.
 
-## Original Requested Requirements (Preserved)
+## 2. The Problem in Detail
 
-Original RFC 025 requested:
-1. Refactor TWR performance engine internals for maintainability/performance.
-2. Preserve behavior equivalence via characterization testing.
-3. Add TWR/MWR endpoint-specific monitoring in query service.
+The current TWR engine presents several challenges that constitute significant technical debt:
 
-## Current Implementation Reality
+* **Maintainability Debt:** The core logic in `calculator.py` is a stateful `for` loop that processes a DataFrame one row at a time. It relies on opaque control flags (`NCTRL_1`, `PERF_RESET`) and temporary variables (`TEMP_LONG_CUM_ROR_PCT`) to manage state between iterations. This makes the code exceptionally difficult for new developers to understand, debug, or safely extend.
+* **Performance Ceiling:** Row-wise iteration is a known anti-pattern in pandas that does not leverage the library's underlying C-speed optimizations. While performant enough for now, this approach will become a bottleneck as the length of time periods requested by users grows.
+* **Monitoring Gap:** The performance endpoints in the `query_service` lack specific metrics. We cannot distinguish TWR vs. MWR latency or track which period types are most requested, creating a blind spot for usage patterns and performance tuning.
 
-1. `performance-calculator-engine` is removed from lotus-core as legacy module under RFC 057.
-2. Query service no longer exposes legacy performance endpoints (`/portfolios/{portfolio_id}/performance`, `/performance/mwr`).
-3. RFC text itself contains numbering drift (`RFC 026` in-body), confirming document staleness relative to current governance stream.
+## 3. Proposed Solution
 
-Evidence:
-- `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
-- `tests/integration/services/query_service/test_main_app.py`
-- `src/services/query_service/app/main.py` and router set (no performance router)
+### 3.1. Core Principle: Behaviorally Identical Refactoring
 
-## Requirement-to-Implementation Traceability
+The single most important constraint is that the **refactored engine must produce mathematically identical results to the existing one**. The unique logic for handling long/short sleeves and performance resets must be perfectly preserved. The existing test suite will be expanded to form a characterization suite to enforce this.
 
-| Original Requirement | Current Implementation in lotus-core | Evidence |
-| --- | --- | --- |
-| In-core performance engine refactor | Not applicable (module retired) | RFC 057 legacy retirement section |
-| Query performance endpoint metrics | Not applicable to removed endpoint surface | query-service OpenAPI contract tests |
-| Characterization-driven refactor in lotus-core | Not applicable in current ownership model | RFC 057 ownership boundaries |
+### 3.2. Vectorized Refactoring Plan
 
-## Design Reasoning and Trade-offs
+The project will be executed in three distinct phases:
 
-1. Keeping performance analytics out of lotus-core reduces contract overlap and ownership drift.
-2. Lotus-core remains focused on canonical data/state contracts and simulation/integration capabilities.
+**Phase 1: Characterization**
+Create a comprehensive new test suite dedicated to the existing engine. This suite will capture its output for a wide range of complex edge cases, including:
+* Portfolios with short positions (negative market value).
+* Portfolios whose market value crosses zero.
+* "Wipeout" scenarios that trigger the `PERF_RESET` logic.
+This test suite will become the immutable benchmark against which the new implementation is validated.
 
-Trade-off:
-- Historical in-core optimization proposals are no longer actionable here and must be re-homed to the owning performance repository if still needed.
+**Phase 2: Vectorized Implementation**
+The `calculate_performance` method will be rewritten to eliminate the `for` loop. The logic will be reimplemented using vectorized pandas and NumPy operations. For example:
+* **Portfolio Sign:** `df['sign'] = np.sign(df['bod_market_value'] + df['bod_cashflow'])`
+* **Reset Conditions:** The `PERF_RESET` conditions will be implemented using boolean masking and `df.shift()` to compare a row's values to the previous row's state.
+* **Geometric Linking:** The cumulative return for contiguous periods (between resets) can be calculated by using `groupby()` on a column that identifies these periods, followed by a `cumprod()` on the daily return factors.
 
-## Gap Assessment
+**Phase 3: Validation & Benchmarking**
+The new vectorized implementation will be run against the characterization suite created in Phase 1. The output must match exactly. Performance benchmarks will be run to quantify the speed improvements.
 
-No lotus-core implementation gap is tracked for RFC 025 because scope is out-of-repo.
+### 3.3. Enhanced Monitoring
 
-## Deviations and Evolution Since Original RFC
+The `query_service` will be instrumented with new Prometheus metrics:
+1.  **`twr_calculation_duration_seconds` (Histogram):** A new metric to specifically time TWR API requests.
+2.  **`mwr_calculation_duration_seconds` (Histogram):** A new metric to specifically time MWR API requests.
+3.  **`performance_period_type_requested_total` (Counter):** A new metric with a `period_type` label (e.g., "YTD", "EXPLICIT") to track usage patterns.
 
-1. RFC 057 superseded the premise by retiring legacy performance assets from lotus-core.
-2. Downstream analytics ownership separation made this RFC non-actionable in this repository.
+## 4. Acceptance Criteria
 
-## Proposed Changes
-
-1. Keep RFC 025 archived in lotus-core.
-2. If requirements remain valuable, re-open as a new RFC in the owning performance app repository with current architecture context.
-
-## Test and Validation Evidence
-
-1. OpenAPI tests confirm performance endpoints are absent:
-   - `tests/integration/services/query_service/test_main_app.py`
-2. RFC 057 implementation record confirms module retirement:
-   - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
-
-## Original Acceptance Criteria Alignment
-
-Original criteria are superseded by ownership and module retirement decisions.
-
-## Rollout and Backward Compatibility
-
-No runtime change introduced by this documentation retrofit.
-
-## Open Questions
-
-1. Which target repository will own any future TWR/MWR engine refactor RFC derived from this historical proposal?
-
-## Next Actions
-
-1. Keep as archived/superseded in lotus-core.
-2. Reference lotus-performance (or current owning app) for any active implementation planning.
+* The new `performance-calculator-engine` implementation produces results that are bit-for-bit identical to the original implementation across the entire characterization test suite.
+* The `for` loop and all `NCTRL` variables are eliminated from `calculator.py`.
+* Performance benchmarks demonstrate a measurable improvement in calculation speed for long time periods.
+* The new Prometheus metrics are implemented in the `query_service` and exposed at the `/metrics` endpoint.

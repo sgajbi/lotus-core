@@ -1,92 +1,42 @@
-# RFC 045 - Lotus Core Ingestion Healthcheck Reliability and Runtime Readiness
+# RFC 045 - lotus-core Ingestion Healthcheck Reliability and Runtime Readiness
 
-| Metadata | Value |
-| --- | --- |
-| Status | Implemented |
-| Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
-| Owners | `ingestion-service`, platform run reliability |
-| Depends On | Docker compose runtime contract |
-| Scope | Eliminate false unhealthy status for ingestion service readiness in compose environments |
+- Status: IMPLEMENTED
+- Date: 2026-02-24
+- Owners: lotus-core Ingestion Service
 
-## Executive Summary
+## Problem Statement
 
-RFC 045 addressed a concrete container healthcheck reliability defect.
-The core problem is resolved:
-1. Ingestion healthcheck now uses a Python urllib probe instead of `curl`.
-2. Readiness endpoint health is checked directly in-container without missing-tool failures.
-3. Startup orchestration paths that depend on healthy ingestion status are aligned with this fix.
+In local Docker startup, `ingestion_service` remains `unhealthy` even when ingestion API calls and `/health/ready` respond successfully.
+This creates false-negative platform health signals and weakens operational confidence for integration testing and orchestration.
 
-Classification: `Fully implemented and aligned`.
+## Root Cause
 
-## Original Requested Requirements (Preserved)
+The container healthcheck command depends on `curl`, but the ingestion image does not include `curl`.
+Docker health probes fail with `/bin/sh: 1: curl: not found`, producing persistent `unhealthy` state despite service readiness.
 
-Original RFC 045 requested:
-1. Replace ingestion probe dependence on unavailable `curl`.
-2. Improve runtime readiness fidelity.
-3. Strengthen startup/smoke reliability around health-driven orchestration.
+## Proposed Solution
 
-## Current Implementation Reality
+1. Replace the ingestion healthcheck command with a probe that does not rely on missing OS tools.
+2. Standardize healthchecks across lotus-core services to use one of:
+   - `python -c` HTTP probe, or
+   - a lightweight binary guaranteed in image baseline.
+3. Add CI/container smoke validation to assert healthcheck tooling availability and healthy status after startup.
 
-Implemented:
-1. `ingestion_service` healthcheck in compose uses:
-   - `python -c "import urllib.request; urllib.request.urlopen(.../health/ready...)"`.
-2. `demo_data_loader` and downstream readiness choreography depend on healthy services, including ingestion.
-3. Operational troubleshooting docs include demo-loader and readiness troubleshooting guidance.
+## Architectural Impact
 
-Evidence:
-- `docker-compose.yml` (`ingestion_service.healthcheck`)
-- `docker-compose.yml` (`demo_data_loader` depends-on healthy services)
-- `tools/demo_data_pack.py` readiness wait logic
-- `docs/features/core_data_ingestion/04_Operations_Troubleshooting_Guide.md`
+- Improves container-level observability fidelity for lotus-core and downstream platform stacks.
+- Reduces false alarms in local and CI compose workflows.
+- Aligns health semantics with platform reliability expectations.
 
-## Requirement-to-Implementation Traceability
+## Risks and Trade-offs
 
-| Original Requirement | Current Implementation in lotus-core | Evidence |
-| --- | --- | --- |
-| Remove missing-tool healthcheck dependency | Implemented | `docker-compose.yml` ingestion healthcheck command |
-| Reliable readiness semantics | Implemented for ingestion runtime path | readiness probe + loader dependency chain |
-| Health-aware startup confidence | Implemented with one-shot loader and readiness wait/poll tooling | compose + `demo_data_pack.py` |
+- Updating probe strategy can mask regressions if probe endpoint itself is too shallow.
+- Standardized probe behavior may require Dockerfile adjustments across multiple lotus-core services.
+- Slight increase in CI runtime for healthcheck validation gates.
 
-## Design Reasoning and Trade-offs
+## High-Level Implementation Approach
 
-1. Probe command must use tooling guaranteed present in image runtime.
-2. Readiness-based gating is more meaningful for integration startup than process-up checks alone.
-
-Trade-off:
-- Different services still use mixed probe styles (`curl` vs `python`), so operational style is not fully uniform across all containers.
-
-## Gap Assessment
-
-No blocking implementation gap for the ingestion-specific defect this RFC targeted.
-
-## Deviations and Evolution Since Original RFC
-
-1. The practical fix focused on ingestion reliability; full cross-service healthcheck style standardization remains optional follow-on hygiene.
-
-## Proposed Changes
-
-1. Keep classification as `Fully implemented and aligned`.
-
-## Test and Validation Evidence
-
-1. Compose-based readiness orchestration paths:
-   - `docker-compose.yml`
-2. Runtime readiness wait implementation:
-   - `tools/demo_data_pack.py`
-
-## Original Acceptance Criteria Alignment
-
-Aligned for ingestion-service reliability objective.
-
-## Rollout and Backward Compatibility
-
-No runtime change introduced by this documentation retrofit.
-
-## Open Questions
-
-1. Should lotus-core standardize all service healthchecks to a single probe style in a separate ops RFC?
-
-## Next Actions
-
-1. Keep ingestion health probe behavior stable and monitor compose startup reliability trends.
+1. Update ingestion container healthcheck in compose/docker artifacts to a guaranteed-available probe command.
+2. Verify probe endpoint coverage (`/health/ready` vs `/health/live`) aligns with orchestration expectations.
+3. Add compose smoke assertion that fails if service reports `unhealthy` after warm-up.
+4. Document healthcheck policy in lotus-core runbook/developer docs.

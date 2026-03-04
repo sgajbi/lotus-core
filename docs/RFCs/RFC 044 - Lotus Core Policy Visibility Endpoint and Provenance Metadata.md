@@ -1,98 +1,52 @@
-# RFC 044 - Lotus Core Policy Visibility Endpoint and Provenance Metadata
+# RFC 044 - lotus-core Policy Visibility Endpoint and Provenance Metadata
 
-| Metadata | Value |
-| --- | --- |
-| Status | Partially Implemented |
-| Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
-| Owners | `query-service` integration contracts |
-| Depends On | RFC 043 |
-| Scope | Policy diagnostics endpoint and provenance metadata propagation |
+- Status: IMPLEMENTED
+- Date: 2026-02-24
+- Owners: lotus-core Query Service
 
-## Executive Summary
+## Context
 
-RFC 044 introduced policy visibility requirements.
-Current implementation is partially aligned:
-1. `GET /integration/policy/effective` is implemented and returns policy provenance.
-2. Provenance metadata model is implemented in integration DTOs and service logic.
-3. But requested provenance embedding in `core-snapshot` response metadata is not present in current snapshot response contract.
+lotus-core core snapshot policy governance is now enforced by backend policy configuration.
+The next gap is visibility: consumers and operators need an explicit API to inspect
+effective policy resolution and provenance for tenant/consumer contexts.
 
-Classification: `Partially implemented (requires enhancement)`.
+## Decision
 
-## Original Requested Requirements (Preserved)
+1. Add `GET /integration/policy/effective` for policy diagnostics.
+2. Include policy provenance metadata in core snapshot response metadata:
+   - `policy_version`
+   - `policySource`
+   - `matched_rule_id`
+   - `strict_mode`
+3. Keep policy decisioning and provenance in lotus-core backend only.
 
-Original RFC 044 requested:
-1. Policy visibility endpoint for effective policy diagnostics.
-2. Provenance fields in snapshot response metadata (`policy_version`, `policy_source`, `matched_rule_id`, `strict_mode`).
-3. Backend-owned policy decisioning.
+## Rationale
 
-## Current Implementation Reality
+1. Improves supportability for policy-governed integration behavior.
+2. Enables lotus-gateway/UI observability without shifting policy logic to clients.
+3. Makes policy rollout behavior deterministic and testable.
 
-Implemented:
-1. `/integration/policy/effective` route exists and is backed by integration policy resolver.
-2. Response includes `policy_provenance` with version/source/rule/strict attributes.
-3. Unit tests cover policy resolution behavior and environment-policy parsing.
+## Consequences
 
-Not fully implemented:
-1. Core snapshot response schema does not include policy provenance metadata block requested by RFC text.
+Positive:
 
-Evidence:
-- `src/services/query_service/app/routers/integration.py`
-- `src/services/query_service/app/services/integration_service.py`
-- `src/services/query_service/app/dtos/integration_dto.py`
-- `src/services/query_service/app/dtos/core_snapshot_dto.py`
-- `tests/unit/services/query_service/services/test_integration_service.py`
-- `tests/unit/services/query_service/routers/test_integration_router.py`
+1. Operators can inspect effective policy context directly from lotus-core.
+2. Snapshot behavior is easier to explain and debug.
 
-## Requirement-to-Implementation Traceability
+Trade-offs:
 
-| Original Requirement | Current Implementation in lotus-core | Evidence |
-| --- | --- | --- |
-| Effective policy diagnostics endpoint | Implemented | `integration.py` route + service |
-| Provenance metadata model | Implemented in policy endpoint response | `integration_dto.py` |
-| Provenance fields in core-snapshot response | Not implemented | `core_snapshot_dto.py` |
+1. Additional API and metadata contract fields to maintain.
 
-## Design Reasoning and Trade-offs
+## Tests
 
-1. Dedicated policy diagnostics endpoint improves operator support workflows.
-2. Keeping policy decisioning backend-owned reduces client complexity.
-
-Trade-off:
-- When snapshot responses omit policy provenance, clients need an extra call to correlate policy decisions.
-
-## Gap Assessment
-
-Remaining delta:
-1. Add optional/explicit policy provenance metadata to `core-snapshot` response, or explicitly document two-step policy contract model as final design.
-
-## Deviations and Evolution Since Original RFC
-
-1. Policy visibility endpoint is in place and strong.
-2. Snapshot metadata propagation goal remains incomplete in current contract.
-
-## Proposed Changes
-
-1. Keep classification as `Partially implemented`.
-2. Decide final policy-provenance propagation model and align docs/code accordingly.
-
-## Test and Validation Evidence
+Added/updated:
 
 1. `tests/unit/services/query_service/services/test_integration_service.py`
-2. `tests/unit/services/query_service/routers/test_integration_router.py`
+2. `tests/integration/services/query_service/test_integration_router_dependency.py`
 
-## Original Acceptance Criteria Alignment
+Coverage includes:
 
-Partially aligned.
-
-## Rollout and Backward Compatibility
-
-No runtime change introduced by this documentation retrofit.
-
-## Open Questions
-
-1. Is policy provenance in snapshot payload mandatory, or can `policy/effective` remain the sole provenance source?
-
-## Next Actions
-
-1. Implement or formally waive snapshot metadata propagation with explicit architecture decision.
+1. effective policy response shape,
+2. strict mode and allowed section resolution,
+3. policy provenance values in core snapshot metadata.
 

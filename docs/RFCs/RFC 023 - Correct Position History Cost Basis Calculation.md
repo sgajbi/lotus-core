@@ -1,96 +1,113 @@
-# RFC 023 - Correct Position History Cost Basis Calculation
+This is a critical data integrity bug fix. The proposal to align the `position_calculator_service` with the authoritative cost basis calculations from the `cost_calculator_service` is the correct approach. It establishes a single source of truth for cost basis logic, which is a foundational principle for a robust financial system.
 
-| Metadata | Value |
-| --- | --- |
-| Status | Implemented |
-| Created | 2025-09-02 |
-| Last Updated | 2026-03-04 |
-| Owners | `position_calculator_service` |
-| Depends On | RFC 001, RFC 021 |
-| Scope | Align position history cost-basis updates with authoritative transaction `net_cost` fields |
+The plan is approved. Proceed with producing the finalized RFC.
 
-## Executive Summary
+### **RFC 023: Correct Position History Cost Basis Calculation**
 
-RFC 023 fixed a correctness issue in position cost-basis tracking for disposals.
-The intended behavior was to treat `net_cost`/`net_cost_local` from upstream cost calculation as the authoritative COGS effect for `SELL`/`TRANSFER_OUT` events.
+  * **Status**: **Final**
+  * **Date**: 2025-09-02
+  * **Lead**: Gemini Architect
+  * **Services Affected**: `position_calculator_service`
+  * **Related RFCs**: [RFC 001 - Epoch and Watermark-Based Reprocessing](https://www.google.com/search?q=docs/RFCs/RFC%2520001%2520-%2520Epoch%2520and%2520Watermark-Based%2520Reprocessing.md)
 
-Current implementation is aligned:
-1. Position logic applies additive `net_cost` semantics for disposal flows.
-2. Unit tests explicitly guard against old proportional approximation behavior.
-3. Position calculator docs now describe the corrected method.
+-----
 
-## Original Requested Requirements (Preserved)
+### 1\. Summary (TL;DR)
 
-Original RFC 023 requested:
-1. Remove proportional cost-basis reduction for sell-side events.
-2. Apply authoritative event `net_cost` / `net_cost_local` for disposals.
-3. Add targeted tests proving exact behavior.
-4. Update position-calculator feature/methodology docs.
+This RFC finalizes the decision to correct a critical data integrity flaw in the `position_calculator_service`. The service currently uses an incorrect proportional approximation to calculate cost basis reductions for sell-side transactions, which is logically inconsistent with the precise, methodology-driven (e.g., FIFO) Cost of Goods Sold (COGS) calculated by the upstream `cost_calculator_service`.
 
-## Current Implementation Reality
+We will refactor the `position_calculator_service` to use the authoritative `net_cost` and `net_cost_local` values provided on the incoming `TransactionEvent`. This change will eliminate the data drift, ensure the `position_history` table is verifiably correct, and simplify the system by removing redundant, flawed logic.
 
-Implemented behavior:
-1. `calculate_next_position` uses additive `net_cost` and `net_cost_local` for `SELL` and `TRANSFER_OUT`.
-2. Disposition path is now consistent with upstream cost engine output semantics.
-3. Unit tests include explicit assertion that cost basis uses `net_cost` rather than proportional reduction.
-4. Position calculator documentation reflects updated method.
+### 2\. Decision
 
-Evidence:
-- `src/services/calculators/position_calculator/app/core/position_logic.py`
-- `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
-- `docs/features/position_calculator/01_Feature_Position_Calculator_Overview.md`
-- `docs/features/position_calculator/03_Methodology_Guide.md`
+We will implement the solution as proposed. The `calculate_next_position` method within `src/services/calculators/position_calculator/app/core/position_logic.py` will be refactored. For `SELL` and `TRANSFER_OUT` transactions, it will no longer use a proportional reduction. Instead, it will directly apply the `net_cost` (for base currency) and `net_cost_local` values from the inbound `TransactionEvent`, which correctly represent the cost of the shares being disposed of.
 
-## Requirement-to-Implementation Traceability
+### 3\. Architectural Consequences
 
-| Original Requirement | Current Implementation in lotus-core | Evidence |
-| --- | --- | --- |
-| Remove proportional sell logic | No proportional math in disposal path | `position_logic.py` |
-| Use event net-cost values as authority | `SELL`/`TRANSFER_OUT` add `transaction.net_cost` + `transaction.net_cost_local` | `position_logic.py` |
-| Add correctness-focused tests | Explicit `test_calculate_next_position_for_sell_uses_net_cost` | `test_position_logic.py` |
-| Refresh docs to corrected methodology | Updated feature + methodology guides | position calculator docs |
+#### Pros:
 
-## Design Reasoning and Trade-offs
+  * **Correctness & Data Integrity**: This is the primary benefit. The `cost_basis` in the `position_history` table will now be perfectly consistent with the underlying FIFO or AVCO tax lots calculated upstream. This eliminates a significant source of data drift and ensures all downstream analytics and API responses are based on correct data.
+  * **System Simplification**: The refactoring removes a redundant, complex, and incorrect calculation from the `position_calculator`, simplifying its logic. It enforces the principle of a single source of truth, where the `cost_calculator_service` is the sole authority on cost basis calculations.
+  * **Improved Auditability**: The `position_history` table will become a more reliable and auditable record, as the change in cost basis after a sale will directly correspond to the COGS of that specific disposition.
 
-1. Single-source-of-truth principle: disposal COGS belongs to cost-calculator output, not a second approximation in position logic.
-2. Simpler and more auditable position behavior by consuming canonical event fields.
+#### Trade-offs:
 
-Trade-off:
-- Position calculator correctness is now more tightly coupled to upstream transaction enrichment quality, which is intentional architectural alignment.
+  * **Tighter Coupling**: This change makes the `position_calculator_service` more tightly coupled to the correctness of the `net_cost` provided by the upstream `cost_calculator_service`. This is a desirable and necessary trade-off, as it enforces the single source of truth pattern for cost basis logic.
 
-## Gap Assessment
+### 4\. High-Level Design
 
-No material implementation gap remains for RFC 023 intent.
+The change is confined to a single method in the `position_calculator_service`.
 
-## Deviations and Evolution Since Original RFC
+  * **File to Modify**: `src/services/calculators/position_calculator/app/core/position_logic.py`
+  * **Method to Modify**: `calculate_next_position`
 
-1. RFC 021 (FIFO/AVCO strategy support) strengthens the rationale for consuming authoritative net-cost output in RFC 023.
-2. Downstream query contracts now inherit corrected position-history cost basis behavior.
+The logic for handling `SELL` and `TRANSFER_OUT` transaction types will be modified as follows:
 
-## Proposed Changes
+**From (Incorrect Proportional Logic):**
 
-1. Keep RFC 023 classification as `Fully implemented and aligned`.
-2. Preserve regression test for disposal-cost-basis invariants.
+```python
+# OLD LOGIC - INCORRECT
+elif txn_type in ["SELL", "TRANSFER_OUT"]:
+    if not quantity.is_zero():
+        proportion_of_holding = transaction.quantity / quantity
+        cost_basis_reduction = cost_basis * proportion_of_holding
+        cost_basis_local_reduction = cost_basis_local * proportion_of_holding
+        
+        cost_basis -= cost_basis_reduction
+        cost_basis_local -= cost_basis_local_reduction
+    
+    quantity -= transaction.quantity
+```
 
-## Test and Validation Evidence
+**To (Correct Additive Logic):**
 
-1. Unit coverage for corrected disposal behavior:
-   - `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
-2. Existing flow-level suites (reprocessing/valuation/timeseries) continue to validate no regression on dependent pipelines.
+```python
+# NEW LOGIC - CORRECT
+elif txn_type in ["SELL", "TRANSFER_OUT"]:
+    quantity -= transaction.quantity
 
-## Original Acceptance Criteria Alignment
+    # transaction.net_cost is negative for a SELL/TRANSFER_OUT, representing the COGS.
+    # Adding this negative value correctly reduces the total cost basis.
+    if transaction.net_cost is not None:
+        cost_basis += transaction.net_cost
+    if transaction.net_cost_local is not None:
+        cost_basis_local += transaction.net_cost_local
+```
 
-Acceptance criteria are met for logic change, test coverage, and documentation updates.
+### 5\. Testing Plan
 
-## Rollout and Backward Compatibility
+A comprehensive testing strategy is required to validate this critical fix.
 
-No runtime change introduced by this documentation retrofit.
+  * **Unit Tests**:
 
-## Open Questions
+      * New unit tests will be added to `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`.
+      * A specific test case will be created that:
+        1.  Initializes a `PositionStateDTO` with a non-uniform average cost (e.g., quantity 100, cost basis 1200).
+        2.  Creates a `SELL` `TransactionEvent` for a partial quantity (e.g., 50) with a `net_cost` derived from a different cost per share (e.g., `-550`, representing a FIFO cost of $11/share).
+        3.  Calls `PositionCalculator.calculate_next_position`.
+        4.  Asserts that the `new_state.cost_basis` is exactly `initial_state.cost_basis + event.net_cost` (i.e., `1200 + (-550) = 650`), and **not** the incorrect proportional value (`1200 * (1 - 50/100) = 600`).
+      * A parallel test will be created to verify the logic for `net_cost_local`.
 
-1. Should additional property-based invariants be added for disposal cost-basis transitions across varied transaction sequences?
+  * **End-to-End (E2E) Tests**:
 
-## Next Actions
+      * Existing E2E tests, particularly `test_reprocessing_workflow.py`, `test_5_day_workflow.py`, and `test_dual_currency_workflow.py`, will be run to ensure no regressions. The final assertions on `cost_basis` and `realized_gain_loss` in these tests are the ultimate validation that the end-to-end pipeline is now consistent.
 
-1. Keep current behavior as canonical baseline.
-2. Maintain disposal-cost-basis regression assertions in unit and scenario test suites.
+### 6\. Documentation Update
+
+To ensure our documentation remains current and accurate, the following files must be updated as part of this change:
+
+  * **`docs/features/position_calculator/01_Feature_Position_Calculator_Overview.md`**:
+
+      * The "Gaps and Design Considerations" section detailing the flawed logic must be **removed**. The overview should now state that the service accurately tracks cost basis by consuming the authoritative COGS from the `cost_calculator_service`.
+
+  * **`docs/features/position_calculator/03_Methodology_Guide.md`**:
+
+      * The note about the "proportional approximation" flaw must be **removed**.
+      * The table detailing the calculation logic must be updated to reflect the new, correct methodology for `SELL` and `TRANSFER_OUT` transactions, explaining that the cost basis is reduced by the `net_cost` from the transaction event.
+
+### 7\. Acceptance Criteria
+
+1.  The `calculate_next_position` logic in `position_logic.py` is refactored to use the additive `net_cost` and `net_cost_local` from the transaction event for sell-side dispositions.
+2.  New unit tests are added to `test_position_logic.py` that specifically validate the correctness of the new cost basis calculation against a known expected value.
+3.  All existing unit, integration, and E2E tests pass, with special attention to the final `cost_basis` assertions in `test_reprocessing_workflow.py` and `test_5_day_workflow.py`.
+4.  The feature documentation in `docs/features/position_calculator/` is updated to remove all mentions of the previous flawed logic and accurately describe the new, correct methodology.

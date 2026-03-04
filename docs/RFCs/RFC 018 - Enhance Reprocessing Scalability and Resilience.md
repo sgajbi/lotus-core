@@ -1,112 +1,28 @@
-# RFC 018 - Enhance Reprocessing Scalability and Resilience
+# RFC 018: Enhance Reprocessing Scalability and Resilience
 
-| Metadata | Value |
-| --- | --- |
-| Status | Implemented |
-| Created | 2025-09-01 |
-| Last Updated | 2026-03-04 |
-| Owners | lotus-core calculators (`position_calculator`, `position_valuation_calculator`), `portfolio-common` |
-| Depends On | RFC 001, RFC 004 |
-| Scope | Durable fan-out for instrument reprocessing triggers and atomic replay trigger flow |
+* **Status**: Proposed
+* **Date**: 2025-09-01
 
-## Executive Summary
+## 1. Summary
 
-RFC 018 addressed two high-risk operational concerns in the reprocessing path:
-1. Fan-out spikes from back-dated instrument prices (thundering herd risk).
-2. Non-atomic epoch bump + replay publication in position replay flow.
+The current reprocessing engine is architecturally sound but has two potential weaknesses under heavy load or failure conditions: a "thundering herd" problem from back-dated prices on widely-held securities, and a state corruption risk if the `position-calculator` crashes mid-replay.
 
-Current lotus-core implementation aligns with both goals:
-1. Instrument-level triggers are converted into durable jobs (`reprocessing_jobs`) and processed by a bounded worker.
-2. Position replay trigger uses outbox-backed atomic staging so epoch bump and replay publication intent commit together.
+This RFC proposes introducing a dedicated, persistent job queue for price-based fan-outs to allow for rate-limiting, and making the transaction re-emission process in the `position-calculator` atomic to improve resilience.
 
-## Original Requested Requirements (Preserved)
+## 2. Gaps and Proposed Solutions
 
-Original RFC 018 requested:
-1. Replace in-memory instrument trigger fan-out with durable queue-backed jobs.
-2. Add controlled worker processing for watermark reset jobs.
-3. Add observable pending-trigger metric.
-4. Make position replay trigger atomic by staging replay events durably in the same transaction as epoch bump.
+### 2.1. Scalability: Price Update "Thundering Herd"
 
-## Current Implementation Reality
+* **Gap:** A back-dated price for a security like an S&P 500 ETF could trigger simultaneous watermark resets for thousands of `position_state` keys. The current implementation fans this out in-memory, which could overwhelm the database and the `ValuationScheduler` with a sudden, massive burst of work.
+* **Proposal:**
+    1.  The `PriceEventConsumer` will no longer be responsible for finding affected portfolios.
+    2.  Instead, the `ValuationScheduler` will read from the `instrument_reprocessing_state` table and, instead of fanning out in-memory, it will create discrete, persistent "ResetWatermarkJob" records in a new `reprocessing_jobs` table.
+    3.  A separate worker process can then consume jobs from this table at a controlled rate, preventing the system from being overwhelmed.
+    4.  **Add Metric:** A new Prometheus Gauge `instrument_reprocessing_triggers_pending` will be added to monitor the depth of the trigger queue.
 
-Implemented behavior:
-1. Durable queue introduced: `reprocessing_jobs` table and repository claim/update workflow.
-2. `ValuationScheduler` converts instrument triggers into `RESET_WATERMARKS` jobs.
-3. `ReprocessingWorker` claims jobs in batches and applies watermark resets across affected portfolios.
-4. `instrument_reprocessing_triggers_pending` gauge is emitted from scheduler metric update path.
-5. `PositionCalculator` uses outbox-backed replay staging after epoch increment in a single transaction scope.
+### 2.2. Resilience: Non-Atomic Transaction Replay
 
-Evidence:
-- `alembic/versions/2e3ca6475106_feat_add_reprocessing_jobs_table.py`
-- `src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py`
-- `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`
-- `src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py`
-- `src/services/calculators/position_calculator/app/core/position_logic.py`
-- `src/libs/portfolio-common/portfolio_common/monitoring.py`
-- `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
-- `tests/unit/services/calculators/position_valuation_calculator/core/test_reprocessing_worker.py`
-- `tests/unit/libs/portfolio-common/test_reprocessing_job_repository.py`
-
-## Requirement-to-Implementation Traceability
-
-| Original Requirement | Current Implementation in lotus-core | Evidence |
-| --- | --- | --- |
-| Durable queue for trigger fan-out | `reprocessing_jobs` schema + repository + worker claim loop | alembic migration; `reprocessing_job_repository.py`; worker tests |
-| Controlled fan-out processing | `ReprocessingWorker` bounded polling/batching and status transitions | `reprocessing_worker.py`; worker unit tests |
-| Pending-trigger observability | Gauge `instrument_reprocessing_triggers_pending` set by scheduler | `monitoring.py`; `valuation_scheduler.py` |
-| Atomic replay trigger | Epoch bump + replay event staging via outbox inside transaction scope | `position_logic.py`; position logic tests |
-
-## Design Reasoning and Trade-offs
-
-1. Durable DB jobs were chosen over in-memory fan-out to prioritize recoverability and bounded load.
-2. Worker/scheduler split inside the same service avoided introducing cross-service network complexity while still decoupling control-plane workloads.
-3. Outbox atomicity reduces recovery burden by making replay intent durable before any asynchronous publish.
-
-Trade-off:
-- Additional table/worker complexity and operational monitoring overhead are accepted for reliability.
-
-## Gap Assessment
-
-No material implementation gap remains against RFC 018 intent.
-
-## Deviations and Evolution Since Original RFC
-
-1. Implementation is documented and reinforced further in architecture notes (`adr_002_reprocessing_scalability.md`) and follow-on reliability hardening (RFC 065).
-2. Queue claim path later received index/perf improvements (`b0c1d2e3f4a5...`) for higher load scenarios.
-
-## Proposed Changes
-
-1. Keep RFC 018 classification as `Fully implemented and aligned`.
-2. Continue load validation via RFC 065/066 reliability packs.
-
-## Test and Validation Evidence
-
-1. Scheduler trigger-to-job conversion tests:
-   - `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
-2. Reprocessing worker claim/process/failure tests:
-   - `tests/unit/services/calculators/position_valuation_calculator/core/test_reprocessing_worker.py`
-3. Repository atomic claim SQL checks:
-   - `tests/unit/libs/portfolio-common/test_reprocessing_job_repository.py`
-4. Atomic replay orchestration checks in position logic:
-   - `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
-
-## Original Acceptance Criteria Alignment
-
-All key acceptance goals are met:
-1. Durable trigger queue exists.
-2. Controlled worker processing exists.
-3. Pending queue metric exists.
-4. Atomic replay trigger path implemented via outbox pattern.
-
-## Rollout and Backward Compatibility
-
-No runtime change introduced by this documentation retrofit.
-
-## Open Questions
-
-1. Should reprocessing job retention/TTL policy be formalized in a separate ops RFC for long-term table growth control?
-
-## Next Actions
-
-1. Keep as implemented baseline.
-2. Track only operational scaling refinements under RFC 065/066.
+* **Gap:** The `position-calculator` currently performs two separate actions in a non-atomic sequence: 1) it updates the `position_state` to increment the epoch, and 2) it begins publishing all historical transactions. If the service crashes after step 1 but before completing step 2, the key is left in a `REPROCESSING` state with no events in flight to complete the process, requiring manual intervention.
+* **Proposal:**
+    1.  Refactor the `position-calculator`'s trigger logic. Instead of publishing directly to Kafka, it will write all the historical transactions that need to be re-emitted into the `outbox_events` table within the **same database transaction** where it increments the `position_state` epoch.
+    2.  The standard `OutboxDispatcher` will then reliably publish these events to Kafka. This makes the entire reprocessing trigger an atomic operation, guaranteeing that a key will not be marked for reprocessing unless the events required to complete it are durably queued for delivery.
