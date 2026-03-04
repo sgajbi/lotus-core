@@ -43,6 +43,7 @@ def compose_up(
     compose_file: str,
     *,
     build: bool,
+    services: list[str] | None = None,
     retries: int = 2,
     retry_wait_seconds: int = 5,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
@@ -57,6 +58,8 @@ def compose_up(
     if build:
         args.append("--build")
     args.append("-d")
+    if services:
+        args.extend(services)
 
     attempts = max(1, retries + 1)
     last_error: subprocess.CalledProcessError | None = None

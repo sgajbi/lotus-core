@@ -27,6 +27,12 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Ensure host-routable DB defaults for any modules initialized during test import.
+os.environ.setdefault("HOST_DATABASE_URL", "postgresql://user:password@localhost:55432/portfolio_db")
+os.environ.setdefault("HOST_QUERY_DATABASE_URL", "postgresql://user:password@localhost:55432/portfolio_db")
+# Keep demo ingestion sidecar disabled for deterministic integration/e2e tests.
+os.environ.setdefault("DEMO_DATA_PACK_ENABLED", "false")
+
 
 def _env_int(name: str, default: int) -> int:
     raw_value = os.getenv(name)
@@ -59,9 +65,25 @@ def docker_services(request):  # noqa: ARG001
     health_timeout = _env_int("LOTUS_TESTS_HEALTH_TIMEOUT_SECONDS", 180)
 
     try:
+        test_services = [
+            "zookeeper",
+            "kafka",
+            "kafka-topic-creator",
+            "postgres",
+            "migration-runner",
+            "ingestion_service",
+            "query_service",
+            "persistence_service",
+            "cost_calculator_service",
+            "cashflow_calculator_service",
+            "position_calculator_service",
+            "position_valuation_calculator",
+            "timeseries_generator_service",
+        ]
         compose_up(
             compose_file,
             build=should_build_images(),
+            services=test_services,
             retries=compose_retries,
             retry_wait_seconds=compose_retry_wait,
         )
