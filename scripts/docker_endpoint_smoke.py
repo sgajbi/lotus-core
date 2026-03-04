@@ -726,7 +726,9 @@ def main() -> int:
             missing_group_keys = sorted(required_group_keys - set(groups[0]))
             if missing_group_keys:
                 group_contract_ok = False
-                group_contract_note = f"missing capacity group keys: {', '.join(missing_group_keys)}"
+                group_contract_note = (
+                    f"missing capacity group keys: {', '.join(missing_group_keys)}"
+                )
         elif missing_capacity_keys:
             group_contract_ok = False
         _record_contract_check(
