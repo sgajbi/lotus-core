@@ -1,46 +1,103 @@
 # RFC 040 - Lookup Catalog Query Optimization and Filter Controls
 
-- Status: IMPLEMENTED
-- Date: 2026-02-23
-- Owners: lotus-core Query Service
+| Metadata | Value |
+| --- | --- |
+| Status | Implemented |
+| Created | 2026-02-23 |
+| Last Updated | 2026-03-04 |
+| Owners | `query-service` lookup contracts |
+| Depends On | RFC 039 lookup baseline, RFC 041 lookup invariant gate |
+| Scope | Filtering, ordering, and payload controls for lookup catalogs |
 
-## Context
+## Executive Summary
 
-lotus-core lookup APIs were introduced as canonical selector contracts. To support enterprise-scale UI selectors and reduce payload size, lookup catalogs require server-side filtering and deterministic ordering.
+RFC 040 extends RFC 039 with server-side query controls and deterministic behavior.
+It is implemented in current query-service:
+1. Portfolio lookup supports scoped filtering and query/limit controls.
+2. Instrument lookup supports product-type and text filtering.
+3. Currency lookup supports source-scoped derivation plus query/limit controls.
+4. Deterministic sort and limit behavior is validated in integration tests.
 
-## Decision
+Classification: `Fully implemented and aligned`.
 
-Enhance lotus-core lookup APIs with query controls and deterministic output behavior:
+## Original Requested Requirements (Preserved)
 
-- `GET /lookups/portfolios`
-  - Added: `cif_id`, `booking_center`, `q`, `limit`
-- `GET /lookups/instruments`
-  - Added: `product_type`, `q`
-- `GET /lookups/currencies`
-  - Added: `source` (`ALL|PORTFOLIOS|INSTRUMENTS`), `q`, `limit`
+Original RFC 040 requested:
+1. Add lookup filter/query parameters to reduce payload volume and improve selector UX.
+2. Ensure deterministic ordering for stable UI behavior.
+3. Enforce server-side limits for oversized catalogs.
 
-Behavior changes:
-- Lookup items are sorted deterministically by `id`.
-- `q` performs case-insensitive matching on `id`/`label`.
-- `limit` is enforced server-side to protect UI and lotus-gateway from oversized catalogs.
+## Current Implementation Reality
 
-## Rationale
+Implemented:
+1. `/lookups/portfolios` supports `client_id`, `booking_center_code`, `q`, and `limit`.
+2. `/lookups/instruments` supports `product_type`, `q`, and `limit`.
+3. `/lookups/currencies` supports `source` (`ALL|PORTFOLIOS|INSTRUMENTS`), `q`, `limit`, and `instrument_page_limit`.
+4. Shared filter helper enforces:
+   - case-insensitive matching on `id` and `label`,
+   - deterministic sorting by `id`,
+   - server-side result limiting.
+5. Integration suites verify filters, sort order, and source scoping behavior.
 
-- Improves selector responsiveness and API efficiency.
-- Moves filtering concerns to lotus-core where catalog ownership resides.
-- Establishes stable, deterministic lookup payloads for repeatable UI behavior.
+Evidence:
+- `src/services/query_service/app/routers/lookups.py`
+- `tests/integration/services/query_service/test_reference_data_routers.py`
+- `tests/integration/services/query_service/test_lookup_contract_router.py`
+- `docs/RFCs/RFC 041 - Lookup Contract Invariant Test Gate.md`
 
-## Consequences
+## Requirement-to-Implementation Traceability
 
-Positive:
-- Smaller payloads and faster client-side rendering.
-- Better tenancy/business-unit scoping for portfolio selectors.
-- Cleaner integration path for lotus-gateway and UI.
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Portfolio lookup filter controls | Implemented | lookups router + integration tests |
+| Instrument lookup filter controls | Implemented | lookups router + integration tests |
+| Currency source/query/limit controls | Implemented | lookups router + integration tests |
+| Deterministic sorting | Implemented (sorted by `id`) | `_filter_limit_sort_items` helper |
+| Server-side limit enforcement | Implemented | query params + helper + tests |
 
-Trade-offs:
-- Slightly expanded API surface and parameter validation matrix.
+## Design Reasoning and Trade-offs
 
-## Follow-ups
+1. Server-side filtering reduces client-side load and network overhead.
+2. Deterministic ordering prevents subtle UI drift and flaky selector behavior.
+3. Source-scoped currency lookup allows targeted selector use cases without separate endpoint families.
 
-- Introduce pagination token patterns for very large catalogs if needed.
-- Add tenant/entitlement-aware lookup filtering once access-control model is finalized.
+Trade-off:
+- Parameter matrix expansion increases validation/test surface area and requires invariant contract coverage.
+
+## Gap Assessment
+
+No high-value implementation gap for RFC 040 baseline scope.
+
+## Deviations and Evolution Since Original RFC
+
+1. Naming in implementation uses current canonical filter fields (`client_id`, `booking_center_code`) rather than earlier shorthand.
+2. Invariant test gate (RFC 041) formalized ongoing regression protection.
+
+## Proposed Changes
+
+1. Keep classification as `Fully implemented and aligned`.
+2. Continue extending lookup controls only when backed by measured selector-scale needs.
+
+## Test and Validation Evidence
+
+1. Query-service reference data router tests:
+   - `tests/integration/services/query_service/test_reference_data_routers.py`
+2. Lookup invariant contract tests:
+   - `tests/integration/services/query_service/test_lookup_contract_router.py`
+
+## Original Acceptance Criteria Alignment
+
+Aligned:
+1. Filter controls, deterministic sorting, and limit enforcement are implemented and tested.
+
+## Rollout and Backward Compatibility
+
+No runtime change introduced by this documentation retrofit.
+
+## Open Questions
+
+1. At what catalog scale should lookup endpoints adopt cursor/token pagination rather than bounded list responses?
+
+## Next Actions
+
+1. Keep RFC 041 invariant suite as mandatory gate for any lookup API changes.

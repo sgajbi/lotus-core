@@ -1,47 +1,90 @@
-# RFC 027: Enhance Performance of Position-Level Analytics
+# RFC 027 - Enhance Performance of Position-Level Analytics
 
-Superseded by RFC 057. `positions-analytics` has been retired from lotus-core; position-level contract evolution continues on canonical `GET /portfolios/{portfolio_id}/positions`.
+| Metadata | Value |
+| --- | --- |
+| Status | Archived |
+| Created | 2025-09-01 |
+| Last Updated | 2026-03-04 |
+| Owners | Historical `positions-analytics` contract (superseded) |
+| Depends On | RFC 017, RFC 057 |
+| Scope | Historical optimization plan for retired `positions-analytics` endpoint |
 
-* **Status**: Proposed
-* **Date**: 2025-09-01
-* **Related RFCs**: RFC 017
+## Executive Summary
 
-## 1. Summary
+RFC 027 targeted performance improvements for `POST /portfolios/{portfolio_id}/positions-analytics`.
+That endpoint and surface were retired under RFC 057 and consolidated into canonical positions APIs.
 
-The `POST /positions-analytics` endpoint provides critical, detailed insights but faces a significant performance and scalability challenge. The current on-the-fly TWR calculation for every position in a portfolio can lead to high API latency and heavy database load, especially for large portfolios or long date ranges.
+As a result, RFC 027 is archived and classified `No longer relevant to this repository` as an active implementation plan.
 
-This RFC proposes a phased approach to address this:
-1.  **Short-term:** Implement a service-level cache to handle repeated requests efficiently.
-2.  **Long-term:** Introduce a pre-calculation and persistence layer for common performance metrics to drastically improve response times for the most frequent queries.
+## Original Requested Requirements (Preserved)
 
-## 2. The Problem: On-the-Fly Calculation at Scale
+Original RFC 027 requested:
+1. Add service-level caching for repeated positions-analytics requests.
+2. Add strategic pre-calculation/persistence for common position analytics metrics.
+3. Keep on-demand fallback for non-standard requests.
 
-The current design prioritizes data freshness by calculating everything at request time. While correct, this has a high cost: a request for a 500-position portfolio with 5 performance periods (e.g., MTD, YTD, 1Y, 3Y, SI) could trigger thousands of database queries and 2,500 individual TWR calculations in a single API call. This will not scale and risks creating a poor user experience or even service timeouts.
+## Current Implementation Reality
 
-## 3. Proposed Solutions
+1. `positions-analytics` endpoint is removed from lotus-core.
+2. Position-level contract surface is consolidated into canonical `GET /portfolios/{portfolio_id}/positions`.
+3. No separate performance-tuning plan for retired endpoint remains applicable.
 
-### 3.1. Phase 1: Service-Level Caching (Tactical)
+Evidence:
+- `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
+- `tests/integration/services/query_service/test_main_app.py`
+- `src/services/query_service/app/routers/positions.py`
+- `docs/RFCs/RFC 017 - Position-Level Analytics API.md`
 
-* **Proposal:** We will introduce a short-lived, in-memory cache (e.g., using `cachetools` or a similar library) within the `PositionAnalyticsService`.
-    * The cache key will be a hash of the `portfolio_id`, `as_of_date`, and the requested `sections`.
-    * The final `PositionAnalyticsResponse` object will be cached for a short duration (e.g., 5-15 minutes).
-* **Benefit:** This provides an immediate performance boost for repeated requests, such as a user refreshing a page or multiple users viewing the same portfolio around the same time, without requiring major architectural changes.
-* **Limitation:** The first request is still slow, and the cache offers no benefit for ad-hoc queries. Cache invalidation is complex due to the reprocessing engine, so a simple time-to-live (TTL) is the only safe initial approach.
+## Requirement-to-Implementation Traceability
 
-### 3.2. Phase 2: Pre-calculation of Standard Metrics (Strategic)
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Cache retired positions-analytics endpoint | Not applicable (endpoint removed) | RFC 057 + OpenAPI tests |
+| Pre-calc store for positions-analytics response | Not applicable in removed surface | query-service contract/state |
+| Hybrid cached + on-demand behavior on positions-analytics | Superseded by canonical positions contract path | RFC 017 + RFC 057 |
 
-* **Proposal:** For a robust, long-term solution, we will pre-calculate and persist the most common position-level performance metrics.
-    1.  **New Table (`position_analytics_cache`):** A new database table will be created to store pre-calculated results.
-        | Column | Type | Description |
-        | :--- | :--- | :--- |
-        | `portfolio_id` | `VARCHAR` (PK) | |
-        | `security_id` | `VARCHAR` (PK) | |
-        | `date` | `DATE` (PK) | The "as of" date for the analytics. |
-        | `epoch` | `INTEGER` | The epoch of the data used for the calculation. |
-        | `twr_ytd` | `NUMERIC` | The calculated Year-to-Date TWR. |
-        | `twr_1y` | `NUMERIC` | The calculated 1-Year TWR. |
-        | `...other_metrics`| | Other common metrics (MTD, QTD, SI). |
-    2.  **New Background Service:** A new, dedicated microservice (`analytics-precalculation-service`) will be created. It will subscribe to the `portfolio_timeseries_generated` Kafka topic. When a new time-series record is created for a given day, this service will trigger the calculation for all standard performance periods for all positions in that portfolio and save the results to the new table.
-    3.  **API Logic Change:** The `PositionAnalyticsService` will be refactored. When a request for a standard period (like YTD) is received, it will first attempt to fetch the result from the `position_analytics_cache` table. If a result is found for the correct epoch, it will be returned instantly. It will only fall back to the on-the-fly calculation for custom date ranges or if the pre-calculated value is missing.
+## Design Reasoning and Trade-offs
 
-* **Benefit:** This provides a massive performance improvement for the most common user workflows, making the application feel instantaneous while still allowing for the flexibility of on-demand calculations for ad-hoc requests.
+1. Consolidating position-level contracts avoids duplicate API surfaces and governance drift.
+2. Performance optimization should target canonical positions/query contracts, not retired endpoints.
+
+Trade-off:
+- RFC 027’s specific optimization plan is no longer directly actionable.
+
+## Gap Assessment
+
+No active lotus-core gap for RFC 027 as written because the target surface is retired.
+
+## Deviations and Evolution Since Original RFC
+
+1. RFC 057 shifted architecture from parallel analytics endpoint to canonical position contract.
+2. RFC 017 now serves as the superseded design record for the removed endpoint.
+
+## Proposed Changes
+
+1. Keep RFC 027 archived/superseded.
+2. Route any future position-query performance work through canonical positions contract governance.
+
+## Test and Validation Evidence
+
+1. Query-service OpenAPI test proving endpoint removal:
+   - `tests/integration/services/query_service/test_main_app.py`
+2. RFC 057 implementation record of endpoint retirement:
+   - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
+
+## Original Acceptance Criteria Alignment
+
+Original criteria are superseded by endpoint retirement and contract consolidation.
+
+## Rollout and Backward Compatibility
+
+No runtime change introduced by this documentation retrofit.
+
+## Open Questions
+
+1. Do we need a new RFC specifically for canonical positions endpoint performance SLOs under current architecture?
+
+## Next Actions
+
+1. Maintain archived status.
+2. Open new RFCs only against active canonical query surfaces.

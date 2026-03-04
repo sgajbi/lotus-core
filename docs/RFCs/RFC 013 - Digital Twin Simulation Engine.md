@@ -1,163 +1,122 @@
-### RFC 013: "Digital Twin" Simulation Engine
+# RFC 013 - Digital Twin Simulation Engine
 
-  * **Status**: Proposed
-  * **Date**: 2025-08-30
-  * **Services Affected**: `query-service`, New `simulation-service`
-  * **Related RFCs**: RFC 012
+| Metadata | Value |
+| --- | --- |
+| Status | Partially Implemented |
+| Created | 2025-08-30 |
+| Last Updated | 2026-03-04 |
+| Owners | lotus-core query-service simulation capability |
+| Depends On | RFC 057, RFC 046A, RFC 058 (evolution path) |
+| Related Standards | `docs/standards/data-model-ownership.md` |
+| Scope | In repo (`lotus-core`) |
 
------
+## Executive Summary
 
-## 1\. Summary (TL;DR)
+RFC 013 proposed a digital-twin simulation capability with asynchronous job orchestration and a separate `simulation-service`.
+Lotus-core now has a substantial simulation capability implemented, but via a different architecture:
+1. simulation session APIs live directly in query-service (`/simulation-sessions/*`)
+2. simulation state is persisted in `simulation_sessions` and `simulation_changes`
+3. projected positions/summary are computed on-demand synchronously.
 
-This RFC proposes the creation of a **"Digital Twin" Simulation Engine**, a new capability allowing Client Advisors to model the potential impact of hypothetical trades or cash flows on a client's portfolio *before* execution.
+So the business intent is implemented in part, while the original architectural form is superseded.
 
-The architecture will introduce a new, dedicated **`simulation-service`** to handle the complex computational logic. The feature will be exposed via an asynchronous API in the `query-service` (`POST /portfolios/{id}/simulations`). An advisor will submit a set of proposed trades, and the system will generate a "diff" report showing the "before" and "after" state of key metrics like asset allocation, concentration risk, and portfolio volatility.
+## Original Requested Requirements (Preserved)
 
------
+Original RFC 013 requested:
+1. A digital twin feature for hypothetical trades/cashflows before execution.
+2. Async initiation endpoint (`POST /portfolios/{id}/simulations`) and job polling endpoint.
+3. Dedicated `simulation-service` microservice.
+4. Persisted job/result model (`simulation_jobs`, `simulation_results`).
+5. “Before/after diff” outputs for allocation, concentration, and risk analytics.
 
-## 2\. Motivation
+## Current Implementation Reality
 
-Advisory conversations are inherently forward-looking. This feature directly supports that by providing a tool to:
+Implemented capability in lotus-core:
+1. Simulation session lifecycle APIs:
+   - create/get/close session
+   - add/delete changes
+   - projected positions and projected summary
+2. Persistence layer for simulation sessions and changes.
+3. Query-service simulation service/repository stack with integration and unit tests.
 
-  * **Quantify Trade Impacts**: Answer client questions like, "What would happen to my risk profile if we sold this stock and bought another?" with immediate, data-driven analysis instead of intuition.
-  * **Enhance Decision-Making**: Allow advisors to test different strategies and visualize their effects on the portfolio's structure and risk characteristics, leading to more informed decisions.
-  * **Strengthen Compliance & Suitability**: Provide an auditable record that the advisor considered the impact of a proposed action on the client's portfolio, reinforcing the suitability of their recommendations.
+Not implemented as originally written:
+1. No dedicated standalone `simulation-service` process.
+2. No async job queue pattern for simulations.
+3. No `simulation_jobs`/`simulation_results` tables as originally named.
+4. No in-core concentration/risk diff report generation from this RFC's proposed schema.
 
------
+Evidence:
+- `src/services/query_service/app/routers/simulation.py`
+- `src/services/query_service/app/services/simulation_service.py`
+- `src/services/query_service/app/repositories/simulation_repository.py`
+- `src/services/query_service/app/dtos/simulation_dto.py`
+- `src/libs/portfolio-common/portfolio_common/database_models.py` (`SimulationSession`, `SimulationChange`)
+- `alembic/versions/e3f4a5b6c7d8_feat_add_simulation_sessions_and_changes_tables.py`
+- `tests/integration/services/query_service/test_simulation_router_dependency.py`
+- `tests/unit/services/query_service/services/test_simulation_service.py`
+- `tests/unit/services/query_service/repositories/test_simulation_repository.py`
 
-## 3\. Architectural Placement & Flow
+## Requirement-to-Implementation Traceability
 
-Simulating portfolio changes is a distinct, computationally intensive task. To protect the performance of our core analytics, this logic will be isolated in a new microservice. The entire flow will be asynchronous.
+| Original Requirement | Current Implementation | Status | Evidence |
+| --- | --- | --- | --- |
+| Digital twin capability for hypothetical changes | Implemented via session + change model | Implemented | simulation router/service/repo |
+| Async simulation jobs (`/simulations`, `/simulation-jobs`) | Not implemented in current form | Gap/superseded | no such routes |
+| Separate `simulation-service` | Not implemented | Superseded | query-service in-process implementation |
+| Persisted simulation workflow state | Implemented, but as session/change tables | Implemented (variant) | DB models + migration |
+| Full before/after allocation/concentration/risk diff | Partially implemented (projected positions/summary only) | Partial | simulation service DTO outputs |
 
-  * **New `simulation-service`**: This service will contain the core simulation logic. It will be responsible for creating an in-memory "digital twin" of a portfolio, applying hypothetical trades, and recalculating key metrics.
-  * **Asynchronous API**: The `query-service` will provide a non-blocking endpoint to initiate simulations. It will create a job, publish an event to Kafka, and immediately return a `job_id`, allowing the client to poll for the result.
+## Design Reasoning and Trade-offs
 
-**Architectural Diagram**:
+1. **Why current approach**: in-process query-service simulation sessions reduce operational complexity and integrate cleanly with canonical core data paths.
+2. **Why no async job service currently**: current projected-state use cases are covered by synchronous session-driven APIs.
+3. **Trade-off**: simpler architecture but narrower analytical output than original rich diff vision.
 
-```mermaid
-graph TD
-    subgraph "User Interaction"
-        Client[Client App] -- 1. POST /simulations --> QS[query-service]
-        QS -- 2. Returns Job ID --> Client
-        Client -- 6. GET /simulation-jobs/{job_id} --> QS
-        QS -- 7. Returns Simulation Report --> Client
-    end
+## Gap Assessment
 
-    subgraph "Backend Processing"
-        QS -- 3. Publishes event --> Kafka((simulation_requested))
-        Kafka --> SS[simulation-service]
-        SS -- 4. Gets current state via /review API --> QS
-        SS -- 5. Calculates diff & persists --> DB[(PostgreSQL)]
-        QS -- Reads results from DB --> DB
-    end
-```
+RFC 013 is partially implemented:
+1. Core simulation session capability exists and is production-aligned with newer RFCs.
+2. Original async job-based architecture and broader analytics-diff outputs were not implemented in this RFC form.
 
------
+## Deviations and Evolution Since Original RFC
 
-## 4\. API Specification (`query-service`)
+1. Simulation design evolved through later RFCs (notably RFC 046A and RFC 058) toward session-centric contracts.
+2. Ownership decomposition under RFC 057 preserved simulation as core capability while removing unrelated legacy analytics surfaces.
+3. Some originally proposed downstream analytics sections (concentration/risk) moved to other domain owners.
 
-### Endpoint 1: Initiate Simulation
+## Proposed Changes
 
-  * **Method**: `POST`
-  * **Path**: `/portfolios/{portfolio_id}/simulations`
+1. Keep RFC 013 as partially implemented historical baseline.
+2. Treat RFC 046A and RFC 058 as authoritative evolution path for simulation contracts.
+3. Do not pursue original separate microservice/job-table design unless a new scale/latency requirement justifies it.
 
-**Request Body:**
+## Test and Validation Evidence
 
-```json
-{
-  "as_of_date": "2025-08-30",
-  "hypothetical_trades": [
-    { "security_id": "SEC_AAPL", "transaction_type": "SELL", "quantity": 100 },
-    { "security_id": "SEC_MSFT", "transaction_type": "BUY", "quantity": 50 },
-    { "transaction_type": "WITHDRAWAL", "amount": 25000, "currency": "USD" }
-  ]
-}
-```
+1. Simulation router integration behavior:
+   - `tests/integration/services/query_service/test_simulation_router_dependency.py`
+2. Simulation service unit coverage:
+   - `tests/unit/services/query_service/services/test_simulation_service.py`
+3. Simulation repository unit coverage:
+   - `tests/unit/services/query_service/repositories/test_simulation_repository.py`
 
-**Response Body (202 Accepted):**
+## Original Acceptance Criteria Alignment
 
-```json
-{
-  "job_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "status": "PENDING",
-  "message": "Portfolio simulation has been queued."
-}
-```
+Alignment status:
+1. Digital twin workflow capability: largely achieved (session model).
+2. Async job service and endpoints: not achieved (superseded by alternate architecture).
+3. Dedicated simulation microservice: not achieved (superseded).
+4. Persisted simulation state: achieved (with different schema model).
+5. Full analytics diff breadth from original proposal: partially achieved.
 
-### Endpoint 2: Retrieve Simulation Report
+## Rollout and Backward Compatibility
 
-  * **Method**: `GET`
-  * **Path**: `/simulation-jobs/{job_id}`
+No runtime change from this documentation retrofit.
 
-**Response Body (200 OK - Complete):**
+## Open Questions
 
-```json
-{
-  "job_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "status": "COMPLETE",
-  "portfolio_id": "PORTF12345",
-  "results": {
-    "allocation": {
-      "by_asset_class": [
-        { "group": "Equity", "before": 0.60, "after": 0.65 },
-        { "group": "Fixed Income", "before": 0.40, "after": 0.35 }
-      ]
-    },
-    "concentration": {
-      "by_security": [
-        { "group": "Apple Inc.", "before": 0.15, "after": 0.12 },
-        { "group": "Microsoft Corp.", "before": 0.08, "after": 0.11 }
-      ]
-    },
-    "risk_analytics": {
-      "volatility": { "before": 0.158, "after": 0.162 },
-      "value_at_risk_99_1d": { "before": 21500.00, "after": 23200.00 }
-    }
-  }
-}
-```
+1. Should future simulation evolution add optional async execution mode for high-cost scenarios while preserving current session contracts?
 
------
+## Next Actions
 
-## 5\. Data Model
-
-Alembic migrations will add two new tables to manage the asynchronous workflow and store results for auditing.
-
-  * **`simulation_jobs`**: Tracks the lifecycle (`PENDING`, `PROCESSING`, `COMPLETE`, `FAILED`) of each simulation request.
-  * **`simulation_results`**: Stores the detailed "before" and "after" JSON report for each completed job.
-
------
-
-## 6\. Implementation Details
-
-The `simulation-service` will leverage our existing library-based architecture for maximum code reuse.
-
-1.  **Fetch Current State**: The service will call the `/review` endpoint to get a complete snapshot of the portfolio's current holdings, allocation, and risk metrics. This becomes the **"before"** state.
-2.  **Create Digital Twin**: It will load the list of holdings into an in-memory data structure (e.g., a pandas DataFrame).
-3.  **Apply Trades**: It will apply the `hypothetical_trades` to this in-memory structure, adjusting quantities and cash balances.
-4.  **Recalculate Metrics**: It will use the imported **`risk-analytics-engine`** and our core allocation logic directly on the in-memory "digital twin" to calculate the **"after"** state metrics.
-5.  **Generate Diff**: The service will compare the "before" and "after" metrics to generate the final diff report.
-6.  **Persist & Complete**: The final report is saved to the `simulation_results` table and the job is marked as `COMPLETE`.
-
------
-
-## 7\. Implementation Roadmap
-
-  * **Phase 1: Core Engine & Allocation Impact**:
-      * Build the new `simulation-service`, asynchronous API endpoints, and database tables.
-      * Implement the in-memory digital twin logic for basic trades (Buy, Sell, Deposit, Withdrawal).
-      * Deliver the first set of analytics focusing on the impact to **Asset Allocation** and **Concentration**.
-  * **Phase 2: Risk Impact Analysis**:
-      * Integrate the `risk-analytics-engine` to calculate the "after" state for key metrics like **Volatility** and **Value at Risk (VaR)**, adding the `risk_analytics` section to the report.
-  * **Phase 3: Advanced Analytics**:
-      * Expand the engine to model and report on the impact to projected portfolio **income/yield**.
-      * Explore a more advanced feature to provide an estimated impact on the portfolio's tax situation (e.g., estimated capital gains from a sale).
-
------
-
-## 8\. Observability & Risks
-
-  * **Observability**: The new `simulation-service` will be fully instrumented with structured logging and Prometheus metrics (`simulation_jobs_created_total`, `simulation_duration_seconds`, etc.), complete with a new Grafana dashboard.
-  * **Risks**:
-      * **Calculation Accuracy**: Simulations are an approximation. The primary risk is that the simplified, in-memory calculation might diverge from the full, stateful pipeline.
-      * **Mitigation**: The simulation will be clearly labeled as an "estimate." Furthermore, by reusing the *exact same* core calculation libraries (`risk-analytics-engine`), we minimize the potential for logical drift.
+1. Keep RFC 013 classification as `Partially implemented (requires enhancement)`.
+2. Track future simulation breadth changes through RFC 046A/RFC 058 follow-on work instead of resurrecting the original microservice plan by default.

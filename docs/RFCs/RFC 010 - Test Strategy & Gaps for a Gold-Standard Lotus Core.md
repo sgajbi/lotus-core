@@ -1,78 +1,130 @@
-### RFC 010: Test Strategy for a Gold-Standard Lotus Core
+# RFC 010 - Test Strategy and Gaps for a Gold-Standard Lotus Core
 
-* **Status**: Proposed
-* **Date**: 2025-08-30
-* **Scope**: All services and libraries in the monorepo
+| Metadata | Value |
+| --- | --- |
+| Status | Partially Implemented |
+| Created | 2025-08-30 |
+| Last Updated | 2026-03-04 |
+| Owners | lotus-core engineering |
+| Depends On | RFC 001, RFC 006, RFC 065, RFC 066 |
+| Related Standards | `docs/standards/scalability-availability.md`, `docs/standards/durability-consistency.md` |
+| Scope | In repo (`lotus-core`) |
 
----
-## 1. Executive Summary
+## Executive Summary
 
-Our system's test suite has a solid foundation, but to achieve a gold-standard, enterprise-grade level of quality, we must go beyond testing individual components in isolation. We must test the resilience and integrity of the system *as a whole*.
+RFC 010 extends lotus-core quality from component correctness to system resilience/integrity.
+It is partially implemented:
+1. Strong unit/integration/e2e baseline exists.
+2. Deterministic load and failure-recovery gates exist.
+3. Several advanced goals remain open (broader chaos matrix, offline independent integrity auditor, property-based financial invariants).
 
-This RFC expands our test strategy to include a new pillar: **System-Level Resilience & Integrity Testing**. This introduces **Chaos Testing** to validate our resilience to infrastructure failure, **Load and Stress Testing** to understand our performance bottlenecks, and a **Data Integrity Auditing** tool to independently verify the correctness of our entire event-driven pipeline.
+## Original Requested Requirements (Preserved)
 
-These advanced testing methodologies, combined with targeted enhancements to our existing unit and integration tests, will provide maximum confidence in our system's correctness, scalability, and robustness in a production environment.
+Original RFC 010 requested:
+1. Close foundational test gaps:
+   - epoch-aware correctness
+   - partial-failure and retry paths
+   - stronger financial engine correctness checks
+2. Add system-level resilience pillars:
+   - chaos testing
+   - load/stress testing
+   - independent data-integrity auditing
+3. Establish production-readiness confidence through repeatable evidence and acceptance gates.
 
----
-## 2. Gaps & Proposed Enhancements in Core Testing
+## Current Implementation Reality
 
-We will first address the gaps in our existing test pyramid to ensure foundational correctness.
+Implemented evidence:
+1. Outbox retry/partial-failure behavior:
+   - `tests/integration/libs/portfolio-common/test_outbox_dispatcher.py`
+   - `tests/integration/libs/portfolio-common/test_outbox_dispatcher_delivery_results.py`
+2. Consumer idempotency/replay safety:
+   - `tests/unit/services/calculators/position_calculator/consumers/test_position_calculator_consumer.py`
+   - `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
+3. Workflow-level reliability and reprocessing behavior:
+   - `tests/e2e/test_reprocessing_workflow.py`
+   - `tests/e2e/test_rapid_reprocessing.py`
+   - `tests/e2e/test_failure_scenarios.py`
+4. Deterministic resilience/load gates and consolidated signoff:
+   - `scripts/performance_load_gate.py`
+   - `scripts/failure_recovery_gate.py`
+   - `scripts/institutional_signoff_pack.py`
 
-### 2.1. Epoch-Aware Data Correctness
-* **Gap**: Insufficient testing of our epoch-fencing logic, a critical component for preventing data corruption during reprocessing.
-* **Solution**: Implement new integration tests for the `SummaryRepository` that seed the database with data across multiple epochs and assert that queries only return data from the single, correct, active epoch.
+Still missing versus original full ambition:
+1. No recurring broader chaos suite beyond controlled gate scenarios.
+2. No independent offline integrity auditor that recomputes end-state from raw ledger input.
+3. No property-based invariant suite (`hypothesis`) for financial engines.
 
-### 2.2. Resilience to Partial Failures
-* **Gap**: The negative paths of our outbox and consumer retry mechanisms are not validated.
-* **Solution**:
-    * **Outbox**: Create an integration test where the mock Kafka producer simulates partial delivery failure and assert that the `OutboxDispatcher` correctly updates event statuses and `retry_count`.
-    * **Consumers**: Add a test that proves consumer idempotency by delivering the same message twice and asserting that no duplicate data is created.
+## Requirement-to-Implementation Traceability
 
-### 2.3. Financial Engine Correctness
-* **Gap**: Our financial engines lack sufficient testing for edge cases and mathematical invariants.
-* **Solution**:
-    * **`risk-analytics-engine`**: Add unit tests for all remaining metrics: Sharpe, Sortino, Beta, Tracking Error, Information Ratio, and all VaR methods.
-    * **`performance-calculator-engine`**: Introduce **property-based testing** using `hypothesis` to verify core invariants, such as scaling invariance (the rate of return should not change if all monetary values are multiplied by a constant factor).
+| Original Requirement | Current Implementation | Status | Evidence |
+| --- | --- | --- | --- |
+| Epoch/replay correctness coverage | Strong unit/integration/e2e around reprocessing | Implemented | reprocessing/unit/integration/e2e tests |
+| Partial-failure retry validation | Outbox delivery-result tests and consumer error-path tests | Implemented | outbox + consumer tests |
+| Load/stress testing pillar | Deterministic load gate script and artifacts | Implemented (initial) | `performance_load_gate.py` |
+| Failure injection/recovery testing | Deterministic interruption/recovery gate | Implemented (initial) | `failure_recovery_gate.py` |
+| Full chaos matrix automation | Not yet broad/scheduled as requested | Partial gap | backlog delta RFC-010-D01 |
+| Independent offline integrity auditor | Not implemented | Gap | backlog delta RFC-010-D02 |
+| Property-based financial invariants | Not implemented | Gap | backlog delta RFC-010-D03 |
 
----
-## 3. New Pillar: System-Level Resilience & Integrity Testing
+## Design Reasoning and Trade-offs
 
-This new category of testing focuses on the non-functional, systemic behavior of our platform.
+1. **Why staged implementation**: deterministic gates gave fast operational value while deeper tooling remained open.
+2. **Why offline auditor is important**: pipeline-coupled tests can still miss silent drift; independent recomputation provides stronger assurance.
+3. **Why property-based tests matter**: financial invariant space is large and example-based tests are insufficient alone.
+4. **Trade-off**: advanced resilience tooling increases maintenance cost but directly supports institutional readiness claims.
 
-### 3.1. Chaos Testing
-We will build a harness to deliberately inject failures into a running staging environment to verify our system's resilience.
-* **Target Scenarios**:
-    * **Kafka Unavailability**: Temporarily bring down a Kafka broker. We will assert that services with stateful consumers pause and resume gracefully, and the outbox dispatcher handles the connection failure without message loss.
-    * **Database Failover**: Simulate a database primary node failure. We will assert that the `query-service` successfully connects to the read-replica and that write-oriented services recover once the primary is restored.
-    * **Service Failure**: Randomly terminate pods for our calculator microservices. We will assert that Kafka consumer group rebalancing works correctly and that another instance picks up the work without creating duplicate data.
+## Gap Assessment
 
-### 3.2. Load and Stress Testing
-We will use tooling (e.g., k6, Locust) to simulate high-load scenarios and identify performance bottlenecks.
-* **Target Scenarios**:
-    * **Ingestion Throughput**: Determine the maximum sustainable rate of transaction ingestion before Kafka consumer lag grows uncontrollably.
-    * **Reprocessing "Thundering Herd"**: Simulate a back-dated price update for a universally held security (like an index ETF) that triggers reprocessing for thousands of keys simultaneously. We will measure the system's recovery time and ensure it does not lead to cascading failures.
-    * **Query API Concurrency**: Stress test the `POST /review` endpoint with hundreds of concurrent requests to identify database connection pool limits and performance degradation curves.
+RFC 010 is still an active roadmap, not a completed milestone.
+Open deltas are high-value and still relevant to current platform maturity goals.
 
-### 3.3. Data Integrity Auditing
-We will build a new, independent, offline tool that acts as a final source of truth for data correctness.
-* **Mechanism**: This tool will bypass the event-driven pipeline entirely. For a given portfolio, it will read the raw, persisted transaction log from the database and recalculate the final state (e.g., final position quantity and cost basis) using a clean, independent implementation of the business logic.
-* **Assertion**: The tool will compare its calculated result against the final state stored in the `daily_position_snapshots` table. Any discrepancy is a critical bug that indicates a flaw in our event-driven pipeline (e.g., a missed event, a race condition, or an epoch-fencing error). This provides an end-to-end guarantee of correctness that no other test can.
+## Deviations and Evolution Since Original RFC
 
----
-## 4. Implementation Plan
+1. `review`/`summary` API stress focus in the original text is now less relevant for lotus-core because those endpoints moved to lotus-report.
+2. Institutional signoff scripts from RFC 065/066 provide partial realization of system-level test intent.
+3. Remaining open work is now concentrated on deeper resilience/auditability, not basic test-pyramid coverage.
 
-1. **Phase 1 - Foundational Correctness**: Implement all tests outlined in Section 2 (Epoch-Awareness, Partial Failures, Financial Engines).
-2. **Phase 2 - Advanced Tooling**:
-    * Build the scripting and infrastructure for Load and Stress Testing scenarios.
-    * Develop the first version of the offline Data Integrity Auditing tool.
-3. **Phase 3 - Chaos Engineering**:
-    * Develop the Chaos Testing harness and begin running automated failure injection tests in our staging environment.
+## Proposed Changes
 
----
-## 5. Acceptance Criteria
+1. Keep RFC 010 in `Partially Implemented` status.
+2. Execute existing tracked deltas:
+   - `RFC-010-D01` chaos suite expansion
+   - `RFC-010-D02` independent integrity auditor
+   - `RFC-010-D03` property-based invariants
+3. Tie closure evidence to recurring operational signoff workflows.
 
-* All unit and integration test gaps are closed.
-* The system can withstand the sudden failure and recovery of Kafka and PostgreSQL without data loss.
-* Performance benchmarks for ingestion and reprocessing are established and monitored.
-* The Data Integrity Auditing tool runs successfully and finds no discrepancies on a regular basis.
-* The full E2E and System-Level Resilience test suites pass, providing a gold-standard signal of production readiness.
+## Test and Validation Evidence
+
+1. Unit/integration/e2e baseline:
+   - `tests/unit/`
+   - `tests/integration/`
+   - `tests/e2e/`
+2. Load/failure deterministic gates:
+   - `scripts/performance_load_gate.py`
+   - `scripts/failure_recovery_gate.py`
+3. Consolidated signoff:
+   - `scripts/institutional_signoff_pack.py`
+
+## Original Acceptance Criteria Alignment
+
+Alignment status:
+1. Foundational test-gap closure: largely achieved.
+2. System can handle controlled failure/recovery scenarios: partially achieved (targeted gate scenarios).
+3. Performance baseline gates established: achieved.
+4. Independent integrity auditor: not achieved.
+5. Full system-level resilience suite as initially envisioned: partially achieved.
+
+## Rollout and Backward Compatibility
+
+No runtime API contract change from this documentation retrofit.
+Remaining work adds verification capability without breaking existing interfaces.
+
+## Open Questions
+
+1. Should chaos/integrity deltas become merge-blocking or begin as advisory evidence gates?
+2. Which environment cadence is mandatory for recurring resilience validation?
+
+## Next Actions
+
+1. Keep RFC 010 classification as `Partially implemented (requires enhancement)`.
+2. Execute and close `RFC-010-D01..D03` with concrete code/test artifacts.

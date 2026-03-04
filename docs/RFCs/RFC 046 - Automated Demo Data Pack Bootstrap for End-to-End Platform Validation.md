@@ -1,121 +1,110 @@
 # RFC 046 - Automated Demo Data Pack Bootstrap for End-to-End Platform Validation
 
-- Status: Proposed
-- Date: 2026-02-24
-- Authors: lotus-core Engineering
-- Related:
-  - `docs/RFCs/RFC 035 - lotus-core lotus-performance lotus-manage Responsibility and Integration Contract.md`
-  - `docs/RFCs/RFC 036 - lotus-core Core Snapshot Contract for lotus-performance and lotus-manage.md`
-  - `docs/RFCs/RFC 043 - lotus-core Core Snapshot Contract Hardening (Freshness, Lineage, Section Governance).md`
-  - `lotus-platform/Local Development Runbook.md`
+| Metadata | Value |
+| --- | --- |
+| Status | Partially Implemented |
+| Created | 2026-02-24 |
+| Last Updated | 2026-03-04 |
+| Owners | `lotus-core` platform bootstrap tooling |
+| Depends On | RFC 035, RFC 036, RFC 045 |
+| Scope | Automated compose-time demo dataset ingest and verification workflow |
 
-## 1. Problem Statement
+## Executive Summary
 
-Local and demo environments lack a reliable, automated, and realistic reference dataset that is loaded as part of platform startup. Teams currently rely on manual ingestion or ad-hoc test payloads, which causes:
+RFC 046 proposed automated demo data bootstrap for deterministic local/platform validation.
+Major implementation is in place:
+1. `tools/demo_data_pack.py` exists and builds + ingests + verifies multi-portfolio data.
+2. `docker-compose.yml` includes one-shot `demo_data_loader` integrated into startup flow.
+3. Operations docs include runbook guidance.
 
-- inconsistent UI/lotus-gateway/lotus-core/lotus-performance/lotus-manage behavior across developer machines,
-- weak validation of end-to-end lifecycle processing,
-- reduced confidence in positions, valuation, performance, and risk outputs,
-- slow feedback loops for UX and integration improvements.
+But validation hardening is incomplete:
+1. Existing demo data integration tests are out of sync with current payload shape/expectations and fail locally.
 
-## 2. Root Cause
+Classification: `Partially implemented (requires enhancement)`.
 
-1. No standardized demo data pack artifact owned by lotus-core.
-2. No compose-time orchestration step to ingest and verify a common dataset.
-3. No deterministic readiness checks proving that downstream processing has completed.
-4. Existing sample data is fragmented across tests and not packaged for startup automation.
+## Original Requested Requirements (Preserved)
 
-## 3. Decision
+Original RFC 046 requested:
+1. Deterministic, realistic multi-portfolio demo data pack.
+2. Compose-time bootstrap automation using canonical ingestion/query APIs.
+3. Verification loop proving downstream processing readiness.
+4. Test coverage and operational documentation.
 
-Introduce a lotus-core-owned automated demo data pack workflow that:
+## Current Implementation Reality
 
-1. defines a comprehensive, realistic multi-portfolio bundle (portfolios, instruments, transactions, market prices, FX rates, business dates),
-2. ingests the bundle through lotus-core ingestion APIs (same path used by platform integrations),
-3. verifies downstream processing via lotus-core query APIs (positions, transactions, analytics-ready outputs),
-4. runs automatically as a one-shot container during `docker compose up -d --build`.
+Implemented:
+1. Demo bundle builder produces portfolios, instruments, transactions, prices, FX rates, and business dates.
+2. CLI workflow supports ingest/verify modes, readiness waits, polling, and idempotency checks.
+3. Compose `demo_data_loader` service runs bootstrap automatically and supports enable/disable flag.
+4. Troubleshooting docs describe usage and failure diagnosis.
 
-## 4. Scope
+Gap:
+1. `tests/integration/tools/test_demo_data_pack.py` currently fails against implementation due stale expectations (`businessDates` key and holdings assumptions), indicating regression in test-to-contract alignment.
 
-In scope:
+Evidence:
+- `tools/demo_data_pack.py`
+- `docker-compose.yml` (`demo_data_loader`)
+- `docs/features/core_data_ingestion/04_Operations_Troubleshooting_Guide.md`
+- `tests/integration/tools/test_demo_data_pack.py`
+- Local execution: `.\.venv\Scripts\python.exe -m pytest -q tests/integration/tools/test_demo_data_pack.py` (2 failures on 2026-03-04)
 
-- a deterministic demo dataset with multiple product types and transaction lifecycle events,
-- an executable bootstrap tool in `tools/`,
-- compose integration for auto-run and startup validation,
-- tests for tool behavior and docs updates for local run commands.
+## Requirement-to-Implementation Traceability
 
-Out of scope:
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Deterministic demo pack artifact | Implemented | `tools/demo_data_pack.py` |
+| Compose-time one-shot bootstrap | Implemented | `docker-compose.yml` `demo_data_loader` |
+| Readiness + verification loop | Implemented | readiness wait + `_verify_portfolio` logic |
+| Test and docs coverage | Partially implemented (docs yes, tests currently stale/failing) | troubleshooting guide + failing integration tests |
 
-- changing lotus-performance or lotus-manage internals,
-- synthetic data generation service beyond lotus-core bootstrap,
-- replacing existing E2E test fixtures.
+## Design Reasoning and Trade-offs
 
-## 5. Proposed Solution
+1. Using canonical ingestion/query APIs for demo bootstrapping validates real integration paths.
+2. One-shot loader keeps local startup repeatable and operator-friendly.
 
-### 5.1 Demo Data Pack Content
+Trade-off:
+- Rich demo verification logic requires disciplined test maintenance; stale tests can hide real drift or create false failure noise.
 
-The pack will include:
+## Gap Assessment
 
-- multiple portfolios (advisory, discretionary, income, and balanced patterns),
-- cross-asset instruments (cash, equities, bonds, ETFs/funds),
-- transaction history (deposit, buy, sell, dividend, fee, transfer/withdrawal flows),
-- daily market prices and FX rates for valuation and analytics,
-- business dates needed for timeseries and aggregation outputs.
+Remaining delta:
+1. Align `test_demo_data_pack.py` with current demo bundle schema and realistic portfolio expectations.
+2. Ensure this suite is included in enforced CI paths for ongoing drift detection.
 
-### 5.2 Automation Flow
+## Deviations and Evolution Since Original RFC
 
-On startup:
+1. Delivery scope expanded with robust verification heuristics and force-ingest controls.
+2. Test contract drift emerged after implementation evolution.
 
-1. wait for ingestion/query readiness,
-2. check whether demo portfolios already exist (idempotent guard),
-3. ingest portfolio bundle if missing,
-4. poll query endpoints until expected outputs are present for each demo portfolio,
-5. exit success/failure with clear logs for operators.
+## Proposed Changes
 
-### 5.3 Compose Integration
+1. Keep classification as `Partially implemented`.
+2. Close test-drift gap before marking RFC fully aligned.
 
-Add a one-shot service (`demo_data_loader`) to lotus-core compose:
+## Test and Validation Evidence
 
-- depends on lotus-core runtime services,
-- executes `python -m tools.demo_data_pack --ingest --verify`,
-- exits after successful validation,
-- supports env-driven toggles (enabled/disabled, timeout, strict verification).
+1. Implementation artifact:
+   - `tools/demo_data_pack.py`
+2. Compose integration:
+   - `docker-compose.yml`
+3. Failing test evidence:
+   - `tests/integration/tools/test_demo_data_pack.py`
+   - `.\.venv\Scripts\python.exe -m pytest -q tests/integration/tools/test_demo_data_pack.py`
 
-## 6. Architectural Impact
+## Original Acceptance Criteria Alignment
 
-- Reinforces lotus-core role as canonical data and lifecycle processing owner.
-- Improves integration readiness for lotus-gateway/UI/lotus-performance/lotus-manage by guaranteeing baseline data availability.
-- Converts demo-data readiness into a repeatable platform bootstrap step instead of manual operations.
+Partially aligned.
 
-## 7. Risks and Trade-offs
+## Rollout and Backward Compatibility
 
-Risks:
+No runtime change introduced by this documentation retrofit.
 
-- startup time increases due to ingestion + verification wait.
-- false negatives if readiness timeouts are too aggressive on slower machines.
-- stale/static demo composition may drift from evolving product requirements.
+## Open Questions
 
-Mitigations:
+1. Should demo data pack verification be required in default CI, or retained as optional integration gate due runtime cost?
 
-- configurable timeout and enable/disable flag,
-- concise logs with failed endpoint context,
-- periodic updates to dataset through RFC-governed changes.
+## Next Actions
 
-## 8. Implementation Plan (High Level)
-
-1. Implement `tools/demo_data_pack.py` with:
-   - deterministic payload builder,
-   - ingestion/query client helpers,
-   - retry + poll + verification loop,
-   - CLI flags for ingest-only, verify-only, timeout.
-2. Add compose service for auto bootstrap.
-3. Add tests validating payload coverage and idempotent flow behavior.
-4. Update lotus-core README/runbook sections for startup and troubleshooting.
-5. Add cross-repo clarification in `lotus-platform` if startup workflow changes.
-
-## 9. Success Criteria
-
-1. `docker compose up -d --build` on lotus-core automatically loads demo data without manual API calls.
-2. Demo portfolios are visible through lotus-core query APIs and lotus-gateway/UI screens.
-3. Core lifecycle outputs (positions, valuations, analytics-ready endpoints) are available after bootstrap.
-4. Re-running bootstrap does not create unintended duplicate business records.
+1. Update demo-data integration tests to current schema/expectations.
+2. Confirm CI gate placement for the demo-data suite.
 

@@ -1,36 +1,87 @@
 # RFC 051 - Test Collection Reliability Hardening
 
-## Problem Statement
+| Metadata | Value |
+| --- | --- |
+| Status | Implemented |
+| Created | 2026-02-24 |
+| Last Updated | 2026-03-04 |
+| Owners | test infrastructure reliability |
+| Depends On | pytest strict-marker policy |
+| Scope | Eliminate test collection errors impacting governance telemetry |
 
-Cross-repo pyramid measurement currently reports lotus-core `collect_errors` because:
+## Executive Summary
 
-- `tests/unit` and `tests/integration` import `openpyxl` but it is not listed in `tests/requirements.txt`.
-- `tests/e2e/test_5_day_workflow.py` uses `@pytest.mark.dependency` while lotus-core runs with `--strict-markers`, and the `dependency` marker is not declared in pytest config.
+RFC 051 is implemented.
+Both root causes identified in the RFC are resolved:
+1. `openpyxl` is present in test requirements.
+2. `dependency` marker is declared in pytest configuration while strict markers remain enabled.
 
-This makes test inventory and governance telemetry noisy and unreliable.
+Classification: `Fully implemented and aligned`.
 
-## Root Cause
+## Original Requested Requirements (Preserved)
 
-- Missing explicit dependency declaration for workbook-driven ingestion tests.
-- Missing marker declaration for `pytest-dependency` usage under strict marker policy.
+Original RFC requested:
+1. Add missing `openpyxl` dependency to test environment.
+2. Register `dependency` marker under strict-marker enforcement.
+3. Restore reliable test collection behavior for governance/telemetry flows.
 
-## Proposed Solution
+## Current Implementation Reality
 
-- Add `openpyxl` to `tests/requirements.txt`.
-- Add `"dependency: mark test dependency ordering/grouping"` to `tool.pytest.ini_options.markers` in `pyproject.toml`.
+Implemented:
+1. `tests/requirements.txt` includes `openpyxl==3.1.5`.
+2. `pyproject.toml` includes marker declaration:
+   - `"dependency: mark test dependency ordering/grouping"`.
+3. `--strict-markers` remains enabled, meaning marker usage is now explicit and collection-safe.
 
-## Architectural Impact
+Evidence:
+- `tests/requirements.txt`
+- `pyproject.toml`
 
-No production runtime impact. This is test platform reliability hardening only.
+## Requirement-to-Implementation Traceability
 
-## Risks and Trade-offs
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Add workbook dependency | Implemented | `tests/requirements.txt` |
+| Declare `dependency` marker | Implemented | `pyproject.toml` pytest markers |
+| Improve collection reliability | Implemented by configuration closure of both identified causes | requirements + pytest config |
 
-- Adds one test dependency package (`openpyxl`) to test environment setup time.
-- No behavioral impact on service code paths.
+## Design Reasoning and Trade-offs
 
-## High-Level Implementation
+1. Explicit dependency and marker declaration reduces non-deterministic CI collection failures.
+2. Maintaining strict markers preserves test hygiene while avoiding false negatives from missing registration.
 
-1. Update test dependency manifest.
-2. Update pytest marker registry.
-3. Re-run collection for unit/integration/e2e buckets.
-4. Re-run PPD pyramid measurement to confirm lotus-core collection errors are resolved.
+Trade-off:
+- Slightly larger test environment dependency footprint.
+
+## Gap Assessment
+
+No high-value implementation gap identified for RFC 051 scope.
+
+## Deviations and Evolution Since Original RFC
+
+1. None material; implementation matches proposal directly.
+
+## Proposed Changes
+
+1. Keep classification as `Fully implemented and aligned`.
+
+## Test and Validation Evidence
+
+1. `tests/requirements.txt`
+2. `pyproject.toml`
+
+## Original Acceptance Criteria Alignment
+
+Aligned.
+
+## Rollout and Backward Compatibility
+
+No runtime change introduced by this documentation retrofit.
+
+## Open Questions
+
+1. None for RFC 051 scope.
+
+## Next Actions
+
+1. Keep dependency/marker declarations synchronized with future test framework additions.

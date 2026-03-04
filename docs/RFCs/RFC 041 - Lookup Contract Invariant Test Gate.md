@@ -1,43 +1,90 @@
 # RFC 041 - Lookup Contract Invariant Test Gate
 
-- Status: IMPLEMENTED
-- Date: 2026-02-23
-- Owners: lotus-core Query Service
+| Metadata | Value |
+| --- | --- |
+| Status | Implemented |
+| Created | 2026-02-23 |
+| Last Updated | 2026-03-04 |
+| Owners | `query-service` |
+| Depends On | RFC 039, RFC 040 |
+| Scope | Contract invariants for lookup selector endpoints |
 
-## Context
+## Executive Summary
 
-Lookup APIs now power UI/lotus-gateway selector behavior. Regressions in item shape, sorting, search filtering, or source scoping can break UX and create subtle cross-service contract drift.
+RFC 041 introduced a dedicated test gate to keep lookup contracts stable.
+It is implemented and active:
+1. Contract-focused integration tests exist.
+2. Tests validate shape, sorting, filtering, limit behavior, and source scoping.
+3. The suite is included in existing integration test execution paths.
 
-## Decision
+Classification: `Fully implemented and aligned`.
 
-Add a dedicated lotus-core integration test gate for lookup contract invariants:
+## Original Requested Requirements (Preserved)
 
-- New test suite: `tests/integration/services/query_service/test_lookup_contract_router.py`
-- Asserts:
-  - canonical item shape (`id`, `label` non-empty strings)
-  - deterministic sorting and limit behavior
-  - case-insensitive query filtering
-  - currency source scoping behavior (`source=INSTRUMENTS`) and uppercase normalization
-- Wired into:
-  - `make test-integration-lite`
-  - CI integration-lite matrix args in `.github/workflows/ci.yml`
+Original RFC 041 requested:
+1. Explicit integration gate for lookup contract invariants.
+2. Assertions on selector contract shape and deterministic behavior.
+3. CI integration for fast regression detection.
 
-## Rationale
+## Current Implementation Reality
 
-- Makes selector contract breakages explicit and fast to detect.
-- Prevents accidental behavior drift during lotus-core API evolution.
-- Keeps lotus-gateway/UI integrations stable without needing heavy end-to-end runs.
+Implemented:
+1. `test_lookup_contract_router.py` validates lookup item shape (`id`, `label`), deterministic sort+limit, search filtering, and currency source behavior.
+2. Test manifest and integration test suites include lookup contract test paths.
+3. Lookup behaviors validated in this suite align with active lookup router implementations.
 
-## Consequences
+Evidence:
+- `tests/integration/services/query_service/test_lookup_contract_router.py`
+- `tests/unit/services/query_service/test_test_manifest.py`
+- `src/services/query_service/app/routers/lookups.py`
+- `.github/workflows/ci.yml`
 
-Positive:
-- Stronger API contract confidence for lookup consumers.
-- Lower risk of production UI selector regressions.
+## Requirement-to-Implementation Traceability
 
-Trade-offs:
-- Slightly longer integration-lite runtime.
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Dedicated lookup invariant test gate | Implemented | `test_lookup_contract_router.py` |
+| Contract shape and deterministic behavior assertions | Implemented | contract test cases |
+| CI-integrated regression coverage | Implemented through existing integration test matrix/manifest | CI workflow + manifest |
 
-## Follow-ups
+## Design Reasoning and Trade-offs
 
-- Extend invariant coverage to include future entitlement/tenant-aware lookup rules.
-- Add contract snapshots if lookup payloads gain richer metadata.
+1. Lightweight contract invariants catch high-impact selector regressions early.
+2. Route-level deterministic behavior checks reduce UI flakiness and hidden drift.
+
+Trade-off:
+- Additional integration coverage increases test runtime modestly.
+
+## Gap Assessment
+
+No high-value implementation gap for RFC 041 scope.
+
+## Deviations and Evolution Since Original RFC
+
+1. Invariant tests now operate alongside broader reference-data router tests, giving stronger combined coverage than standalone-only gating.
+
+## Proposed Changes
+
+1. Keep classification as `Fully implemented and aligned`.
+2. Extend invariants only when lookup contract semantics expand.
+
+## Test and Validation Evidence
+
+1. `tests/integration/services/query_service/test_lookup_contract_router.py`
+2. `tests/integration/services/query_service/test_reference_data_routers.py`
+
+## Original Acceptance Criteria Alignment
+
+Aligned.
+
+## Rollout and Backward Compatibility
+
+No runtime change introduced by this documentation retrofit.
+
+## Open Questions
+
+1. None for baseline RFC 041 scope.
+
+## Next Actions
+
+1. Preserve lookup invariant tests as mandatory gate for lookup API changes.

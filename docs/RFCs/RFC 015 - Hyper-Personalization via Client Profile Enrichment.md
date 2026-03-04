@@ -1,98 +1,87 @@
-### RFC 015: Hyper-Personalization via Client Profile Enrichment
+# RFC 015 - Hyper-Personalization via Client Profile Enrichment
 
-  * **Status**: Proposed
-  * **Date**: 2025-08-30
-  * **Services Affected**: `ingestion-service`, `persistence-service`, `portfolio-common`, `query-service`, `nba-service`, `insight-report-service`
-  * **Related RFCs**: RFC 011, RFC 009
+| Metadata | Value |
+| --- | --- |
+| Status | Archived |
+| Created | 2025-08-30 |
+| Last Updated | 2026-03-04 |
+| Owners | Advisory intelligence/reporting domains (outside lotus-core) |
+| Depends On | RFC 011, RFC 009 |
+| Scope | Archived from `lotus-core`; partially related data-model asks not implemented here |
 
------
+## Executive Summary
 
-## 1\. Summary (TL;DR)
+RFC 015 proposed enriching portfolio records with deep `client_profile` semantics for personalized NBA and narrative reporting.
+In lotus-core, this RFC was not implemented as specified and its principal consumers (`nba-service`, `insight-report-service`) are out of current core scope.
 
-This RFC proposes a significant enhancement to our data model and AI engines to enable **hyper-personalized** client recommendations and insights. We will enrich the core `Portfolio` entity with a structured `client_profile` that captures individual client goals (e.g., retirement, education), preferences (e.g., ESG focus), and constraints (e.g., restricted securities).
+## Original Requested Requirements (Preserved)
 
-This deeper, qualitative context will be ingested and persisted through our existing pipeline and then consumed by the `nba-service` and `insight-report-service`. This allows our AI engines to generate recommendations and commentary that are not just financially sound, but are explicitly aligned with the client's life objectives and personal values.
+Original RFC 015 requested:
+1. Add `client_profile` JSONB-style enrichment to portfolio data model.
+2. Extend ingestion/persistence/query paths to accept/store/serve this profile.
+3. Enable NBA and insight engines to use profile context for personalized signals and narratives.
+4. Introduce richer goal/preference/constraint-aware recommendation behaviors.
 
------
+## Current Implementation Reality
 
-## 2\. Motivation
+1. No `client_profile` field exists on lotus-core `Portfolio` model in current schema.
+2. Ingestion portfolio DTO does not carry client-profile block.
+3. Persistence portfolio repository/event model does not process that profile.
+4. Primary downstream AI services referenced by RFC are outside lotus-core ownership.
 
-To deliver a truly "high-touch" experience at scale, our system must understand the "why" behind the numbers. A standard risk profile is not enough. By integrating a client's personal goals and values into our analytical process, we can:
+Evidence:
+- `src/libs/portfolio-common/portfolio_common/database_models.py` (`Portfolio` model)
+- `src/services/ingestion_service/app/DTOs/portfolio_dto.py`
+- `src/libs/portfolio-common/portfolio_common/events.py` (`PortfolioEvent`)
+- `src/services/persistence_service/app/repositories/portfolio_repository.py`
 
-  * **Generate Goal-Oriented Recommendations**: Shift from generic advice ("rebalance to target") to highly relevant suggestions ("increase savings rate by 2% to stay on track for your 2045 retirement goal").
-  * **Build Deeper Trust**: Demonstrate to the end-client that their personal values (like ESG) are being actively considered in the management of their portfolio.
-  * **Create a Powerful Differentiator**: Offer a level of personalization that is impossible for advisors to replicate manually across their entire book of business, creating a significant competitive advantage.
+## Requirement-to-Implementation Traceability
 
------
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Add `client_profile` on portfolio schema | Not implemented | portfolio DB model |
+| Ingest and persist client profile | Not implemented | portfolio DTO/event/repository |
+| Expose enriched profile via query APIs | Not implemented in current contract | query DTO/service surfaces |
+| Use in NBA/insight engines | Out of lotus-core runtime scope | cross-app ownership context |
 
-## 3\. Architectural Changes & Data Flow
+## Design Reasoning and Trade-offs
 
-### 3.1. Data Model Enrichment
+1. **Why archive here**: RFC value is tied to advisor-intelligence services not owned by lotus-core.
+2. **Core trade-off**: keeping lotus-core lean on canonical financial data reduces coupling to rapidly changing personalization semantics.
+3. **Potential future path**: if profile becomes a canonical upstream master-data requirement, reintroduce via a dedicated core contract RFC with clear ownership.
 
-The core change is the addition of a new `client_profile` column to the `portfolios` table. Using a `JSONB` type provides the flexibility to evolve the profile schema over time without requiring database migrations for every new field.
+## Gap Assessment
 
-**Proposed `client_profile` JSONB Schema:**
+No immediate lotus-core implementation gap is tracked under current ownership model.
+This RFC is best treated as out-of-scope for core until a cross-app governance decision makes client-profile canonical in core data contracts.
 
-```json
-{
-  "goals": [
-    {
-      "type": "RETIREMENT", 
-      "target_year": 2045, 
-      "target_amount": 5000000,
-      "priority": "HIGH"
-    },
-    {
-      "type": "EDUCATION", 
-      "target_year": 2035,
-      "target_amount": 250000,
-      "priority": "MEDIUM"
-    }
-  ],
-  "preferences": {
-    "esg_focus": "HIGH", 
-    "commentary_tone": "CONCISE"
-  },
-  "constraints": {
-    "restricted_sectors": ["TOBACCO", "GAMBLING"]
-  }
-}
-```
+## Deviations and Evolution Since Original RFC
 
-### 3.2. Ingestion & Persistence
+1. NBA/insight service roadmap did not materialize inside lotus-core boundary.
+2. Lotus-core model evolution focused on canonical processing/integration contracts, not personalization intelligence.
 
-1.  **`ingestion-service`**: The `POST /ingest/portfolios` endpoint and its corresponding `Portfolio` DTO will be updated to accept the new, optional `client_profile` object.
-2.  **`persistence-service`**: The `PortfolioConsumer` will be enhanced to validate and persist the `client_profile` JSONB data into the `portfolios` table.
+## Proposed Changes
 
-### 3.3. Consumption by AI Services
+1. Keep RFC 015 archived in lotus-core.
+2. If reactivated, reframe as cross-repo master-data contract RFC with explicit owners and downstream adopters.
 
-1.  **`query-service`**: The `/portfolios/{id}` endpoint will be updated to return the enriched `client_profile` data.
-2.  **`nba-service` & `insight-report-service`**: These services will now fetch the enriched portfolio data. This new context becomes a primary input for the "Signal Detection" and "Narrative Synthesis" stages of their respective pipelines.
+## Test and Validation Evidence
 
------
+1. Absence evidence in model/DTO/event/repository paths listed above.
 
-## 4\. New Hyper-Personalized Recommendation Signals
+## Original Acceptance Criteria Alignment
 
-This enriched data enables a new class of powerful, high-value signals in the `nba-service`:
+Original acceptance criteria are not met in lotus-core by design because scope is outside current repository ownership.
 
-  * **Goal Progress Signal**: The engine can now run a simple projection to determine if the portfolio is on track to meet a stated goal. If not, it can generate a recommendation like, "Increase contribution rate to meet retirement goal."
-  * **Preference Mismatch Signal**: The engine can scan the portfolio's holdings and flag any that conflict with the client's stated ESG or ethical preferences.
-  * **Constraint Violation Signal**: The engine can flag any holdings that violate a hard constraint, such as an allocation to a restricted sector.
-  * **Goal-Funding Recommendation**: When a goal's target date is approaching, the engine can recommend derisking the assets allocated to that specific goal.
+## Rollout and Backward Compatibility
 
------
+No runtime change from this documentation retrofit.
 
-## 5\. Implementation Roadmap
+## Open Questions
 
-  * **Phase 1: Foundational Data Layer**:
-      * Implement the Alembic migration to add the `client_profile` column to the `portfolios` table.
-      * Update the ingestion and persistence services to handle the new data.
-      * Update the `query-service` to expose the enriched profile.
-  * **Phase 2: Integration with NBA Engine**:
-      * Enhance the `nba-service`'s Signal Detection layer to incorporate the new profile data.
-      * Implement the new "Goal Progress" and "Preference Mismatch" signals.
-  * **Phase 3: Integration with NLG Engine**:
-      * Enhance the `insight-report-service` to use the client's goals and preferences to generate more personalized, empathetic narrative commentary.
- 
+1. Should client-profile semantics become canonical enterprise master data (and if yes, which repo owns the canonical schema)?
 
- 
+## Next Actions
+
+1. Keep this RFC archived as historical context.
+2. Re-home active profile-enrichment roadmap to the recommendation/reporting domain repositories.

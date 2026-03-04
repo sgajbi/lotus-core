@@ -1,76 +1,102 @@
-# RFC 029 - lotus-manage Engineering Baseline Alignment
+# RFC 029 - DPM Engineering Baseline Alignment
 
-- Status: Proposed
-- Date: 2026-02-23
-- Owner: Platform Engineering
+| Metadata | Value |
+| --- | --- |
+| Status | Implemented |
+| Created | 2026-02-23 |
+| Last Updated | 2026-03-04 |
+| Owners | Platform engineering, repository governance |
+| Depends On | lotus-platform CI/dev workflow standards |
+| Scope | Repository baseline alignment for CI, Make commands, lint/typecheck scaffolding |
 
-## Context
+## Executive Summary
 
-`lotus-core` currently lacks a consistent top-level engineering baseline compared to `lotus-advise`:
+RFC 029 established the repository engineering baseline (CI + local command parity + typed/linted entry points).
+Current implementation is in place and materially exceeds the initial Phase 1 scope in some areas.
 
-- no repository-level CI workflow for lint/typecheck/tests/docker
-- no repository-level `Makefile` standard commands
-- no repository-level `mypy.ini`
-- inconsistent linting and formatting execution path
-- no PR auto-merge workflow aligned with protected branch delivery
+Key baseline components now exist:
+1. Repository-level CI workflow with quality gates and test jobs.
+2. Standardized top-level `Makefile` commands.
+3. Repository-level `mypy.ini` and ruff config in `pyproject.toml`.
+4. Expanded CI contract and gating beyond initial minimal baseline.
 
-This slows delivery and increases integration risk across platform services.
+## Original Requested Requirements (Preserved)
 
-## Decision
+Original RFC 029 requested:
+1. Add unified CI workflow for lint/typecheck/tests/docker validation.
+2. Add standard `Makefile` developer commands.
+3. Add repo mypy + ruff baseline.
+4. Align with phased strictness model from scoped paths toward broader enforcement.
+5. Apply branch/merge governance alignment (outside repo code where applicable).
 
-Adopt a lotus-manage-style baseline now, with a phased strictness model:
+## Current Implementation Reality
 
-1. Add unified CI workflow with:
-   - workflow lint
-   - lint + typecheck + unit tests
-   - docker build validation
-2. Add repo `Makefile` with:
-   - `install`, `lint`, `typecheck`, `test`, `check`, `docker-build`
-3. Add repo `mypy.ini` and `ruff` config in `pyproject.toml`
-4. Add PR auto-merge workflow matching lotus-manage pattern
-5. Apply `main` branch protection requiring CI checks and PR review
+Implemented in repository:
+1. `.github/workflows/ci.yml` defines workflow lint, quality, test suites, coverage gate, docker build, smoke/performance/recovery gates.
+2. `Makefile` exposes install/lint/typecheck/test/check/coverage/docker and additional standardized QA gates.
+3. `mypy.ini` exists and scopes typed enforcement to selected query-service paths.
+4. `pyproject.toml` includes ruff settings and pytest config.
 
-## Phase Strategy
+Notes:
+1. Branch protection / PR auto-merge policy is org/repo-hosting configuration; not directly auditable from source tree.
+2. CI scope has evolved beyond initial Phase 1 and integrates broader quality controls.
 
-### Phase 1 (this RFC implementation)
+Evidence:
+- `.github/workflows/ci.yml`
+- `Makefile`
+- `mypy.ini`
+- `pyproject.toml`
 
-- enforce quality gates on stable slice:
-  - `src/services/query_service/app`
-  - `tests/unit/services/query_service`
-- enforce mypy on:
-  - `src/services/query_service/app/dtos`
-  - `src/services/query_service/app/routers`
-- temporary lint exception for `E701` to avoid blocking migration on legacy style debt
+## Requirement-to-Implementation Traceability
 
-### Phase 2 (next RFC)
+| Original Requirement | Current Implementation in lotus-core | Evidence |
+| --- | --- | --- |
+| Unified CI baseline | Implemented and expanded | `ci.yml` |
+| Standard Make targets | Implemented | `Makefile` |
+| Repo mypy + ruff baseline | Implemented | `mypy.ini`; `pyproject.toml` |
+| Scoped strictness-first rollout | Implemented via typed scope + matrixed gates | `mypy.ini`; CI workflow |
+| Branch protection/automerge governance | External to codebase | platform/repo settings |
 
-- expand lint/typecheck scope to additional services/libs
-- remove `E701` exception
-- add integration/e2e pipeline partitioning and coverage gates
+## Design Reasoning and Trade-offs
 
-## Consequences
+1. Scoped strictness prevents blocking delivery while quality baseline is established.
+2. Standard make targets create deterministic local/CI parity for developers and agents.
+3. Expanded CI gates strengthen reliability but increase runtime/resource usage.
 
-### Positive
+## Gap Assessment
 
-- immediate CI and quality standardization with lotus-manage-compatible workflow shape
-- deterministic local commands for developers and AI agents
-- reduced drift in tooling across backend repositories
+No material in-repo implementation gap remains for RFC 029 baseline intent.
 
-### Trade-Off
+## Deviations and Evolution Since Original RFC
 
-- initial enforcement is intentionally scoped (not full-repo strict yet)
-- strictness ratchet is planned, not completed in a single change
+1. CI pipeline evolved beyond original narrow baseline (additional gates and suites).
+2. Coverage threshold in CI moved under RFC 030 evolution with tighter enforcement.
 
-## Success Criteria
+## Proposed Changes
 
-- CI runs on all PRs and pushes to `main`
-- `make check` succeeds locally and in CI
-- Docker build check succeeds in CI
-- `main` branch protection enabled with required checks
+1. Keep RFC 029 as `Fully implemented and aligned` for baseline objective.
+2. Continue strictness ratchet and policy hygiene in later RFC streams.
 
-## Out of Scope
+## Test and Validation Evidence
 
-- full-repo lint debt cleanup
-- full-repo mypy adoption
-- e2e docker-compose CI parity for all services in this change
+1. Workflow definitions and quality jobs in `ci.yml`.
+2. Reproducible local commands in `Makefile`.
+3. Typed/lint config in `mypy.ini` and `pyproject.toml`.
 
+## Original Acceptance Criteria Alignment
+
+In-repo acceptance criteria are met.
+Branch protection verification remains governance/admin concern outside source code.
+
+## Rollout and Backward Compatibility
+
+No runtime change introduced by this documentation retrofit.
+
+## Open Questions
+
+1. Should we add a repository-visible governance checklist file that records required branch protection and required checks to close the auditability gap?
+
+## Next Actions
+
+1. Maintain current baseline.
+2. Continue incremental expansion of strict typing/lint scope under future RFC loops.
