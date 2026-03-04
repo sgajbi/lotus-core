@@ -1,10 +1,13 @@
 # services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py
 import logging
 import json
+import os
+import time
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
-from tenacity import retry, stop_after_attempt, wait_fixed, before_log, retry_if_exception_type
+from tenacity import before_log, retry, stop_after_attempt, wait_fixed
 from confluent_kafka import Message
+from dataclasses import dataclass
 from typing import Dict, Optional
 
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -25,9 +28,37 @@ logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "cashflow-calculator"
 
+CASHFLOW_RULE_CACHE_TTL_SECONDS = int(
+    os.getenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "300")
+)
+
+
+@dataclass
+class CashflowRuleCacheState:
+    rules_by_transaction_type: Dict[str, CashflowRule]
+    loaded_at_monotonic_seconds: float
+
+
 # Module-level cache for cashflow rules.
-# This will be populated once when the first message is processed.
-_cashflow_rules_cache: Optional[Dict[str, CashflowRule]] = None
+_cashflow_rule_cache_state: Optional[CashflowRuleCacheState] = None
+
+
+def invalidate_cashflow_rule_cache() -> None:
+    """
+    Explicit cache invalidation hook.
+
+    Intended for operational use and tests where rules are updated and
+    immediate refresh is required without process restart.
+    """
+    global _cashflow_rule_cache_state
+    _cashflow_rule_cache_state = None
+
+
+def _cache_is_fresh(cache_state: CashflowRuleCacheState) -> bool:
+    if CASHFLOW_RULE_CACHE_TTL_SECONDS <= 0:
+        return False
+    age_seconds = time.monotonic() - cache_state.loaded_at_monotonic_seconds
+    return age_seconds < CASHFLOW_RULE_CACHE_TTL_SECONDS
 
 class NoCashflowRuleError(ValueError):
     """Custom exception for when a rule for a transaction type is not found."""
@@ -40,20 +71,39 @@ class CashflowCalculatorConsumer(BaseConsumer):
     cashflow based on rules from the database, persists it, and writes a
     completion event to the outbox.
     """
+    async def _load_cashflow_rules_cache(self, db_session) -> CashflowRuleCacheState:
+        repo = CashflowRulesRepository(db_session)
+        rules_list = await repo.get_all_rules()
+        logger.info("Loaded %s cashflow rules from repository.", len(rules_list))
+        return CashflowRuleCacheState(
+            rules_by_transaction_type={rule.transaction_type.upper(): rule for rule in rules_list},
+            loaded_at_monotonic_seconds=time.monotonic(),
+        )
+
     async def _get_rule_for_transaction(self, db_session, transaction_type: str) -> Optional[CashflowRule]:
         """
         Retrieves the cashflow rule for a given transaction type, using a
-        lazy-loaded in-memory cache.
+        lazy-loaded in-memory cache with TTL refresh and missing-rule refresh.
         """
-        global _cashflow_rules_cache
-        if _cashflow_rules_cache is None:
-            logger.info("Cashflow rules cache is not populated. Loading from database...")
-            repo = CashflowRulesRepository(db_session)
-            rules_list = await repo.get_all_rules()
-            _cashflow_rules_cache = {rule.transaction_type: rule for rule in rules_list}
-            logger.info(f"Successfully loaded and cached {len(_cashflow_rules_cache)} cashflow rules.")
-        
-        return _cashflow_rules_cache.get(transaction_type.upper())
+        global _cashflow_rule_cache_state
+
+        if _cashflow_rule_cache_state is None or not _cache_is_fresh(_cashflow_rule_cache_state):
+            logger.info("Cashflow rules cache miss/stale; refreshing from database.")
+            _cashflow_rule_cache_state = await self._load_cashflow_rules_cache(db_session)
+
+        transaction_type_key = transaction_type.upper()
+        rule = _cashflow_rule_cache_state.rules_by_transaction_type.get(transaction_type_key)
+        if rule is not None:
+            return rule
+
+        # Force one immediate refresh when a requested rule is missing.
+        # This supports near-real-time rule updates without waiting for TTL expiry.
+        logger.info(
+            "Cashflow rule '%s' not found in cache; forcing immediate refresh.",
+            transaction_type_key,
+        )
+        _cashflow_rule_cache_state = await self._load_cashflow_rules_cache(db_session)
+        return _cashflow_rule_cache_state.rules_by_transaction_type.get(transaction_type_key)
 
     async def process_message(self, msg: Message):
         await self._process_message_with_retry(msg)
