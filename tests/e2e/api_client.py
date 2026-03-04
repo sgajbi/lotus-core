@@ -26,11 +26,18 @@ class E2EApiClient:
         response.raise_for_status()
         return response
     
-    def post_query(self, endpoint: str, payload: Dict) -> requests.Response:
+    def post_query(
+        self,
+        endpoint: str,
+        payload: Dict,
+        *,
+        raise_for_status: bool = True,
+    ) -> requests.Response:
         """Sends a POST request to a specified query endpoint."""
         url = f"{self.query_url}{endpoint}"
         response = self.session.post(url, json=payload, timeout=20)
-        response.raise_for_status()
+        if raise_for_status:
+            response.raise_for_status()
         return response
 
     def poll_for_data(
