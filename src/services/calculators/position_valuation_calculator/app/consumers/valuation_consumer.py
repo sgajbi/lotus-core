@@ -22,6 +22,11 @@ from portfolio_common.database_models import DailyPositionSnapshot
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "position-valuation-calculator"
+FAILED_JOB_STATUSES = {"FAILED"}
+VALUATION_FAILED = "FAILED"
+VALUATION_UNVALUED = "UNVALUED"
+VALUATION_VALUED_CURRENT = "VALUED_CURRENT"
+VALUATION_VALUED_STALE = "VALUED_STALE"
 
 class DataNotFoundError(Exception):
     """Custom exception for retryable data fetching errors."""
@@ -109,14 +114,26 @@ class ValuationConsumer(BaseConsumer):
                         )
 
                         # 4. Perform valuation if price is available
+                        job_failure_reason = None
                         if price:
                             fx_rate = await repo.get_fx_rate(instrument.currency, portfolio.base_currency, event.valuation_date)
                             if instrument.currency != portfolio.base_currency and not fx_rate:
-                                snapshot.valuation_status = 'FAILED'
+                                snapshot.valuation_status = VALUATION_FAILED
+                                job_failure_reason = (
+                                    f"Missing FX rate for {instrument.currency}->{portfolio.base_currency} "
+                                    f"on or before {event.valuation_date}"
+                                )
                                 VALUATION_JOBS_FAILED_TOTAL.labels(
                                     portfolio_id=event.portfolio_id, security_id=event.security_id, reason="missing_fx_rate"
                                 ).inc()
-                                logger.error(f"Missing required FX rate for valuation. Job will be marked FAILED.")
+                                logger.error(
+                                    "Missing required FX rate for valuation. Job will be marked FAILED.",
+                                    extra={
+                                        "portfolio_id": event.portfolio_id,
+                                        "security_id": event.security_id,
+                                        "valuation_date": str(event.valuation_date),
+                                    },
+                                )
                             else:
                                 valuation_result = ValuationLogic.calculate_valuation(
                                     quantity=snapshot.quantity, market_price=price.price,
@@ -129,11 +146,22 @@ class ValuationConsumer(BaseConsumer):
                                 if valuation_result:
                                     snapshot.market_price = price.price
                                     snapshot.market_value, snapshot.market_value_local, snapshot.unrealized_gain_loss, snapshot.unrealized_gain_loss_local = valuation_result
-                                    snapshot.valuation_status = 'VALUED_CURRENT' if price.price_date == event.valuation_date else 'VALUED_STALE'
+                                    snapshot.valuation_status = (
+                                        VALUATION_VALUED_CURRENT
+                                        if price.price_date == event.valuation_date
+                                        else VALUATION_VALUED_STALE
+                                    )
                                 else:
-                                    snapshot.valuation_status = 'FAILED'
+                                    snapshot.valuation_status = VALUATION_FAILED
+                                    job_failure_reason = (
+                                        f"Valuation logic returned no result for {event.security_id} "
+                                        f"on {event.valuation_date}"
+                                    )
+                                    VALUATION_JOBS_FAILED_TOTAL.labels(
+                                        portfolio_id=event.portfolio_id, security_id=event.security_id, reason="valuation_logic_failed"
+                                    ).inc()
                         else:
-                            snapshot.valuation_status = 'UNVALUED'
+                            snapshot.valuation_status = VALUATION_UNVALUED
 
                         # 5. Persist the snapshot and create completion event
                         persisted_snapshot = await repo.upsert_daily_snapshot(snapshot)
@@ -153,7 +181,8 @@ class ValuationConsumer(BaseConsumer):
                             event.security_id,
                             event.valuation_date,
                             event.epoch,
-                            "COMPLETE",
+                            "FAILED" if snapshot.valuation_status in FAILED_JOB_STATUSES else "COMPLETE",
+                            failure_reason=job_failure_reason,
                         )
                         await idempotency_repo.mark_event_processed(event_id, event.portfolio_id, SERVICE_NAME, correlation_id)
                 
