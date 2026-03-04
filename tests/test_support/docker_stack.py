@@ -51,11 +51,15 @@ def compose_up(
     retry_wait_seconds: int = 5,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> None:
-    runner(
-        ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
-        check=False,
-        capture_output=True,
-    )
+    try:
+        runner(
+            ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
+            check=False,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError:
+        # Best-effort cleanup only. Continue with bring-up retries.
+        pass
 
     args = ["docker", "compose", "-f", compose_file, "up"]
     if build:
@@ -75,11 +79,15 @@ def compose_up(
             stderr = (exc.stderr or b"").decode("utf-8", errors="ignore").lower()
             removed_conflicts = _remove_conflicting_named_containers(stderr, runner)
             if removed_conflicts or _is_retryable_compose_up_error(stderr):
-                runner(
-                    ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
-                    check=False,
-                    capture_output=True,
-                )
+                try:
+                    runner(
+                        ["docker", "compose", "-f", compose_file, "down", "--remove-orphans"],
+                        check=False,
+                        capture_output=True,
+                    )
+                except subprocess.CalledProcessError:
+                    # Retry path should not fail due to cleanup issues.
+                    pass
                 if retry_wait_seconds > 0:
                     time.sleep(retry_wait_seconds)
                 continue

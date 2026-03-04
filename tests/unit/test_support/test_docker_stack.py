@@ -30,7 +30,7 @@ def test_compose_up_retries_on_existing_image_conflict() -> None:
 
     def runner(args, **kwargs):  # noqa: ANN001
         calls.append(list(args))
-        if len(calls) == 1:
+        if args[-2:] == ["up", "-d"] and len([c for c in calls if c[-2:] == ["up", "-d"]]) == 1:
             raise subprocess.CalledProcessError(
                 returncode=1,
                 cmd=args,
@@ -46,9 +46,10 @@ def test_compose_up_retries_on_existing_image_conflict() -> None:
         runner=runner,
     )
 
-    assert calls[0][-2:] == ["up", "-d"]
-    assert calls[1][-2:] == ["down", "--remove-orphans"]
-    assert calls[2][-2:] == ["up", "-d"]
+    assert calls[0][-2:] == ["down", "--remove-orphans"]
+    assert calls[1][-2:] == ["up", "-d"]
+    assert calls[2][-2:] == ["down", "--remove-orphans"]
+    assert calls[3][-2:] == ["up", "-d"]
 
 
 def test_compose_up_retries_on_migration_runner_exit() -> None:
@@ -56,7 +57,7 @@ def test_compose_up_retries_on_migration_runner_exit() -> None:
 
     def runner(args, **kwargs):  # noqa: ANN001
         calls.append(list(args))
-        if len(calls) == 1:
+        if args[-2:] == ["up", "-d"] and len([c for c in calls if c[-2:] == ["up", "-d"]]) == 1:
             raise subprocess.CalledProcessError(
                 returncode=1,
                 cmd=args,
@@ -72,9 +73,10 @@ def test_compose_up_retries_on_migration_runner_exit() -> None:
         runner=runner,
     )
 
-    assert calls[0][-2:] == ["up", "-d"]
-    assert calls[1][-2:] == ["down", "--remove-orphans"]
-    assert calls[2][-2:] == ["up", "-d"]
+    assert calls[0][-2:] == ["down", "--remove-orphans"]
+    assert calls[1][-2:] == ["up", "-d"]
+    assert calls[2][-2:] == ["down", "--remove-orphans"]
+    assert calls[3][-2:] == ["up", "-d"]
 
 
 def test_wait_for_migration_runner_success() -> None:
