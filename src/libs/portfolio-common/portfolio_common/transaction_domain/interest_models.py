@@ -34,6 +34,13 @@ class InterestCanonicalTransaction(BaseModel):
     gross_transaction_amount: Decimal = Field(
         ..., description="Gross interest amount in trade currency."
     )
+    interest_direction: Optional[str] = Field(
+        default=None,
+        description=(
+            "Semantic direction for INTEREST baseline: INCOME or EXPENSE. "
+            "When omitted, processing defaults to INCOME."
+        ),
+    )
     trade_fee: Optional[Decimal] = Field(
         default=Decimal(0), description="Transaction fee amount if applicable."
     )

@@ -75,6 +75,17 @@ def validate_interest_transaction(
             )
         )
 
+    if txn.interest_direction is not None:
+        direction = txn.interest_direction.upper()
+        if direction not in {"INCOME", "EXPENSE"}:
+            issues.append(
+                InterestValidationIssue(
+                    code=InterestValidationReasonCode.INVALID_INTEREST_DIRECTION,
+                    field="interest_direction",
+                    message="interest_direction must be INCOME or EXPENSE when provided.",
+                )
+            )
+
     if not txn.trade_currency:
         issues.append(
             InterestValidationIssue(

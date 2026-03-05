@@ -102,8 +102,8 @@ def test_interest_cost_calculation_current_behavior_zero_cost_and_no_realized_pn
     assert interest_transaction.net_cost == Decimal("0")
     assert interest_transaction.net_cost_local == Decimal("0")
     assert interest_transaction.gross_cost == Decimal("0")
-    assert interest_transaction.realized_gain_loss is None
-    assert interest_transaction.realized_gain_loss_local is None
+    assert interest_transaction.realized_gain_loss == Decimal("0")
+    assert interest_transaction.realized_gain_loss_local == Decimal("0")
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
 

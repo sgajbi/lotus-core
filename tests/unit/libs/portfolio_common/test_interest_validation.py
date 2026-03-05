@@ -55,6 +55,24 @@ def test_validate_interest_transaction_detects_non_positive_gross_amount() -> No
     )
 
 
+def test_validate_interest_transaction_rejects_unknown_direction() -> None:
+    txn = _base_txn().model_copy(update={"interest_direction": "UNKNOWN"})
+    issues = validate_interest_transaction(txn)
+    assert any(
+        i.code == InterestValidationReasonCode.INVALID_INTEREST_DIRECTION
+        for i in issues
+    )
+
+
+def test_validate_interest_transaction_accepts_expense_direction() -> None:
+    txn = _base_txn().model_copy(update={"interest_direction": "EXPENSE"})
+    issues = validate_interest_transaction(txn)
+    assert not any(
+        i.code == InterestValidationReasonCode.INVALID_INTEREST_DIRECTION
+        for i in issues
+    )
+
+
 def test_validate_interest_transaction_detects_invalid_date_order() -> None:
     txn = _base_txn().model_copy(
         update={"transaction_date": datetime(2026, 3, 8, 10, 0, 0)}

@@ -345,6 +345,148 @@ def test_dividend_strategy_rejects_non_positive_gross_amount(
     assert error_reporter.has_errors_for("DIV_BAD_GROSS")
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
+
+def test_interest_transaction_has_zero_cost_and_explicit_zero_realized_pnl(
+    cost_calculator, mock_disposition_engine
+):
+    interest_transaction = Transaction(
+        transaction_id="INT001",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("50.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+    cost_calculator.calculate_transaction_costs(interest_transaction)
+    assert interest_transaction.net_cost == Decimal("0")
+    assert interest_transaction.realized_gain_loss == Decimal("0")
+    assert interest_transaction.realized_gain_loss_local == Decimal("0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_interest_strategy_rejects_non_zero_quantity(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    invalid_interest = Transaction(
+        transaction_id="INT_BAD_QTY",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("1"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("50.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(invalid_interest)
+    assert error_reporter.has_errors_for("INT_BAD_QTY")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_interest_strategy_rejects_non_zero_price(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    invalid_interest = Transaction(
+        transaction_id="INT_BAD_PRICE",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("5"),
+        gross_transaction_amount=Decimal("50.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(invalid_interest)
+    assert error_reporter.has_errors_for("INT_BAD_PRICE")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_interest_strategy_rejects_non_positive_gross_amount(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    invalid_interest = Transaction(
+        transaction_id="INT_BAD_GROSS",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(invalid_interest)
+    assert error_reporter.has_errors_for("INT_BAD_GROSS")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_interest_strategy_allows_expense_direction_baseline(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    expense_interest = Transaction(
+        transaction_id="INT_EXPENSE_OK",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("25.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        interest_direction="EXPENSE",
+    )
+
+    cost_calculator.calculate_transaction_costs(expense_interest)
+    assert not error_reporter.has_errors_for("INT_EXPENSE_OK")
+    assert expense_interest.realized_gain_loss == Decimal("0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_interest_strategy_rejects_unknown_direction(
+    cost_calculator, error_reporter
+):
+    invalid_direction = Transaction(
+        transaction_id="INT_BAD_DIR",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("25.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        interest_direction="UNKNOWN",
+    )
+
+    cost_calculator.calculate_transaction_costs(invalid_direction)
+    assert error_reporter.has_errors_for("INT_BAD_DIR")
+
+
 def test_transfer_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
     transfer_in_transaction = Transaction(
         transaction_id="TRANSFER_IN_01", portfolio_id="P1", instrument_id="IBM", security_id="S_IBM",

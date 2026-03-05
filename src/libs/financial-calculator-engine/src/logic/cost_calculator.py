@@ -42,6 +42,14 @@ def _add_dividend_invariant_error(
     )
 
 
+def _add_interest_invariant_error(
+    error_reporter: ErrorReporter, transaction: Transaction, message: str
+) -> None:
+    error_reporter.add_error(
+        transaction.transaction_id, f"INTEREST invariant violation: {message}"
+    )
+
+
 def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
     try:
         return Decimal(str(value))
@@ -275,6 +283,73 @@ class DividendStrategy:
             )
             return
 
+
+class InterestStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        transaction.net_cost = Decimal(0)
+        transaction.net_cost_local = Decimal(0)
+        transaction.gross_cost = Decimal(0)
+        transaction.realized_gain_loss = Decimal(0)
+        transaction.realized_gain_loss_local = Decimal(0)
+
+        direction = str(getattr(transaction, "interest_direction", "INCOME")).upper()
+        if direction not in {"INCOME", "EXPENSE"}:
+            _add_interest_invariant_error(
+                error_reporter,
+                transaction,
+                "interest_direction must be INCOME or EXPENSE when provided.",
+            )
+            return
+
+        if transaction.quantity != Decimal(0):
+            _add_interest_invariant_error(
+                error_reporter, transaction, "quantity_delta must be 0 for INTEREST."
+            )
+            return
+
+        try:
+            price = _normalize_decimal_field(getattr(transaction, "price", Decimal(0)), "price")
+        except ValueError as exc:
+            _add_interest_invariant_error(error_reporter, transaction, str(exc))
+            return
+
+        if price != Decimal(0):
+            _add_interest_invariant_error(
+                error_reporter, transaction, "price must be 0 for INTEREST."
+            )
+            return
+
+        if transaction.gross_transaction_amount <= Decimal(0):
+            _add_interest_invariant_error(
+                error_reporter,
+                transaction,
+                "gross_interest_local must be > 0 for INTEREST baseline.",
+            )
+            return
+
+        if transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0):
+            _add_interest_invariant_error(
+                error_reporter, transaction, "net_cost and net_cost_local must be 0."
+            )
+            return
+
+        if (
+            transaction.realized_gain_loss != Decimal(0)
+            or transaction.realized_gain_loss_local != Decimal(0)
+        ):
+            _add_interest_invariant_error(
+                error_reporter,
+                transaction,
+                "realized capital/FX P&L must be explicit zero for INTEREST.",
+            )
+            return
+
+
 class DefaultStrategy:
     def calculate_costs(self, transaction: Transaction, disposition_engine: DispositionEngine, error_reporter: ErrorReporter) -> None:
         transaction.gross_cost = transaction.gross_transaction_amount
@@ -289,7 +364,7 @@ class CostCalculator:
         self._strategies: dict[TransactionType, TransactionCostStrategy] = {
             TransactionType.BUY: BuyStrategy(),
             TransactionType.SELL: SellStrategy(),
-            TransactionType.INTEREST: IncomeStrategy(),
+            TransactionType.INTEREST: InterestStrategy(),
             TransactionType.DIVIDEND: DividendStrategy(),
             TransactionType.DEPOSIT: CashInflowStrategy(),
             TransactionType.TRANSFER_IN: SecurityInflowStrategy(),
