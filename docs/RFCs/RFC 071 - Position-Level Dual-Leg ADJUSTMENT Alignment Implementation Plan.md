@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Implemented |
 | Created | 2026-03-05 |
 | Last Updated | 2026-03-05 |
 | Owners | lotus-core engineering |
@@ -13,7 +13,46 @@
 ## Executive Summary
 This RFC defines the implementation plan to enforce a strict dual-leg model in lotus-core for any transaction type that has both product semantics and cash impact. The product leg keeps business semantics, and the linked `ADJUSTMENT` cash leg is the authoritative cash-movement representation.
 
-This plan is documentation-first and approval-gated. No implementation work starts until approval.
+Implementation is completed in lotus-core with migrations, runtime dual-leg orchestration, and calculator alignment.
+
+## Implementation Closure (2026-03-05)
+Delivered:
+1. Canonical dual-leg metadata contract completed across ingestion DTOs, event model, query DTOs, and persistence schema:
+ - `settlement_cash_account_id`, `settlement_cash_instrument_id`
+ - `movement_direction`
+ - `originating_transaction_id`, `originating_transaction_type`
+ - `adjustment_reason`, `link_type`, `reconciliation_key`
+2. `AUTO_GENERATE` enforcement and generation:
+ - shared adjustment cash-leg builder implemented
+ - cost calculator consumer generates, persists, links, and emits `ADJUSTMENT` cash legs
+3. `UPSTREAM_PROVIDED` pairing gate:
+ - portfolio-scoped lookup by `external_cash_transaction_id`
+ - quality-gated pairing via shared dual-leg validator before product-leg downstream handoff
+4. Calculator source-of-truth alignment:
+ - `ADJUSTMENT` support added in financial calculator transaction enum/strategy map
+ - cashflow consumer skips product-leg cashflow when a linked cash leg exists
+ - cashflow logic uses `movement_direction` for `ADJUSTMENT` sign
+ - position calculator applies signed quantity/cost updates for `ADJUSTMENT`
+5. Cashflow rule coverage:
+ - migration adds canonical `ADJUSTMENT` cashflow rule (`TRANSFER`, `EOD`, position-flow only)
+6. Tests:
+ - new unit suites for adjustment cash-leg builder and dual-leg behaviors
+ - updated cost/cashflow/position tests for auto-generation, pairing, and no-double-count behavior
+
+Validation evidence:
+1. `pytest` targeted unit suites:
+ - `tests/unit/libs/portfolio_common/test_adjustment_cash_leg.py`
+ - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
+ - `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
+ - `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
+ - `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
+ - `tests/unit/libs/portfolio_common/test_dividend_validation.py`
+ - `tests/unit/libs/portfolio_common/test_interest_validation.py`
+2. Migration contract gate:
+ - `python scripts/migration_contract_check.py --mode alembic-sql`
+
+Residual operational note:
+1. Local persistence integration test environment may require migration refresh to latest head before executing full integration repository suites, due existing local DB schema drift.
 
 ## Goals
 1. Enforce one canonical cross-transaction model for all events with product + cash impact.
