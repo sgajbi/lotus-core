@@ -54,11 +54,26 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/query_service/services/test_sell_state_service.py",
         "tests/integration/services/query_service/test_sell_state_router.py",
     ],
+    "transaction-dividend-contract": [
+        "tests/unit/transaction_specs/test_dividend_slice0_characterization.py",
+        "tests/unit/libs/portfolio_common/test_dividend_validation.py",
+        "tests/unit/libs/portfolio_common/test_dividend_linkage.py",
+        "tests/unit/libs/portfolio_common/test_cash_entry_mode.py",
+        "tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py",
+        "tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py",
+        "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py",
+        "tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py",
+        "tests/unit/services/ingestion_service/test_transaction_model.py",
+        "tests/unit/services/query_service/services/test_transaction_service.py",
+        "tests/integration/services/query_service/test_transactions_router.py",
+        "tests/integration/services/persistence_service/repositories/test_repositories.py",
+    ],
 }
 
 # Backward-compatible aliases for previous suite names.
 SUITES["buy-rfc"] = SUITES["transaction-buy-contract"]
 SUITES["sell-rfc"] = SUITES["transaction-sell-contract"]
+SUITES["dividend-rfc"] = SUITES["transaction-dividend-contract"]
 
 SOURCE = "src/services/query_service/app"
 SUITE_PYTEST_ARGS: dict[str, list[str]] = {
@@ -72,8 +87,10 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "ops-contract": "integration",
     "transaction-buy-contract": "integration",
     "transaction-sell-contract": "integration",
+    "transaction-dividend-contract": "integration",
     "buy-rfc": "integration",
     "sell-rfc": "integration",
+    "dividend-rfc": "integration",
     "e2e-smoke": "e2e",
 }
 

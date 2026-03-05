@@ -79,7 +79,7 @@ Quality target:
 | 3 | Completed | `DIVIDEND-SLICE-3-CALCULATION-INVARIANTS.md`, cost invariant tests |
 | 4 | Completed | `DIVIDEND-SLICE-4-WITHHOLDING-ROC-CASH-LINKAGE.md`, cash-entry mode/linkage tests |
 | 5 | Completed | `DIVIDEND-SLICE-5-QUERY-OBSERVABILITY.md`, query/API governance evidence |
-| 6 | Pending | Conformance suite wiring and closure report |
+| 6 | Completed | `DIVIDEND-SLICE-6-CONFORMANCE-REPORT.md`, suite + CI wiring |
 
 ### Slice 0 - Gap Assessment and Characterization Baseline (docs + tests, no behavior change)
 Deliverables:
