@@ -1,9 +1,11 @@
 import logging
 from decimal import Decimal
 from typing import Optional
+
 from portfolio_common.database_models import Cashflow, CashflowRule
 from portfolio_common.events import TransactionEvent
 from portfolio_common.monitoring import CASHFLOWS_CREATED_TOTAL
+
 from .enums import CashflowClassification
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,14 @@ class CashflowLogic:
             CashflowClassification.CASHFLOW_IN         # From DEPOSIT
         ]
 
-        if rule.classification in positive_classifications:
+        # INTEREST direction baseline: default INCOME (inflow), EXPENSE (outflow).
+        interest_direction = str(getattr(transaction, "interest_direction", "INCOME")).upper()
+        if transaction.transaction_type == "INTEREST":
+            if interest_direction == "EXPENSE":
+                amount = -abs(amount)
+            else:
+                amount = abs(amount)
+        elif rule.classification in positive_classifications:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.TRANSFER:
             if transaction.transaction_type == "TRANSFER_IN":

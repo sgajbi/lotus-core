@@ -291,3 +291,94 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     assert (
         persisted_after_upsert.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
     )
+
+
+async def test_transaction_repository_persists_interest_linkage_and_policy_metadata(
+    clean_db, async_db_session: AsyncSession
+):
+    """
+    INTEREST metadata required by RFC-070 Slice 2 must persist and remain updateable via UPSERT.
+    """
+    repo = TransactionDBRepository(async_db_session)
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_META_INT_01",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="High",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_META_INT_01",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+
+    event = TransactionEvent(
+        transaction_id="META_INT_TEST_01",
+        portfolio_id="PORT_META_INT_01",
+        instrument_id="INST_META_INT_01",
+        security_id="SEC_META_INT_01",
+        transaction_date=datetime(2026, 3, 2, 10, 0, 0),
+        transaction_type="INTEREST",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("75"),
+        trade_currency="USD",
+        currency="USD",
+        economic_event_id="EVT-INT-2026-1001",
+        linked_transaction_group_id="LTG-INT-2026-2001",
+        calculation_policy_id="INTEREST_DEFAULT_POLICY",
+        calculation_policy_version="1.0.0",
+        source_system="OMS_PRIMARY",
+        cash_entry_mode="AUTO",
+        interest_direction="INCOME",
+        withholding_tax_amount=Decimal("10"),
+        other_interest_deductions_amount=Decimal("5"),
+        net_interest_amount=Decimal("60"),
+    )
+
+    await repo.create_or_update_transaction(event)
+    await async_db_session.commit()
+
+    stmt = select(DBTransaction).where(DBTransaction.transaction_id == "META_INT_TEST_01")
+    persisted = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted.economic_event_id == "EVT-INT-2026-1001"
+    assert persisted.linked_transaction_group_id == "LTG-INT-2026-2001"
+    assert persisted.calculation_policy_id == "INTEREST_DEFAULT_POLICY"
+    assert persisted.calculation_policy_version == "1.0.0"
+    assert persisted.source_system == "OMS_PRIMARY"
+    assert persisted.cash_entry_mode == "AUTO"
+    assert persisted.external_cash_transaction_id is None
+    assert persisted.interest_direction == "INCOME"
+    assert persisted.withholding_tax_amount == Decimal("10")
+    assert persisted.other_interest_deductions_amount == Decimal("5")
+    assert persisted.net_interest_amount == Decimal("60")
+
+    updated = event.model_copy(
+        update={
+            "calculation_policy_version": "1.0.1",
+            "source_system": "OMS_FALLBACK",
+            "cash_entry_mode": "EXTERNAL",
+            "external_cash_transaction_id": "CASH-INT-2026-0001",
+            "interest_direction": "EXPENSE",
+            "withholding_tax_amount": Decimal("0"),
+            "other_interest_deductions_amount": Decimal("2"),
+            "net_interest_amount": Decimal("73"),
+        }
+    )
+    await repo.create_or_update_transaction(updated)
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted_after_upsert.calculation_policy_version == "1.0.1"
+    assert persisted_after_upsert.source_system == "OMS_FALLBACK"
+    assert persisted_after_upsert.cash_entry_mode == "EXTERNAL"
+    assert persisted_after_upsert.external_cash_transaction_id == "CASH-INT-2026-0001"
+    assert persisted_after_upsert.interest_direction == "EXPENSE"
+    assert persisted_after_upsert.withholding_tax_amount == Decimal("0")
+    assert persisted_after_upsert.other_interest_deductions_amount == Decimal("2")
+    assert persisted_after_upsert.net_interest_amount == Decimal("73")

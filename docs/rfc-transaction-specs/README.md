@@ -74,6 +74,11 @@ This ensures that all future transaction types follow the same documentation pat
 ### Transaction RFCs
 
 * `transactions/BUY/RFC-BUY-01.md`
+* `transactions/SELL/RFC-SELL-01.md`
+* `transactions/DIVIDEND/RFC-DIVIDEND-01.md`
+* `transactions/INTEREST/RFC-INTEREST-01.md`
+* `transactions/CHARGE/RFC-CHARGE-01.md`
+* `transactions/TRANSFER_IN_OUT/RFC-TRANSFER-01.md`
 
 ### Templates
 

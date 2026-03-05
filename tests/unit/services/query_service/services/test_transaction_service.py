@@ -35,15 +35,19 @@ def mock_transaction_repo() -> AsyncMock:
         Transaction(
             transaction_id="T2",
             transaction_date=datetime(2025, 1, 11),
-            transaction_type="SELL",
+            transaction_type="INTEREST",
             instrument_id="I2",
             security_id="S2",
-            quantity=Decimal(20),
-            price=Decimal(200),
-            gross_transaction_amount=Decimal(4000),
+            quantity=Decimal(0),
+            price=Decimal(0),
+            gross_transaction_amount=Decimal(125),
             currency="USD",
             cash_entry_mode="EXTERNAL",
             external_cash_transaction_id="CASH-ENTRY-2026-0002",
+            interest_direction="INCOME",
+            withholding_tax_amount=Decimal("10"),
+            other_interest_deductions_amount=Decimal("5"),
+            net_interest_amount=Decimal("110"),
         ),
     ]
     repo.get_transactions_count.return_value = 25
@@ -101,6 +105,10 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
             response_dto.transactions[1].external_cash_transaction_id
             == "CASH-ENTRY-2026-0002"
         )
+        assert response_dto.transactions[1].interest_direction == "INCOME"
+        assert response_dto.transactions[1].withholding_tax_amount == Decimal("10")
+        assert response_dto.transactions[1].other_interest_deductions_amount == Decimal("5")
+        assert response_dto.transactions[1].net_interest_amount == Decimal("110")
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):

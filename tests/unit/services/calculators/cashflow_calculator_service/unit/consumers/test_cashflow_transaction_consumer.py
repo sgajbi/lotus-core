@@ -468,3 +468,99 @@ async def test_process_message_dividend_external_mode_without_link_sends_to_dlq(
     cashflow_consumer._send_to_dlq_async.assert_awaited_once()
     dlq_error_arg = cashflow_consumer._send_to_dlq_async.call_args[0][1]
     assert isinstance(dlq_error_arg, ExternalCashLinkageError)
+
+
+async def test_process_message_interest_external_mode_skips_auto_cashflow_creation(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_cashflow_repo = mock_dependencies["cashflow_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_rules_repo = mock_dependencies["rules_repo"]
+
+    event = TransactionEvent(
+        transaction_id="TXN_CASHFLOW_INT_EXT_01",
+        portfolio_id="PORT_CFC_01",
+        instrument_id="INST_CFC_01",
+        security_id="SEC_CFC_01",
+        transaction_date=datetime(2025, 8, 1, 10, 0, 0),
+        transaction_type="INTEREST",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_fee=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
+        cash_entry_mode="EXTERNAL",
+        external_cash_transaction_id="CASH_INT_EXT_01",
+        epoch=1,
+    )
+    mock_kafka_message.value.return_value = event.model_dump_json().encode("utf-8")
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+
+    with patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = True
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await cashflow_consumer.process_message(mock_kafka_message)
+
+    mock_rules_repo.get_all_rules.assert_not_awaited()
+    mock_cashflow_repo.create_cashflow.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    cashflow_consumer._send_to_dlq_async.assert_not_called()
+
+
+async def test_process_message_interest_external_mode_without_link_sends_to_dlq(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_cashflow_repo = mock_dependencies["cashflow_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_rules_repo = mock_dependencies["rules_repo"]
+
+    event = TransactionEvent(
+        transaction_id="TXN_CASHFLOW_INT_EXT_02",
+        portfolio_id="PORT_CFC_01",
+        instrument_id="INST_CFC_01",
+        security_id="SEC_CFC_01",
+        transaction_date=datetime(2025, 8, 1, 10, 0, 0),
+        transaction_type="INTEREST",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_fee=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
+        cash_entry_mode="EXTERNAL",
+        external_cash_transaction_id=None,
+        epoch=1,
+    )
+    mock_kafka_message.value.return_value = event.model_dump_json().encode("utf-8")
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+
+    with patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = True
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await cashflow_consumer.process_message(mock_kafka_message)
+
+    mock_rules_repo.get_all_rules.assert_not_awaited()
+    mock_cashflow_repo.create_cashflow.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_idempotency_repo.mark_event_processed.assert_not_called()
+    cashflow_consumer._send_to_dlq_async.assert_awaited_once()
+    dlq_error_arg = cashflow_consumer._send_to_dlq_async.call_args[0][1]
+    assert isinstance(dlq_error_arg, ExternalCashLinkageError)

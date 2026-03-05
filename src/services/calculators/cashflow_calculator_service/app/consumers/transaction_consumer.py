@@ -70,6 +70,9 @@ class ExternalCashLinkageError(ValueError):
     """Raised when EXTERNAL cash-entry mode is configured without required linkage."""
 
 
+EXTERNAL_CASHFLOW_BYPASS_TRANSACTION_TYPES = {"DIVIDEND", "INTEREST"}
+
+
 class CashflowCalculatorConsumer(BaseConsumer):
     """
     Consumes raw transaction completion events, calculates the corresponding
@@ -145,19 +148,22 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         await tx.rollback()
                         return
 
+                    event_transaction_type = event.transaction_type.upper()
                     if (
-                        event.transaction_type.upper() == "DIVIDEND"
+                        event_transaction_type
+                        in EXTERNAL_CASHFLOW_BYPASS_TRANSACTION_TYPES
                         and is_external_cash_entry_mode(event.cash_entry_mode)
                     ):
                         if not event.external_cash_transaction_id:
                             raise ExternalCashLinkageError(
-                                "DIVIDEND with EXTERNAL cash_entry_mode requires "
+                                f"{event_transaction_type} with EXTERNAL cash_entry_mode requires "
                                 "external_cash_transaction_id."
                             )
                         logger.info(
-                            "Skipping auto cashflow creation for DIVIDEND EXTERNAL cash-entry mode.",
+                            "Skipping auto cashflow creation for EXTERNAL cash-entry mode.",
                             extra={
                                 "transaction_id": event.transaction_id,
+                                "transaction_type": event_transaction_type,
                                 "external_cash_transaction_id": event.external_cash_transaction_id,
                                 "economic_event_id": event.economic_event_id,
                                 "linked_transaction_group_id": event.linked_transaction_group_id,

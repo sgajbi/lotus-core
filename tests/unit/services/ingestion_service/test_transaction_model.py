@@ -162,3 +162,28 @@ def test_transaction_model_accepts_cash_entry_mode_and_external_cash_link() -> N
     model = Transaction(**payload)
     assert model.cash_entry_mode == "EXTERNAL"
     assert model.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
+
+
+def test_transaction_model_accepts_interest_semantic_fields() -> None:
+    payload = {
+        "transaction_id": "INT_FIELDS_001",
+        "portfolio_id": "PORT_META_001",
+        "instrument_id": "BOND_USD_001",
+        "security_id": "BOND_USD_001",
+        "transaction_date": "2026-03-01T10:00:00Z",
+        "transaction_type": "INTEREST",
+        "quantity": "0",
+        "price": "0",
+        "gross_transaction_amount": "125.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "interest_direction": "INCOME",
+        "withholding_tax_amount": "10.0",
+        "other_interest_deductions_amount": "5.0",
+        "net_interest_amount": "110.0",
+    }
+    model = Transaction(**payload)
+    assert model.interest_direction == "INCOME"
+    assert model.withholding_tax_amount == Decimal("10.0")
+    assert model.other_interest_deductions_amount == Decimal("5.0")
+    assert model.net_interest_amount == Decimal("110.0")

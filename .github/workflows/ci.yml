@@ -93,6 +93,7 @@ jobs:
           - suite: transaction-buy-contract
           - suite: transaction-sell-contract
           - suite: transaction-dividend-contract
+          - suite: transaction-interest-contract
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

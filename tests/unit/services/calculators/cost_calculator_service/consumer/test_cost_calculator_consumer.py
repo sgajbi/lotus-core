@@ -15,6 +15,8 @@ from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
     DIVIDEND_DEFAULT_POLICY_ID,
     DIVIDEND_DEFAULT_POLICY_VERSION,
+    INTEREST_DEFAULT_POLICY_ID,
+    INTEREST_DEFAULT_POLICY_VERSION,
     SELL_AVCO_POLICY_ID,
     SELL_DEFAULT_POLICY_VERSION,
     SELL_FIFO_POLICY_ID,
@@ -155,6 +157,32 @@ def mock_dividend_kafka_message() -> MagicMock:
     mock_msg.topic.return_value = "raw_transactions_completed"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 3
+    mock_msg.headers.return_value = []
+    return mock_msg
+
+
+@pytest.fixture
+def mock_interest_kafka_message() -> MagicMock:
+    """Provides a reusable mock Kafka message for an INTEREST transaction."""
+    interest_event = TransactionEvent(
+        transaction_id="INT01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 26),
+        transaction_type="INTEREST",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("95.0"),
+        trade_currency="USD",
+        currency="USD",
+        trade_fee=Decimal("0.0"),
+    )
+    mock_msg = MagicMock()
+    mock_msg.value.return_value = interest_event.model_dump_json().encode("utf-8")
+    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.partition.return_value = 0
+    mock_msg.offset.return_value = 4
     mock_msg.headers.return_value = []
     return mock_msg
 
@@ -592,3 +620,39 @@ async def test_consumer_assigns_dividend_metadata_defaults(
     assert (
         payload["linked_transaction_group_id"] == "LTG-DIVIDEND-PORT_COST_01-DIV01"
     )
+
+
+async def test_consumer_assigns_interest_metadata_defaults(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_interest_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.get_transaction_history.return_value = []
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_fx_rate.return_value = None
+    mock_repo.update_transaction_costs.side_effect = lambda arg: arg
+
+    await cost_calculator_consumer.process_message(mock_interest_kafka_message)
+
+    updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
+    assert updated_transaction_arg.economic_event_id == "EVT-INTEREST-PORT_COST_01-INT01"
+    assert (
+        updated_transaction_arg.linked_transaction_group_id
+        == "LTG-INTEREST-PORT_COST_01-INT01"
+    )
+    assert updated_transaction_arg.calculation_policy_id == INTEREST_DEFAULT_POLICY_ID
+    assert (
+        updated_transaction_arg.calculation_policy_version
+        == INTEREST_DEFAULT_POLICY_VERSION
+    )
+
+    payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
+    assert payload["economic_event_id"] == "EVT-INTEREST-PORT_COST_01-INT01"
+    assert payload["linked_transaction_group_id"] == "LTG-INTEREST-PORT_COST_01-INT01"

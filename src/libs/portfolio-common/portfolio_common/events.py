@@ -115,6 +115,10 @@ class TransactionEvent(BaseModel):
     source_system: Optional[str] = None
     cash_entry_mode: Optional[str] = None
     external_cash_transaction_id: Optional[str] = None
+    interest_direction: Optional[str] = None
+    withholding_tax_amount: Optional[Decimal] = None
+    other_interest_deductions_amount: Optional[Decimal] = None
+    net_interest_amount: Optional[Decimal] = None
     created_at: Optional[datetime] = None
     epoch: Optional[int] = None
 

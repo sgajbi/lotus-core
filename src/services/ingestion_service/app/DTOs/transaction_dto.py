@@ -97,6 +97,32 @@ class Transaction(BaseModel):
             "Upstream cash transaction identifier when cash_entry_mode is EXTERNAL."
         ),
     )
+    interest_direction: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "INCOME"},
+        description=(
+            "Optional INTEREST semantic direction. Supported canonical values are "
+            "INCOME and EXPENSE."
+        ),
+    )
+    withholding_tax_amount: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        json_schema_extra={"example": "15.25"},
+        description="Optional withholding tax amount for INTEREST transactions.",
+    )
+    other_interest_deductions_amount: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        json_schema_extra={"example": "1.00"},
+        description="Optional non-tax deductions applied to INTEREST transactions.",
+    )
+    net_interest_amount: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        json_schema_extra={"example": "108.20"},
+        description=(
+            "Optional net-interest amount supplied upstream for reconciliation "
+            "against gross and deduction fields."
+        ),
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

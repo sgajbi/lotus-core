@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -29,15 +30,19 @@ async def async_test_client():
                 TransactionRecord(
                     transaction_id="T1",
                     transaction_date=datetime(2025, 8, 1, 0, 0, 0),
-                    transaction_type="BUY",
+                    transaction_type="INTEREST",
                     instrument_id="INST_1",
                     security_id="SEC_1",
-                    quantity=10.0,
-                    price=100.0,
-                    gross_transaction_amount=1000.0,
+                    quantity=0.0,
+                    price=0.0,
+                    gross_transaction_amount=125.0,
                     currency="USD",
                     cash_entry_mode="EXTERNAL",
                     external_cash_transaction_id="CASH-ENTRY-2026-0001",
+                    interest_direction="INCOME",
+                    withholding_tax_amount=Decimal("10.00"),
+                    other_interest_deductions_amount=Decimal("5.00"),
+                    net_interest_amount=Decimal("110.00"),
                 )
             ],
         )
@@ -80,6 +85,10 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
         payload["transactions"][0]["external_cash_transaction_id"]
         == "CASH-ENTRY-2026-0001"
     )
+    assert payload["transactions"][0]["interest_direction"] == "INCOME"
+    assert payload["transactions"][0]["withholding_tax_amount"] == "10.00"
+    assert payload["transactions"][0]["other_interest_deductions_amount"] == "5.00"
+    assert payload["transactions"][0]["net_interest_amount"] == "110.00"
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
         security_id="SEC_1",
