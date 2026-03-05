@@ -49,15 +49,16 @@ def _event(
 @pytest.mark.parametrize(
     ("transaction_type", "quantity", "gross", "net_cost", "expected_qty", "expected_cost"),
     [
-        ("DEPOSIT", "0", "25", "0", Decimal("125"), Decimal("125")),
-        ("WITHDRAWAL", "0", "30", "0", Decimal("70"), Decimal("70")),
-        ("FEE", "0", "5", "0", Decimal("95"), Decimal("95")),
-        ("TAX", "0", "7", "0", Decimal("93"), Decimal("93")),
-        ("TRANSFER_IN", "2", "20", "0", Decimal("102"), Decimal("120")),
+        ("DEPOSIT", "0", "25", "0", Decimal("100"), Decimal("100")),
+        ("WITHDRAWAL", "0", "30", "0", Decimal("100"), Decimal("100")),
+        ("FEE", "0", "5", "0", Decimal("100"), Decimal("100")),
+        ("TAX", "0", "7", "0", Decimal("100"), Decimal("100")),
+        ("TRANSFER_IN", "2", "20", "20", Decimal("102"), Decimal("120")),
         ("TRANSFER_OUT", "3", "0", "-15", Decimal("97"), Decimal("85")),
+        ("TRANSFER_IN", "0", "35", "0", Decimal("100"), Decimal("100")),
     ],
 )
-def test_slice0_position_characterization_locks_current_bundle_behavior(
+def test_position_bundle_semantics(
     transaction_type: str,
     quantity: str,
     gross: str,
@@ -97,8 +98,7 @@ def test_slice0_position_characterization_locks_current_bundle_behavior(
             Decimal("-100"),
         ),
         ("FEE", CashflowClassification.EXPENSE, CashflowTiming.EOD, True, Decimal("-100")),
-        # Slice-0 lock: TAX currently carries is_portfolio_flow=False in seed rules.
-        ("TAX", CashflowClassification.EXPENSE, CashflowTiming.EOD, False, Decimal("-100")),
+        ("TAX", CashflowClassification.EXPENSE, CashflowTiming.EOD, True, Decimal("-100")),
         ("TRANSFER_IN", CashflowClassification.TRANSFER, CashflowTiming.BOD, True, Decimal("100")),
         (
             "TRANSFER_OUT",

@@ -92,7 +92,7 @@ No hard technical blocker was identified that requires separation.
 | 0 | Completed | `PORTFOLIO-FLOW-BUNDLE-SLICE-0-GAP-ASSESSMENT.md`; characterization tests for position/cashflow baseline |
 | 1 | Completed | `PORTFOLIO-FLOW-BUNDLE-SLICE-1-VALIDATION-GUARDRAILS.md`; shared guardrail helper + consumer enforcement + unit tests |
 | 2 | Completed | `PORTFOLIO-FLOW-BUNDLE-SLICE-2-CLASSIFICATION-ALIGNMENT.md`; TAX rule migration + regression tests |
-| 3 | Pending | Calculator and timeseries semantic harmonization |
+| 3 | Completed | `PORTFOLIO-FLOW-BUNDLE-SLICE-3-CALCULATOR-HARMONIZATION.md`; position-calculator semantic alignment + canonicalized bundle tests |
 | 4 | Pending | Query/observability and contract hardening |
 | 5 | Pending | Regression suite and CI wiring |
 | 6 | Pending | Conformance report and closure |

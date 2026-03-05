@@ -188,20 +188,38 @@ class PositionCalculator:
             if transaction.net_cost_local is not None:
                 cost_basis_local += transaction.net_cost_local
 
-        elif txn_type == "DEPOSIT":
-            quantity += transaction.gross_transaction_amount
-            cost_basis += transaction.gross_transaction_amount
-            cost_basis_local += transaction.gross_transaction_amount
+        elif txn_type in ["DEPOSIT", "FEE", "TAX", "WITHDRAWAL"]:
+            logger.debug(
+                "[CalculateNext] Txn type %s is portfolio-level cashflow and does not "
+                "change security position quantity/cost.",
+                txn_type,
+            )
 
-        elif txn_type == "TRANSFER_IN":
-            quantity += transaction.quantity
-            cost_basis += transaction.gross_transaction_amount
-            cost_basis_local += transaction.gross_transaction_amount
+        elif txn_type in ["TRANSFER_IN", "TRANSFER_OUT"]:
+            transfer_quantity = transaction.quantity
+            if transfer_quantity > 0:
+                transfer_sign = Decimal(1) if txn_type == "TRANSFER_IN" else Decimal(-1)
+                quantity += transfer_sign * transfer_quantity
 
-        elif txn_type in ["FEE", "TAX", "WITHDRAWAL"]:
-            quantity -= transaction.gross_transaction_amount
-            cost_basis -= transaction.gross_transaction_amount
-            cost_basis_local -= transaction.gross_transaction_amount
+                if transaction.net_cost is not None:
+                    cost_basis += transaction.net_cost
+                elif txn_type == "TRANSFER_IN":
+                    cost_basis += transaction.gross_transaction_amount
+                else:
+                    cost_basis -= transaction.gross_transaction_amount
+
+                if transaction.net_cost_local is not None:
+                    cost_basis_local += transaction.net_cost_local
+                elif txn_type == "TRANSFER_IN":
+                    cost_basis_local += transaction.gross_transaction_amount
+                else:
+                    cost_basis_local -= transaction.gross_transaction_amount
+            else:
+                logger.debug(
+                    "[CalculateNext] Txn type %s with zero transfer quantity treated as "
+                    "cash-only transfer and does not change security position quantity/cost.",
+                    txn_type,
+                )
 
         elif txn_type == "ADJUSTMENT":
             movement_direction = str(transaction.movement_direction or "INFLOW").upper()

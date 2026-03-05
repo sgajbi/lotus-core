@@ -58,3 +58,8 @@ Validated against shared standards for characterization-first delivery:
 
 Slice 0 locks current behavior for safe refactoring only.
 As slices progress, these assertions must move to canonical RFC-074 semantics and legacy-only expectations must be removed.
+
+Superseded baseline items:
+
+1. Slice 2 aligned `TAX` as portfolio flow in cashflow rules.
+2. Slice 3 removed security position quantity/cost mutation for `DEPOSIT`, `WITHDRAWAL`, `FEE`, and `TAX`.
