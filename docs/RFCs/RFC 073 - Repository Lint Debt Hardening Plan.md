@@ -19,7 +19,7 @@ The plan runs as a dedicated stream in parallel with feature RFCs and uses stric
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | 0 | Completed | `docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md` |
-| 1 | In Progress | `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/libs/financial-calculator-engine --statistics` (before/after snapshot below) |
+| 1 | Completed | Runtime-critical scope now Ruff-clean: `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/libs/financial-calculator-engine --statistics` |
 | 2 | Pending | Core test-domain lint burn-down |
 | 3 | Pending | Scripts/tooling lint burn-down |
 | 4 | Pending | CI/global gate tightening |
@@ -157,6 +157,18 @@ Slice 1 Progress (Batch 7):
 4. Regression evidence:
  - `make typecheck` -> passed
  - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+
+Slice 1 Progress (Batch 8):
+1. Cleared final runtime-scope `E501` findings across calculators and shared libs.
+2. Post-batch runtime-critical snapshot:
+ - `E501`: `125 -> 0` (`-125`)
+ - scope status: Ruff clean (no remaining findings)
+3. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+4. Slice 1 exit criteria:
+ - cleaned runtime domains remain Ruff-clean: `met`
+ - functional regression suite for affected domains passes: `met`
 
 ### Slice 2 - Core Test Domains
 Deliverables:

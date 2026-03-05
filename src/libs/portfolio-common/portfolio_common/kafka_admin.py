@@ -11,10 +11,11 @@ from .config import KAFKA_BOOTSTRAP_SERVERS
 
 logger = logging.getLogger(__name__)
 
+
 @retry(
-    stop=stop_after_attempt(15), # Total wait time: 15 attempts * 4s = 60s
+    stop=stop_after_attempt(15),  # Total wait time: 15 attempts * 4s = 60s
     wait=wait_fixed(4),
-    before=before_log(logger, logging.INFO)
+    before=before_log(logger, logging.INFO),
 )
 def ensure_topics_exist(required_topics: List[str]):
     """
@@ -31,8 +32,8 @@ def ensure_topics_exist(required_topics: List[str]):
         required_topics: A list of topic names that must exist.
     """
     logger.info(f"Verifying existence of Kafka topics: {required_topics}...")
-    
-    conf = {'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS}
+
+    conf = {"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS}
     admin_client = AdminClient(conf)
 
     try:
@@ -46,12 +47,14 @@ def ensure_topics_exist(required_topics: List[str]):
         if missing_topics:
             # If topics are missing, raise an exception to trigger a retry
             raise KafkaException(f"Required topics are not yet available: {missing_topics}")
-        
+
         logger.info("All required Kafka topics found.")
 
     except KafkaException as e:
         logger.warning(f"Kafka error while verifying topics: {e}. Retrying...")
-        raise # Re-raise to allow tenacity to handle the retry
+        raise  # Re-raise to allow tenacity to handle the retry
     except Exception as e:
-        logger.critical(f"An unexpected error occurred while verifying Kafka topics: {e}", exc_info=True)
-        sys.exit(1) # Exit on unexpected errors
+        logger.critical(
+            f"An unexpected error occurred while verifying Kafka topics: {e}", exc_info=True
+        )
+        sys.exit(1)  # Exit on unexpected errors

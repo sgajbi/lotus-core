@@ -107,4 +107,3 @@ __all__ = [
     "SELL_DEFAULT_POLICY_VERSION",
     "enrich_sell_transaction_metadata",
 ]
-

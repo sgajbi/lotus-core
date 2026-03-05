@@ -35,9 +35,7 @@ def validate_dividend_transaction(
             DividendValidationIssue(
                 code=DividendValidationReasonCode.INVALID_TRANSACTION_TYPE,
                 field="transaction_type",
-                message=(
-                    "transaction_type must be DIVIDEND for DIVIDEND canonical validation."
-                ),
+                message=("transaction_type must be DIVIDEND for DIVIDEND canonical validation."),
             )
         )
 
@@ -73,9 +71,7 @@ def validate_dividend_transaction(
             DividendValidationIssue(
                 code=DividendValidationReasonCode.NON_POSITIVE_GROSS_AMOUNT,
                 field="gross_transaction_amount",
-                message=(
-                    "gross_transaction_amount must be greater than zero for DIVIDEND."
-                ),
+                message=("gross_transaction_amount must be greater than zero for DIVIDEND."),
             )
         )
 

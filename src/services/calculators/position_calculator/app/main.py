@@ -17,7 +17,7 @@ async def main():
     Initializes and runs the ConsumerManager.
     """
     logger.info("Position Calculation Service starting up...")
-    
+
     # Instrument the web app before starting the server
     Instrumentator().instrument(web_app).expose(web_app)
     logger.info("Prometheus metrics exposed at /metrics")
@@ -26,9 +26,12 @@ async def main():
     try:
         await manager.run()
     except Exception as e:
-        logger.critical(f"Position Calculation Service encountered a critical error: {e}", exc_info=True)
+        logger.critical(
+            f"Position Calculation Service encountered a critical error: {e}", exc_info=True
+        )
     finally:
         logger.info("Position Calculation Service has shut down.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

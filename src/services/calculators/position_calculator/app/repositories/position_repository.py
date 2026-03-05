@@ -16,10 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+
 class PositionRepository:
     """
     Handles all database interactions for position calculation.
     """
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -32,13 +34,10 @@ class PositionRepository:
         Finds the latest date for which a daily snapshot has been successfully
         created for a given key in a specific epoch.
         """
-        stmt = (
-            select(func.max(DailyPositionSnapshot.date))
-            .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.security_id == security_id,
-                DailyPositionSnapshot.epoch == epoch
-            )
+        stmt = select(func.max(DailyPositionSnapshot.date)).where(
+            DailyPositionSnapshot.portfolio_id == portfolio_id,
+            DailyPositionSnapshot.security_id == security_id,
+            DailyPositionSnapshot.epoch == epoch,
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -55,10 +54,12 @@ class PositionRepository:
             select(
                 DailyPositionSnapshot.security_id,
                 DailyPositionSnapshot.quantity,
-                func.row_number().over(
+                func.row_number()
+                .over(
                     partition_by=DailyPositionSnapshot.security_id,
                     order_by=DailyPositionSnapshot.date.desc(),
-                ).label("rn"),
+                )
+                .label("rn"),
             )
             .where(
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
@@ -77,14 +78,19 @@ class PositionRepository:
         result = await self.db.execute(stmt)
         security_ids = result.scalars().all()
         logger.info(
-            f"Found {len(security_ids)} open security positions for portfolio '{portfolio_id}' as of {as_of_date}."
+            "Found "
+            f"{len(security_ids)} open security positions for portfolio "
+            f"'{portfolio_id}' as of {as_of_date}."
         )
         return security_ids
 
     @async_timed(repository="PositionRepository", method="get_all_transactions_for_security")
-    async def get_all_transactions_for_security(self, portfolio_id: str, security_id: str) -> List[Transaction]:
+    async def get_all_transactions_for_security(
+        self, portfolio_id: str, security_id: str
+    ) -> List[Transaction]:
         """
-        Fetches all transactions for a specific security within a portfolio, ordered chronologically.
+        Fetches all transactions for a specific security within a portfolio,
+        ordered chronologically.
         This is required to replay the entire history accurately.
         """
         stmt = (
@@ -111,13 +117,17 @@ class PositionRepository:
     async def get_last_position_before(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> Optional[PositionHistory]:
-        stmt = select(PositionHistory).filter(
-            PositionHistory.portfolio_id == portfolio_id,
-            PositionHistory.security_id == security_id,
-            PositionHistory.position_date < a_date,
-            PositionHistory.epoch == epoch
-        ).order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
-        
+        stmt = (
+            select(PositionHistory)
+            .filter(
+                PositionHistory.portfolio_id == portfolio_id,
+                PositionHistory.security_id == security_id,
+                PositionHistory.position_date < a_date,
+                PositionHistory.epoch == epoch,
+            )
+            .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+        )
+
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
@@ -125,11 +135,15 @@ class PositionRepository:
     async def get_transactions_on_or_after(
         self, portfolio_id: str, security_id: str, a_date: date
     ) -> List[Transaction]:
-        stmt = select(Transaction).filter(
-            Transaction.portfolio_id == portfolio_id,
-            Transaction.security_id == security_id,
-            func.date(Transaction.transaction_date) >= a_date
-        ).order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
+        stmt = (
+            select(Transaction)
+            .filter(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.security_id == security_id,
+                func.date(Transaction.transaction_date) >= a_date,
+            )
+            .order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
+        )
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -142,7 +156,7 @@ class PositionRepository:
             PositionHistory.portfolio_id == portfolio_id,
             PositionHistory.security_id == security_id,
             PositionHistory.position_date >= a_date,
-            PositionHistory.epoch == epoch
+            PositionHistory.epoch == epoch,
         )
         result = await self.db.execute(stmt)
         deleted_count = result.rowcount or 0

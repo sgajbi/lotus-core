@@ -11,8 +11,7 @@ def normalize_cash_entry_mode(mode: str | None) -> str:
     normalized = (mode or AUTO_GENERATE_CASH_ENTRY_MODE).strip().upper()
     if normalized not in SUPPORTED_CASH_ENTRY_MODES:
         raise ValueError(
-            "Unsupported cash_entry_mode. Expected AUTO_GENERATE or "
-            "UPSTREAM_PROVIDED."
+            "Unsupported cash_entry_mode. Expected AUTO_GENERATE or " "UPSTREAM_PROVIDED."
         )
     return normalized
 

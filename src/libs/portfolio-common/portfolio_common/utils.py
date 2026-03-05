@@ -15,6 +15,7 @@ def async_timed(repository: str, method: str) -> Callable:
         repository: The name of the repository class (e.g., 'TransactionRepository').
         method: The name of the method being timed (e.g., 'get_transactions').
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
@@ -24,9 +25,10 @@ def async_timed(repository: str, method: str) -> Callable:
             finally:
                 end_time = time.monotonic()
                 duration = end_time - start_time
-                DB_OPERATION_LATENCY_SECONDS.labels(
-                    repository=repository,
-                    method=method
-                ).observe(duration)
+                DB_OPERATION_LATENCY_SECONDS.labels(repository=repository, method=method).observe(
+                    duration
+                )
+
         return wrapper
+
     return decorator

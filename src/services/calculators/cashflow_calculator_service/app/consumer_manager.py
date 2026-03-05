@@ -18,11 +18,13 @@ from .web import app as web_app
 
 logger = logging.getLogger(__name__)
 
+
 class ConsumerManager:
     """
     Manages the lifecycle of Kafka consumers, the outbox dispatcher,
     and the new health probe web server.
     """
+
     def __init__(self):
         self.consumers = []
         self.tasks = []
@@ -34,7 +36,7 @@ class ConsumerManager:
                 topic=KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
                 group_id="cashflow_calculator_group",
                 dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
-                service_prefix="CFLOW"
+                service_prefix="CFLOW",
             )
         )
 
@@ -44,7 +46,10 @@ class ConsumerManager:
         logger.info(f"ConsumerManager initialized with {len(self.consumers)} consumer(s).")
 
     def _signal_handler(self, signum, frame):
-        logger.info(f"Received shutdown signal: {signal.Signals(signum).name}. Initiating graceful shutdown...")
+        logger.info(
+            "Received shutdown signal: "
+            f"{signal.Signals(signum).name}. Initiating graceful shutdown..."
+        )
         self._shutdown_event.set()
 
     async def run(self):
@@ -68,7 +73,7 @@ class ConsumerManager:
         logger.info("Shutdown event received. Stopping all tasks...")
         for consumer in self.consumers:
             consumer.shutdown()
-        
+
         self.dispatcher.stop()
         server.should_exit = True
 

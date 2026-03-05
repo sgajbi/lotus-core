@@ -15,5 +15,5 @@ setup_metrics(app)
 
 # Create and include the standardized health router.
 # This service depends on both the database and Kafka.
-health_router = create_health_router('db', 'kafka')
+health_router = create_health_router("db", "kafka")
 app.include_router(health_router)

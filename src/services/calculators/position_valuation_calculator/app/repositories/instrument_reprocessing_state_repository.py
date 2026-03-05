@@ -1,4 +1,5 @@
-# src/services/calculators/position_valuation_calculator/app/repositories/instrument_reprocessing_state_repository.py
+# src/services/calculators/position_valuation_calculator/app/repositories/
+# instrument_reprocessing_state_repository.py
 import logging
 from datetime import date
 
@@ -9,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+
 class InstrumentReprocessingStateRepository:
     """
     Handles database operations for the InstrumentReprocessingState model.
     """
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -26,23 +29,31 @@ class InstrumentReprocessingStateRepository:
         """
         try:
             stmt = pg_insert(InstrumentReprocessingState).values(
-                security_id=security_id,
-                earliest_impacted_date=price_date
+                security_id=security_id, earliest_impacted_date=price_date
             )
-            
+
             # The LEAST function is specific to PostgreSQL.
             # Using text() is a reliable way to execute this database-specific function.
             update_stmt = stmt.on_conflict_do_update(
-                index_elements=['security_id'],
+                index_elements=["security_id"],
                 set_={
-                    "earliest_impacted_date": text(f"LEAST(instrument_reprocessing_state.earliest_impacted_date, '{price_date.isoformat()}')"),
-                    "updated_at": text("now()")
-                }
+                    "earliest_impacted_date": text(
+                        "LEAST(instrument_reprocessing_state.earliest_impacted_date, "
+                        f"'{price_date.isoformat()}')"
+                    ),
+                    "updated_at": text("now()"),
+                },
             )
-            
+
             await self.db.execute(update_stmt)
-            logger.info(f"Successfully staged UPSERT for instrument reprocessing state for '{security_id}'.")
+            logger.info(
+                f"Successfully staged UPSERT for instrument reprocessing state for '{security_id}'."
+            )
 
         except Exception as e:
-            logger.error(f"Failed to stage UPSERT for instrument reprocessing state for '{security_id}': {e}", exc_info=True)
+            logger.error(
+                "Failed to stage UPSERT for instrument reprocessing state for "
+                f"'{security_id}': {e}",
+                exc_info=True,
+            )
             raise

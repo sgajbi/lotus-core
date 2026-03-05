@@ -10,6 +10,7 @@ class PortfolioConsumer(GenericPersistenceConsumer):
     """
     Consumes, validates, and persists portfolio events idempotently.
     """
+
     @property
     def event_model(self):
         return PortfolioEvent

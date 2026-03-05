@@ -25,25 +25,27 @@ from .web import app as web_app
 
 logger = logging.getLogger(__name__)
 
+
 class ConsumerManager:
     """
     Manages the lifecycle of Kafka consumers, the outbox dispatcher,
     the new valuation scheduler, and the health probe web server.
     """
+
     def __init__(self):
         self.consumers = []
         self.tasks = []
         self._shutdown_event = asyncio.Event()
-        
+
         group_id = "position_valuation_group"
         service_prefix = "VAL"
-        
+
         self.consumers.append(
             ValuationConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_VALUATION_REQUIRED_TOPIC,
                 group_id=f"{group_id}_jobs",
-                service_prefix=service_prefix 
+                service_prefix=service_prefix,
             )
         )
 
@@ -53,7 +55,7 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
                 group_id=f"{group_id}_price_events",
-                service_prefix=service_prefix
+                service_prefix=service_prefix,
             )
         )
 
@@ -63,11 +65,18 @@ class ConsumerManager:
         # --- NEW: Instantiate the worker ---
         self.reprocessing_worker = ReprocessingWorker()
 
-        logger.info(f"ConsumerManager initialized with {len(self.consumers)} consumer(s), 1 scheduler, and 1 reprocessing worker.")
+        logger.info(
+            "ConsumerManager initialized with "
+            f"{len(self.consumers)} consumer(s), 1 scheduler, "
+            "and 1 reprocessing worker."
+        )
 
     def _signal_handler(self, signum, frame):
         """Sets the shutdown event when a signal is received."""
-        logger.info(f"Received shutdown signal: {signal.Signals(signum).name}. Initiating graceful shutdown...")
+        logger.info(
+            "Received shutdown signal: "
+            f"{signal.Signals(signum).name}. Initiating graceful shutdown..."
+        )
         self._shutdown_event.set()
 
     async def run(self):
@@ -79,30 +88,35 @@ class ConsumerManager:
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
-        
+
         uvicorn_config = uvicorn.Config(web_app, host="0.0.0.0", port=8084, log_config=None)
         server = uvicorn.Server(uvicorn_config)
 
-        logger.info("Starting all consumer tasks, the outbox dispatcher, the scheduler, the reprocessing worker, and the web server...")
+        logger.info(
+            "Starting all consumer tasks, the outbox dispatcher, "
+            "the scheduler, the reprocessing worker, and the web server..."
+        )
         self.tasks = [asyncio.create_task(c.run()) for c in self.consumers]
         self.tasks.append(asyncio.create_task(self.dispatcher.run()))
         self.tasks.append(asyncio.create_task(self.scheduler.run()))
         # --- NEW: Add the worker to the asyncio tasks ---
         self.tasks.append(asyncio.create_task(self.reprocessing_worker.run()))
         self.tasks.append(asyncio.create_task(server.serve()))
-         
+
         logger.info("ConsumerManager is running. Press Ctrl+C to exit.")
         await self._shutdown_event.wait()
-        
+
         logger.info("Shutdown event received. Stopping all tasks...")
         for consumer in self.consumers:
             consumer.shutdown()
-        
+
         self.dispatcher.stop()
         self.scheduler.stop()
         # --- NEW: Stop the worker ---
         self.reprocessing_worker.stop()
         server.should_exit = True
-        
+
         await asyncio.gather(*self.tasks, return_exceptions=True)
-        logger.info("All consumer, dispatcher, and web server tasks have been successfully shut down.")
+        logger.info(
+            "All consumer, dispatcher, and web server tasks have been successfully shut down."
+        )

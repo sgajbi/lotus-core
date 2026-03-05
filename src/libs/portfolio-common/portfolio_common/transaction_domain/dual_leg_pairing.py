@@ -89,15 +89,13 @@ def validate_upstream_cash_leg_pairing(
     if (
         product_leg.linked_transaction_group_id
         and cash_leg.linked_transaction_group_id
-        and product_leg.linked_transaction_group_id
-        != cash_leg.linked_transaction_group_id
+        and product_leg.linked_transaction_group_id != cash_leg.linked_transaction_group_id
     ):
         issues.append(
             DualLegPairingIssue(
                 field="linked_transaction_group_id",
                 message=(
-                    "product and cash legs must share linked_transaction_group_id "
-                    "when present."
+                    "product and cash legs must share linked_transaction_group_id " "when present."
                 ),
             )
         )

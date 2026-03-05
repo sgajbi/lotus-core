@@ -26,8 +26,10 @@ def get_sync_database_url():
 
     return url
 
+
 engine = create_engine(get_sync_database_url(), pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def get_db_session():
     """
@@ -38,7 +40,6 @@ def get_db_session():
         yield db
     finally:
         db.close()
-
 
 
 def get_async_database_url():
@@ -58,6 +59,7 @@ def get_async_database_url():
 
     return url
 
+
 async_engine = create_async_engine(
     get_async_database_url(),
     pool_pre_ping=True,
@@ -70,6 +72,7 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
     expire_on_commit=False,
 )
+
 
 async def get_async_db_session() -> AsyncSession:
     """

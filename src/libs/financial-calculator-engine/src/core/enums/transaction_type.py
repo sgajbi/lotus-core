@@ -9,6 +9,7 @@ class TransactionType(str, Enum):
     Inheriting from 'str' ensures that the enum values are strings,
     making them directly usable and comparable with string inputs.
     """
+
     BUY = "BUY"
     SELL = "SELL"
     INTEREST = "INTEREST"
@@ -19,7 +20,7 @@ class TransactionType(str, Enum):
     TRANSFER_IN = "TRANSFER_IN"
     TRANSFER_OUT = "TRANSFER_OUT"
     ADJUSTMENT = "ADJUSTMENT"
-    OTHER = "OTHER" # Catch-all for any other transaction types not explicitly defined
+    OTHER = "OTHER"  # Catch-all for any other transaction types not explicitly defined
 
     @classmethod
     def list(cls):

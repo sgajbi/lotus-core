@@ -15,17 +15,14 @@ def enrich_dividend_transaction_metadata(event: TransactionEvent) -> Transaction
         return event
 
     economic_event_id = (
-        event.economic_event_id
-        or f"EVT-DIVIDEND-{event.portfolio_id}-{event.transaction_id}"
+        event.economic_event_id or f"EVT-DIVIDEND-{event.portfolio_id}-{event.transaction_id}"
     )
     linked_transaction_group_id = (
         event.linked_transaction_group_id
         or f"LTG-DIVIDEND-{event.portfolio_id}-{event.transaction_id}"
     )
     calculation_policy_id = event.calculation_policy_id or DIVIDEND_DEFAULT_POLICY_ID
-    calculation_policy_version = (
-        event.calculation_policy_version or DIVIDEND_DEFAULT_POLICY_VERSION
-    )
+    calculation_policy_version = event.calculation_policy_version or DIVIDEND_DEFAULT_POLICY_VERSION
     cash_entry_mode = normalize_cash_entry_mode(event.cash_entry_mode)
 
     return event.model_copy(

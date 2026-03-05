@@ -11,6 +11,7 @@ class BusinessDateConsumer(GenericPersistenceConsumer):
     Consumes, validates, and persists business date events idempotently.
     This consumer does not produce any outbound events.
     """
+
     @property
     def event_model(self):
         return BusinessDateEvent

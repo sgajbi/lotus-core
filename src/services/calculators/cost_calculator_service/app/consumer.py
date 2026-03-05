@@ -124,10 +124,7 @@ class CostCalculatorConsumer(BaseConsumer):
             "other_fees": other_fees,
         }
         if any(v is not None for v in fee_components.values()):
-            normalized = {
-                k: str(Decimal(str(v or "0")))
-                for k, v in fee_components.items()
-            }
+            normalized = {k: str(Decimal(str(v or "0"))) for k, v in fee_components.items()}
             event_dict["fees"] = normalized
             event_dict["trade_fee"] = str(sum(Decimal(v) for v in normalized.values()))
         elif Decimal(trade_fee_str) > 0:
@@ -243,7 +240,9 @@ class CostCalculatorConsumer(BaseConsumer):
                         )
 
                         if errored:
-                            new_errors = [e for e in errored if e.transaction_id in new_transaction_ids]
+                            new_errors = [
+                                e for e in errored if e.transaction_id in new_transaction_ids
+                            ]
                             if new_errors:
                                 raise ValueError(
                                     f"Transaction engine failed: {new_errors[0].error_reason}"
@@ -272,17 +271,23 @@ class CostCalculatorConsumer(BaseConsumer):
                                     p_txn.transaction_type, "persist_lot_state", "success"
                                 )
                                 self._record_lifecycle_stage(
-                                    p_txn.transaction_type, "persist_accrued_offset_state", "attempt"
+                                    p_txn.transaction_type,
+                                    "persist_accrued_offset_state",
+                                    "attempt",
                                 )
                                 await repo.upsert_accrued_income_offset_state(p_txn)
                                 self._record_lifecycle_stage(
-                                    p_txn.transaction_type, "persist_accrued_offset_state", "success"
+                                    p_txn.transaction_type,
+                                    "persist_accrued_offset_state",
+                                    "success",
                                 )
                                 logger.info(
                                     "buy_state_persisted",
                                     extra={
                                         "transaction_id": p_txn.transaction_id,
-                                        "economic_event_id": getattr(p_txn, "economic_event_id", None),
+                                        "economic_event_id": getattr(
+                                            p_txn, "economic_event_id", None
+                                        ),
                                         "linked_transaction_group_id": getattr(
                                             p_txn, "linked_transaction_group_id", None
                                         ),
@@ -300,7 +305,9 @@ class CostCalculatorConsumer(BaseConsumer):
                                     "sell_state_persisted",
                                     extra={
                                         "transaction_id": p_txn.transaction_id,
-                                        "economic_event_id": getattr(p_txn, "economic_event_id", None),
+                                        "economic_event_id": getattr(
+                                            p_txn, "economic_event_id", None
+                                        ),
                                         "linked_transaction_group_id": getattr(
                                             p_txn, "linked_transaction_group_id", None
                                         ),
@@ -326,12 +333,16 @@ class CostCalculatorConsumer(BaseConsumer):
                         if (
                             processed_event.cash_entry_mode is not None
                             and mode == UPSTREAM_PROVIDED_CASH_ENTRY_MODE
-                            and processed_event.transaction_type.upper() != ADJUSTMENT_TRANSACTION_TYPE
+                            and processed_event.transaction_type.upper()
+                            != ADJUSTMENT_TRANSACTION_TYPE
                         ):
-                            external_cash_id = (processed_event.external_cash_transaction_id or "").strip()
+                            external_cash_id = (
+                                processed_event.external_cash_transaction_id or ""
+                            ).strip()
                             if not external_cash_id:
                                 raise ValueError(
-                                    "UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg."
+                                    "UPSTREAM_PROVIDED requires "
+                                    "external_cash_transaction_id on product leg."
                                 )
                             cash_leg_db = await repo.get_transaction_by_id(
                                 external_cash_id, portfolio_id=processed_event.portfolio_id
@@ -346,9 +357,13 @@ class CostCalculatorConsumer(BaseConsumer):
 
                         emitted_events.append(processed_event)
                         if should_auto_generate_cash_leg(processed_event):
-                            generated_cash_leg = build_auto_generated_adjustment_cash_leg(processed_event)
+                            generated_cash_leg = build_auto_generated_adjustment_cash_leg(
+                                processed_event
+                            )
                             await repo.create_or_update_transaction_event(generated_cash_leg)
-                            processed_event.external_cash_transaction_id = generated_cash_leg.transaction_id
+                            processed_event.external_cash_transaction_id = (
+                                generated_cash_leg.transaction_id
+                            )
                             await repo.create_or_update_transaction_event(processed_event)
                             emitted_events.append(generated_cash_leg)
 

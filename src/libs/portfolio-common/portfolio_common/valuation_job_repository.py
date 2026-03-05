@@ -11,10 +11,12 @@ from .database_models import PortfolioValuationJob
 
 logger = logging.getLogger(__name__)
 
+
 class ValuationJobRepository:
     """
     Handles database operations for creating and managing PortfolioValuationJob records.
     """
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -50,8 +52,8 @@ class ValuationJobRepository:
             }
 
             final_stmt = stmt.on_conflict_do_update(
-                index_elements=['portfolio_id', 'security_id', 'valuation_date', 'epoch'],
-                set_=update_dict
+                index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
+                set_=update_dict,
             )
 
             await self.db.execute(final_stmt)

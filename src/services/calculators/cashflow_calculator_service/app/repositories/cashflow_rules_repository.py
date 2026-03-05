@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+
 class CashflowRulesRepository:
     """
     Handles read-only database queries for cashflow rule data.
     """
+
     def __init__(self, db: AsyncSession):
         self.db = db
 

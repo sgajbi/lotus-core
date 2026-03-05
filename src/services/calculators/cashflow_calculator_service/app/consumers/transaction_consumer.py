@@ -61,13 +61,16 @@ def _cache_is_fresh(cache_state: CashflowRuleCacheState) -> bool:
     age_seconds = time.monotonic() - cache_state.loaded_at_monotonic_seconds
     return age_seconds < CASHFLOW_RULE_CACHE_TTL_SECONDS
 
+
 class NoCashflowRuleError(ValueError):
     """Custom exception for when a rule for a transaction type is not found."""
+
     pass
 
 
 class LinkedCashLegError(ValueError):
     """Raised when a linked-cash-leg contract is malformed."""
+
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
@@ -78,6 +81,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
     cashflow based on rules from the database, persists it, and writes a
     completion event to the outbox.
     """
+
     async def _load_cashflow_rules_cache(self, db_session) -> CashflowRuleCacheState:
         repo = CashflowRulesRepository(db_session)
         rules_list = await repo.get_all_rules()
@@ -87,7 +91,9 @@ class CashflowCalculatorConsumer(BaseConsumer):
             loaded_at_monotonic_seconds=time.monotonic(),
         )
 
-    async def _get_rule_for_transaction(self, db_session, transaction_type: str) -> Optional[CashflowRule]:
+    async def _get_rule_for_transaction(
+        self, db_session, transaction_type: str
+    ) -> Optional[CashflowRule]:
         """
         Retrieves the cashflow rule for a given transaction type, using a
         lazy-loaded in-memory cache with TTL refresh and missing-rule refresh.
@@ -115,14 +121,10 @@ class CashflowCalculatorConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         await self._process_message_with_retry(msg)
 
-    @retry(
-        wait=wait_fixed(2),
-        stop=stop_after_attempt(15),
-        before=before_log(logger, logging.INFO)
-    )
+    @retry(wait=wait_fixed(2), stop=stop_after_attempt(15), before=before_log(logger, logging.INFO))
     async def _process_message_with_retry(self, msg: Message):
-        key = msg.key().decode('utf-8') if msg.key() else "NoKey"
-        value = msg.value().decode('utf-8')
+        key = msg.key().decode("utf-8") if msg.key() else "NoKey"
+        value = msg.value().decode("utf-8")
         event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
         correlation_id = correlation_id_var.get()
 
@@ -139,7 +141,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
 
                     fencer = EpochFencer(db, service_name=SERVICE_NAME)
                     if not await fencer.check(event):
-                        await tx.rollback() 
+                        await tx.rollback()
                         return
 
                     if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
@@ -153,9 +155,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         if event.cash_entry_mode is not None
                         else None
                     )
-                    has_linked_cash_leg = bool(
-                        (event.external_cash_transaction_id or "").strip()
-                    )
+                    has_linked_cash_leg = bool((event.external_cash_transaction_id or "").strip())
                     if normalized_mode == "UPSTREAM_PROVIDED" and not has_linked_cash_leg:
                         raise LinkedCashLegError(
                             "UPSTREAM_PROVIDED product leg requires external_cash_transaction_id."
@@ -165,7 +165,8 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         and has_linked_cash_leg
                     ):
                         logger.info(
-                            "Skipping product-leg cashflow creation because linked ADJUSTMENT cash leg is authoritative.",
+                            "Skipping product-leg cashflow creation because "
+                            "linked ADJUSTMENT cash leg is authoritative.",
                             extra={
                                 "transaction_id": event.transaction_id,
                                 "transaction_type": event_transaction_type,
@@ -182,7 +183,11 @@ class CashflowCalculatorConsumer(BaseConsumer):
 
                     rule = await self._get_rule_for_transaction(db, event.transaction_type)
                     if not rule:
-                        raise NoCashflowRuleError(f"No cashflow rule found for transaction type '{event.transaction_type}'. Message will be sent to DLQ.")
+                        raise NoCashflowRuleError(
+                            "No cashflow rule found for transaction type "
+                            f"'{event.transaction_type}'. "
+                            "Message will be sent to DLQ."
+                        )
 
                     cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
                     saved = await cashflow_repo.create_cashflow(cashflow_to_save)
@@ -200,16 +205,16 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         is_position_flow=saved.is_position_flow,
                         is_portfolio_flow=saved.is_portfolio_flow,
                         calculation_type=saved.calculation_type,
-                        epoch=saved.epoch
+                        epoch=saved.epoch,
                     )
 
                     await outbox_repo.create_outbox_event(
-                        aggregate_type='Cashflow',
+                        aggregate_type="Cashflow",
                         aggregate_id=str(saved.portfolio_id),
-                        event_type='CashflowCalculated',
+                        event_type="CashflowCalculated",
                         topic=KAFKA_CASHFLOW_CALCULATED_TOPIC,
-                        payload=completion_evt.model_dump(mode='json'),
-                        correlation_id=correlation_id
+                        payload=completion_evt.model_dump(mode="json"),
+                        correlation_id=correlation_id,
                     )
 
                     await idempotency_repo.mark_event_processed(
@@ -228,7 +233,9 @@ class CashflowCalculatorConsumer(BaseConsumer):
             logger.warning("DB integrity error; will retry...", exc_info=False)
             raise
         except NoCashflowRuleError as e:
-            logger.error(f"Configuration error: {e}. This is a non-retryable error. Sending to DLQ.")
+            logger.error(
+                f"Configuration error: {e}. This is a non-retryable error. Sending to DLQ."
+            )
             await self._send_to_dlq_async(msg, e)
         except LinkedCashLegError as e:
             logger.error(f"Linked cash-leg contract error: {e}. Sending to DLQ.")
@@ -236,6 +243,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
         except Exception as e:
             logger.error(
                 f"Unexpected error processing message with key '{key}'. Sending to DLQ.",
-                exc_info=True
+                exc_info=True,
             )
             await self._send_to_dlq_async(msg, e)

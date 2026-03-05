@@ -18,7 +18,7 @@ async def main():
     Initializes and runs the ConsumerManager and the OutboxDispatcher side-by-side.
     """
     logger.info("Cashflow Calculation Service starting up...")
-    
+
     Instrumentator().instrument(web_app).expose(web_app)
     logger.info("Prometheus metrics exposed at /metrics")
 
@@ -31,7 +31,9 @@ async def main():
     try:
         await manager.run()
     except Exception as e:
-        logger.critical(f"Cashflow Calculation Service encountered a critical error: {e}", exc_info=True)
+        logger.critical(
+            f"Cashflow Calculation Service encountered a critical error: {e}", exc_info=True
+        )
         raise
     finally:
         dispatcher.stop()
@@ -46,4 +48,5 @@ async def main():
 
 if __name__ == "__main__":
     import contextlib
+
     asyncio.run(main())

@@ -59,11 +59,7 @@ def _resolve_adjustment_amount_and_direction(
             if str(getattr(event, "interest_direction", "INCOME")).upper() == "EXPENSE"
             else "INFLOW"
         )
-        reason = (
-            "INTEREST_CHARGE_SETTLEMENT"
-            if direction == "OUTFLOW"
-            else "INTEREST_SETTLEMENT"
-        )
+        reason = "INTEREST_CHARGE_SETTLEMENT" if direction == "OUTFLOW" else "INTEREST_SETTLEMENT"
         return net_interest, direction, reason
     raise AdjustmentCashLegError(
         "transaction_type",
@@ -85,24 +81,19 @@ def build_auto_generated_adjustment_cash_leg(event: TransactionEvent) -> Transac
             "settlement_cash_account_id is required in AUTO_GENERATE mode.",
         )
 
-    cash_instrument_id = (
-        event.settlement_cash_instrument_id or event.settlement_cash_account_id
-    )
+    cash_instrument_id = event.settlement_cash_instrument_id or event.settlement_cash_account_id
     if not cash_instrument_id:
         raise AdjustmentCashLegError(
             "settlement_cash_instrument_id",
             "Unable to resolve settlement cash instrument identifier.",
         )
 
-    amount, movement_direction, adjustment_reason = _resolve_adjustment_amount_and_direction(
-        event
-    )
+    amount, movement_direction, adjustment_reason = _resolve_adjustment_amount_and_direction(event)
     amount = abs(amount)
 
     tx_type = event.transaction_type.upper()
     economic_event_id = (
-        event.economic_event_id
-        or f"EVT-{tx_type}-{event.portfolio_id}-{event.transaction_id}"
+        event.economic_event_id or f"EVT-{tx_type}-{event.portfolio_id}-{event.transaction_id}"
     )
     linked_group_id = (
         event.linked_transaction_group_id

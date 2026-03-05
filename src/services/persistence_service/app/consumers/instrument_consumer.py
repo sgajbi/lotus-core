@@ -10,6 +10,7 @@ class InstrumentConsumer(GenericPersistenceConsumer):
     """
     Consumes, validates, and persists instrument events using the generic persistence consumer.
     """
+
     @property
     def event_model(self):
         return InstrumentEvent

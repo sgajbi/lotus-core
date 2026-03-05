@@ -25,12 +25,8 @@ class InterestCanonicalTransaction(BaseModel):
         default=None, description="Contractual settlement timestamp."
     )
 
-    quantity: Decimal = Field(
-        ..., description="Quantity impact. Canonical INTEREST requires zero."
-    )
-    price: Decimal = Field(
-        ..., description="Unit price impact. Canonical INTEREST requires zero."
-    )
+    quantity: Decimal = Field(..., description="Quantity impact. Canonical INTEREST requires zero.")
+    price: Decimal = Field(..., description="Unit price impact. Canonical INTEREST requires zero.")
     gross_transaction_amount: Decimal = Field(
         ..., description="Gross interest amount in trade currency."
     )
@@ -87,8 +83,7 @@ class InterestCanonicalTransaction(BaseModel):
     external_cash_transaction_id: Optional[str] = Field(
         default=None,
         description=(
-            "Upstream cash transaction identifier when cash_entry_mode is "
-            "UPSTREAM_PROVIDED."
+            "Upstream cash transaction identifier when cash_entry_mode is " "UPSTREAM_PROVIDED."
         ),
     )
     settlement_cash_account_id: Optional[str] = Field(
@@ -100,7 +95,5 @@ class InterestCanonicalTransaction(BaseModel):
     )
     settlement_cash_instrument_id: Optional[str] = Field(
         default=None,
-        description=(
-            "Optional direct cash instrument identifier for generated cash legs."
-        ),
+        description=("Optional direct cash instrument identifier for generated cash legs."),
     )

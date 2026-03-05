@@ -10,6 +10,7 @@ class FxRateConsumer(GenericPersistenceConsumer):
     """
     Consumes, validates, and persists FX rate events idempotently.
     """
+
     @property
     def event_model(self):
         return FxRateEvent

@@ -9,17 +9,21 @@ from .position_state_repository import PositionStateRepository
 
 logger = logging.getLogger(__name__)
 
+
 class FencedEvent(Protocol):
     """A protocol defining the required attributes for an event to be checked by the fencer."""
+
     portfolio_id: str
     security_id: str
     epoch: Optional[int]
+
 
 class EpochFencer:
     """
     A reusable utility to perform epoch fencing for consumers. It ensures that
     stale messages from a previous, now-obsolete history are safely ignored.
     """
+
     def __init__(self, db: AsyncSession, service_name: str = "<not-set>"):
         self.db = db
         self.state_repo = PositionStateRepository(db)
@@ -53,9 +57,9 @@ class EpochFencer:
                     "portfolio_id": event.portfolio_id,
                     "security_id": event.security_id,
                     "message_epoch": message_epoch,
-                    "current_epoch": current_state.epoch
-                }
+                    "current_epoch": current_state.epoch,
+                },
             )
             return False
-        
+
         return True

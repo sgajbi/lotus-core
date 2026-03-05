@@ -113,4 +113,3 @@ def validate_buy_transaction(
             )
 
     return issues
-
