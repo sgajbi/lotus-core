@@ -25,6 +25,13 @@ from .dividend_validation import (
     DividendValidationIssue,
     validate_dividend_transaction,
 )
+from .interest_models import InterestCanonicalTransaction
+from .interest_reason_codes import InterestValidationReasonCode
+from .interest_validation import (
+    InterestValidationError,
+    InterestValidationIssue,
+    validate_interest_transaction,
+)
 from .sell_linkage import (
     SELL_AVCO_POLICY_ID,
     SELL_DEFAULT_POLICY_VERSION,
@@ -57,6 +64,11 @@ __all__ = [
     "DIVIDEND_DEFAULT_POLICY_ID",
     "DIVIDEND_DEFAULT_POLICY_VERSION",
     "enrich_dividend_transaction_metadata",
+    "InterestCanonicalTransaction",
+    "InterestValidationError",
+    "InterestValidationIssue",
+    "InterestValidationReasonCode",
+    "validate_interest_transaction",
     "SellCanonicalTransaction",
     "SellValidationError",
     "SellValidationIssue",

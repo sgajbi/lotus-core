@@ -62,7 +62,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | 0 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-0-GAP-ASSESSMENT.md`, `tests/unit/transaction_specs/test_interest_slice0_characterization.py` |
-| 1 | Pending | Validation model + reason-code taxonomy |
+| 1 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-1-VALIDATION-REASON-CODES.md`, `tests/unit/libs/portfolio_common/test_interest_validation.py` |
 | 2 | Pending | Metadata enrichment + persistence traceability |
 | 3 | Pending | Calculation invariants + direction semantics baseline |
 | 4 | Pending | Cash-entry mode + withholding/linkage behavior |
