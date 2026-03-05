@@ -146,6 +146,18 @@ Slice 1 Progress (Batch 6):
  - `make typecheck` -> passed
  - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
 
+Slice 1 Progress (Batch 7):
+1. Scoped E501 reduction completed for portfolio-common runtime configuration/consumer hotspot:
+ - `src/libs/portfolio-common/portfolio_common/config.py`
+ - `src/libs/portfolio-common/portfolio_common/kafka_consumer.py`
+2. Scope method:
+ - `ruff format` on both files, followed by manual wrapping of residual long log strings
+3. Snapshot impact:
+ - runtime-critical scope E501 count: `150 -> 125` (`-25`)
+4. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+
 ### Slice 2 - Core Test Domains
 Deliverables:
 1. Resolve Ruff violations in high-value unit/integration suites.

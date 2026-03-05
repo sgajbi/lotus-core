@@ -22,26 +22,48 @@ MONGO_INITDB_ROOT_PASSWORD = os.getenv("MONGO_INITDB_ROOT_PASSWORD", "password")
 MONGO_HOST = os.getenv("MONGO_HOST", "mongodb")
 MONGO_PORT = os.getenv("MONGO_PORT", "2717")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "portfolio_state")
-MONGO_URL = f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}"
+MONGO_URL = (
+    f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}"
+)
 
 # Kafka Configurations
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS_HOST") or os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9093")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS_HOST") or os.getenv(
+    "KAFKA_BOOTSTRAP_SERVERS", "kafka:9093"
+)
 KAFKA_RAW_PORTFOLIOS_TOPIC = os.getenv("KAFKA_RAW_PORTFOLIOS_TOPIC", "raw_portfolios")
 KAFKA_RAW_TRANSACTIONS_TOPIC = os.getenv("KAFKA_RAW_TRANSACTIONS_TOPIC", "raw_transactions")
-KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC = os.getenv("KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC", "raw_transactions_completed")
-KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC = os.getenv("KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC", "processed_transactions_completed")
+KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC = os.getenv(
+    "KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC", "raw_transactions_completed"
+)
+KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC = os.getenv(
+    "KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC", "processed_transactions_completed"
+)
 KAFKA_INSTRUMENTS_TOPIC = os.getenv("KAFKA_INSTRUMENTS_TOPIC", "instruments")
 KAFKA_MARKET_PRICES_TOPIC = os.getenv("KAFKA_MARKET_PRICES_TOPIC", "market_prices")
-KAFKA_MARKET_PRICE_PERSISTED_TOPIC = os.getenv("KAFKA_MARKET_PRICE_PERSISTED_TOPIC", "market_price_persisted")
+KAFKA_MARKET_PRICE_PERSISTED_TOPIC = os.getenv(
+    "KAFKA_MARKET_PRICE_PERSISTED_TOPIC", "market_price_persisted"
+)
 KAFKA_FX_RATES_TOPIC = os.getenv("KAFKA_FX_RATES_TOPIC", "fx_rates")
-KAFKA_RAW_BUSINESS_DATES_TOPIC = os.getenv("KAFKA_RAW_BUSINESS_DATES_TOPIC", "raw_business_dates") # New Topic
+KAFKA_RAW_BUSINESS_DATES_TOPIC = os.getenv(
+    "KAFKA_RAW_BUSINESS_DATES_TOPIC", "raw_business_dates"
+)  # New Topic
 KAFKA_PERSISTENCE_DLQ_TOPIC = os.getenv("KAFKA_PERSISTENCE_DLQ_TOPIC", "persistence_service.dlq")
-KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC = os.getenv("KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC", "daily_position_snapshot_persisted")
+KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC = os.getenv(
+    "KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC", "daily_position_snapshot_persisted"
+)
 KAFKA_POSITION_VALUED_TOPIC = os.getenv("KAFKA_POSITION_VALUED_TOPIC", "position_valued")
-KAFKA_CASHFLOW_CALCULATED_TOPIC = os.getenv("KAFKA_CASHFLOW_CALCULATED_TOPIC", "cashflow_calculated")
-KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC = os.getenv("KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC", "position_timeseries_generated")
-KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC = os.getenv("KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC", "portfolio_timeseries_generated")
-KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC = os.getenv("KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC", "portfolio_aggregation_required")
+KAFKA_CASHFLOW_CALCULATED_TOPIC = os.getenv(
+    "KAFKA_CASHFLOW_CALCULATED_TOPIC", "cashflow_calculated"
+)
+KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC = os.getenv(
+    "KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC", "position_timeseries_generated"
+)
+KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC", "portfolio_timeseries_generated"
+)
+KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC", "portfolio_aggregation_required"
+)
 KAFKA_VALUATION_REQUIRED_TOPIC = os.getenv("KAFKA_VALUATION_REQUIRED_TOPIC", "valuation_required")
 
 # Business-date calendar and guardrail policy
@@ -101,7 +123,10 @@ def _sanitize_consumer_override_map(raw: object, *, context: str) -> dict[str, o
     sanitized: dict[str, object] = {}
     for key, value in raw.items():
         if key not in _CONSUMER_ALLOWED_TYPES:
-            logger.warning("Ignoring unsupported Kafka consumer config key.", extra={"key": key, "context": context})
+            logger.warning(
+                "Ignoring unsupported Kafka consumer config key.",
+                extra={"key": key, "context": context},
+            )
             continue
         try:
             sanitized[key] = _coerce_consumer_config_value(key, value)
@@ -126,7 +151,9 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
         try:
             defaults = json.loads(defaults_raw)
             merged.update(
-                _sanitize_consumer_override_map(defaults, context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON")
+                _sanitize_consumer_override_map(
+                    defaults, context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON"
+                )
             )
         except Exception as exc:
             logger.warning("Invalid consumer defaults JSON; ignoring.", extra={"error": str(exc)})
@@ -147,6 +174,8 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
             else:
                 logger.warning("Group overrides JSON must be an object; ignoring.")
         except Exception as exc:
-            logger.warning("Invalid consumer group overrides JSON; ignoring.", extra={"error": str(exc)})
+            logger.warning(
+                "Invalid consumer group overrides JSON; ignoring.", extra={"error": str(exc)}
+            )
 
     return merged
