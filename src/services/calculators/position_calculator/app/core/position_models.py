@@ -1,5 +1,7 @@
-from pydantic import BaseModel
 from decimal import Decimal
+
+from pydantic import BaseModel
+
 
 class PositionState(BaseModel):
     """

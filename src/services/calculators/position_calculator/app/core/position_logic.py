@@ -2,18 +2,19 @@
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import List, Optional
+from typing import List
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.database_models import PositionHistory, Transaction as DBTransaction, PositionState
-from ..core.position_models import PositionState as PositionStateDTO
-from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
-from ..repositories.position_repository import PositionRepository
-from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.config import KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC
-from portfolio_common.reprocessing import EpochFencer
+from portfolio_common.database_models import PositionHistory
+from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
 from portfolio_common.monitoring import REPROCESSING_EPOCH_BUMPED_TOTAL
+from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.position_state_repository import PositionStateRepository
+from portfolio_common.reprocessing import EpochFencer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.position_models import PositionState as PositionStateDTO
+from ..repositories.position_repository import PositionRepository
 
 logger = logging.getLogger(__name__)
 

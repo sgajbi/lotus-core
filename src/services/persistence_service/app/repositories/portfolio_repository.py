@@ -1,9 +1,10 @@
 # services/persistence_service/app/repositories/portfolio_repository.py
 import logging
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from portfolio_common.database_models import Portfolio as DBPortfolio
 from portfolio_common.events import PortfolioEvent
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

@@ -1,15 +1,20 @@
 # services/calculators/position_calculator/app/consumer_manager.py
+import asyncio
 import logging
 import signal
-import asyncio
-import uvicorn
 
-from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC, KAFKA_PERSISTENCE_DLQ_TOPIC
-from .consumers.transaction_event_consumer import TransactionEventConsumer
+import uvicorn
+from portfolio_common.config import (
+    KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+)
+from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
-from portfolio_common.kafka_admin import ensure_topics_exist
-from .web import app as web_app # NEW IMPORT
+
+from .consumers.transaction_event_consumer import TransactionEventConsumer
+from .web import app as web_app  # NEW IMPORT
 
 logger = logging.getLogger(__name__)
 

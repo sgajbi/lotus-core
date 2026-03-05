@@ -1,7 +1,7 @@
 # services/calculators/position-valuation-calculator/app/logic/valuation_logic.py
 import logging
-from typing import Tuple, Optional
 from decimal import Decimal
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

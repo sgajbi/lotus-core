@@ -1,8 +1,10 @@
-import logging
-from confluent_kafka import Producer, KafkaException
-from .config import KAFKA_BOOTSTRAP_SERVERS
 import json
-from typing import Dict, Any, Optional, List, Tuple, Callable
+import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from confluent_kafka import KafkaException, Producer
+
+from .config import KAFKA_BOOTSTRAP_SERVERS
 
 logger = logging.getLogger(__name__)
 

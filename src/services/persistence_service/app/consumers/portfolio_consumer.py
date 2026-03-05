@@ -1,8 +1,10 @@
 # src/services/persistence_service/app/consumers/portfolio_consumer.py
-from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.events import PortfolioEvent
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..repositories.portfolio_repository import PortfolioRepository
 from .base_consumer import GenericPersistenceConsumer
+
 
 class PortfolioConsumer(GenericPersistenceConsumer):
     """

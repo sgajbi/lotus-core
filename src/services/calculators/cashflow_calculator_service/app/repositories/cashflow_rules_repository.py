@@ -2,10 +2,10 @@
 import logging
 from typing import List
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.utils import async_timed
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

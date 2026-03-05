@@ -1,10 +1,11 @@
 # services/persistence_service/app/repositories/fx_rate_repository.py
 import logging
-from typing import Tuple, List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from typing import Tuple
+
 from portfolio_common.database_models import FxRate as DBFxRate
 from portfolio_common.events import FxRateEvent
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

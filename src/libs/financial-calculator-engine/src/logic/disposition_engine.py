@@ -1,9 +1,10 @@
 # libs/financial-calculator-engine/src/logic/disposition_engine.py
-from typing import Optional, Tuple
+import logging
 from decimal import Decimal
+from typing import Optional, Tuple
+
 from core.models.transaction import Transaction
 from logic.cost_basis_strategies import CostBasisStrategy
-import logging
 
 logger = logging.getLogger(__name__)
 

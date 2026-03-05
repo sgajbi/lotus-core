@@ -1,10 +1,13 @@
 # src/services/persistence_service/app/consumers/market_price_consumer.py
-from typing import Dict, Any, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.events import MarketPriceEvent, MarketPricePersistedEvent
-from ..repositories.market_price_repository import MarketPriceRepository
+from typing import Any, Dict, Optional
+
 from portfolio_common.config import KAFKA_MARKET_PRICE_PERSISTED_TOPIC
+from portfolio_common.events import MarketPriceEvent, MarketPricePersistedEvent
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..repositories.market_price_repository import MarketPriceRepository
 from .base_consumer import GenericPersistenceConsumer
+
 
 class MarketPriceConsumer(GenericPersistenceConsumer):
     """

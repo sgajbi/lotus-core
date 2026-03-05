@@ -1,9 +1,11 @@
 # libs/financial-calculator-engine/src/core/models/transaction.py
 
-from datetime import date, datetime, timezone
-from typing import Optional, Any
-from pydantic import BaseModel, Field, condecimal, ConfigDict, field_validator
+from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator
+
 
 class Fees(BaseModel):
     """

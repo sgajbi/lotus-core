@@ -1,10 +1,11 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing.py
 import logging
-from typing import Protocol, Optional
+from typing import Optional, Protocol
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .position_state_repository import PositionStateRepository
 from .monitoring import EPOCH_MISMATCH_DROPPED_TOTAL
+from .position_state_repository import PositionStateRepository
 
 logger = logging.getLogger(__name__)
 

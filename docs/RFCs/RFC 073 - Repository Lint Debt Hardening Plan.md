@@ -19,7 +19,7 @@ The plan runs as a dedicated stream in parallel with feature RFCs and uses stric
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | 0 | Completed | `docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md` |
-| 1 | Pending | Runtime-critical services lint burn-down |
+| 1 | In Progress | `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/libs/financial-calculator-engine --statistics` (before/after snapshot below) |
 | 2 | Pending | Core test-domain lint burn-down |
 | 3 | Pending | Scripts/tooling lint burn-down |
 | 4 | Pending | CI/global gate tightening |
@@ -69,6 +69,23 @@ Deliverables:
 Exit Criteria:
 1. Cleaned runtime domains remain Ruff-clean.
 2. Functional regression suite for affected domains passes.
+
+Slice 1 Progress (Batch 1):
+1. Scope completed:
+ - `src/services/calculators`
+ - `src/services/persistence_service`
+ - `src/libs/portfolio-common`
+ - `src/libs/financial-calculator-engine`
+2. Actions:
+ - applied safe lint-only fixes for `I001`, `F401`, `F841`
+ - manual cleanup of one residual unused local variable in position consumer
+3. Snapshot:
+ - before: `244 E501`, `73 I001`, `29 F401`, `3 F841`, `1 E402`, `1 E711`, `1 F541`
+ - after: `239 E501`, `1 E402`, `1 E711`, `1 F541`
+ - removed in batch: `105` findings (`I001/F401/F841` fully eliminated in scope)
+4. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
 
 ### Slice 2 - Core Test Domains
 Deliverables:

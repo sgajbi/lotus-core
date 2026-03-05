@@ -1,14 +1,14 @@
 # src/libs/portfolio-common/portfolio_common/health.py
-import logging
 import asyncio
-from typing import List, Callable, Awaitable
+import logging
+from typing import Awaitable, Callable
 
-from fastapi import APIRouter, status, HTTPException
-from sqlalchemy import text
 from confluent_kafka.admin import AdminClient
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import text
 
-from .db import AsyncSessionLocal
 from .config import KAFKA_BOOTSTRAP_SERVERS
+from .db import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 

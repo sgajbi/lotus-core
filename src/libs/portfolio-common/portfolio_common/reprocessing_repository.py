@@ -1,13 +1,14 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_repository.py
 import logging
 from typing import List
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
 from .database_models import Transaction as DBTransaction
 from .events import TransactionEvent
-from .kafka_utils import KafkaProducer, get_kafka_producer
-from .config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
+from .kafka_utils import KafkaProducer
 from .logging_utils import correlation_id_var
 
 logger = logging.getLogger(__name__)

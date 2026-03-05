@@ -1,6 +1,7 @@
 # src/services/calculators/cashflow_calculator_service/app/core/enums.py
 from enum import Enum
 
+
 class CashflowTiming(str, Enum):
     """Defines if the cashflow occurs at the beginning or end of the day."""
     BOD = "BOD"  # Beginning of Day

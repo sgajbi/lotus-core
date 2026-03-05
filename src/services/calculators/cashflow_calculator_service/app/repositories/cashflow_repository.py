@@ -1,8 +1,9 @@
 # services/calculators/cashflow_calculator_service/app/repositories/cashflow_repository.py
 import logging
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
+
 from portfolio_common.database_models import Cashflow
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

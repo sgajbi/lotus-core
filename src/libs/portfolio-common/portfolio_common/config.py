@@ -1,7 +1,8 @@
 # libs/portfolio-common/portfolio_common/config.py
-import os
 import json
 import logging
+import os
+
 from dotenv import load_dotenv
 
 # Load environment variables from a .env file for local development.

@@ -1,6 +1,7 @@
 # libs/financial-calculator-engine/src/logic/sorter.py
 from core.models.transaction import Transaction
 
+
 class TransactionSorter:
     """
     Responsible for merging and sorting transactions according to processing rules.

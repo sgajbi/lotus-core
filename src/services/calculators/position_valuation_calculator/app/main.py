@@ -1,6 +1,7 @@
 # services/calculators/position-valuation-calculator/app/main.py
-import logging
 import asyncio
+import logging
+
 from app.consumer_manager import ConsumerManager
 from portfolio_common.logging_utils import setup_logging
 from prometheus_fastapi_instrumentator import Instrumentator

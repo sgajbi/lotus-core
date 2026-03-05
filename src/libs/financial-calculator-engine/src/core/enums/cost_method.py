@@ -2,6 +2,7 @@
 
 from enum import Enum
 
+
 class CostMethod(str, Enum):
     """
     Defines the available cost basis calculation methods.

@@ -1,12 +1,11 @@
 # libs/portfolio-common/portfolio_common/kafka_admin.py
 import logging
 import sys
-import time
 from typing import List
 
-from confluent_kafka.admin import AdminClient
 from confluent_kafka import KafkaException
-from tenacity import retry, stop_after_attempt, wait_fixed, before_log
+from confluent_kafka.admin import AdminClient
+from tenacity import before_log, retry, stop_after_attempt, wait_fixed
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
 

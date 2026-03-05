@@ -1,6 +1,6 @@
 # services/persistence_service/app/monitoring.py
-from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter, Histogram
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # 1. Define custom metrics
 EVENTS_PROCESSED_TOTAL = Counter(

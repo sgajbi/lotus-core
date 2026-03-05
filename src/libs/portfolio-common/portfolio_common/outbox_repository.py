@@ -5,7 +5,6 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.database_models import OutboxEvent
-from portfolio_common.db import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 

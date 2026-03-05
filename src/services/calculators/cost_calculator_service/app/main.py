@@ -1,9 +1,11 @@
 # services/calculators/cost_calculator_service/app/main.py
-import logging
 import asyncio
-from .consumer_manager import ConsumerManager
+import logging
+
 from portfolio_common.logging_utils import setup_logging
 from prometheus_fastapi_instrumentator import Instrumentator
+
+from .consumer_manager import ConsumerManager
 from .web import app as web_app
 
 setup_logging()

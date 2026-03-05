@@ -1,8 +1,8 @@
 # libs/financial-calculator-engine/src/logic/cost_basis_strategies.py
 import logging
-from typing import Protocol, Deque, Dict, Tuple, Optional
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from decimal import Decimal
+from typing import Deque, Dict, Optional, Protocol, Tuple
 
 from core.models.transaction import Transaction
 from logic.cost_objects import CostLot

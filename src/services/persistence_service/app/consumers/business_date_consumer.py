@@ -1,8 +1,10 @@
 # src/services/persistence_service/app/consumers/business_date_consumer.py
-from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.events import BusinessDateEvent
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..repositories.business_date_repository import BusinessDateRepository
 from .base_consumer import GenericPersistenceConsumer
+
 
 class BusinessDateConsumer(GenericPersistenceConsumer):
     """

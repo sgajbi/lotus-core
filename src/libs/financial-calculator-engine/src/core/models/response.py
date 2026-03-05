@@ -1,7 +1,9 @@
 # libs/financial-calculator-engine/src/core/models/response.py
-from typing import List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import List
+
 from core.models.transaction import Transaction
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class ErroredTransaction(BaseModel):
     """

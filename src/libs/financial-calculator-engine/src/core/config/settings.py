@@ -1,8 +1,10 @@
 # src/core/config/settings.py
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+
 from core.enums.cost_method import CostMethod
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     """

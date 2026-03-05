@@ -5,7 +5,6 @@ from portfolio_common.events import TransactionEvent
 
 from .cash_entry_mode import AUTO_GENERATE_CASH_ENTRY_MODE, normalize_cash_entry_mode
 
-
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
 AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES = {

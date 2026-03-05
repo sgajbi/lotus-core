@@ -1,16 +1,15 @@
 # src/services/calculators/cost_calculator_service/app/consumers/reprocessing_consumer.py
-import logging
 import json
-from pydantic import ValidationError
+import logging
 
 from confluent_kafka import Message
-from sqlalchemy.exc import DBAPIError, OperationalError
-from tenacity import retry, stop_after_attempt, wait_fixed, before_log, retry_if_exception_type
-
+from portfolio_common.db import get_async_db_session
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.kafka_utils import get_kafka_producer
-from portfolio_common.db import get_async_db_session
 from portfolio_common.reprocessing_repository import ReprocessingRepository
+from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError, OperationalError
+from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 REPROCESSING_REQUESTED_TOPIC = "transactions_reprocessing_requested"

@@ -1,10 +1,12 @@
 # services/persistence_service/app/repositories/transaction_db_repo.py
 import logging
-from sqlalchemy import select, exists
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from portfolio_common.database_models import Transaction as DBTransaction, Portfolio
+
+from portfolio_common.database_models import Portfolio
+from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+from sqlalchemy import exists, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

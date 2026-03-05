@@ -1,7 +1,8 @@
 # src/core/models/request.py
 
 import logging
-from pydantic import BaseModel, Field, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 

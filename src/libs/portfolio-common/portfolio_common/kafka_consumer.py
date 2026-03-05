@@ -2,13 +2,14 @@
 import asyncio
 import functools
 import inspect
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone
 import logging
 import time
 import traceback
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Dict, Optional
 from uuid import uuid4
+
 from confluent_kafka import Consumer, Message
 
 from .config import get_kafka_consumer_runtime_overrides

@@ -1,7 +1,8 @@
 # services/persistence_service/app/web.py
 from fastapi import FastAPI
-from .monitoring import setup_metrics
 from portfolio_common.health import create_health_router
+
+from .monitoring import setup_metrics
 
 app = FastAPI(
     title="Persistence Service - Health",

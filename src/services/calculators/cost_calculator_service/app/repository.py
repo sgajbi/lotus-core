@@ -1,20 +1,24 @@
 # services/calculators/cost_calculator_service/app/repository.py
-from typing import List, Optional
 from datetime import date
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from decimal import Decimal
+from typing import List, Optional
+
+from core.models.transaction import Transaction as EngineTransaction
+from portfolio_common.database_models import (
+    AccruedIncomeOffsetState,
+    FxRate,
+    Portfolio,
+    PositionLotState,
+    TransactionCost,
+)
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
-    TransactionCost,
-    Portfolio,
-    FxRate,
-    PositionLotState,
-    AccruedIncomeOffsetState,
 )
 from portfolio_common.events import TransactionEvent
-from core.models.transaction import Transaction as EngineTransaction
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
 
 class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):

@@ -1,7 +1,8 @@
 # libs/portfolio-common/portfolio_common/idempotency_repository.py
 import logging
 from typing import Optional
-from sqlalchemy import select, exists
+
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ProcessedEvent

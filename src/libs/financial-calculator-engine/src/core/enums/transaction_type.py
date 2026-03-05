@@ -2,6 +2,7 @@
 
 from enum import Enum
 
+
 class TransactionType(str, Enum):
     """
     Defines the supported types of financial transactions.

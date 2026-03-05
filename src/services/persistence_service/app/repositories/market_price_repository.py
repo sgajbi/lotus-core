@@ -2,12 +2,13 @@
 import logging
 from datetime import date
 from typing import List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy import select, func
 
-from portfolio_common.database_models import MarketPrice as DBMarketPrice, DailyPositionSnapshot
+from portfolio_common.database_models import DailyPositionSnapshot
+from portfolio_common.database_models import MarketPrice as DBMarketPrice
 from portfolio_common.events import MarketPriceEvent
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

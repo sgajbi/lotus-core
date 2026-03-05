@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+
 class CostLot:
     """
     Represents a single 'lot' of securities acquired through a BUY transaction,

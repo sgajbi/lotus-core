@@ -1,22 +1,22 @@
 # src/libs/portfolio-common/portfolio_common/outbox_dispatcher.py
-import logging
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from sqlalchemy import update, func
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import func, update
+from sqlalchemy.orm import sessionmaker
 
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.db import SessionLocal
+from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.monitoring import (
-    observe_outbox_published,
     observe_outbox_failed,
+    observe_outbox_published,
     observe_outbox_retried,
-    set_outbox_pending,
     outbox_batch_timer,
+    set_outbox_pending,
 )
 
 logger = logging.getLogger(__name__)

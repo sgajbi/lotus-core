@@ -1,23 +1,26 @@
 # src/services/calculators/position_valuation_calculator/app/consumers/valuation_consumer.py
-import logging
 import json
-from pydantic import ValidationError
-from sqlalchemy.exc import DBAPIError, OperationalError
+import logging
 
 from confluent_kafka import Message
-from tenacity import retry, stop_after_attempt, wait_fixed, before_log, retry_if_exception_type
-
-from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.events import PortfolioValuationRequiredEvent, DailyPositionSnapshotPersistedEvent
-from portfolio_common.db import get_async_db_session
 from portfolio_common.config import KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC
-from portfolio_common.idempotency_repository import IdempotencyRepository
-from portfolio_common.outbox_repository import OutboxRepository
-from portfolio_common.logging_utils import correlation_id_var
-from portfolio_common.monitoring import VALUATION_JOBS_SKIPPED_TOTAL, VALUATION_JOBS_FAILED_TOTAL
-from ..repositories.valuation_repository import ValuationRepository
-from ..logic.valuation_logic import ValuationLogic
 from portfolio_common.database_models import DailyPositionSnapshot
+from portfolio_common.db import get_async_db_session
+from portfolio_common.events import (
+    DailyPositionSnapshotPersistedEvent,
+    PortfolioValuationRequiredEvent,
+)
+from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
+from portfolio_common.outbox_repository import OutboxRepository
+from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError, OperationalError
+from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+
+from ..logic.valuation_logic import ValuationLogic
+from ..repositories.valuation_repository import ValuationRepository
 
 logger = logging.getLogger(__name__)
 

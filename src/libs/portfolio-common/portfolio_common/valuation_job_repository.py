@@ -64,7 +64,7 @@ class ValuationJobRepository:
                     "epoch": epoch,
                 },
             )
-        except Exception as e:
+        except Exception:
             logger.error(
                 "Failed to stage upsert for valuation job",
                 extra={

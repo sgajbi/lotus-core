@@ -1,19 +1,20 @@
 # services/calculators/cost_calculator_service/app/consumer_manager.py
+import asyncio
 import logging
 import signal
-import asyncio
-import uvicorn
 
+import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_PERSISTENCE_DLQ_TOPIC,
     KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
-    KAFKA_PERSISTENCE_DLQ_TOPIC
 )
-from .consumer import CostCalculatorConsumer
-from .consumers.reprocessing_consumer import ReprocessingConsumer, REPROCESSING_REQUESTED_TOPIC
+from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
-from portfolio_common.kafka_admin import ensure_topics_exist
+
+from .consumer import CostCalculatorConsumer
+from .consumers.reprocessing_consumer import REPROCESSING_REQUESTED_TOPIC, ReprocessingConsumer
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)

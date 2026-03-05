@@ -1,19 +1,18 @@
 # src/services/persistence_service/app/consumers/base_consumer.py
-import logging
 import json
-import sys
-from typing import Type, Optional, Dict, Any
+import logging
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, ValidationError
-from confluent_kafka import Message
-from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
+from typing import Any, Dict, Optional, Type
 
+from confluent_kafka import Message
+from portfolio_common.db import get_async_db_session
+from portfolio_common.exceptions import RetryableConsumerError
+from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
-from portfolio_common.db import get_async_db_session
-from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
-from portfolio_common.exceptions import RetryableConsumerError
+from pydantic import BaseModel, ValidationError
+from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 
 logger = logging.getLogger(__name__)
 

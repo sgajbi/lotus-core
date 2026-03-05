@@ -4,7 +4,8 @@ import os
 import sys
 import uuid
 from contextvars import ContextVar
-from pythonjsonlogger import jsonlogger # NEW IMPORT
+
+from pythonjsonlogger import jsonlogger  # NEW IMPORT
 
 # This shared context variable will hold the correlation ID for each request/event.
 # It's initialized with a default value for cases where it's not explicitly set.

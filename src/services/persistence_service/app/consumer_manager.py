@@ -1,30 +1,31 @@
 # services/persistence-service/app/consumer_manager.py
+import asyncio
 import logging
 import signal
-import asyncio
-import uvicorn
 
+import uvicorn
 from portfolio_common.config import (
-    KAFKA_BOOTSTRAP_SERVERS, 
-    KAFKA_RAW_TRANSACTIONS_TOPIC,
+    KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_FX_RATES_TOPIC,
     KAFKA_INSTRUMENTS_TOPIC,
     KAFKA_MARKET_PRICES_TOPIC,
-    KAFKA_FX_RATES_TOPIC,
-    KAFKA_RAW_PORTFOLIOS_TOPIC,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
-    KAFKA_RAW_BUSINESS_DATES_TOPIC
+    KAFKA_RAW_BUSINESS_DATES_TOPIC,
+    KAFKA_RAW_PORTFOLIOS_TOPIC,
+    KAFKA_RAW_TRANSACTIONS_TOPIC,
 )
-from .consumers.transaction_consumer import TransactionPersistenceConsumer
-from .consumers.instrument_consumer import InstrumentConsumer
-from .consumers.market_price_consumer import MarketPriceConsumer
-from .consumers.fx_rate_consumer import FxRateConsumer
-from .consumers.portfolio_consumer import PortfolioConsumer
-from .consumers.business_date_consumer import BusinessDateConsumer
+from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
-from portfolio_common.kafka_admin import ensure_topics_exist
-from .web import app as web_app
+
+from .consumers.business_date_consumer import BusinessDateConsumer
+from .consumers.fx_rate_consumer import FxRateConsumer
+from .consumers.instrument_consumer import InstrumentConsumer
+from .consumers.market_price_consumer import MarketPriceConsumer
+from .consumers.portfolio_consumer import PortfolioConsumer
+from .consumers.transaction_consumer import TransactionPersistenceConsumer
 from .monitoring import setup_metrics
+from .web import app as web_app
 
 logger = logging.getLogger(__name__)
 

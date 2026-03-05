@@ -1,6 +1,7 @@
 # libs/financial-calculator-engine/src/logic/error_reporter.py
 from core.models.response import ErroredTransaction
 
+
 class ErrorReporter:
     """
     Manages the collection and reporting of processing errors for transactions.

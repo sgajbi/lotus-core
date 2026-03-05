@@ -1,24 +1,27 @@
 # services/calculators/position-valuation-calculator/app/consumer_manager.py
+import asyncio
 import logging
 import signal
-import asyncio
-import uvicorn
 
+import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
     KAFKA_VALUATION_REQUIRED_TOPIC,
-    KAFKA_MARKET_PRICE_PERSISTED_TOPIC 
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
-from .web import app as web_app
-from .core.valuation_scheduler import ValuationScheduler
-# --- NEW IMPORTS ---
-from .core.reprocessing_worker import ReprocessingWorker
+
+from .consumers.price_event_consumer import PriceEventConsumer
+
 # --- END NEW IMPORTS ---
 from .consumers.valuation_consumer import ValuationConsumer
-from .consumers.price_event_consumer import PriceEventConsumer
+
+# --- NEW IMPORTS ---
+from .core.reprocessing_worker import ReprocessingWorker
+from .core.valuation_scheduler import ValuationScheduler
+from .web import app as web_app
 
 logger = logging.getLogger(__name__)
 

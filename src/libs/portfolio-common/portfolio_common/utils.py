@@ -1,9 +1,10 @@
 # libs/portfolio-common/portfolio_common/utils.py
-import time
 import functools
-from typing import Callable, Any
+import time
+from typing import Any, Callable
 
 from .monitoring import DB_OPERATION_LATENCY_SECONDS
+
 
 def async_timed(repository: str, method: str) -> Callable:
     """

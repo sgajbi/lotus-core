@@ -1,20 +1,21 @@
 # src/services/calculators/position_valuation_calculator/app/consumers/price_event_consumer.py
-import logging
 import json
-from datetime import timedelta
+import logging
 
-from pydantic import ValidationError
 from confluent_kafka import Message
-from sqlalchemy.exc import DBAPIError, OperationalError
-from tenacity import retry, stop_after_attempt, wait_fixed, before_log, retry_if_exception_type
-
-from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.events import MarketPricePersistedEvent
 from portfolio_common.db import get_async_db_session
+from portfolio_common.events import MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
+from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError, OperationalError
+from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+
+from ..repositories.instrument_reprocessing_state_repository import (
+    InstrumentReprocessingStateRepository,
+)
 from ..repositories.valuation_repository import ValuationRepository
-from ..repositories.instrument_reprocessing_state_repository import InstrumentReprocessingStateRepository
 
 logger = logging.getLogger(__name__)
 

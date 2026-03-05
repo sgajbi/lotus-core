@@ -1,26 +1,31 @@
 # src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import List, Optional, Dict, Tuple
-from sqlalchemy import select, func, distinct, exists, text, update, delete, tuple_, cast
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
-from sqlalchemy.sql.expression import lateral
-from sqlalchemy.types import Date
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from typing import Dict, List, Optional, Tuple
 
-
-from portfolio_common.database_models import (
-    PositionHistory, MarketPrice, DailyPositionSnapshot, FxRate, Instrument, Portfolio,
-    PortfolioValuationJob, Transaction, BusinessDate, PortfolioTimeseries, PositionTimeseries,
-    PositionState, InstrumentReprocessingState
-)
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
-from portfolio_common.utils import async_timed
+from portfolio_common.database_models import (
+    BusinessDate,
+    DailyPositionSnapshot,
+    FxRate,
+    Instrument,
+    InstrumentReprocessingState,
+    MarketPrice,
+    Portfolio,
+    PortfolioValuationJob,
+    PositionHistory,
+    PositionState,
+)
 from portfolio_common.monitoring import (
     observe_valuation_worker_jobs_claimed,
     observe_valuation_worker_stale_resets,
 )
+from portfolio_common.utils import async_timed
+from sqlalchemy import cast, delete, func, select, text, tuple_, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
+from sqlalchemy.types import Date
 
 logger = logging.getLogger(__name__)
 

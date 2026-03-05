@@ -1,28 +1,28 @@
 # src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py
-import logging
 import asyncio
-from typing import List, Dict, Any
-from datetime import date, timedelta
+import logging
+from datetime import timedelta
+from typing import Any, Dict, List
 
-from portfolio_common.db import get_async_db_session
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.config import KAFKA_VALUATION_REQUIRED_TOPIC
+from portfolio_common.database_models import PortfolioValuationJob
+from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioValuationRequiredEvent
-from portfolio_common.database_models import PortfolioValuationJob, PositionState
-from ..repositories.valuation_repository import ValuationRepository
-from portfolio_common.valuation_job_repository import ValuationJobRepository
+from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+from portfolio_common.monitoring import (
+    INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
+    POSITION_STATE_WATERMARK_LAG_DAYS,
+    REPROCESSING_ACTIVE_KEYS_TOTAL,
+    SCHEDULER_GAP_DAYS,
+    SNAPSHOT_LAG_SECONDS,
+    VALUATION_JOBS_CREATED_TOTAL,
+)
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
-from portfolio_common.monitoring import (
-    REPROCESSING_ACTIVE_KEYS_TOTAL,
-    SNAPSHOT_LAG_SECONDS,
-    SCHEDULER_GAP_DAYS,
-    VALUATION_JOBS_CREATED_TOTAL,
-    INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
-    POSITION_STATE_WATERMARK_LAG_DAYS
-)
-from ..settings import get_valuation_runtime_settings
+from portfolio_common.valuation_job_repository import ValuationJobRepository
 
+from ..repositories.valuation_repository import ValuationRepository
+from ..settings import get_valuation_runtime_settings
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +260,7 @@ class ValuationScheduler:
                     async with db.begin():
                         await self._advance_watermarks(db)
 
-            except Exception as e:
+            except Exception:
                 logger.error("Error in scheduler polling loop.", exc_info=True)
 
             try:

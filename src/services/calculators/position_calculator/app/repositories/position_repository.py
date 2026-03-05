@@ -3,13 +3,16 @@ import logging
 from datetime import date
 from typing import List, Optional
 
-from sqlalchemy import select, func, delete
-from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.database_models import (
-    PositionHistory, Transaction, DailyPositionSnapshot, BusinessDate
-)
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
+from portfolio_common.database_models import (
+    BusinessDate,
+    DailyPositionSnapshot,
+    PositionHistory,
+    Transaction,
+)
 from portfolio_common.utils import async_timed
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,11 @@
 # src/libs/portfolio-common/portfolio_common/position_state_repository.py
 import logging
 from datetime import date
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Any, Dict, List, Tuple
 
-from sqlalchemy import select, update, func, tuple_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PositionState
 from .utils import async_timed

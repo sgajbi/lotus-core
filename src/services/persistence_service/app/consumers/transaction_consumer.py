@@ -1,11 +1,13 @@
 # services/persistence_service/app/consumers/transaction_consumer.py
-from typing import Dict, Any, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.events import TransactionEvent
+from typing import Any, Dict, Optional
+
 from portfolio_common.config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
+from portfolio_common.events import TransactionEvent
+from sqlalchemy.ext.asyncio import AsyncSession
+from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
+
 from ..repositories.transaction_db_repo import TransactionDBRepository
 from .base_consumer import GenericPersistenceConsumer
-from tenacity import retry, stop_after_delay, wait_fixed, retry_if_exception_type
 
 
 class PortfolioNotFoundError(Exception):
