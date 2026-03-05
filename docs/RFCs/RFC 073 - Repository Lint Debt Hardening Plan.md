@@ -111,6 +111,19 @@ Slice 1 Progress (Batch 3):
  - `make typecheck` -> passed
  - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
 
+Slice 1 Progress (Batch 4):
+1. Scoped E501 reduction completed for financial-calculator-engine core/modeling chunk:
+ - `src/libs/financial-calculator-engine/src/core/models/request.py`
+ - `src/libs/financial-calculator-engine/src/core/models/transaction.py`
+ - `src/libs/financial-calculator-engine/src/logic/cost_basis_strategies.py`
+2. Scope method:
+ - `ruff format` on selected files, followed by manual wrapping of residual long descriptions/messages
+3. Snapshot impact:
+ - runtime-critical scope E501 count: `216 -> 188` (`-28`)
+4. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+
 ### Slice 2 - Core Test Domains
 Deliverables:
 1. Resolve Ruff violations in high-value unit/integration suites.
