@@ -690,6 +690,7 @@ async def test_consumer_auto_generates_adjustment_cash_leg_when_settlement_accou
     assert "DIVIDEND" in by_type
     assert "ADJUSTMENT" in by_type
     assert by_type["DIVIDEND"]["external_cash_transaction_id"] == "DIV01-CASHLEG"
+    assert by_type["ADJUSTMENT"]["external_cash_transaction_id"] is None
     assert by_type["ADJUSTMENT"]["originating_transaction_id"] == "DIV01"
     assert by_type["ADJUSTMENT"]["movement_direction"] == "INFLOW"
     assert by_type["ADJUSTMENT"]["gross_transaction_amount"] == "120.0"

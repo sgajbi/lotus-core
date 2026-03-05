@@ -347,7 +347,6 @@ class CostCalculatorConsumer(BaseConsumer):
                         emitted_events.append(processed_event)
                         if should_auto_generate_cash_leg(processed_event):
                             generated_cash_leg = build_auto_generated_adjustment_cash_leg(processed_event)
-                            generated_cash_leg.external_cash_transaction_id = processed_event.transaction_id
                             await repo.create_or_update_transaction_event(generated_cash_leg)
                             processed_event.external_cash_transaction_id = generated_cash_leg.transaction_id
                             await repo.create_or_update_transaction_event(processed_event)
