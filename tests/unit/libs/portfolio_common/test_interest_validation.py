@@ -125,6 +125,54 @@ def test_validate_interest_transaction_accepts_expense_direction() -> None:
     )
 
 
+def test_validate_interest_transaction_rejects_negative_withholding_tax() -> None:
+    txn = _base_txn().model_copy(update={"withholding_tax_amount": Decimal("-1")})
+    issues = validate_interest_transaction(txn)
+    assert any(
+        i.code == InterestValidationReasonCode.NEGATIVE_WITHHOLDING_TAX for i in issues
+    )
+
+
+def test_validate_interest_transaction_rejects_negative_other_deductions() -> None:
+    txn = _base_txn().model_copy(
+        update={"other_interest_deductions_amount": Decimal("-1")}
+    )
+    issues = validate_interest_transaction(txn)
+    assert any(
+        i.code == InterestValidationReasonCode.NEGATIVE_OTHER_DEDUCTIONS for i in issues
+    )
+
+
+def test_validate_interest_transaction_rejects_net_reconciliation_mismatch() -> None:
+    txn = _base_txn().model_copy(
+        update={
+            "withholding_tax_amount": Decimal("10"),
+            "other_interest_deductions_amount": Decimal("5"),
+            "net_interest_amount": Decimal("120"),
+        }
+    )
+    issues = validate_interest_transaction(txn)
+    assert any(
+        i.code == InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
+        for i in issues
+    )
+
+
+def test_validate_interest_transaction_accepts_reconciled_net_interest_amount() -> None:
+    txn = _base_txn().model_copy(
+        update={
+            "withholding_tax_amount": Decimal("10"),
+            "other_interest_deductions_amount": Decimal("5"),
+            "net_interest_amount": Decimal("108.45"),
+        }
+    )
+    issues = validate_interest_transaction(txn)
+    assert not any(
+        i.code == InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
+        for i in issues
+    )
+
+
 def test_validate_interest_transaction_detects_invalid_date_order() -> None:
     txn = _base_txn().model_copy(update={"transaction_date": datetime(2026, 3, 8, 10, 0, 0)})
     issues = validate_interest_transaction(txn)
