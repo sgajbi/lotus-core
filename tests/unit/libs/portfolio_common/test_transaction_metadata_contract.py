@@ -46,4 +46,3 @@ def test_transaction_db_model_exposes_metadata_columns() -> None:
     assert "source_system" in column_names
     assert "cash_entry_mode" in column_names
     assert "external_cash_transaction_id" in column_names
-

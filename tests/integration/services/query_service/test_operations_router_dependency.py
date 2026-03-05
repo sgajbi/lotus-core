@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.main import app
 from src.services.query_service.app.routers.operations import (
-    get_operations_service,
     OperationsService,
+    get_operations_service,
 )
 
 pytestmark = pytest.mark.asyncio

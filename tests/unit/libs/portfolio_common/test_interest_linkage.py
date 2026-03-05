@@ -28,10 +28,7 @@ def _interest_event() -> TransactionEvent:
 def test_enrich_interest_metadata_populates_defaults() -> None:
     enriched = enrich_interest_transaction_metadata(_interest_event())
     assert enriched.economic_event_id == "EVT-INTEREST-PORT-LINK-001-INT-LINK-001"
-    assert (
-        enriched.linked_transaction_group_id
-        == "LTG-INTEREST-PORT-LINK-001-INT-LINK-001"
-    )
+    assert enriched.linked_transaction_group_id == "LTG-INTEREST-PORT-LINK-001-INT-LINK-001"
     assert enriched.calculation_policy_id == INTEREST_DEFAULT_POLICY_ID
     assert enriched.calculation_policy_version == INTEREST_DEFAULT_POLICY_VERSION
     assert enriched.cash_entry_mode == "AUTO_GENERATE"
@@ -55,4 +52,3 @@ def test_enrich_interest_metadata_preserves_upstream_values() -> None:
     assert enriched.calculation_policy_version == "2.1.0"
     assert enriched.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert enriched.external_cash_transaction_id == "CASH-UPSTREAM-001"
-

@@ -1,16 +1,14 @@
 # tests/integration/libs/portfolio-common/integration/test_outbox_dispatcher_delivery_results.py
-import asyncio
 import json
 import uuid
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-
 from portfolio_common.database_models import OutboxEvent
-from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.kafka_utils import KafkaProducer
+from portfolio_common.outbox_dispatcher import OutboxDispatcher
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 pytestmark = pytest.mark.asyncio
 
@@ -26,11 +24,11 @@ def mock_kafka_producer() -> MagicMock:
     def _flush(timeout=10):
         # Simulate delivery results for 3 messages: S, F, S
         outcomes = [
-            (True, None),                 # Success
-            (False, "simulated error"),   # Failure
-            (True, None)                  # Success
+            (True, None),  # Success
+            (False, "simulated error"),  # Failure
+            (True, None),  # Success
         ]
-        
+
         for call, (ok, err_msg) in zip(mock.publish_message.call_args_list, outcomes):
             kwargs = call.kwargs
             cb = kwargs.get("on_delivery")
@@ -68,14 +66,18 @@ async def test_marks_only_success_on_delivery(db_engine, clean_db, mock_kafka_pr
             ids = [r.id for r in session.query(OutboxEvent.id).order_by(OutboxEvent.id).all()]
 
     # ACT
-    dispatcher = OutboxDispatcher(kafka_producer=mock_kafka_producer, poll_interval=1, batch_size=10)
+    dispatcher = OutboxDispatcher(
+        kafka_producer=mock_kafka_producer, poll_interval=1, batch_size=10
+    )
     # run one deterministic synchronous cycle
     dispatcher._process_batch_sync()
 
     # ASSERT
     with Session(db_engine) as session:
         rows = session.execute(
-            text("SELECT id, status, retry_count FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"),
+            text(
+                "SELECT id, status, retry_count FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
+            ),
             {"ids": ids},
         ).all()
 
@@ -84,6 +86,7 @@ async def test_marks_only_success_on_delivery(db_engine, clean_db, mock_kafka_pr
     assert rows[1].status == "PENDING"
     assert rows[1].retry_count is not None and rows[1].retry_count >= 1
     assert rows[2].status == "PROCESSED"
+
 
 # --- NEW TEST ---
 async def test_increments_retry_count_from_null(db_engine, clean_db):
@@ -94,7 +97,7 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
     """
     # ARRANGE
     mock_producer = MagicMock(spec=KafkaProducer)
-    
+
     def _failing_flush(timeout=10):
         # Simulate failed delivery for all messages
         for call in mock_producer.publish_message.call_args_list:
@@ -103,7 +106,7 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
             outbox_id = kwargs.get("outbox_id")
             if cb and outbox_id:
                 cb(outbox_id, False, "Simulated delivery failure")
-    
+
     mock_producer.flush.side_effect = _failing_flush
 
     event_id = None
@@ -116,7 +119,7 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
                 event_type="TestEvent",
                 payload=json.dumps({"data": "test"}),
                 topic="test.topic",
-                retry_count=None # Explicitly set to NULL
+                retry_count=None,  # Explicitly set to NULL
             )
             session.add(evt)
             session.flush()
@@ -129,8 +132,7 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
     # ASSERT
     with Session(db_engine) as session:
         result = session.execute(
-            text("SELECT retry_count FROM outbox_events WHERE id = :id"),
-            {"id": event_id}
+            text("SELECT retry_count FROM outbox_events WHERE id = :id"), {"id": event_id}
         ).scalar_one_or_none()
-    
+
     assert result == 1

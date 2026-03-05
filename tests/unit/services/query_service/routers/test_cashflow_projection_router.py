@@ -54,7 +54,9 @@ async def test_get_cashflow_projection_success() -> None:
 @pytest.mark.asyncio
 async def test_get_cashflow_projection_maps_value_error_to_404() -> None:
     service = MagicMock(spec=CashflowProjectionService)
-    service.get_cashflow_projection = AsyncMock(side_effect=ValueError("Portfolio with id P404 not found"))
+    service.get_cashflow_projection = AsyncMock(
+        side_effect=ValueError("Portfolio with id P404 not found")
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await get_cashflow_projection(

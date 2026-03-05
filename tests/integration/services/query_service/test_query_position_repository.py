@@ -1,18 +1,18 @@
 # tests/integration/services/query_service/test_query_position_repository.py
-import pytest
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
+import pytest
 from portfolio_common.database_models import (
-    Portfolio,
-    Instrument,
     DailyPositionSnapshot,
+    Instrument,
+    Portfolio,
+    PositionHistory,
     PositionState,
     Transaction,
-    PositionHistory,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 
@@ -191,7 +191,8 @@ async def test_get_latest_positions_by_portfolio(
     """
     GIVEN a security with multiple historical daily snapshots in the database
     WHEN get_latest_positions_by_portfolio is called
-    THEN it should return only the single, most recent snapshot for that security, including all instrument data.
+    THEN it should return only the single, most recent snapshot for that
+    security, including all instrument data.
     """
     # ARRANGE
     repo = PositionRepository(async_db_session)
@@ -322,4 +323,3 @@ async def test_get_latest_positions_prefers_latest_business_date_over_latest_id(
     latest_snapshot, _, _ = latest_positions[0]
     assert latest_snapshot.date == setup_snapshot_id_order_mismatch_data["newer_date"]
     assert latest_snapshot.quantity == Decimal("200")
-

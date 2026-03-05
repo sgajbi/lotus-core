@@ -29,9 +29,7 @@ async def _transactions_table_has_column(async_db_session: AsyncSession, column_
         "SELECT COUNT(*) FROM information_schema.columns "
         "WHERE table_name = 'transactions' AND column_name = :column_name"
     )
-    scalar = (
-        await async_db_session.execute(query, {"column_name": column_name})
-    ).scalar()
+    scalar = (await async_db_session.execute(query, {"column_name": column_name})).scalar()
     return bool(scalar)
 
 
@@ -43,38 +41,43 @@ def instrument_event_buy():
         name="Apple Inc. (Test)",
         isin="US0378331005",
         currency="USD",
-        product_type="Equity"
+        product_type="Equity",
     )
+
 
 @pytest.fixture
 def instrument_event_update():
     return InstrumentEvent(
         security_id="SEC_AAPL_001",
-        name="Apple Inc. (Updated)", # Name changed
-        isin="US0378331005_NEW", # ISIN changed
+        name="Apple Inc. (Updated)",  # Name changed
+        isin="US0378331005_NEW",  # ISIN changed
         currency="USD",
-        product_type="Equity_Updated" # Product type changed
+        product_type="Equity_Updated",  # Product type changed
     )
+
 
 # --- Integration Tests for InstrumentRepository (Now Async) ---
 
-async def test_instrument_repository_create_new_instrument(clean_db, async_db_session: AsyncSession):
+
+async def test_instrument_repository_create_new_instrument(
+    clean_db, async_db_session: AsyncSession
+):
     """
     Tests that a new instrument can be successfully created.
     """
     repo = InstrumentRepository(async_db_session)
-    
+
     event = InstrumentEvent(
         security_id="TEST_SEC_NEW",
         name="Test New Instrument",
         isin="TESTISIN123",
         currency="SGD",
-        product_type="Bond"
+        product_type="Bond",
     )
-    
+
     await repo.create_or_update_instrument(event)
     await async_db_session.commit()
-    
+
     stmt = select(DBInstrument).where(DBInstrument.security_id == "TEST_SEC_NEW")
     result = await async_db_session.execute(stmt)
     fetched_instrument = result.scalar_one_or_none()
@@ -83,9 +86,12 @@ async def test_instrument_repository_create_new_instrument(clean_db, async_db_se
     assert fetched_instrument.name == "Test New Instrument"
 
 
-async def test_instrument_repository_upsert_update_existing_instrument(clean_db, async_db_session: AsyncSession, instrument_event_buy, instrument_event_update):
+async def test_instrument_repository_upsert_update_existing_instrument(
+    clean_db, async_db_session: AsyncSession, instrument_event_buy, instrument_event_update
+):
     """
-    Tests that an existing instrument is updated when an UPSERT event with the same security_id occurs.
+    Tests that an existing instrument is updated when an UPSERT event with
+    the same security_id occurs.
     """
     repo = InstrumentRepository(async_db_session)
 
@@ -104,7 +110,9 @@ async def test_instrument_repository_upsert_update_existing_instrument(clean_db,
     assert fetched_instrument.isin == "US0378331005_NEW"
 
 
-async def test_instrument_repository_upsert_no_change_on_identical_event(clean_db, async_db_session: AsyncSession, instrument_event_buy):
+async def test_instrument_repository_upsert_no_change_on_identical_event(
+    clean_db, async_db_session: AsyncSession, instrument_event_buy
+):
     """
     Tests that an UPSERT event with identical data results in no effective change.
     """
@@ -112,17 +120,22 @@ async def test_instrument_repository_upsert_no_change_on_identical_event(clean_d
 
     await repo.create_or_update_instrument(instrument_event_buy)
     await async_db_session.commit()
-    
+
     await repo.create_or_update_instrument(instrument_event_buy)
     await async_db_session.commit()
-    
-    stmt = select(func.count()).select_from(select(DBInstrument).where(DBInstrument.security_id == "SEC_AAPL_001").subquery())
+
+    stmt = select(func.count()).select_from(
+        select(DBInstrument).where(DBInstrument.security_id == "SEC_AAPL_001").subquery()
+    )
     result = await async_db_session.execute(stmt)
     count_in_db = result.scalar()
     assert count_in_db == 1
 
+
 # --- NEW TEST (RFC 016) ---
-async def test_instrument_repository_upserts_with_new_issuer_fields(clean_db, async_db_session: AsyncSession):
+async def test_instrument_repository_upserts_with_new_issuer_fields(
+    clean_db, async_db_session: AsyncSession
+):
     """
     GIVEN an InstrumentEvent populated with the new issuer fields
     WHEN the create_or_update_instrument method is called
@@ -137,7 +150,7 @@ async def test_instrument_repository_upserts_with_new_issuer_fields(clean_db, as
         currency="USD",
         product_type="Note",
         issuer_id="ISSUER_ABC",
-        ultimate_parent_issuer_id="ULTIMATE_XYZ"
+        ultimate_parent_issuer_id="ULTIMATE_XYZ",
     )
 
     # ACT
@@ -153,8 +166,11 @@ async def test_instrument_repository_upserts_with_new_issuer_fields(clean_db, as
     assert persisted_instrument.issuer_id == "ISSUER_ABC"
     assert persisted_instrument.ultimate_parent_issuer_id == "ULTIMATE_XYZ"
 
+
 # --- NEW TEST (RFC 021) ---
-async def test_portfolio_repository_persists_cost_basis_method(clean_db, async_db_session: AsyncSession):
+async def test_portfolio_repository_persists_cost_basis_method(
+    clean_db, async_db_session: AsyncSession
+):
     """
     GIVEN a PortfolioEvent with the new cost_basis_method field set to AVCO
     WHEN the create_or_update_portfolio method is called
@@ -172,7 +188,7 @@ async def test_portfolio_repository_persists_cost_basis_method(clean_db, async_d
         investment_time_horizon="Long",
         portfolio_type="Discretionary",
         booking_center_code="SG",
-        cost_basis_method="AVCO"  # Explicitly set the new field
+        cost_basis_method="AVCO",  # Explicitly set the new field
     )
 
     # ACT
@@ -187,6 +203,7 @@ async def test_portfolio_repository_persists_cost_basis_method(clean_db, async_d
     assert persisted_portfolio is not None
     assert persisted_portfolio.cost_basis_method == "AVCO"
 
+
 # --- Test for TransactionDBRepository (Now Async) ---
 async def test_transaction_repository_is_idempotent(clean_db, async_db_session: AsyncSession):
     """
@@ -195,26 +212,40 @@ async def test_transaction_repository_is_idempotent(clean_db, async_db_session: 
     repo = TransactionDBRepository(async_db_session)
 
     test_portfolio = Portfolio(
-        portfolio_id="PORT_T1", base_currency="USD", open_date=date(2024, 1, 1),
-        risk_exposure="High", investment_time_horizon="Long", portfolio_type="Discretionary",
-        booking_center_code="SG", client_id="CIF_123", status="ACTIVE"
+        portfolio_id="PORT_T1",
+        base_currency="USD",
+        open_date=date(2024, 1, 1),
+        risk_exposure="High",
+        investment_time_horizon="Long",
+        portfolio_type="Discretionary",
+        booking_center_code="SG",
+        client_id="CIF_123",
+        status="ACTIVE",
     )
     async_db_session.add(test_portfolio)
     await async_db_session.commit()
 
     event = TransactionEvent(
-        transaction_id="IDEMPOTENCY_TEST_01", portfolio_id="PORT_T1",
-        instrument_id="INST_T1", security_id="SEC_T1",
-        transaction_date=datetime(2025, 7, 31, 10, 0, 0), transaction_type="BUY",
-        quantity=Decimal("100"), price=Decimal("10"), gross_transaction_amount=Decimal("1000"),
-        trade_currency="USD", currency="USD",
+        transaction_id="IDEMPOTENCY_TEST_01",
+        portfolio_id="PORT_T1",
+        instrument_id="INST_T1",
+        security_id="SEC_T1",
+        transaction_date=datetime(2025, 7, 31, 10, 0, 0),
+        transaction_type="BUY",
+        quantity=Decimal("100"),
+        price=Decimal("10"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
     )
 
     # 1. Create the transaction for the first time
     await repo.create_or_update_transaction(event)
     await async_db_session.commit()
 
-    stmt1 = select(func.count()).select_from(select(DBTransaction).where(DBTransaction.transaction_id == event.transaction_id).subquery())
+    stmt1 = select(func.count()).select_from(
+        select(DBTransaction).where(DBTransaction.transaction_id == event.transaction_id).subquery()
+    )
     count1 = (await async_db_session.execute(stmt1)).scalar()
     assert count1 == 1
 
@@ -222,7 +253,9 @@ async def test_transaction_repository_is_idempotent(clean_db, async_db_session: 
     await repo.create_or_update_transaction(event)
     await async_db_session.commit()
 
-    stmt2 = select(func.count()).select_from(select(DBTransaction).where(DBTransaction.transaction_id == event.transaction_id).subquery())
+    stmt2 = select(func.count()).select_from(
+        select(DBTransaction).where(DBTransaction.transaction_id == event.transaction_id).subquery()
+    )
     count2 = (await async_db_session.execute(stmt2)).scalar()
     assert count2 == 1
 
@@ -299,9 +332,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     assert persisted_after_upsert.calculation_policy_version == "1.0.1"
     assert persisted_after_upsert.source_system == "OMS_FALLBACK"
     assert persisted_after_upsert.cash_entry_mode == "UPSTREAM_PROVIDED"
-    assert (
-        persisted_after_upsert.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
-    )
+    assert persisted_after_upsert.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
 
 
 async def test_transaction_repository_persists_interest_linkage_and_policy_metadata(
@@ -455,4 +486,3 @@ async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
     assert persisted.adjustment_reason == "DIVIDEND_SETTLEMENT"
     assert persisted.link_type == "DIVIDEND_TO_CASH"
     assert persisted.reconciliation_key == "REC-ADJ-001"
-

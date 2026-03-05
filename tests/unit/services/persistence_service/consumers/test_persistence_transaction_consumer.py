@@ -1,20 +1,22 @@
 # tests/unit/services/persistence_service/consumers/test_persistence_transaction_consumer.py
-import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
-from contextlib import asynccontextmanager
-
-from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.events import TransactionEvent
-from src.services.persistence_service.app.consumers.transaction_consumer import TransactionPersistenceConsumer, PortfolioNotFoundError
-from src.services.persistence_service.app.repositories.transaction_db_repo import TransactionDBRepository
-from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.outbox_repository import OutboxRepository
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.persistence_service.app.consumers.transaction_consumer import (
+    TransactionPersistenceConsumer,
+)
+from src.services.persistence_service.app.repositories.transaction_db_repo import (
+    TransactionDBRepository,
+)
 
 # Mark all tests in this file as asyncio
 pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def transaction_consumer():
@@ -23,8 +25,9 @@ def transaction_consumer():
         bootstrap_servers="mock_server",
         topic="raw_transactions",
         group_id="test_group",
-        dlq_topic="persistence.dlq"
+        dlq_topic="persistence.dlq",
     )
+
 
 @pytest.fixture
 def valid_transaction_event():
@@ -43,18 +46,20 @@ def valid_transaction_event():
         currency="USD",
     )
 
+
 @pytest.fixture
 def mock_kafka_message(valid_transaction_event: TransactionEvent):
     """Creates a mock Kafka message containing a valid transaction."""
     mock_message = MagicMock()
-    mock_message.value.return_value = valid_transaction_event.model_dump_json().encode('utf-8')
-    mock_message.key.return_value = "test_key".encode('utf-8')
+    mock_message.value.return_value = valid_transaction_event.model_dump_json().encode("utf-8")
+    mock_message.key.return_value = "test_key".encode("utf-8")
     mock_message.error.return_value = None
     mock_message.topic.return_value = "raw_transactions"
     mock_message.partition.return_value = 0
     mock_message.offset.return_value = 1
-    mock_message.headers.return_value = [('correlation_id', b'test-corr-id')]
+    mock_message.headers.return_value = [("correlation_id", b"test-corr-id")]
     return mock_message
+
 
 @pytest.fixture
 def mock_dependencies():
@@ -66,19 +71,28 @@ def mock_dependencies():
     mock_db_session = AsyncMock(spec=AsyncSession)
     # FIX: The `begin()` method must return an async context manager.
     # An AsyncMock can be used as one directly.
-    mock_db_session.begin.return_value = AsyncMock() 
-    
+    mock_db_session.begin.return_value = AsyncMock()
+
     async def get_session_gen():
         yield mock_db_session
-    
-    with patch(
-        "src.services.persistence_service.app.consumers.base_consumer.get_async_db_session", new=get_session_gen
-    ), patch(
-        "src.services.persistence_service.app.consumers.transaction_consumer.TransactionDBRepository", return_value=mock_repo
-    ), patch(
-        "src.services.persistence_service.app.consumers.base_consumer.OutboxRepository", return_value=mock_outbox_repo
-    ), patch(
-        "src.services.persistence_service.app.consumers.base_consumer.IdempotencyRepository", return_value=mock_idempotency_repo
+
+    with (
+        patch(
+            "src.services.persistence_service.app.consumers.base_consumer.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.persistence_service.app.consumers.transaction_consumer.TransactionDBRepository",
+            return_value=mock_repo,
+        ),
+        patch(
+            "src.services.persistence_service.app.consumers.base_consumer.OutboxRepository",
+            return_value=mock_outbox_repo,
+        ),
+        patch(
+            "src.services.persistence_service.app.consumers.base_consumer.IdempotencyRepository",
+            return_value=mock_idempotency_repo,
+        ),
     ):
         yield {
             "repo": mock_repo,
@@ -86,10 +100,11 @@ def mock_dependencies():
             "idempotency_repo": mock_idempotency_repo,
         }
 
+
 async def test_process_message_success(
     transaction_consumer: TransactionPersistenceConsumer,
     mock_kafka_message: MagicMock,
-    mock_dependencies: dict
+    mock_dependencies: dict,
 ):
     """
     GIVEN a valid transaction message
@@ -101,12 +116,14 @@ async def test_process_message_success(
     mock_repo = mock_dependencies["repo"]
     mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
-    
+
     mock_repo.check_portfolio_exists.return_value = True
     mock_idempotency_repo.is_event_processed.return_value = False
 
     # Use patch.object for robust mocking
-    with patch.object(transaction_consumer, '_send_to_dlq_async', new_callable=AsyncMock) as mock_send_to_dlq:
+    with patch.object(
+        transaction_consumer, "_send_to_dlq_async", new_callable=AsyncMock
+    ) as mock_send_to_dlq:
         # ACT
         await transaction_consumer.process_message(mock_kafka_message)
 
@@ -115,11 +132,12 @@ async def test_process_message_success(
         mock_outbox_repo.create_outbox_event.assert_called_once()
         mock_send_to_dlq.assert_not_called()
 
+
 # --- REVISED TEST ---
 async def test_handle_persistence_retries_and_succeeds(
     transaction_consumer: TransactionPersistenceConsumer,
     valid_transaction_event: TransactionEvent,
-    mock_dependencies: dict
+    mock_dependencies: dict,
 ):
     """
     GIVEN a transaction for a portfolio that initially does not exist
@@ -128,17 +146,17 @@ async def test_handle_persistence_retries_and_succeeds(
     """
     # ARRANGE
     mock_repo = mock_dependencies["repo"]
-    
+
     # Simulate portfolio not found on first call, but found on the second
     mock_repo.check_portfolio_exists.side_effect = [False, True]
-    
+
     # ACT
     # This call will invoke the retry logic internally and should complete without error
     await transaction_consumer.handle_persistence(AsyncMock(), valid_transaction_event)
-    
+
     # ASSERT
     # Verify the check was called twice (initial attempt + 1 retry)
     assert mock_repo.check_portfolio_exists.call_count == 2
-    
+
     # Verify the transaction was created only on the successful attempt
     mock_repo.create_or_update_transaction.assert_awaited_once_with(valid_transaction_event)

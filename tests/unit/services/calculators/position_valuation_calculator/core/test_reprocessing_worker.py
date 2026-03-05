@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker import (
     ReprocessingWorker,
 )
-from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (
+from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
 
@@ -32,27 +32,36 @@ def mock_dependencies():
     async def get_session_gen():
         yield mock_db_session
 
-    with patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.get_async_db_session",
-        new=get_session_gen,
-    ), patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.ValuationRepository",
-        return_value=mock_valuation_repo,
-    ), patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.PositionStateRepository",
-        return_value=mock_state_repo,
-    ), patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.ReprocessingJobRepository",
-        return_value=mock_repro_job_repo,
-    ), patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_claimed"
-    ) as mock_observe_claimed, patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_completed"
-    ) as mock_observe_completed, patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_failed"
-    ) as mock_observe_failed, patch(
-        "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.reprocessing_worker_batch_timer"
-    ) as mock_batch_timer:
+    with (
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.ValuationRepository",
+            return_value=mock_valuation_repo,
+        ),
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.PositionStateRepository",
+            return_value=mock_state_repo,
+        ),
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.ReprocessingJobRepository",
+            return_value=mock_repro_job_repo,
+        ),
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_claimed"
+        ) as mock_observe_claimed,
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_completed"
+        ) as mock_observe_completed,
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_failed"
+        ) as mock_observe_failed,
+        patch(
+            "src.services.calculators.position_valuation_calculator.app.core.reprocessing_worker.reprocessing_worker_batch_timer"
+        ) as mock_batch_timer,
+    ):
         mock_batch_timer.return_value.__enter__.return_value = None
         mock_batch_timer.return_value.__exit__.return_value = None
         yield {

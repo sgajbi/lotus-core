@@ -19,33 +19,55 @@ def mock_disposition_engine():
     mock.get_available_quantity.return_value = Decimal("1000000")
     return mock
 
+
 @pytest.fixture
 def error_reporter():
     return ErrorReporter()
+
 
 @pytest.fixture
 def cost_calculator(mock_disposition_engine, error_reporter):
     return CostCalculator(disposition_engine=mock_disposition_engine, error_reporter=error_reporter)
 
+
 @pytest.fixture
 def buy_transaction():
     return Transaction(
-        transaction_id="BUY001", portfolio_id="P1", instrument_id="AAPL", security_id="S1",
-        transaction_type=TransactionType.BUY, transaction_date=datetime(2023, 1, 1), settlement_date=datetime(2023, 1, 3),
-        quantity=Decimal("10"), gross_transaction_amount=Decimal("1500"), trade_currency="USD",
-        fees=Fees(brokerage=Decimal("5.5")), accrued_interest=Decimal("10.0"),
-        portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="BUY001",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        settlement_date=datetime(2023, 1, 3),
+        quantity=Decimal("10"),
+        gross_transaction_amount=Decimal("1500"),
+        trade_currency="USD",
+        fees=Fees(brokerage=Decimal("5.5")),
+        accrued_interest=Decimal("10.0"),
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
+
 
 @pytest.fixture
 def sell_transaction():
     return Transaction(
-        transaction_id="SELL001", portfolio_id="P1", instrument_id="AAPL", security_id="S1",
-        transaction_type=TransactionType.SELL, transaction_date=datetime(2023, 1, 10), settlement_date=datetime(2023, 1, 12),
-        quantity=Decimal("5"), gross_transaction_amount=Decimal("800"), trade_currency="USD",
+        transaction_id="SELL001",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.SELL,
+        transaction_date=datetime(2023, 1, 10),
+        settlement_date=datetime(2023, 1, 12),
+        quantity=Decimal("5"),
+        gross_transaction_amount=Decimal("800"),
+        trade_currency="USD",
         fees=Fees(brokerage=Decimal("3.0")),
-        portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
+
 
 def test_buy_strategy(cost_calculator, mock_disposition_engine, buy_transaction):
     cost_calculator.calculate_transaction_costs(buy_transaction)
@@ -56,14 +78,21 @@ def test_buy_strategy(cost_calculator, mock_disposition_engine, buy_transaction)
     assert buy_transaction.realized_gain_loss_local == Decimal("0")
     mock_disposition_engine.add_buy_lot.assert_called_once_with(buy_transaction)
 
+
 def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
     dual_currency_buy = Transaction(
-        transaction_id="DC_BUY_01", portfolio_id="P_USD", instrument_id="AIR.lotus-performance", security_id="S_AIR",
-        transaction_type=TransactionType.BUY, transaction_date=datetime(2023, 1, 1),
-        quantity=Decimal("100"), gross_transaction_amount=Decimal("15000"), trade_currency="EUR",
+        transaction_id="DC_BUY_01",
+        portfolio_id="P_USD",
+        instrument_id="AIR.lotus-performance",
+        security_id="S_AIR",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("15000"),
+        trade_currency="EUR",
         fees=Fees(brokerage=Decimal("10")),
         portfolio_base_currency="USD",
-        transaction_fx_rate=Decimal("1.15")
+        transaction_fx_rate=Decimal("1.15"),
     )
     cost_calculator.calculate_transaction_costs(dual_currency_buy)
     assert dual_currency_buy.net_cost_local == Decimal("15010")
@@ -78,12 +107,20 @@ def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
     cost_calculator, mock_disposition_engine
 ):
     bond_buy = Transaction(
-        transaction_id="BOND_BUY_01", portfolio_id="P_USD", instrument_id="UST5Y", security_id="S_UST5Y",
-        transaction_type=TransactionType.BUY, transaction_date=datetime(2023, 1, 1),
-        quantity=Decimal("100"), gross_transaction_amount=Decimal("98000"),
-        trade_currency="USD", fees=Fees(brokerage=Decimal("40")), accrued_interest=Decimal("1250"),
-        portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0"),
-        calculation_policy_id="BUY_EXCLUDE_ACCRUED_INTEREST_FROM_BOOK_COST"
+        transaction_id="BOND_BUY_01",
+        portfolio_id="P_USD",
+        instrument_id="UST5Y",
+        security_id="S_UST5Y",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("98000"),
+        trade_currency="USD",
+        fees=Fees(brokerage=Decimal("40")),
+        accrued_interest=Decimal("1250"),
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        calculation_policy_id="BUY_EXCLUDE_ACCRUED_INTEREST_FROM_BOOK_COST",
     )
 
     cost_calculator.calculate_transaction_costs(bond_buy)
@@ -98,10 +135,17 @@ def test_buy_strategy_rejects_zero_quantity_with_invariant_error(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
     invalid_buy = Transaction(
-        transaction_id="BUY_ZERO_QTY", portfolio_id="P1", instrument_id="AAPL", security_id="S1",
-        transaction_type=TransactionType.BUY, transaction_date=datetime(2023, 1, 1),
-        quantity=Decimal("0"), gross_transaction_amount=Decimal("1000"), trade_currency="USD",
-        portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="BUY_ZERO_QTY",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("0"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
 
     cost_calculator.calculate_transaction_costs(invalid_buy)
@@ -111,22 +155,37 @@ def test_buy_strategy_rejects_zero_quantity_with_invariant_error(
 
 
 def test_sell_strategy_gain(cost_calculator, mock_disposition_engine, sell_transaction):
-    mock_disposition_engine.consume_sell_quantity.return_value = (Decimal("500"), Decimal("500"), Decimal("5"), None)
+    mock_disposition_engine.consume_sell_quantity.return_value = (
+        Decimal("500"),
+        Decimal("500"),
+        Decimal("5"),
+        None,
+    )
     cost_calculator.calculate_transaction_costs(sell_transaction)
     assert sell_transaction.realized_gain_loss == Decimal("297.0")
     mock_disposition_engine.consume_sell_quantity.assert_called_once_with(sell_transaction)
 
+
 def test_sell_strategy_dual_currency(cost_calculator, mock_disposition_engine):
     dual_currency_sell = Transaction(
-        transaction_id="DC_SELL_01", portfolio_id="P_USD", instrument_id="AIR.lotus-performance", security_id="S_AIR",
-        transaction_type=TransactionType.SELL, transaction_date=datetime(2023, 1, 10),
-        quantity=Decimal("50"), gross_transaction_amount=Decimal("8000"), trade_currency="EUR",
+        transaction_id="DC_SELL_01",
+        portfolio_id="P_USD",
+        instrument_id="AIR.lotus-performance",
+        security_id="S_AIR",
+        transaction_type=TransactionType.SELL,
+        transaction_date=datetime(2023, 1, 10),
+        quantity=Decimal("50"),
+        gross_transaction_amount=Decimal("8000"),
+        trade_currency="EUR",
         fees=Fees(brokerage=Decimal("8")),
         portfolio_base_currency="USD",
-        transaction_fx_rate=Decimal("1.20")
+        transaction_fx_rate=Decimal("1.20"),
     )
     mock_disposition_engine.consume_sell_quantity.return_value = (
-        Decimal("8250"), Decimal("7500"), Decimal("50"), None
+        Decimal("8250"),
+        Decimal("7500"),
+        Decimal("50"),
+        None,
     )
     cost_calculator.calculate_transaction_costs(dual_currency_sell)
     assert dual_currency_sell.realized_gain_loss_local == Decimal("492")
@@ -205,34 +264,70 @@ def test_sell_strategy_multi_lot_fifo():
         disposition_engine=disposition_engine, error_reporter=error_reporter
     )
     buy_txn_1 = Transaction(
-        transaction_id="BUY001", portfolio_id="P1", instrument_id="AAPL", security_id="S1",
-        transaction_type="BUY", transaction_date=datetime(2023, 1, 1), quantity=Decimal("100"),
-        gross_transaction_amount=Decimal("1000"), net_cost=Decimal("1000"), net_cost_local=Decimal("1000"), trade_currency="USD", portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="BUY001",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost=Decimal("1000"),
+        net_cost_local=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(buy_txn_1)
     buy_txn_2 = Transaction(
-        transaction_id="BUY002", portfolio_id="P1", instrument_id="AAPL", security_id="S1",
-        transaction_type="BUY", transaction_date=datetime(2023, 1, 5), quantity=Decimal("50"),
-        gross_transaction_amount=Decimal("600"), net_cost=Decimal("600"), net_cost_local=Decimal("600"), trade_currency="USD", portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="BUY002",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 5),
+        quantity=Decimal("50"),
+        gross_transaction_amount=Decimal("600"),
+        net_cost=Decimal("600"),
+        net_cost_local=Decimal("600"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(buy_txn_2)
     sell_txn = Transaction(
-        transaction_id="SELL001", portfolio_id="P1", instrument_id="AAPL", security_id="S1",
-        transaction_type="SELL", transaction_date=datetime(2023, 1, 10),
-        quantity=Decimal("120"), gross_transaction_amount=Decimal("1800"), trade_currency="USD",
-        portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="SELL001",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type="SELL",
+        transaction_date=datetime(2023, 1, 10),
+        quantity=Decimal("120"),
+        gross_transaction_amount=Decimal("1800"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(sell_txn)
     assert sell_txn.realized_gain_loss == Decimal("560")
     assert not error_reporter.has_errors()
     assert disposition_engine.get_available_quantity("P1", "AAPL") == Decimal("30")
 
+
 def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
     deposit_transaction = Transaction(
-        transaction_id="DEPOSIT001", portfolio_id="P1", instrument_id="CASH_USD", security_id="CASH_USD",
-        transaction_type=TransactionType.DEPOSIT, transaction_date=datetime(2023, 1, 1),
-        quantity=Decimal("10000"), price=Decimal("1"), gross_transaction_amount=Decimal("10000"),
-        trade_currency="USD", portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="DEPOSIT001",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.DEPOSIT,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("10000"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("10000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(deposit_transaction)
     assert deposit_transaction.net_cost == Decimal("10000")
@@ -240,12 +335,21 @@ def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_eng
     call_args = mock_disposition_engine.add_buy_lot.call_args[0][0]
     assert call_args.quantity == Decimal("10000")
 
+
 def test_dividend_transaction_has_zero_cost(cost_calculator, mock_disposition_engine):
     dividend_transaction = Transaction(
-        transaction_id="DIV001", portfolio_id="P1", instrument_id="AAPL", security_id="S1",
-        transaction_type=TransactionType.DIVIDEND, transaction_date=datetime(2023, 1, 15),
-        quantity=Decimal("0"), price=Decimal("0"), gross_transaction_amount=Decimal("500.00"),
-        trade_currency="USD", portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="DIV001",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.DIVIDEND,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("500.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(dividend_transaction)
     assert dividend_transaction.net_cost == Decimal("0")
@@ -464,9 +568,7 @@ def test_interest_strategy_allows_expense_direction_baseline(
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
 
-def test_interest_strategy_rejects_unknown_direction(
-    cost_calculator, error_reporter
-):
+def test_interest_strategy_rejects_unknown_direction(cost_calculator, error_reporter):
     invalid_direction = Transaction(
         transaction_id="INT_BAD_DIR",
         portfolio_id="P1",
@@ -489,10 +591,18 @@ def test_interest_strategy_rejects_unknown_direction(
 
 def test_transfer_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
     transfer_in_transaction = Transaction(
-        transaction_id="TRANSFER_IN_01", portfolio_id="P1", instrument_id="IBM", security_id="S_IBM",
-        transaction_type="TRANSFER_IN", transaction_date=datetime(2023, 2, 1),
-        quantity=Decimal("100"), price=Decimal("150"), gross_transaction_amount=Decimal("15000"),
-        trade_currency="USD", portfolio_base_currency="USD", transaction_fx_rate=Decimal("1.0")
+        transaction_id="TRANSFER_IN_01",
+        portfolio_id="P1",
+        instrument_id="IBM",
+        security_id="S_IBM",
+        transaction_type="TRANSFER_IN",
+        transaction_date=datetime(2023, 2, 1),
+        quantity=Decimal("100"),
+        price=Decimal("150"),
+        gross_transaction_amount=Decimal("15000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(transfer_in_transaction)
     assert transfer_in_transaction.net_cost == Decimal("15000")
@@ -500,6 +610,7 @@ def test_transfer_in_strategy_creates_cost_lot(cost_calculator, mock_disposition
     call_args = mock_disposition_engine.add_buy_lot.call_args[0][0]
     assert call_args.quantity == Decimal("100")
     assert call_args.net_cost == Decimal("15000")
+
 
 def test_transfer_out_strategy_consumes_lot_without_pnl(cost_calculator, mock_disposition_engine):
     """
@@ -518,12 +629,15 @@ def test_transfer_out_strategy_consumes_lot_without_pnl(cost_calculator, mock_di
         gross_transaction_amount=Decimal("3200"),
         trade_currency="USD",
         portfolio_base_currency="USD",
-        transaction_fx_rate=Decimal("1.0")
+        transaction_fx_rate=Decimal("1.0"),
     )
-    
+
     # Simulate the disposition engine returning the cost of the transferred shares
     mock_disposition_engine.consume_sell_quantity.return_value = (
-        Decimal("3000"), Decimal("3000"), Decimal("20"), None
+        Decimal("3000"),
+        Decimal("3000"),
+        Decimal("20"),
+        None,
     )
 
     # Act
@@ -535,6 +649,7 @@ def test_transfer_out_strategy_consumes_lot_without_pnl(cost_calculator, mock_di
 
     # Crucially, it should NOT have calculated a realized gain/loss
     assert transfer_out_transaction.realized_gain_loss is None
+
 
 # --- NEW FAILING TEST ---
 def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disposition_engine):
@@ -555,12 +670,15 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
         gross_transaction_amount=Decimal("500"),
         trade_currency="USD",
         portfolio_base_currency="USD",
-        transaction_fx_rate=Decimal("1.0")
+        transaction_fx_rate=Decimal("1.0"),
     )
-    
+
     # Simulate the disposition engine returning the cost of the withdrawn cash
     mock_disposition_engine.consume_sell_quantity.return_value = (
-        Decimal("500"), Decimal("500"), Decimal("500"), None
+        Decimal("500"),
+        Decimal("500"),
+        Decimal("500"),
+        None,
     )
 
     # Act

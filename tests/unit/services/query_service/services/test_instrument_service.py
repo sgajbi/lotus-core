@@ -1,11 +1,12 @@
 # tests/unit/services/query_service/services/test_instrument_service.py
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.services.query_service.app.services.instrument_service import InstrumentService
-from src.services.query_service.app.repositories.instrument_repository import InstrumentRepository
+import pytest
 from portfolio_common.database_models import Instrument
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.services.query_service.app.repositories.instrument_repository import InstrumentRepository
+from src.services.query_service.app.services.instrument_service import InstrumentService
 
 pytestmark = pytest.mark.asyncio
 

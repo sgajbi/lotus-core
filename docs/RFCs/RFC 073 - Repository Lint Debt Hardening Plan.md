@@ -20,7 +20,7 @@ The plan runs as a dedicated stream in parallel with feature RFCs and uses stric
 | --- | --- | --- |
 | 0 | Completed | `docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md` |
 | 1 | Completed | Runtime-critical scope now Ruff-clean: `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/libs/financial-calculator-engine --statistics` |
-| 2 | Pending | Core test-domain lint burn-down |
+| 2 | Completed | Test scope now Ruff-clean: `python -m ruff check tests --statistics` |
 | 3 | Pending | Scripts/tooling lint burn-down |
 | 4 | Pending | CI/global gate tightening |
 
@@ -169,6 +169,23 @@ Slice 1 Progress (Batch 8):
 4. Slice 1 exit criteria:
  - cleaned runtime domains remain Ruff-clean: `met`
  - functional regression suite for affected domains passes: `met`
+
+Slice 2 Progress (Accelerated Pass):
+1. Started from test-domain baseline captured in Slice 0:
+ - total test-domain findings: `725`
+2. Applied accelerated cleanup:
+ - `ruff format tests`
+ - `ruff check tests --fix --unsafe-fixes`
+ - targeted manual cleanup for residual docstring/SQL/import/comment long lines
+3. Slice 2 result:
+ - test-domain findings: `725 -> 0`
+ - test scope status: Ruff-clean
+4. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+5. Slice 2 exit criteria:
+ - cleaned test domains remain Ruff-clean: `met`
+ - suite pass-rate unchanged: `met`
 
 ### Slice 2 - Core Test Domains
 Deliverables:

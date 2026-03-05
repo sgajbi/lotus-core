@@ -28,10 +28,7 @@ def _dividend_event() -> TransactionEvent:
 def test_enrich_dividend_metadata_populates_defaults() -> None:
     enriched = enrich_dividend_transaction_metadata(_dividend_event())
     assert enriched.economic_event_id == "EVT-DIVIDEND-PORT-LINK-001-DIV-LINK-001"
-    assert (
-        enriched.linked_transaction_group_id
-        == "LTG-DIVIDEND-PORT-LINK-001-DIV-LINK-001"
-    )
+    assert enriched.linked_transaction_group_id == "LTG-DIVIDEND-PORT-LINK-001-DIV-LINK-001"
     assert enriched.calculation_policy_id == DIVIDEND_DEFAULT_POLICY_ID
     assert enriched.calculation_policy_version == DIVIDEND_DEFAULT_POLICY_VERSION
     assert enriched.cash_entry_mode == "AUTO_GENERATE"
@@ -55,4 +52,3 @@ def test_enrich_dividend_metadata_preserves_upstream_values() -> None:
     assert enriched.calculation_policy_version == "2.1.0"
     assert enriched.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert enriched.external_cash_transaction_id == "CASH-UPSTREAM-001"
-

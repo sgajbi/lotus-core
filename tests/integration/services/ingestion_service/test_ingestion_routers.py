@@ -1,11 +1,11 @@
 # tests/integration/services/ingestion-service/test_ingestion_routers.py
-from datetime import UTC, datetime
-from decimal import Decimal
 import base64
 import hashlib
 import hmac
-from io import BytesIO
 import json
+from datetime import UTC, datetime
+from decimal import Decimal
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -15,9 +15,10 @@ import pytest_asyncio
 from openpyxl import Workbook
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
+from src.services.ingestion_service.app import ops_controls
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
-from src.services.ingestion_service.app import ops_controls
+
 try:
     from app import ops_controls as app_ops_controls
 except ModuleNotFoundError:  # pragma: no cover - only needed in certain test path setups.
@@ -296,7 +297,7 @@ async def async_test_client(mock_kafka_producer: MagicMock):
                         "queue_age_seconds": 901.0,
                         "retry_count": 0,
                         "suggested_action": (
-                            "Investigate consumer lag and retry this job once root cause is resolved."
+                            "Investigate consumer lag and retry this job once root cause is resolved."  # noqa: E501
                         ),
                     }
                 ][:limit],

@@ -4,8 +4,8 @@ from decimal import Decimal
 from portfolio_common.events import TransactionEvent
 from portfolio_common.transaction_domain import (
     SELL_AVCO_POLICY_ID,
-    SELL_FIFO_POLICY_ID,
     SELL_DEFAULT_POLICY_VERSION,
+    SELL_FIFO_POLICY_ID,
     enrich_sell_transaction_metadata,
 )
 
@@ -29,10 +29,7 @@ def _sell_event() -> TransactionEvent:
 def test_enrich_sell_metadata_populates_defaults() -> None:
     enriched = enrich_sell_transaction_metadata(_sell_event())
     assert enriched.economic_event_id == "EVT-SELL-PORT-LINK-001-SELL-LINK-001"
-    assert (
-        enriched.linked_transaction_group_id
-        == "LTG-SELL-PORT-LINK-001-SELL-LINK-001"
-    )
+    assert enriched.linked_transaction_group_id == "LTG-SELL-PORT-LINK-001-SELL-LINK-001"
     assert enriched.calculation_policy_id == SELL_FIFO_POLICY_ID
     assert enriched.calculation_policy_version == SELL_DEFAULT_POLICY_VERSION
 

@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.db import get_async_db_session
 from src.services.query_service.app.dtos.buy_state_dto import (
     AccruedIncomeOffsetRecord,
     AccruedIncomeOffsetsResponse,

@@ -1,6 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.sell_state_repository import SellStateRepository

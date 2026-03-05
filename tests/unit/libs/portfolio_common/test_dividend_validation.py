@@ -50,15 +50,11 @@ def test_validate_dividend_transaction_detects_non_zero_price() -> None:
 def test_validate_dividend_transaction_detects_non_positive_gross_amount() -> None:
     txn = _base_txn().model_copy(update={"gross_transaction_amount": Decimal("0")})
     issues = validate_dividend_transaction(txn)
-    assert any(
-        i.code == DividendValidationReasonCode.NON_POSITIVE_GROSS_AMOUNT for i in issues
-    )
+    assert any(i.code == DividendValidationReasonCode.NON_POSITIVE_GROSS_AMOUNT for i in issues)
 
 
 def test_validate_dividend_transaction_detects_invalid_date_order() -> None:
-    txn = _base_txn().model_copy(
-        update={"transaction_date": datetime(2026, 3, 8, 10, 0, 0)}
-    )
+    txn = _base_txn().model_copy(update={"transaction_date": datetime(2026, 3, 8, 10, 0, 0)})
     issues = validate_dividend_transaction(txn)
     assert any(i.code == DividendValidationReasonCode.INVALID_DATE_ORDER for i in issues)
 
@@ -73,12 +69,8 @@ def test_validate_dividend_transaction_strict_metadata() -> None:
         }
     )
     issues = validate_dividend_transaction(txn, strict_metadata=True)
-    assert any(
-        i.code == DividendValidationReasonCode.MISSING_LINKAGE_IDENTIFIER for i in issues
-    )
-    assert any(
-        i.code == DividendValidationReasonCode.MISSING_POLICY_METADATA for i in issues
-    )
+    assert any(i.code == DividendValidationReasonCode.MISSING_LINKAGE_IDENTIFIER for i in issues)
+    assert any(i.code == DividendValidationReasonCode.MISSING_POLICY_METADATA for i in issues)
 
 
 def test_validate_dividend_transaction_requires_external_cash_link_for_external_mode() -> None:
@@ -89,10 +81,7 @@ def test_validate_dividend_transaction_requires_external_cash_link_for_external_
         }
     )
     issues = validate_dividend_transaction(txn)
-    assert any(
-        i.code == DividendValidationReasonCode.MISSING_EXTERNAL_CASH_LINK
-        for i in issues
-    )
+    assert any(i.code == DividendValidationReasonCode.MISSING_EXTERNAL_CASH_LINK for i in issues)
 
 
 def test_validate_dividend_transaction_requires_settlement_cash_account_for_auto_mode() -> None:
@@ -104,7 +93,5 @@ def test_validate_dividend_transaction_requires_settlement_cash_account_for_auto
     )
     issues = validate_dividend_transaction(txn)
     assert any(
-        i.code == DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT
-        for i in issues
+        i.code == DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT for i in issues
     )
-

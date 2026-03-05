@@ -45,4 +45,3 @@ def test_runtime_settings_env_override_with_positive_int_guard(monkeypatch):
     assert settings.valuation_scheduler_dispatch_rounds == 6
     assert settings.reprocessing_worker_poll_interval_seconds == 15
     assert settings.reprocessing_worker_batch_size == 24
-

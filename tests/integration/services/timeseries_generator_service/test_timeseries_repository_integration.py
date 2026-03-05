@@ -1,10 +1,7 @@
-import pytest
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
-
+import pytest
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
     Instrument,
@@ -14,6 +11,9 @@ from portfolio_common.database_models import (
     PositionState,
     PositionTimeseries,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+
 from src.services.timeseries_generator_service.app.repositories.timeseries_repository import (
     TimeseriesRepository,
 )
@@ -135,7 +135,7 @@ def setup_sequential_jobs_with_snapshot_completeness(db_engine, clean_db):
                 _position_ts(portfolio_id, "SEC_A", day1),
             ]
         )
-        # Day2 inputs: keep complete for SEC_A so day2 can claim once day1 portfolio timeseries exists.
+        # Day2 inputs: keep complete for SEC_A so day2 can claim once day1 portfolio timeseries exists.  # noqa: E501
         session.add_all(
             [
                 _snapshot(portfolio_id, "SEC_A", day2),
@@ -157,7 +157,7 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
     day1 = setup_sequential_jobs_with_snapshot_completeness["day1"]
     day2 = setup_sequential_jobs_with_snapshot_completeness["day2"]
 
-    # Day1 should not claim while input set is incomplete (2 expected snapshots vs 1 position-timeseries).
+    # Day1 should not claim while input set is incomplete (2 expected snapshots vs 1 position-timeseries).  # noqa: E501
     claimed_jobs_1 = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
     assert claimed_jobs_1 == []
@@ -172,7 +172,7 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
     assert len(claimed_jobs_2) == 1
     assert claimed_jobs_2[0].aggregation_date == day1
 
-    # Simulate day1 aggregation completion; day2 should now claim (prior-day + completeness satisfied).
+    # Simulate day1 aggregation completion; day2 should now claim (prior-day + completeness satisfied).  # noqa: E501
     with Session(db_engine) as session:
         session.add(
             PortfolioTimeseries(

@@ -104,4 +104,3 @@ async def test_get_portfolio_service_dependency_factory():
     service = get_portfolio_service(db)
 
     assert isinstance(service, PortfolioService)
-

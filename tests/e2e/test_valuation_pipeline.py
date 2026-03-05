@@ -1,7 +1,9 @@
 # tests/e2e/test_valuation_pipeline.py
-import pytest
 from decimal import Decimal
 from typing import Callable
+
+import pytest
+
 from .api_client import E2EApiClient
 from .assertions import as_decimal
 
@@ -51,7 +53,26 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
     )
 
     # 2. Ingest transaction, market price, AND the business date to trigger the scheduler
-    e2e_api_client.ingest("/ingest/transactions", {"transactions": [{"transaction_id": "E2E_VAL_BUY_01", "portfolio_id": portfolio_id, "instrument_id": "E2E_VAL", "security_id": security_id, "transaction_date": f"{tx_date}T10:00:00Z", "transaction_type": "BUY", "quantity": 10, "price": 100.0, "gross_transaction_amount": 1000.0, "trade_currency": "USD", "currency": "USD"}]})
+    e2e_api_client.ingest(
+        "/ingest/transactions",
+        {
+            "transactions": [
+                {
+                    "transaction_id": "E2E_VAL_BUY_01",
+                    "portfolio_id": portfolio_id,
+                    "instrument_id": "E2E_VAL",
+                    "security_id": security_id,
+                    "transaction_date": f"{tx_date}T10:00:00Z",
+                    "transaction_type": "BUY",
+                    "quantity": 10,
+                    "price": 100.0,
+                    "gross_transaction_amount": 1000.0,
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                }
+            ]
+        },
+    )
     e2e_api_client.ingest(
         "/ingest/market-prices",
         {
@@ -70,21 +91,21 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
         {"business_dates": [{"business_date": tx_date}]},
     )
 
-
     # 3. Poll the database until the daily_position_snapshot is fully valued.
     # This is a reliable indicator that the entire pipeline has completed.
-    query = "SELECT valuation_status FROM daily_position_snapshots WHERE portfolio_id = :pid AND security_id = :sid AND date = :date"
+    query = "SELECT valuation_status FROM daily_position_snapshots WHERE portfolio_id = :pid AND security_id = :sid AND date = :date"  # noqa: E501
     params = {"pid": portfolio_id, "sid": security_id, "date": tx_date}
-    validation_func = lambda r: r is not None and r.valuation_status == 'VALUED_CURRENT'
-    
+    def validation_func(r):
+        return r is not None and r.valuation_status == "VALUED_CURRENT"
+
     poll_db_until(
         query=query,
         validation_func=validation_func,
         params=params,
         timeout=120,
-        fail_message=f"Valuation for {security_id} on {tx_date} did not complete."
+        fail_message=f"Valuation for {security_id} on {tx_date} did not complete.",
     )
-    
+
     return {"portfolio_id": portfolio_id}
 
 
@@ -95,8 +116,8 @@ def test_full_valuation_pipeline(setup_valuation_data, e2e_api_client: E2EApiCli
     """
     # ARRANGE
     portfolio_id = setup_valuation_data["portfolio_id"]
-    
-    # ACT: The pipeline has already run and been verified by the fixture; we just query the final state.
+
+    # ACT: The pipeline has already run and been verified by the fixture; we just query the final state.  # noqa: E501
     api_response = e2e_api_client.query(f"/portfolios/{portfolio_id}/positions")
     response_data = api_response.json()
 
@@ -108,10 +129,10 @@ def test_full_valuation_pipeline(setup_valuation_data, e2e_api_client: E2EApiCli
     assert position["security_id"] == "SEC_E2E_VAL"
     assert as_decimal(position["quantity"]) == Decimal("10")
     assert as_decimal(position["cost_basis"]) == Decimal("1000")
-    
+
     assert as_decimal(valuation["market_price"]) == Decimal("110")
     # Expected market_value = 10 shares * 110/share = 1100
     assert as_decimal(valuation["market_value"]) == Decimal("1100")
-    
+
     # Expected unrealized_gain_loss = 1100 (MV) - 1000 (Cost) = 100
     assert float(as_decimal(valuation["unrealized_gain_loss"])) == pytest.approx(100.0)

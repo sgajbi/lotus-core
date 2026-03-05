@@ -1,10 +1,11 @@
 # tests/unit/services/query_service/repositories/test_portfolio_repository.py
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
+import pytest
 from portfolio_common.database_models import Portfolio
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -113,4 +114,3 @@ async def test_get_by_id_returns_none_when_missing(
     portfolio = await repository.get_by_id("P404")
 
     assert portfolio is None
-

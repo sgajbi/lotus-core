@@ -1,9 +1,10 @@
-import pytest
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
-from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import AsyncMock
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -390,9 +391,7 @@ async def test_reference_contract_methods() -> None:
     assert definition is not None
     assert definition.benchmark_id == "B1"
 
-    benchmark_catalog = await service.list_benchmark_catalog(
-        date(2026, 1, 1), None, None, None
-    )
+    benchmark_catalog = await service.list_benchmark_catalog(date(2026, 1, 1), None, None, None)
     assert benchmark_catalog.records == []
 
     index_catalog = await service.list_index_catalog(date(2026, 1, 1), None, None, None)
@@ -462,7 +461,9 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         resolve_benchmark_assignment=AsyncMock(return_value=None),
-        get_benchmark_definition=AsyncMock(side_effect=[None, SimpleNamespace(benchmark_currency="EUR")]),
+        get_benchmark_definition=AsyncMock(
+            side_effect=[None, SimpleNamespace(benchmark_currency="EUR")]
+        ),
         list_benchmark_components=AsyncMock(return_value=[]),
         list_benchmark_components_for_benchmarks=AsyncMock(return_value={}),
         list_benchmark_definitions=AsyncMock(
@@ -550,4 +551,3 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
         include_sections=None,
     )
     assert effective.allowed_sections == []
-

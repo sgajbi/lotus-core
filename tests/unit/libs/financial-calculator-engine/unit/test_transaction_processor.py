@@ -1,18 +1,16 @@
 # tests/unit/libs/financial-calculator-engine/unit/test_transaction_processor.py
-import pytest
-from datetime import datetime
 from decimal import Decimal
-from typing import List
 from unittest.mock import patch
 
+import pytest
 from engine.transaction_processor import TransactionProcessor
+from logic.cost_basis_strategies import FIFOBasisStrategy
+from logic.cost_calculator import CostCalculator
+from logic.disposition_engine import DispositionEngine
+from logic.error_reporter import ErrorReporter
 from logic.parser import TransactionParser
 from logic.sorter import TransactionSorter
-from logic.cost_basis_strategies import FIFOBasisStrategy
-from logic.disposition_engine import DispositionEngine
-from logic.cost_calculator import CostCalculator
-from logic.error_reporter import ErrorReporter
-from core.models.transaction import Transaction
+
 
 @pytest.fixture
 def transaction_processor() -> TransactionProcessor:
@@ -33,7 +31,10 @@ def transaction_processor() -> TransactionProcessor:
         error_reporter=error_reporter,
     )
 
-def test_transaction_processor_handles_backdated_insert(transaction_processor: TransactionProcessor):
+
+def test_transaction_processor_handles_backdated_insert(
+    transaction_processor: TransactionProcessor,
+):
     """
     GIVEN an existing BUY and SELL, and a new back-dated BUY transaction
     WHEN the transactions are processed
@@ -44,29 +45,53 @@ def test_transaction_processor_handles_backdated_insert(transaction_processor: T
     # Existing history: Buy 100 @ $10, then Sell 50 @ $12. P&L = (50*12) - (50*10) = $100
     existing_transactions_raw = [
         {
-            "transaction_id": "BUY_1", "portfolio_id": "P1", "instrument_id": "I1", "security_id": "S1",
-            "transaction_date": "2023-01-01T10:00:00Z", "transaction_type": "BUY", "quantity": 100,
-            "price": 10, "gross_transaction_amount": 1000, "trade_currency": "USD",
-            "portfolio_base_currency": "USD", "transaction_fx_rate": 1.0
+            "transaction_id": "BUY_1",
+            "portfolio_id": "P1",
+            "instrument_id": "I1",
+            "security_id": "S1",
+            "transaction_date": "2023-01-01T10:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": 100,
+            "price": 10,
+            "gross_transaction_amount": 1000,
+            "trade_currency": "USD",
+            "portfolio_base_currency": "USD",
+            "transaction_fx_rate": 1.0,
         },
         {
-            "transaction_id": "SELL_1", "portfolio_id": "P1", "instrument_id": "I1", "security_id": "S1",
-            "transaction_date": "2023-01-10T10:00:00Z", "transaction_type": "SELL", "quantity": 50,
-            "price": 12, "gross_transaction_amount": 600, "trade_currency": "USD",
-            "portfolio_base_currency": "USD", "transaction_fx_rate": 1.0
-        }
+            "transaction_id": "SELL_1",
+            "portfolio_id": "P1",
+            "instrument_id": "I1",
+            "security_id": "S1",
+            "transaction_date": "2023-01-10T10:00:00Z",
+            "transaction_type": "SELL",
+            "quantity": 50,
+            "price": 12,
+            "gross_transaction_amount": 600,
+            "trade_currency": "USD",
+            "portfolio_base_currency": "USD",
+            "transaction_fx_rate": 1.0,
+        },
     ]
 
     # New transaction: A BUY that occurred before the original SELL
     new_transactions_raw = [
         {
-            "transaction_id": "BUY_2_BACKDATED", "portfolio_id": "P1", "instrument_id": "I1", "security_id": "S1",
-            "transaction_date": "2023-01-05T10:00:00Z", "transaction_type": "BUY", "quantity": 100,
-            "price": 8, "gross_transaction_amount": 800, "trade_currency": "USD",
-            "portfolio_base_currency": "USD", "transaction_fx_rate": 1.0
+            "transaction_id": "BUY_2_BACKDATED",
+            "portfolio_id": "P1",
+            "instrument_id": "I1",
+            "security_id": "S1",
+            "transaction_date": "2023-01-05T10:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": 100,
+            "price": 8,
+            "gross_transaction_amount": 800,
+            "trade_currency": "USD",
+            "portfolio_base_currency": "USD",
+            "transaction_fx_rate": 1.0,
         }
     ]
-    
+
     # Combine all transactions for the engine to process
     all_transactions_raw = existing_transactions_raw + new_transactions_raw
 
@@ -74,7 +99,7 @@ def test_transaction_processor_handles_backdated_insert(transaction_processor: T
     # The engine processes the full list and is responsible for sorting and calculating
     processed_txns, errored_txns = transaction_processor.process_transactions(
         existing_transactions_raw=[],  # Simulating a full recalculation call
-        new_transactions_raw=all_transactions_raw
+        new_transactions_raw=all_transactions_raw,
     )
 
     # ASSERT
@@ -88,15 +113,16 @@ def test_transaction_processor_handles_backdated_insert(transaction_processor: T
     # The SELL of 50 shares should now be matched against the first 50 shares of BUY_1.
     # P&L = (50 * $12) - (50 * $10) = $100. The back-dated buy doesn't affect this specific sell.
     assert results["SELL_1"].realized_gain_loss == Decimal("100")
-    
+
     # Check that the costs for the buy transactions are correct
     assert results["BUY_1"].net_cost == Decimal("1000")
     assert results["BUY_2_BACKDATED"].net_cost == Decimal("800")
     assert results["BUY_1"].realized_gain_loss == Decimal("0")
     assert results["BUY_2_BACKDATED"].realized_gain_loss == Decimal("0")
 
-@patch('engine.transaction_processor.RECALCULATION_DURATION_SECONDS')
-@patch('engine.transaction_processor.RECALCULATION_DEPTH')
+
+@patch("engine.transaction_processor.RECALCULATION_DURATION_SECONDS")
+@patch("engine.transaction_processor.RECALCULATION_DEPTH")
 def test_transaction_processor_records_metrics(
     mock_depth_metric, mock_duration_metric, transaction_processor: TransactionProcessor
 ):
@@ -107,14 +133,37 @@ def test_transaction_processor_records_metrics(
     """
     # ARRANGE
     transactions_raw = [
-        {"transaction_id": "BUY_1", "portfolio_id": "P1", "instrument_id": "I1", "security_id": "S1", "transaction_date": "2023-01-01T10:00:00Z", "transaction_type": "BUY", "quantity": 100, "price": 10, "gross_transaction_amount": 1000, "trade_currency": "USD", "portfolio_base_currency": "USD"},
-        {"transaction_id": "SELL_1", "portfolio_id": "P1", "instrument_id": "I1", "security_id": "S1", "transaction_date": "2023-01-10T10:00:00Z", "transaction_type": "SELL", "quantity": 50, "price": 12, "gross_transaction_amount": 600, "trade_currency": "USD", "portfolio_base_currency": "USD"},
+        {
+            "transaction_id": "BUY_1",
+            "portfolio_id": "P1",
+            "instrument_id": "I1",
+            "security_id": "S1",
+            "transaction_date": "2023-01-01T10:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": 100,
+            "price": 10,
+            "gross_transaction_amount": 1000,
+            "trade_currency": "USD",
+            "portfolio_base_currency": "USD",
+        },
+        {
+            "transaction_id": "SELL_1",
+            "portfolio_id": "P1",
+            "instrument_id": "I1",
+            "security_id": "S1",
+            "transaction_date": "2023-01-10T10:00:00Z",
+            "transaction_type": "SELL",
+            "quantity": 50,
+            "price": 12,
+            "gross_transaction_amount": 600,
+            "trade_currency": "USD",
+            "portfolio_base_currency": "USD",
+        },
     ]
 
     # ACT
     transaction_processor.process_transactions(
-        existing_transactions_raw=[],
-        new_transactions_raw=transactions_raw
+        existing_transactions_raw=[], new_transactions_raw=transactions_raw
     )
 
     # ASSERT

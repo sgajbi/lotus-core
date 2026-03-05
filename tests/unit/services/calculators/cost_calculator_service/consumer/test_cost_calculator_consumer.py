@@ -601,25 +601,14 @@ async def test_consumer_assigns_dividend_metadata_defaults(
     await cost_calculator_consumer.process_message(mock_dividend_kafka_message)
 
     updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
-    assert (
-        updated_transaction_arg.economic_event_id
-        == "EVT-DIVIDEND-PORT_COST_01-DIV01"
-    )
-    assert (
-        updated_transaction_arg.linked_transaction_group_id
-        == "LTG-DIVIDEND-PORT_COST_01-DIV01"
-    )
+    assert updated_transaction_arg.economic_event_id == "EVT-DIVIDEND-PORT_COST_01-DIV01"
+    assert updated_transaction_arg.linked_transaction_group_id == "LTG-DIVIDEND-PORT_COST_01-DIV01"
     assert updated_transaction_arg.calculation_policy_id == DIVIDEND_DEFAULT_POLICY_ID
-    assert (
-        updated_transaction_arg.calculation_policy_version
-        == DIVIDEND_DEFAULT_POLICY_VERSION
-    )
+    assert updated_transaction_arg.calculation_policy_version == DIVIDEND_DEFAULT_POLICY_VERSION
 
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
     assert payload["economic_event_id"] == "EVT-DIVIDEND-PORT_COST_01-DIV01"
-    assert (
-        payload["linked_transaction_group_id"] == "LTG-DIVIDEND-PORT_COST_01-DIV01"
-    )
+    assert payload["linked_transaction_group_id"] == "LTG-DIVIDEND-PORT_COST_01-DIV01"
 
 
 async def test_consumer_assigns_interest_metadata_defaults(
@@ -643,15 +632,9 @@ async def test_consumer_assigns_interest_metadata_defaults(
 
     updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
     assert updated_transaction_arg.economic_event_id == "EVT-INTEREST-PORT_COST_01-INT01"
-    assert (
-        updated_transaction_arg.linked_transaction_group_id
-        == "LTG-INTEREST-PORT_COST_01-INT01"
-    )
+    assert updated_transaction_arg.linked_transaction_group_id == "LTG-INTEREST-PORT_COST_01-INT01"
     assert updated_transaction_arg.calculation_policy_id == INTEREST_DEFAULT_POLICY_ID
-    assert (
-        updated_transaction_arg.calculation_policy_version
-        == INTEREST_DEFAULT_POLICY_VERSION
-    )
+    assert updated_transaction_arg.calculation_policy_version == INTEREST_DEFAULT_POLICY_VERSION
 
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
     assert payload["economic_event_id"] == "EVT-INTEREST-PORT_COST_01-INT01"
@@ -685,7 +668,9 @@ async def test_consumer_auto_generates_adjustment_cash_leg_when_settlement_accou
     await cost_calculator_consumer.process_message(mock_dividend_kafka_message)
 
     assert mock_outbox_repo.create_outbox_event.await_count == 2
-    payloads = [call.kwargs["payload"] for call in mock_outbox_repo.create_outbox_event.call_args_list]
+    payloads = [
+        call.kwargs["payload"] for call in mock_outbox_repo.create_outbox_event.call_args_list
+    ]
     by_type = {payload["transaction_type"]: payload for payload in payloads}
     assert "DIVIDEND" in by_type
     assert "ADJUSTMENT" in by_type

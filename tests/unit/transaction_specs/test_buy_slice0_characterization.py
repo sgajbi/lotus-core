@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.calculators.cost_calculator_service.app.consumer import CostCalculatorConsumer
 from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator

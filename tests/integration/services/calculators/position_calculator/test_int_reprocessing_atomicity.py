@@ -1,23 +1,32 @@
 # tests/integration/services/calculators/position_calculator/test_int_reprocessing_atomicity.py
-import pytest
-import pytest_asyncio
-from datetime import datetime, date, timezone
-from decimal import Decimal
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock
 
+import pytest
+import pytest_asyncio
+from portfolio_common.database_models import (
+    Portfolio,
+    PositionState,
+)
+from portfolio_common.database_models import (
+    Transaction as DBTransaction,
+)
+from portfolio_common.events import TransactionEvent
+from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.database_models import Portfolio, Transaction as DBTransaction, PositionState, OutboxEvent
-from portfolio_common.events import TransactionEvent
-from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.outbox_repository import OutboxRepository
+
 from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
-from src.services.calculators.position_calculator.app.repositories.position_repository import PositionRepository
+from src.services.calculators.position_calculator.app.repositories.position_repository import (
+    PositionRepository,
+)
 
 pytestmark = pytest.mark.asyncio
 
 PORTFOLIO_ID = "E2E_REPRO_ATOM_01"
 SECURITY_ID = "SEC_REPRO_ATOM_01"
+
 
 @pytest_asyncio.fixture(scope="function")
 async def setup_repro_atomicity_data(async_db_session: AsyncSession):
@@ -39,7 +48,7 @@ async def setup_repro_atomicity_data(async_db_session: AsyncSession):
             """
         )
     )
-    
+
     # ARRANGE: Create initial state
     async_db_session.add(
         Portfolio(
@@ -51,33 +60,40 @@ async def setup_repro_atomicity_data(async_db_session: AsyncSession):
             risk_exposure="a",
             investment_time_horizon="b",
             portfolio_type="c",
-            booking_center_code="d"
+            booking_center_code="d",
         )
     )
-    
+
     async_db_session.add(
         PositionState(
             portfolio_id=PORTFOLIO_ID,
             security_id=SECURITY_ID,
             watermark_date=date(2025, 9, 9),
             epoch=0,
-            status='CURRENT'
+            status="CURRENT",
         )
     )
-    
+
     async_db_session.add(
         DBTransaction(
-            transaction_id="TXN_ATOM_CURRENT", portfolio_id=PORTFOLIO_ID, instrument_id="ATS",
-            security_id=SECURITY_ID, transaction_date=datetime(2025, 9, 10, 10, tzinfo=timezone.utc),
-            transaction_type="BUY", quantity=100, price=10, gross_transaction_amount=1000,
-            trade_currency="USD", currency="USD"
+            transaction_id="TXN_ATOM_CURRENT",
+            portfolio_id=PORTFOLIO_ID,
+            instrument_id="ATS",
+            security_id=SECURITY_ID,
+            transaction_date=datetime(2025, 9, 10, 10, tzinfo=timezone.utc),
+            transaction_type="BUY",
+            quantity=100,
+            price=10,
+            gross_transaction_amount=1000,
+            trade_currency="USD",
+            currency="USD",
         )
     )
     await async_db_session.commit()
 
+
 async def test_reprocessing_is_atomic_on_outbox_failure(
-    setup_repro_atomicity_data,
-    async_db_session: AsyncSession
+    setup_repro_atomicity_data, async_db_session: AsyncSession
 ):
     """
     This test verifies the new atomic implementation.
@@ -96,10 +112,18 @@ async def test_reprocessing_is_atomic_on_outbox_failure(
     outbox_repo.create_outbox_event = AsyncMock(side_effect=Exception("Outbox failed!"))
 
     back_dated_event = TransactionEvent(
-        transaction_id="TXN_ATOM_BACKDATED", portfolio_id=PORTFOLIO_ID, instrument_id="ATS",
-        security_id=SECURITY_ID, transaction_date=datetime(2025, 9, 5, 10, tzinfo=timezone.utc),
-        transaction_type="BUY", quantity=10, price=9, gross_transaction_amount=90,
-        trade_currency="USD", currency="USD", epoch=None # An original event has no epoch
+        transaction_id="TXN_ATOM_BACKDATED",
+        portfolio_id=PORTFOLIO_ID,
+        instrument_id="ATS",
+        security_id=SECURITY_ID,
+        transaction_date=datetime(2025, 9, 5, 10, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity=10,
+        price=9,
+        gross_transaction_amount=90,
+        trade_currency="USD",
+        currency="USD",
+        epoch=None,  # An original event has no epoch
     )
 
     # ACT: Attempt to process the back-dated event, which should fail
@@ -109,28 +133,29 @@ async def test_reprocessing_is_atomic_on_outbox_failure(
             db_session=async_db_session,
             repo=repo,
             position_state_repo=position_state_repo,
-            outbox_repo=outbox_repo
+            outbox_repo=outbox_repo,
         )
 
     # ASSERT: Verify that the transaction was rolled back
     # The session is now in a failed state, so we need a new one to query
     from sqlalchemy.orm import sessionmaker
+
     async_session_maker = sessionmaker(
         async_db_session.bind, class_=AsyncSession, expire_on_commit=False
     )
-    
+
     async with async_session_maker() as new_session:
         # 1. The position_state should NOT have been updated to epoch 1
         state_result = await new_session.execute(
-            text("SELECT epoch, status FROM position_state WHERE portfolio_id = :pid AND security_id = :sid"),
-            {"pid": PORTFOLIO_ID, "sid": SECURITY_ID}
+            text(
+                "SELECT epoch, status FROM position_state WHERE portfolio_id = :pid AND security_id = :sid"  # noqa: E501
+            ),
+            {"pid": PORTFOLIO_ID, "sid": SECURITY_ID},
         )
         final_state = state_result.fetchone()
         assert final_state.epoch == 0
-        assert final_state.status == 'CURRENT'
+        assert final_state.status == "CURRENT"
 
         # 2. No outbox events should have been created
-        outbox_result = await new_session.execute(
-            text("SELECT COUNT(*) FROM outbox_events")
-        )
+        outbox_result = await new_session.execute(text("SELECT COUNT(*) FROM outbox_events"))
         assert outbox_result.scalar_one() == 0

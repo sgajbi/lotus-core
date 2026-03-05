@@ -1,16 +1,14 @@
 import json
 from datetime import UTC, date, datetime
-from decimal import Decimal
 
 import pytest
+from portfolio_common.database_models import OutboxEvent, Portfolio, ProcessedEvent, Transaction
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.database_models import OutboxEvent, Portfolio, ProcessedEvent, Transaction
 from src.services.persistence_service.app.consumers.transaction_consumer import (
     TransactionPersistenceConsumer,
 )
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -103,10 +101,12 @@ async def test_transaction_consumer_boundary_persists_transaction_outbox_and_ide
     outbox_count = (
         await async_db_session.execute(
             select(func.count()).select_from(
-                select(OutboxEvent).where(
+                select(OutboxEvent)
+                .where(
                     OutboxEvent.aggregate_id == "PORT_BOUNDARY_01",
                     OutboxEvent.event_type == "RawTransactionPersisted",
-                ).subquery()
+                )
+                .subquery()
             )
         )
     ).scalar_one()
@@ -115,10 +115,12 @@ async def test_transaction_consumer_boundary_persists_transaction_outbox_and_ide
     processed_count = (
         await async_db_session.execute(
             select(func.count()).select_from(
-                select(ProcessedEvent).where(
+                select(ProcessedEvent)
+                .where(
                     ProcessedEvent.event_id == "TXN_BOUNDARY_01",
                     ProcessedEvent.service_name == "persistence-transactions",
-                ).subquery()
+                )
+                .subquery()
             )
         )
     ).scalar_one()
@@ -127,7 +129,9 @@ async def test_transaction_consumer_boundary_persists_transaction_outbox_and_ide
     txn_count_after_replay = (
         await async_db_session.execute(
             select(func.count()).select_from(
-                select(Transaction).where(Transaction.transaction_id == "TXN_BOUNDARY_01").subquery()
+                select(Transaction)
+                .where(Transaction.transaction_id == "TXN_BOUNDARY_01")
+                .subquery()
             )
         )
     ).scalar_one()
@@ -136,10 +140,12 @@ async def test_transaction_consumer_boundary_persists_transaction_outbox_and_ide
     outbox_count_after_replay = (
         await async_db_session.execute(
             select(func.count()).select_from(
-                select(OutboxEvent).where(
+                select(OutboxEvent)
+                .where(
                     OutboxEvent.aggregate_id == "PORT_BOUNDARY_01",
                     OutboxEvent.event_type == "RawTransactionPersisted",
-                ).subquery()
+                )
+                .subquery()
             )
         )
     ).scalar_one()

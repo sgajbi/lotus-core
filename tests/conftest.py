@@ -270,9 +270,7 @@ def _build_truncate_sql(connection) -> str:
     existing_tables = {
         row[0]
         for row in connection.execute(
-            text(
-                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-            )
+            text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
         ).fetchall()
     }
     tables = [table for table in TABLES_TO_TRUNCATE if table in existing_tables]

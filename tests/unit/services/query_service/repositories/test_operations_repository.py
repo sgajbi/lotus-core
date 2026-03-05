@@ -108,9 +108,7 @@ async def test_get_stale_processing_aggregation_jobs_count(
 ):
     mock_execute_scalar_one(mock_db_session, 1)
 
-    value = await repository.get_stale_processing_aggregation_jobs_count(
-        "P1", stale_minutes=15
-    )
+    value = await repository.get_stale_processing_aggregation_jobs_count("P1", stale_minutes=15)
 
     assert value == 1
     stmt = mock_db_session.execute.call_args[0][0]

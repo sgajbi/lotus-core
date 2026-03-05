@@ -3,10 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+from core.models.transaction import Transaction
 from hypothesis import given, settings
 from hypothesis import strategies as st
-
-from core.models.transaction import Transaction
 from logic.cost_basis_strategies import AverageCostBasisStrategy, FIFOBasisStrategy
 
 

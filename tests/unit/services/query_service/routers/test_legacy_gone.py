@@ -34,4 +34,3 @@ def test_raise_legacy_endpoint_gone_raises_http_410() -> None:
     detail = exc_info.value.detail
     assert detail["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
     assert detail["target_service"] == "lotus-report"
-

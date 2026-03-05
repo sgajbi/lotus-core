@@ -1,13 +1,16 @@
 # tests/e2e/api_client.py
-import requests
-import time
-import pytest
 import re
-from typing import List, Dict, Any, Callable
+import time
+from typing import Any, Callable, Dict, List
+
+import pytest
+import requests
 from requests.exceptions import RequestException
+
 
 class E2EApiClient:
     """A client for interacting with the system's APIs in E2E tests."""
+
     def __init__(self, ingestion_url: str, query_url: str):
         self.ingestion_url = ingestion_url
         self.query_url = query_url
@@ -56,7 +59,7 @@ class E2EApiClient:
         response = self.session.get(url, timeout=10)
         response.raise_for_status()
         return response
-    
+
     def post_query(
         self,
         endpoint: str,
@@ -77,7 +80,7 @@ class E2EApiClient:
         validation_func: Callable[[Any], bool],
         timeout: int = 60,
         interval: int = 2,
-        fail_message: str = "Polling timed out"
+        fail_message: str = "Polling timed out",
     ):
         """Polls a query endpoint until the validation function returns True."""
         start_time = time.time()
@@ -92,7 +95,7 @@ class E2EApiClient:
             except RequestException:
                 pass  # Ignore connection errors during polling
             time.sleep(interval)
-        
+
         pytest.fail(
             f"{fail_message} after {timeout} seconds for endpoint {endpoint}. "
             f"Last response: {last_response_data}"

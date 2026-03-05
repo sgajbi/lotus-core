@@ -66,11 +66,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
     }
     transactions_payload = {
         "transactions": [
-                {
-                    "transaction_id": f"{portfolio_id}_DEP_01",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
+            {
+                "transaction_id": f"{portfolio_id}_DEP_01",
+                "portfolio_id": portfolio_id,
+                "instrument_id": cash_security_id,
+                "security_id": cash_security_id,
                 "transaction_date": "2025-09-01T09:00:00Z",
                 "transaction_type": "DEPOSIT",
                 "quantity": 300000,
@@ -79,11 +79,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "USD",
                 "currency": "USD",
             },
-                {
-                    "transaction_id": f"{portfolio_id}_BUY_SAP",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": security_id,
-                    "security_id": security_id,
+            {
+                "transaction_id": f"{portfolio_id}_BUY_SAP",
+                "portfolio_id": portfolio_id,
+                "instrument_id": security_id,
+                "security_id": security_id,
                 "transaction_date": "2025-09-01T10:00:00Z",
                 "transaction_type": "BUY",
                 "quantity": 1000,
@@ -92,11 +92,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "EUR",
                 "currency": "EUR",
             },
-                {
-                    "transaction_id": f"{portfolio_id}_CASH_OUT_BUY",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
+            {
+                "transaction_id": f"{portfolio_id}_CASH_OUT_BUY",
+                "portfolio_id": portfolio_id,
+                "instrument_id": cash_security_id,
+                "security_id": cash_security_id,
                 "transaction_date": "2025-09-01T10:00:00Z",
                 "transaction_type": "SELL",
                 "quantity": 110000,
@@ -105,11 +105,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "USD",
                 "currency": "USD",
             },
-                {
-                    "transaction_id": f"{portfolio_id}_DIV_SAP",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": security_id,
-                    "security_id": security_id,
+            {
+                "transaction_id": f"{portfolio_id}_DIV_SAP",
+                "portfolio_id": portfolio_id,
+                "instrument_id": security_id,
+                "security_id": security_id,
                 "transaction_date": "2025-09-03T10:00:00Z",
                 "transaction_type": "DIVIDEND",
                 "quantity": 0,
@@ -118,11 +118,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "EUR",
                 "currency": "EUR",
             },
-                {
-                    "transaction_id": f"{portfolio_id}_CASH_IN_DIV",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
+            {
+                "transaction_id": f"{portfolio_id}_CASH_IN_DIV",
+                "portfolio_id": portfolio_id,
+                "instrument_id": cash_security_id,
+                "security_id": cash_security_id,
                 "transaction_date": "2025-09-03T10:00:00Z",
                 "transaction_type": "BUY",
                 "quantity": 1120,
@@ -131,11 +131,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "USD",
                 "currency": "USD",
             },
-                {
-                    "transaction_id": f"{portfolio_id}_FEE",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
+            {
+                "transaction_id": f"{portfolio_id}_FEE",
+                "portfolio_id": portfolio_id,
+                "instrument_id": cash_security_id,
+                "security_id": cash_security_id,
                 "transaction_date": "2025-09-04T10:00:00Z",
                 "transaction_type": "FEE",
                 "quantity": 1,
@@ -144,11 +144,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "USD",
                 "currency": "USD",
             },
-                {
-                    "transaction_id": f"{portfolio_id}_SELL_SAP",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": security_id,
-                    "security_id": security_id,
+            {
+                "transaction_id": f"{portfolio_id}_SELL_SAP",
+                "portfolio_id": portfolio_id,
+                "instrument_id": security_id,
+                "security_id": security_id,
                 "transaction_date": "2025-09-05T10:00:00Z",
                 "transaction_type": "SELL",
                 "quantity": 200,
@@ -157,11 +157,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "trade_currency": "EUR",
                 "currency": "EUR",
             },
-                {
-                    "transaction_id": f"{portfolio_id}_CASH_IN_SELL",
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
+            {
+                "transaction_id": f"{portfolio_id}_CASH_IN_SELL",
+                "portfolio_id": portfolio_id,
+                "instrument_id": cash_security_id,
+                "security_id": cash_security_id,
                 "transaction_date": "2025-09-05T10:00:00Z",
                 "transaction_type": "BUY",
                 "quantity": 24840,
@@ -193,7 +193,9 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
 
     assert e2e_api_client.ingest("/ingest/portfolios", portfolio_payload).status_code == 202
     assert e2e_api_client.ingest("/ingest/instruments", instruments_payload).status_code == 202
-    assert e2e_api_client.ingest("/ingest/business-dates", business_dates_payload).status_code == 202
+    assert (
+        e2e_api_client.ingest("/ingest/business-dates", business_dates_payload).status_code == 202
+    )
     assert e2e_api_client.ingest("/ingest/fx-rates", fx_rates_payload).status_code == 202
     assert e2e_api_client.ingest("/ingest/transactions", transactions_payload).status_code == 202
     assert e2e_api_client.ingest("/ingest/market-prices", market_prices_payload).status_code == 202
