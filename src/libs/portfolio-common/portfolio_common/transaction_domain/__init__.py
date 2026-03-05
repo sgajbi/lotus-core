@@ -1,24 +1,31 @@
 """Canonical transaction domain contracts and validators."""
 
 from .buy_models import BuyCanonicalTransaction
+from .buy_reason_codes import BuyValidationReasonCode
 from .buy_validation import (
     BuyValidationError,
     BuyValidationIssue,
     validate_buy_transaction,
 )
-from .buy_reason_codes import BuyValidationReasonCode
+from .dividend_models import DividendCanonicalTransaction
+from .dividend_reason_codes import DividendValidationReasonCode
+from .dividend_validation import (
+    DividendValidationError,
+    DividendValidationIssue,
+    validate_dividend_transaction,
+)
+from .sell_linkage import (
+    SELL_AVCO_POLICY_ID,
+    SELL_DEFAULT_POLICY_VERSION,
+    SELL_FIFO_POLICY_ID,
+    enrich_sell_transaction_metadata,
+)
 from .sell_models import SellCanonicalTransaction
+from .sell_reason_codes import SellValidationReasonCode
 from .sell_validation import (
     SellValidationError,
     SellValidationIssue,
     validate_sell_transaction,
-)
-from .sell_reason_codes import SellValidationReasonCode
-from .sell_linkage import (
-    SELL_AVCO_POLICY_ID,
-    SELL_FIFO_POLICY_ID,
-    SELL_DEFAULT_POLICY_VERSION,
-    enrich_sell_transaction_metadata,
 )
 
 __all__ = [
@@ -27,6 +34,11 @@ __all__ = [
     "BuyValidationIssue",
     "BuyValidationReasonCode",
     "validate_buy_transaction",
+    "DividendCanonicalTransaction",
+    "DividendValidationError",
+    "DividendValidationIssue",
+    "DividendValidationReasonCode",
+    "validate_dividend_transaction",
     "SellCanonicalTransaction",
     "SellValidationError",
     "SellValidationIssue",

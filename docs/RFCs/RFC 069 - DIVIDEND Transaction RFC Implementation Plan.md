@@ -21,6 +21,12 @@ Current `DIVIDEND` behavior is functional but minimal:
 
 This plan closes those gaps incrementally with deterministic validation, policy/linkage traceability, richer calculation semantics (gross/net/withholding/ROC), and conformance gates.
 
+Quality target:
+1. industry-grade accounting/analytics semantics (not minimal functional parity only);
+2. deterministic and reproducible numeric behavior suitable for audit, reconciliation, and downstream quant analytics;
+3. explicit decomposition fields aligned to market practice (gross income, withholding, ROC component, net cash effect);
+4. standards-grade contracts/tests with strict governance gates.
+
 ## Original Requested Requirements (Preserved)
 1. Implement `RFC-DIVIDEND-01` semantics without regressing existing BUY/SELL behavior.
 2. Introduce canonical DIVIDEND validation reason codes and strict metadata support.
@@ -165,6 +171,13 @@ Per approved slice, run relevant gates:
 If vocabulary changes are synchronized to platform catalog:
 1. run `lotus-platform/platform-contracts/api-vocabulary/validate_api_vocabulary_catalog.py`
 
+Quantitative and Analytics Rigor gates:
+1. all monetary computations must remain decimal-safe with policy-defined precision/rounding;
+2. decomposition identities must be test-enforced (for example `net = gross - withholding - deductions`, ROC separation where applicable);
+3. reconciliation tests must verify deterministic linkage between income leg and cash leg across both cash-entry modes;
+4. replay tests must prove identical outputs for identical inputs/policy and deterministic conflict handling for materially inconsistent duplicates;
+5. output contracts must be analytics-ready (explicit component fields, no ambiguous overloaded totals).
+
 ## Governance and Standards Alignment
 1. No aliases in API contracts or vocabulary inventory (RFC-0067).
 2. Canonical snake_case naming only.
@@ -221,6 +234,14 @@ Approval checklist:
 2. Open decisions resolved.
 3. Test/gate expectations accepted.
 4. Residual-risk acceptance criteria confirmed.
+
+## Industry-Grade Acceptance Criteria
+To close RFC 069 as implemented, evidence must show:
+1. accounting correctness and reconciliation completeness under realistic wealth-management scenarios (gross/net/withholding/ROC/cash-linkage);
+2. deterministic behavior under reprocessing/idempotency conflict paths;
+3. contract quality and vocabulary governance compliance (RFC-0067) with no alias drift;
+4. robust unit + integration coverage focused on domain outcomes, not status-code-only assertions;
+5. clear operational diagnostics for support teams (failure codes, stage, correlation/linkage metadata).
 
 ## Next Actions After Approval
 1. Execute Slice 0 and publish `DIVIDEND-SLICE-0-GAP-ASSESSMENT.md`.

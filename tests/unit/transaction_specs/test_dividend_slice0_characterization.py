@@ -4,8 +4,12 @@ from unittest.mock import MagicMock, patch
 
 from core.enums.transaction_type import TransactionType
 from core.models.transaction import Transaction as EngineTransaction
-from portfolio_common.database_models import CashflowRule, Transaction as DBTransaction
+from logic.cost_calculator import CostCalculator
+from logic.error_reporter import ErrorReporter
+from portfolio_common.database_models import CashflowRule
+from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
     CashflowLogic,
@@ -22,8 +26,6 @@ from src.services.calculators.position_calculator.app.core.position_models impor
     PositionState as PositionStateDTO,
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
-from logic.cost_calculator import CostCalculator
-from logic.error_reporter import ErrorReporter
 
 
 def test_dividend_ingestion_allows_zero_quantity_and_price_with_default_fee() -> None:
