@@ -21,7 +21,7 @@ Slice 2 establishes deterministic metadata enrichment for INTEREST and verifies 
 - `linked_transaction_group_id` default: `LTG-INTEREST-{portfolio_id}-{transaction_id}`
 - `calculation_policy_id` default: `INTEREST_DEFAULT_POLICY`
 - `calculation_policy_version` default: `1.0.0`
-- `cash_entry_mode` normalization via shared utility (`AUTO` default)
+- `cash_entry_mode` normalization via shared utility (`AUTO_GENERATE` default)
 
 Upstream-provided values are preserved unchanged.
 
@@ -46,3 +46,4 @@ Validated shared standards for this slice:
 - INTEREST calculation invariants and direction semantics are Slice 3.
 - cash-entry mode execution behavior and withholding reconciliation are Slice 4.
 - query/observability contract extensions are Slice 5.
+

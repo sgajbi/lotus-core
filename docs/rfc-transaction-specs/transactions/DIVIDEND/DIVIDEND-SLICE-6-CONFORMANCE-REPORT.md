@@ -10,7 +10,7 @@ This report maps RFC-DIVIDEND-01 requirements to implementation evidence deliver
 | Section 4 linkage invariants (`economic_event_id`, linkage group) | Covered | DIVIDEND metadata enrichment + persistence/query propagation + tests |
 | Section 5 processing flow (validate -> enrich -> policy metadata -> calculate -> persist/publish) | Covered | DIVIDEND domain validation/linkage modules + cost/cashflow consumer integrations |
 | Section 8 explicit zero realized P&L fields | Covered | DIVIDEND cost strategy sets realized fields to explicit zero and tests |
-| Section 10 dual cash-entry mode | Covered (naming normalization) | `AUTO`/`EXTERNAL` mode support, external-link enforcement, skip-auto-cashflow path |
+| Section 10 dual cash-entry mode | Covered (naming normalization) | `AUTO_GENERATE`/`UPSTREAM_PROVIDED` mode support, external-link enforcement, skip-auto-cashflow path |
 | Section 13 query/output visibility over existing surfaces | Covered | transaction query DTO exposes mode/linkage fields; router/service tests |
 | Section 16 required test matrix (validation/calc/cash/query/idempotency) | Partially Covered | dedicated `transaction-dividend-contract` suite + targeted unit/integration tests |
 | Section 11 withholding-tax decomposition | Partially Covered | gross amount and cash linkage handled; dedicated withholding decomposition pending |
@@ -40,3 +40,4 @@ This report maps RFC-DIVIDEND-01 requirements to implementation evidence deliver
 ## Closure Statement
 Slice 6 deliverables (suite wiring, alias, CI inclusion, conformance reporting) are complete.
 Full RFC-DIVIDEND-01 closure still requires follow-on delivery for withholding/ROC/timing gaps listed above.
+

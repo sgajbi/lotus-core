@@ -185,6 +185,14 @@ class PositionCalculator:
             quantity -= transaction.gross_transaction_amount
             cost_basis -= transaction.gross_transaction_amount
             cost_basis_local -= transaction.gross_transaction_amount
+
+        elif txn_type == "ADJUSTMENT":
+            movement_direction = str(transaction.movement_direction or "INFLOW").upper()
+            magnitude = abs(transaction.gross_transaction_amount)
+            signed = -magnitude if movement_direction == "OUTFLOW" else magnitude
+            quantity += signed
+            cost_basis += signed
+            cost_basis_local += signed
         
         else:
             logger.debug(f"[CalculateNext] Txn type {txn_type} does not affect position quantity/cost.")

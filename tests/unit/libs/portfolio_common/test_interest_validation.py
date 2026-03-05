@@ -150,7 +150,7 @@ def test_validate_interest_transaction_strict_metadata() -> None:
 def test_validate_interest_transaction_requires_external_cash_link_for_external_mode() -> None:
     txn = _base_txn().model_copy(
         update={
-            "cash_entry_mode": "EXTERNAL",
+            "cash_entry_mode": "UPSTREAM_PROVIDED",
             "external_cash_transaction_id": None,
         }
     )
@@ -159,3 +159,18 @@ def test_validate_interest_transaction_requires_external_cash_link_for_external_
         i.code == InterestValidationReasonCode.MISSING_EXTERNAL_CASH_LINK
         for i in issues
     )
+
+
+def test_validate_interest_transaction_requires_settlement_cash_account_for_auto_mode() -> None:
+    txn = _base_txn().model_copy(
+        update={
+            "cash_entry_mode": "AUTO_GENERATE",
+            "settlement_cash_account_id": None,
+        }
+    )
+    issues = validate_interest_transaction(txn)
+    assert any(
+        i.code == InterestValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT
+        for i in issues
+    )
+

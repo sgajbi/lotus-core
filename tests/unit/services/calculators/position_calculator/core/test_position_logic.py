@@ -261,3 +261,42 @@ def test_calculate_next_position_for_sell_uses_net_cost():
     assert new_state.quantity == Decimal("50")
     assert new_state.cost_basis == Decimal("650")
     assert new_state.cost_basis_local == Decimal("500")
+
+
+def test_calculate_next_position_for_adjustment_uses_movement_direction():
+    initial_state = PositionStateDTO(
+        quantity=Decimal("1000"),
+        cost_basis=Decimal("1000"),
+        cost_basis_local=Decimal("1000"),
+    )
+    inflow_event = TransactionEvent(
+        transaction_id="ADJ_IN_01",
+        transaction_type="ADJUSTMENT",
+        movement_direction="INFLOW",
+        quantity=Decimal("0"),
+        net_cost=Decimal("0"),
+        net_cost_local=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("50"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    outflow_event = inflow_event.model_copy(
+        update={
+            "transaction_id": "ADJ_OUT_01",
+            "movement_direction": "OUTFLOW",
+            "gross_transaction_amount": Decimal("20"),
+        }
+    )
+
+    mid_state = PositionCalculator.calculate_next_position(initial_state, inflow_event)
+    final_state = PositionCalculator.calculate_next_position(mid_state, outflow_event)
+
+    assert mid_state.quantity == Decimal("1050")
+    assert mid_state.cost_basis == Decimal("1050")
+    assert final_state.quantity == Decimal("1030")
+    assert final_state.cost_basis == Decimal("1030")

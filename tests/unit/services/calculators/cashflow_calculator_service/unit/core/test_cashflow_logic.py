@@ -257,3 +257,49 @@ def test_calculate_buy_propagates_linkage_metadata(mock_metric, base_transaction
     assert cashflow.economic_event_id == "EVT-2026-9001"
     assert cashflow.linked_transaction_group_id == "LTG-2026-9001"
     mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch("src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL")
+def test_calculate_adjustment_inflow_uses_movement_direction(mock_metric, base_transaction_event: TransactionEvent):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "ADJUSTMENT",
+            "movement_direction": "INFLOW",
+            "gross_transaction_amount": Decimal("250"),
+            "trade_fee": Decimal("0"),
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+    assert cashflow.amount == Decimal("250")
+    assert cashflow.amount > 0
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch("src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL")
+def test_calculate_adjustment_outflow_uses_movement_direction(mock_metric, base_transaction_event: TransactionEvent):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "ADJUSTMENT",
+            "movement_direction": "OUTFLOW",
+            "gross_transaction_amount": Decimal("250"),
+            "trade_fee": Decimal("0"),
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+    assert cashflow.amount == Decimal("-250")
+    assert cashflow.amount < 0
+    mock_metric.labels.return_value.inc.assert_called_once()

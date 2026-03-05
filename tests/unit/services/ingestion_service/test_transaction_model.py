@@ -156,11 +156,11 @@ def test_transaction_model_accepts_cash_entry_mode_and_external_cash_link() -> N
         "gross_transaction_amount": "1000.0",
         "trade_currency": "USD",
         "currency": "USD",
-        "cash_entry_mode": "EXTERNAL",
+        "cash_entry_mode": "UPSTREAM_PROVIDED",
         "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
     }
     model = Transaction(**payload)
-    assert model.cash_entry_mode == "EXTERNAL"
+    assert model.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert model.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
 
 
@@ -187,3 +187,4 @@ def test_transaction_model_accepts_interest_semantic_fields() -> None:
     assert model.withholding_tax_amount == Decimal("10.0")
     assert model.other_interest_deductions_amount == Decimal("5.0")
     assert model.net_interest_amount == Decimal("110.0")
+

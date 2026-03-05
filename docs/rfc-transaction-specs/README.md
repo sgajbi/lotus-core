@@ -70,6 +70,7 @@ This ensures that all future transaction types follow the same documentation pat
 * `shared/10-query-audit-and-observability.md`
 * `shared/11-test-strategy-and-gap-assessment.md`
 * `shared/12-canonical-modeling-guidelines.md`
+* `shared/13-dual-leg-accounting-and-cash-adjustment-model.md`
 
 ### Transaction RFCs
 
@@ -79,6 +80,8 @@ This ensures that all future transaction types follow the same documentation pat
 * `transactions/INTEREST/RFC-INTEREST-01.md`
 * `transactions/CHARGE/RFC-CHARGE-01.md`
 * `transactions/TRANSFER_IN_OUT/RFC-TRANSFER-01.md`
+* `transactions/CASH MOVEMENT/RFC-CASH-MOVEMENT-01.md`
+* `transactions/RFC-POSITION-DUAL-LEG-ALIGNMENT-01.md`
 
 ### Templates
 

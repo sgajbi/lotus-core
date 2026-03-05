@@ -30,7 +30,7 @@ def mock_transaction_repo() -> AsyncMock:
             price=Decimal(100),
             gross_transaction_amount=Decimal(1000),
             currency="USD",
-            cash_entry_mode="AUTO",
+            cash_entry_mode="AUTO_GENERATE",
         ),
         Transaction(
             transaction_id="T2",
@@ -42,7 +42,7 @@ def mock_transaction_repo() -> AsyncMock:
             price=Decimal(0),
             gross_transaction_amount=Decimal(125),
             currency="USD",
-            cash_entry_mode="EXTERNAL",
+            cash_entry_mode="UPSTREAM_PROVIDED",
             external_cash_transaction_id="CASH-ENTRY-2026-0002",
             interest_direction="INCOME",
             withholding_tax_amount=Decimal("10"),
@@ -99,8 +99,8 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.limit == 10
         assert len(response_dto.transactions) == 2
         assert response_dto.transactions[0].transaction_id == "T1"
-        assert response_dto.transactions[0].cash_entry_mode == "AUTO"
-        assert response_dto.transactions[1].cash_entry_mode == "EXTERNAL"
+        assert response_dto.transactions[0].cash_entry_mode == "AUTO_GENERATE"
+        assert response_dto.transactions[1].cash_entry_mode == "UPSTREAM_PROVIDED"
         assert (
             response_dto.transactions[1].external_cash_transaction_id
             == "CASH-ENTRY-2026-0002"
@@ -202,3 +202,4 @@ async def test_get_transactions_include_projected_skips_business_date_default(
             end_date=None,
             as_of_date=None,
         )
+

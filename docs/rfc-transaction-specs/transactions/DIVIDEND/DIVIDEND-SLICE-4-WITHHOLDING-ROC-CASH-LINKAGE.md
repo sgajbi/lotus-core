@@ -2,25 +2,25 @@
 
 ## Scope
 Slice 4 implements the dual cash-entry mode requirement for `DIVIDEND` without introducing dedicated endpoints:
-1. `AUTO` mode: service-managed cashflow generation remains the default path.
-2. `EXTERNAL` mode: upstream cash entry is authoritative, and calculator flow enforces explicit linkage.
+1. `AUTO_GENERATE` mode: service-managed cashflow generation remains the default path.
+2. `UPSTREAM_PROVIDED` mode: upstream cash entry is authoritative, and calculator flow enforces explicit linkage.
 
 This slice focuses on deterministic linkage semantics and replay-safe behavior. Withholding/ROC decomposition remains reserved for subsequent extension on top of this linkage contract.
 
 ## Implemented Changes
 1. Canonical mode helpers in `portfolio_common.transaction_domain.cash_entry_mode`:
  - `normalize_cash_entry_mode`
- - `is_external_cash_entry_mode`
- - constants for supported modes (`AUTO`, `EXTERNAL`)
-2. Canonical DIVIDEND metadata enrichment now defaults `cash_entry_mode` to `AUTO`.
+ - `is_upstream_provided_cash_entry_mode`
+ - constants for supported modes (`AUTO_GENERATE`, `UPSTREAM_PROVIDED`)
+2. Canonical DIVIDEND metadata enrichment now defaults `cash_entry_mode` to `AUTO_GENERATE`.
 3. Canonical DIVIDEND validation now enforces:
- - when `cash_entry_mode == EXTERNAL`, `external_cash_transaction_id` is required (`DIVIDEND_011_MISSING_EXTERNAL_CASH_LINK`).
+ - when `cash_entry_mode == UPSTREAM_PROVIDED`, `external_cash_transaction_id` is required (`DIVIDEND_011_MISSING_EXTERNAL_CASH_LINK`).
 4. Event and persistence contracts now carry:
  - `cash_entry_mode`
  - `external_cash_transaction_id`
 5. Cashflow calculator consumer behavior:
- - `DIVIDEND + AUTO`: existing cashflow rule path unchanged.
- - `DIVIDEND + EXTERNAL`:
+ - `DIVIDEND + AUTO_GENERATE`: existing cashflow rule path unchanged.
+ - `DIVIDEND + UPSTREAM_PROVIDED`:
    - requires `external_cash_transaction_id`;
    - skips auto cashflow creation;
    - marks idempotency as processed;
@@ -31,7 +31,7 @@ This slice focuses on deterministic linkage semantics and replay-safe behavior. 
  - index on `external_cash_transaction_id`
 
 ## Deterministic Behavior Contract
-1. Missing/unknown mode input normalizes to `AUTO`.
+1. Missing/unknown mode input normalizes to `AUTO_GENERATE`.
 2. External mode is explicit and cannot silently fall back when a linkage id is absent.
 3. Replay of already-processed external-mode events remains idempotent through processed-event marking.
 4. Existing BUY/SELL behavior is unchanged.
@@ -55,3 +55,4 @@ This slice focuses on deterministic linkage semantics and replay-safe behavior. 
 ## Residual Gaps
 1. Withholding-tax and ROC component decomposition fields/identities are not introduced in this slice.
 2. Reconciliation reporting surfaces for full income decomposition remain for later slice work.
+

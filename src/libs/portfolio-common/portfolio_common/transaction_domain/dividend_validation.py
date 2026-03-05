@@ -2,7 +2,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
-from .cash_entry_mode import is_external_cash_entry_mode
+from .cash_entry_mode import (
+    AUTO_GENERATE_CASH_ENTRY_MODE,
+    is_upstream_provided_cash_entry_mode,
+    normalize_cash_entry_mode,
+)
 from .dividend_models import DividendCanonicalTransaction
 from .dividend_reason_codes import DividendValidationReasonCode
 
@@ -127,7 +131,26 @@ def validate_dividend_transaction(
                 )
             )
 
-    if is_external_cash_entry_mode(txn.cash_entry_mode):
+    cash_entry_mode = normalize_cash_entry_mode(txn.cash_entry_mode)
+    has_explicit_cash_entry_mode = txn.cash_entry_mode is not None
+
+    if (
+        has_explicit_cash_entry_mode
+        and cash_entry_mode == AUTO_GENERATE_CASH_ENTRY_MODE
+        and not txn.settlement_cash_account_id
+    ):
+        issues.append(
+            DividendValidationIssue(
+                code=DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT,
+                field="settlement_cash_account_id",
+                message=(
+                    "settlement_cash_account_id is required when "
+                    "cash_entry_mode is AUTO_GENERATE."
+                ),
+            )
+        )
+
+    if has_explicit_cash_entry_mode and is_upstream_provided_cash_entry_mode(cash_entry_mode):
         if not txn.external_cash_transaction_id:
             issues.append(
                 DividendValidationIssue(
@@ -135,7 +158,7 @@ def validate_dividend_transaction(
                     field="external_cash_transaction_id",
                     message=(
                         "external_cash_transaction_id is required when "
-                        "cash_entry_mode is EXTERNAL."
+                        "cash_entry_mode is UPSTREAM_PROVIDED."
                     ),
                 )
             )

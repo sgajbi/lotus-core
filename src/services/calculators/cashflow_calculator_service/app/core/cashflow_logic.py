@@ -46,6 +46,9 @@ class CashflowLogic:
                 amount = -abs(amount)
             else:
                 amount = abs(amount)
+        elif transaction.transaction_type == "ADJUSTMENT":
+            movement_direction = str(getattr(transaction, "movement_direction", "INFLOW")).upper()
+            amount = abs(amount) if movement_direction == "INFLOW" else -abs(amount)
         elif rule.classification in positive_classifications:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.TRANSFER:

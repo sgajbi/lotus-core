@@ -58,11 +58,27 @@ class DividendCanonicalTransaction(BaseModel):
     cash_entry_mode: Optional[str] = Field(
         default=None,
         description=(
-            "Cash-leg generation mode. AUTO for service-generated cash leg, "
-            "EXTERNAL for upstream-provided cash entry."
+            "Cash-leg generation mode. AUTO_GENERATE for service-generated cash leg, "
+            "UPSTREAM_PROVIDED for upstream-provided cash entry."
         ),
     )
     external_cash_transaction_id: Optional[str] = Field(
         default=None,
-        description="Upstream cash transaction identifier when cash_entry_mode is EXTERNAL.",
+        description=(
+            "Upstream cash transaction identifier when cash_entry_mode is "
+            "UPSTREAM_PROVIDED."
+        ),
+    )
+    settlement_cash_account_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Settlement cash account identifier required for AUTO_GENERATE cash-leg "
+            "construction."
+        ),
+    )
+    settlement_cash_instrument_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional direct cash instrument identifier for generated cash legs."
+        ),
     )

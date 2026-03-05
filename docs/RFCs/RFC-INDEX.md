@@ -1,6 +1,6 @@
 # RFC Review Index
 
-Generated: `2026-03-04`
+Generated: `2026-03-05`
 
 Status vocabulary for review loop:
 - Draft
@@ -89,6 +89,7 @@ Implementation classification vocabulary:
 | RFC-068 | Active Query DTO Pyramid Hardening | Implemented | Implemented | Fully implemented and aligned | docs/RFCs/RFC 068 - Active Query DTO Pyramid Hardening.md (see implementation and validation sections) | Use as active authority for DTO pyramid governance on current domains. |
 | RFC-069 | DIVIDEND Transaction RFC Implementation Plan | Implemented | Partially Implemented | Partially implemented (requires enhancement) | docs/RFCs/RFC 069 - DIVIDEND Transaction RFC Implementation Plan.md; docs/rfc-transaction-specs/transactions/DIVIDEND/DIVIDEND-SLICE-6-CONFORMANCE-REPORT.md | Keep delivered slices (0-6) as baseline; schedule follow-on scope for withholding/ROC decomposition and advanced timing semantics tracked in the conformance report. |
 | RFC-070 | INTEREST Transaction RFC Implementation Plan | Implemented | Partially Implemented | Partially implemented (requires enhancement) | docs/RFCs/RFC 070 - INTEREST Transaction RFC Implementation Plan.md; docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-0-GAP-ASSESSMENT.md; docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-1-VALIDATION-REASON-CODES.md; docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-2-PERSISTENCE-METADATA.md; docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-3-CALCULATION-INVARIANTS.md; docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-4-CASH-LINKAGE-WITHHOLDING.md; docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-5-QUERY-OBSERVABILITY.md; docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md; scripts/test_manifest.py; .github/workflows/ci.yml | Keep implemented baseline; decide whether deduction fields remain additive or policy-flagged in follow-on refinement. |
+| RFC-071 | Position-Level Dual-Leg ADJUSTMENT Alignment Implementation Plan | Implemented | Implemented | Fully implemented and aligned | docs/RFCs/RFC 071 - Position-Level Dual-Leg ADJUSTMENT Alignment Implementation Plan.md; docs/rfc-transaction-specs/transactions/RFC-POSITION-DUAL-LEG-ALIGNMENT-01.md; docs/rfc-transaction-specs/shared/13-dual-leg-accounting-and-cash-adjustment-model.md; src/libs/portfolio-common/portfolio_common/transaction_domain/adjustment_cash_leg.py; src/services/calculators/cost_calculator_service/app/consumer.py; src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py; src/services/calculators/position_calculator/app/core/position_logic.py | Keep full-stack integration DB migrations current before running persistence integration suites in local/dev environments. |
 
 ## Loop Execution Notes
 

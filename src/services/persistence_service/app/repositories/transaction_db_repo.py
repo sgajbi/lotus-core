@@ -35,11 +35,10 @@ class TransactionDBRepository:
                 **event_dict
             )
 
-            # Define which columns to update if a conflict on 'transaction_id' occurs.
-            # We exclude the primary key and the unique identifier itself from the update set.
-            update_dict = {
-                c.name: c for c in stmt.excluded if c.name not in ["id", "transaction_id"]
-            }
+            # Update only fields supplied by the event payload to avoid touching
+            # unrelated columns during partial contract rollout.
+            update_fields = [k for k in event_dict.keys() if k not in {"id", "transaction_id"}]
+            update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
 
             # The final UPSERT statement with the conflict resolution.
             final_stmt = stmt.on_conflict_do_update(

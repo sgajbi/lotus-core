@@ -34,7 +34,7 @@ def test_enrich_interest_metadata_populates_defaults() -> None:
     )
     assert enriched.calculation_policy_id == INTEREST_DEFAULT_POLICY_ID
     assert enriched.calculation_policy_version == INTEREST_DEFAULT_POLICY_VERSION
-    assert enriched.cash_entry_mode == "AUTO"
+    assert enriched.cash_entry_mode == "AUTO_GENERATE"
 
 
 def test_enrich_interest_metadata_preserves_upstream_values() -> None:
@@ -44,7 +44,7 @@ def test_enrich_interest_metadata_preserves_upstream_values() -> None:
             "linked_transaction_group_id": "LTG-UPSTREAM-001",
             "calculation_policy_id": "INTEREST_SPECIAL_POLICY",
             "calculation_policy_version": "2.1.0",
-            "cash_entry_mode": "EXTERNAL",
+            "cash_entry_mode": "UPSTREAM_PROVIDED",
             "external_cash_transaction_id": "CASH-UPSTREAM-001",
         }
     )
@@ -53,5 +53,6 @@ def test_enrich_interest_metadata_preserves_upstream_values() -> None:
     assert enriched.linked_transaction_group_id == "LTG-UPSTREAM-001"
     assert enriched.calculation_policy_id == "INTEREST_SPECIAL_POLICY"
     assert enriched.calculation_policy_version == "2.1.0"
-    assert enriched.cash_entry_mode == "EXTERNAL"
+    assert enriched.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert enriched.external_cash_transaction_id == "CASH-UPSTREAM-001"
+

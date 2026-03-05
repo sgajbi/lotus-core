@@ -906,7 +906,7 @@
       "semanticId": "lotus.cash_entry_mode",
       "canonicalTerm": "cash_entry_mode",
       "preferredName": "cash_entry_mode",
-      "description": "Cash-leg generation mode. AUTO indicates service-generated cashflow; EXTERNAL indicates upstream-provided separate cash entry.",
+      "description": "Cash-leg generation mode. AUTO_GENERATE indicates service-generated cashflow; UPSTREAM_PROVIDED indicates upstream-provided separate cash entry.",
       "example": "cash_entry_mode_example",
       "type": "object",
       "locations": [
@@ -2189,8 +2189,8 @@
       "semanticId": "lotus.external_cash_transaction_id",
       "canonicalTerm": "external_cash_transaction_id",
       "preferredName": "external_cash_transaction_id",
-      "description": "Linked upstream cash transaction id when cash_entry_mode is EXTERNAL.",
-      "example": "EXTERNAL_CASH_TRANSACTION_001",
+      "description": "Linked upstream cash transaction id when cash_entry_mode is UPSTREAM_PROVIDED.",
+      "example": "UPSTREAM_PROVIDED_CASH_TRANSACTION_001",
       "type": "object",
       "locations": [
         "body"
