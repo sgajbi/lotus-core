@@ -1,7 +1,7 @@
 {
   "description": "Approved baseline monetary-float findings. New findings fail CI.",
   "policy_version": "1.1.0",
-  "generated_at": "2026-02-27T04:49:56Z",
+  "generated_at": "2026-03-05T09:19:57Z",
   "allowlist": [
     {
       "finding": "scripts/check_monetary_float_usage.py:112:\"justification\": \"Temporary approved monetary float usage; migrate to Decimal.\",",
@@ -10,49 +10,13 @@
       "review_by": "2026-08-24"
     },
     {
+      "finding": "src/services/ingestion_service/app/settings.py:32:return float(raw)",
+      "justification": "Non-monetary operational threshold parsing; approved exception.",
+      "owner": "platform-governance",
+      "review_by": "2026-08-24"
+    },
+    {
       "finding": "src/services/query_service/app/dtos/cashflow_dto.py:11:amount: float",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/position_analytics_dto.py:13:amount: float",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/position_analytics_dto.py:52:weight: float",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/position_analytics_dto.py:89:total_market_value: float = Field(...)",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/position_dto.py:23:cost_basis: float = Field(",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/position_dto.py:26:cost_basis_local: Optional[float] = Field(",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/position_dto.py:58:cost_basis: float = Field(",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/position_dto.py:62:cost_basis_local: Optional[float] = Field(",
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
       "review_by": "2026-08-24"
@@ -94,36 +58,6 @@
       "review_by": "2026-08-24"
     },
     {
-      "finding": "src/services/query_service/app/dtos/transaction_dto.py:20:price: float",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/transaction_dto.py:21:gross_transaction_amount: float",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/transaction_dto.py:24:net_cost: Optional[float] = None",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/transaction_dto.py:27:net_cost_local: Optional[float] = None",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/dtos/transaction_dto.py:30:transaction_fx_rate: Optional[float] = None",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
       "finding": "src/services/query_service/app/dtos/valuation_dto.py:10:market_price: float | None",
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
@@ -142,100 +76,34 @@
       "review_by": "2026-08-24"
     },
     {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:128:local=MonetaryAmount(amount=float(total_income_local), currency=currency),",
+      "finding": "src/services/query_service/app/services/position_flow_effects.py:20:return float(transaction_quantity_effect_decimal(transaction_type, quantity))",
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
-      "review_by": "2026-08-26"
+      "review_by": "2026-09-01"
     },
     {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:130:amount=float(total_income_base), currency=portfolio.base_currency",
+      "finding": "src/services/query_service/app/services/simulation_service.py:108:\"cost_basis\": float(row.cost_basis) if row.cost_basis is not None else None,",
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
-      "review_by": "2026-08-26"
+      "review_by": "2026-09-01"
     },
     {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:148:amount=float(snapshot.market_value_local or 0), currency=currency",
+      "finding": "src/services/query_service/app/services/simulation_service.py:109:\"cost_basis_local\": float(row.cost_basis_local)",
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
-      "review_by": "2026-08-26"
+      "review_by": "2026-09-01"
     },
     {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:151:amount=float(snapshot.market_value or 0), currency=portfolio.base_currency",
+      "finding": "src/services/query_service/app/services/simulation_service.py:207:price=(float(row.price) if row.price is not None else None),",
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
-      "review_by": "2026-08-26"
+      "review_by": "2026-09-01"
     },
     {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:156:amount=float(snapshot.cost_basis_local or 0), currency=currency",
+      "finding": "src/services/query_service/app/services/simulation_service.py:208:amount=(float(row.amount) if row.amount is not None else None),",
       "justification": "Temporary approved monetary float usage; migrate to Decimal.",
       "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:159:amount=float(snapshot.cost_basis or 0), currency=portfolio.base_currency",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:164:amount=float(snapshot.unrealized_gain_loss_local or 0), currency=currency",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:167:amount=float(snapshot.unrealized_gain_loss or 0),",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:212:total_market_value=float(total_market_value_base),",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/services/position_analytics_service.py:68:weight=float(market_value_base / total_market_value_base)",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-26"
-    },
-    {
-      "finding": "src/services/query_service/app/services/simulation_service.py:111:\"cost_basis\": float(row.cost_basis) if row.cost_basis is not None else None,",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/services/simulation_service.py:112:\"cost_basis_local\": float(row.cost_basis_local)",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/services/simulation_service.py:188:magnitude = float(change.quantity or change.amount or 0.0)",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/services/simulation_service.py:213:price=(float(row.price) if row.price is not None else None),",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/query_service/app/services/simulation_service.py:214:amount=(float(row.amount) if row.amount is not None else None),",
-      "justification": "Temporary approved monetary float usage; migrate to Decimal.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
-    },
-    {
-      "finding": "src/services/ingestion_service/app/settings.py:32:return float(raw)",
-      "justification": "Non-monetary operational threshold parsing; approved exception.",
-      "owner": "platform-governance",
-      "review_by": "2026-08-24"
+      "review_by": "2026-09-01"
     }
   ]
 }
