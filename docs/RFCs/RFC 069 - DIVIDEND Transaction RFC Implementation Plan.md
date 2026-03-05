@@ -78,7 +78,7 @@ Quality target:
 | 2 | Completed | `DIVIDEND-SLICE-2-PERSISTENCE-METADATA.md`, enrichment + consumer tests |
 | 3 | Completed | `DIVIDEND-SLICE-3-CALCULATION-INVARIANTS.md`, cost invariant tests |
 | 4 | Completed | `DIVIDEND-SLICE-4-WITHHOLDING-ROC-CASH-LINKAGE.md`, cash-entry mode/linkage tests |
-| 5 | Pending | Query/observability expansion over existing endpoints |
+| 5 | Completed | `DIVIDEND-SLICE-5-QUERY-OBSERVABILITY.md`, query/API governance evidence |
 | 6 | Pending | Conformance suite wiring and closure report |
 
 ### Slice 0 - Gap Assessment and Characterization Baseline (docs + tests, no behavior change)

@@ -30,6 +30,7 @@ def mock_transaction_repo() -> AsyncMock:
             price=Decimal(100),
             gross_transaction_amount=Decimal(1000),
             currency="USD",
+            cash_entry_mode="AUTO",
         ),
         Transaction(
             transaction_id="T2",
@@ -41,6 +42,8 @@ def mock_transaction_repo() -> AsyncMock:
             price=Decimal(200),
             gross_transaction_amount=Decimal(4000),
             currency="USD",
+            cash_entry_mode="EXTERNAL",
+            external_cash_transaction_id="CASH-ENTRY-2026-0002",
         ),
     ]
     repo.get_transactions_count.return_value = 25
@@ -92,6 +95,12 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.limit == 10
         assert len(response_dto.transactions) == 2
         assert response_dto.transactions[0].transaction_id == "T1"
+        assert response_dto.transactions[0].cash_entry_mode == "AUTO"
+        assert response_dto.transactions[1].cash_entry_mode == "EXTERNAL"
+        assert (
+            response_dto.transactions[1].external_cash_transaction_id
+            == "CASH-ENTRY-2026-0002"
+        )
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):
