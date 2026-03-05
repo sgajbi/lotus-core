@@ -19,9 +19,8 @@ from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.simulation_repository import SimulationRepository
 
-
-_POSITIVE_TYPES = {"BUY", "DEPOSIT", "TRANSFER_IN"}
-_NEGATIVE_TYPES = {"SELL", "WITHDRAWAL", "TRANSFER_OUT", "FEE", "TAX"}
+_POSITION_INCREASE_TYPES = {"BUY", "TRANSFER_IN"}
+_POSITION_DECREASE_TYPES = {"SELL", "TRANSFER_OUT"}
 
 
 class SimulationService:
@@ -185,10 +184,10 @@ class SimulationService:
     @staticmethod
     def _change_quantity_effect(change) -> float:
         txn_type = str(change.transaction_type).upper()
-        magnitude = float(change.quantity or change.amount or 0.0)
-        if txn_type in _POSITIVE_TYPES:
+        magnitude = float(change.quantity or 0.0)
+        if txn_type in _POSITION_INCREASE_TYPES:
             return magnitude
-        if txn_type in _NEGATIVE_TYPES:
+        if txn_type in _POSITION_DECREASE_TYPES:
             return -magnitude
         return 0.0
 

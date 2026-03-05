@@ -330,9 +330,13 @@ async def test_validate_session_active_raises_when_session_missing():
     ("transaction_type", "quantity", "amount", "expected"),
     [
         ("BUY", 10, None, 10.0),
-        ("TRANSFER_IN", None, 5, 5.0),
+        ("TRANSFER_IN", 5, 99, 5.0),
         ("SELL", 7, None, -7.0),
-        ("WITHDRAWAL", None, 3, -3.0),
+        ("TRANSFER_OUT", 3, 99, -3.0),
+        ("DEPOSIT", None, 5, 0.0),
+        ("WITHDRAWAL", None, 3, 0.0),
+        ("FEE", None, 2, 0.0),
+        ("TAX", None, 1, 0.0),
         ("UNKNOWN", 9, None, 0.0),
     ],
 )
