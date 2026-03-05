@@ -73,6 +73,19 @@ class TransactionRecord(BaseModel):
     source_system: Optional[str] = Field(
         None, description="Upstream source system identifier.", examples=["OMS_PRIMARY"]
     )
+    cash_entry_mode: Optional[str] = Field(
+        None,
+        description=(
+            "Cash-leg generation mode. AUTO indicates service-generated cashflow; "
+            "EXTERNAL indicates upstream-provided separate cash entry."
+        ),
+        examples=["AUTO"],
+    )
+    external_cash_transaction_id: Optional[str] = Field(
+        None,
+        description="Linked upstream cash transaction id when cash_entry_mode is EXTERNAL.",
+        examples=["CASH-ENTRY-2026-0001"],
+    )
     cashflow: Optional[CashflowRecord] = Field(
         None, description="Linked cashflow details when available."
     )

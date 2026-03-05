@@ -1,26 +1,27 @@
 # services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py
-import logging
 import json
+import logging
 import time
-from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
-from tenacity import before_log, retry, stop_after_attempt, wait_fixed
-from confluent_kafka import Message
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
-from portfolio_common.events import TransactionEvent, CashflowCalculatedEvent
-from portfolio_common.db import get_async_db_session
+from confluent_kafka import Message
 from portfolio_common.config import (
     CASHFLOW_RULE_CACHE_TTL_SECONDS as DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS,
 )
 from portfolio_common.config import KAFKA_CASHFLOW_CALCULATED_TOPIC
+from portfolio_common.database_models import CashflowRule
+from portfolio_common.db import get_async_db_session
+from portfolio_common.events import CashflowCalculatedEvent, TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
-from portfolio_common.database_models import CashflowRule
+from portfolio_common.transaction_domain import is_external_cash_entry_mode
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
+from tenacity import before_log, retry, stop_after_attempt, wait_fixed
 
 from ..core.cashflow_logic import CashflowLogic
 from ..repositories.cashflow_repository import CashflowRepository
@@ -63,6 +64,10 @@ def _cache_is_fresh(cache_state: CashflowRuleCacheState) -> bool:
 class NoCashflowRuleError(ValueError):
     """Custom exception for when a rule for a transaction type is not found."""
     pass
+
+
+class ExternalCashLinkageError(ValueError):
+    """Raised when EXTERNAL cash-entry mode is configured without required linkage."""
 
 
 class CashflowCalculatorConsumer(BaseConsumer):
@@ -140,6 +145,30 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         await tx.rollback()
                         return
 
+                    if (
+                        event.transaction_type.upper() == "DIVIDEND"
+                        and is_external_cash_entry_mode(event.cash_entry_mode)
+                    ):
+                        if not event.external_cash_transaction_id:
+                            raise ExternalCashLinkageError(
+                                "DIVIDEND with EXTERNAL cash_entry_mode requires "
+                                "external_cash_transaction_id."
+                            )
+                        logger.info(
+                            "Skipping auto cashflow creation for DIVIDEND EXTERNAL cash-entry mode.",
+                            extra={
+                                "transaction_id": event.transaction_id,
+                                "external_cash_transaction_id": event.external_cash_transaction_id,
+                                "economic_event_id": event.economic_event_id,
+                                "linked_transaction_group_id": event.linked_transaction_group_id,
+                            },
+                        )
+                        await idempotency_repo.mark_event_processed(
+                            event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                        )
+                        await db.commit()
+                        return
+
                     rule = await self._get_rule_for_transaction(db, event.transaction_type)
                     if not rule:
                         raise NoCashflowRuleError(f"No cashflow rule found for transaction type '{event.transaction_type}'. Message will be sent to DLQ.")
@@ -189,6 +218,9 @@ class CashflowCalculatorConsumer(BaseConsumer):
             raise
         except NoCashflowRuleError as e:
             logger.error(f"Configuration error: {e}. This is a non-retryable error. Sending to DLQ.")
+            await self._send_to_dlq_async(msg, e)
+        except ExternalCashLinkageError as e:
+            logger.error(f"External cash linkage error: {e}. Sending to DLQ.")
             await self._send_to_dlq_async(msg, e)
         except Exception as e:
             logger.error(

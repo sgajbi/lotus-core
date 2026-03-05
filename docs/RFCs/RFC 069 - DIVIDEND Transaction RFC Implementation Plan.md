@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | In Progress |
 | Created | 2026-03-05 |
 | Last Updated | 2026-03-05 |
 | Owners | lotus-core engineering |
@@ -69,6 +69,17 @@ Quality target:
 | RFC conformance mapping report | Not implemented | No section-to-evidence closure artifact | Slice 6 |
 
 ## Slice Plan (0..6)
+
+## Slice Execution Status
+| Slice | Status | Evidence |
+| --- | --- | --- |
+| 0 | Completed | `DIVIDEND-SLICE-0-GAP-ASSESSMENT.md`, characterization tests |
+| 1 | Completed | `DIVIDEND-SLICE-1-VALIDATION-REASON-CODES.md`, validator/reason-code tests |
+| 2 | Completed | `DIVIDEND-SLICE-2-PERSISTENCE-METADATA.md`, enrichment + consumer tests |
+| 3 | Completed | `DIVIDEND-SLICE-3-CALCULATION-INVARIANTS.md`, cost invariant tests |
+| 4 | Completed | `DIVIDEND-SLICE-4-WITHHOLDING-ROC-CASH-LINKAGE.md`, cash-entry mode/linkage tests |
+| 5 | Pending | Query/observability expansion over existing endpoints |
+| 6 | Pending | Conformance suite wiring and closure report |
 
 ### Slice 0 - Gap Assessment and Characterization Baseline (docs + tests, no behavior change)
 Deliverables:

@@ -55,3 +55,14 @@ class DividendCanonicalTransaction(BaseModel):
     calculation_policy_version: Optional[str] = Field(
         default=None, description="Resolved policy version."
     )
+    cash_entry_mode: Optional[str] = Field(
+        default=None,
+        description=(
+            "Cash-leg generation mode. AUTO for service-generated cash leg, "
+            "EXTERNAL for upstream-provided cash entry."
+        ),
+    )
+    external_cash_transaction_id: Optional[str] = Field(
+        default=None,
+        description="Upstream cash transaction identifier when cash_entry_mode is EXTERNAL.",
+    )

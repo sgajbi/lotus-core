@@ -7,6 +7,12 @@ from .buy_validation import (
     BuyValidationIssue,
     validate_buy_transaction,
 )
+from .cash_entry_mode import (
+    AUTO_CASH_ENTRY_MODE,
+    EXTERNAL_CASH_ENTRY_MODE,
+    is_external_cash_entry_mode,
+    normalize_cash_entry_mode,
+)
 from .dividend_linkage import (
     DIVIDEND_DEFAULT_POLICY_ID,
     DIVIDEND_DEFAULT_POLICY_VERSION,
@@ -39,6 +45,10 @@ __all__ = [
     "BuyValidationIssue",
     "BuyValidationReasonCode",
     "validate_buy_transaction",
+    "AUTO_CASH_ENTRY_MODE",
+    "EXTERNAL_CASH_ENTRY_MODE",
+    "normalize_cash_entry_mode",
+    "is_external_cash_entry_mode",
     "DividendCanonicalTransaction",
     "DividendValidationError",
     "DividendValidationIssue",

@@ -34,6 +34,7 @@ def test_enrich_dividend_metadata_populates_defaults() -> None:
     )
     assert enriched.calculation_policy_id == DIVIDEND_DEFAULT_POLICY_ID
     assert enriched.calculation_policy_version == DIVIDEND_DEFAULT_POLICY_VERSION
+    assert enriched.cash_entry_mode == "AUTO"
 
 
 def test_enrich_dividend_metadata_preserves_upstream_values() -> None:
@@ -43,6 +44,8 @@ def test_enrich_dividend_metadata_preserves_upstream_values() -> None:
             "linked_transaction_group_id": "LTG-UPSTREAM-001",
             "calculation_policy_id": "DIVIDEND_SPECIAL_POLICY",
             "calculation_policy_version": "2.1.0",
+            "cash_entry_mode": "EXTERNAL",
+            "external_cash_transaction_id": "CASH-UPSTREAM-001",
         }
     )
     enriched = enrich_dividend_transaction_metadata(event)
@@ -50,3 +53,5 @@ def test_enrich_dividend_metadata_preserves_upstream_values() -> None:
     assert enriched.linked_transaction_group_id == "LTG-UPSTREAM-001"
     assert enriched.calculation_policy_id == "DIVIDEND_SPECIAL_POLICY"
     assert enriched.calculation_policy_version == "2.1.0"
+    assert enriched.cash_entry_mode == "EXTERNAL"
+    assert enriched.external_cash_transaction_id == "CASH-UPSTREAM-001"

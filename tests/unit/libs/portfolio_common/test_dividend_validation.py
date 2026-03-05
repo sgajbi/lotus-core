@@ -79,3 +79,17 @@ def test_validate_dividend_transaction_strict_metadata() -> None:
     assert any(
         i.code == DividendValidationReasonCode.MISSING_POLICY_METADATA for i in issues
     )
+
+
+def test_validate_dividend_transaction_requires_external_cash_link_for_external_mode() -> None:
+    txn = _base_txn().model_copy(
+        update={
+            "cash_entry_mode": "EXTERNAL",
+            "external_cash_transaction_id": None,
+        }
+    )
+    issues = validate_dividend_transaction(txn)
+    assert any(
+        i.code == DividendValidationReasonCode.MISSING_EXTERNAL_CASH_LINK
+        for i in issues
+    )
