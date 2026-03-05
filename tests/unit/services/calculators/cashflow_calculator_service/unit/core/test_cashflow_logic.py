@@ -1,13 +1,19 @@
-# tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py
-import pytest
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
 from unittest.mock import patch
 
-from portfolio_common.events import TransactionEvent
+import pytest
 from portfolio_common.database_models import CashflowRule
-from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import CashflowLogic
-from src.services.calculators.cashflow_calculator_service.app.core.enums import CashflowClassification, CashflowTiming
+from portfolio_common.events import TransactionEvent
+
+from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
+    CashflowLogic,
+)
+from src.services.calculators.cashflow_calculator_service.app.core.enums import (
+    CashflowClassification,
+    CashflowTiming,
+)
+
 
 @pytest.fixture
 def base_transaction_event() -> TransactionEvent:
@@ -82,6 +88,58 @@ def test_calculate_dividend_transaction(mock_metric, base_transaction_event: Tra
     assert cashflow.is_position_flow is True
     assert cashflow.is_portfolio_flow is False
     assert cashflow.timing == "EOD"
+    mock_metric.labels.assert_called_once_with(classification='INCOME', timing='EOD')
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch("src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL")
+def test_calculate_interest_income_transaction(mock_metric, base_transaction_event: TransactionEvent):
+    """INTEREST INCOME is a positive cashflow (inflow)."""
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "INTEREST",
+            "gross_transaction_amount": Decimal("120"),
+            "trade_fee": Decimal("5"),
+            "interest_direction": "INCOME",
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INCOME,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == Decimal("115")
+    assert cashflow.amount > 0
+    mock_metric.labels.assert_called_once_with(classification='INCOME', timing='EOD')
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch("src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL")
+def test_calculate_interest_expense_transaction(mock_metric, base_transaction_event: TransactionEvent):
+    """INTEREST EXPENSE is a negative cashflow (outflow)."""
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "INTEREST",
+            "gross_transaction_amount": Decimal("120"),
+            "trade_fee": Decimal("5"),
+            "interest_direction": "EXPENSE",
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INCOME,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == Decimal("-115")
+    assert cashflow.amount < 0
     mock_metric.labels.assert_called_once_with(classification='INCOME', timing='EOD')
     mock_metric.labels.return_value.inc.assert_called_once()
 

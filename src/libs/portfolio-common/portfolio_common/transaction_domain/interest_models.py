@@ -44,6 +44,21 @@ class InterestCanonicalTransaction(BaseModel):
     trade_fee: Optional[Decimal] = Field(
         default=Decimal(0), description="Transaction fee amount if applicable."
     )
+    withholding_tax_amount: Optional[Decimal] = Field(
+        default=Decimal(0),
+        description="Withholding tax amount applied to interest event.",
+    )
+    other_interest_deductions_amount: Optional[Decimal] = Field(
+        default=Decimal(0),
+        description="Other non-tax deductions applied to gross interest.",
+    )
+    net_interest_amount: Optional[Decimal] = Field(
+        default=None,
+        description=(
+            "Optional upstream provided net-interest amount. "
+            "When present, must reconcile to gross - withholding - other deductions."
+        ),
+    )
 
     trade_currency: str = Field(..., description="Trade/settlement currency.")
     currency: str = Field(..., description="Booked transaction currency.")

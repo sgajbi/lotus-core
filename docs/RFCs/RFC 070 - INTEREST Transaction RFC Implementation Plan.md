@@ -65,7 +65,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 | 1 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-1-VALIDATION-REASON-CODES.md`, `tests/unit/libs/portfolio_common/test_interest_validation.py` |
 | 2 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-2-PERSISTENCE-METADATA.md`, `tests/unit/libs/portfolio_common/test_interest_linkage.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` |
 | 3 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-3-CALCULATION-INVARIANTS.md`, `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py` |
-| 4 | Pending | Cash-entry mode + withholding/linkage behavior |
+| 4 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-4-CASH-LINKAGE-WITHHOLDING.md`, `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py` |
 | 5 | Pending | Query/observability supportability artifacts |
 | 6 | Pending | Conformance suite wiring + closure report |
 
@@ -193,12 +193,12 @@ Every slice PR must include a short shared-doc conformance note listing which sh
 
 ## Open Decisions Requiring Reviewer Direction
 1. Should withholding and other deductions be modeled as additive canonical fields in the transaction contract now, or staged behind policy feature flags?
-2. Should INTEREST expense path reuse existing `EXPENSE` cashflow classification rules immediately, or be introduced in a staged rule migration?
 
 ## Confirmed Direction
 1. INTEREST implementation should follow existing transaction RFC delivery discipline (slice-based, evidence-first).
 2. INTEREST visibility should be delivered via existing query/support endpoint surfaces (no dedicated transaction endpoint by default).
 3. INTEREST direction is encoded as explicit canonical field (`interest_direction`) with baseline values `INCOME`/`EXPENSE`.
+4. INTEREST expense cashflow handling is introduced via staged direction-aware sign semantics while preserving current rule-table compatibility.
 
 ## Approval Record
 1. Plan approved by requester on `2026-03-05` and Slice 0 execution started.

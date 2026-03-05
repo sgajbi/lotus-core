@@ -86,6 +86,45 @@ def validate_interest_transaction(
                 )
             )
 
+    withholding_tax_amount = txn.withholding_tax_amount or Decimal(0)
+    other_interest_deductions_amount = txn.other_interest_deductions_amount or Decimal(0)
+
+    if withholding_tax_amount < 0:
+        issues.append(
+            InterestValidationIssue(
+                code=InterestValidationReasonCode.NEGATIVE_WITHHOLDING_TAX,
+                field="withholding_tax_amount",
+                message="withholding_tax_amount must be >= 0.",
+            )
+        )
+
+    if other_interest_deductions_amount < 0:
+        issues.append(
+            InterestValidationIssue(
+                code=InterestValidationReasonCode.NEGATIVE_OTHER_DEDUCTIONS,
+                field="other_interest_deductions_amount",
+                message="other_interest_deductions_amount must be >= 0.",
+            )
+        )
+
+    if txn.net_interest_amount is not None:
+        expected_net = (
+            txn.gross_transaction_amount
+            - withholding_tax_amount
+            - other_interest_deductions_amount
+        )
+        if txn.net_interest_amount != expected_net:
+            issues.append(
+                InterestValidationIssue(
+                    code=InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH,
+                    field="net_interest_amount",
+                    message=(
+                        "net_interest_amount must equal gross_transaction_amount - "
+                        "withholding_tax_amount - other_interest_deductions_amount."
+                    ),
+                )
+            )
+
     if not txn.trade_currency:
         issues.append(
             InterestValidationIssue(
