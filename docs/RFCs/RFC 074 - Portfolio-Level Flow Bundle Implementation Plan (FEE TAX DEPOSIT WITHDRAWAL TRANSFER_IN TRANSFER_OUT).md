@@ -90,7 +90,7 @@ No hard technical blocker was identified that requires separation.
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | 0 | Completed | `PORTFOLIO-FLOW-BUNDLE-SLICE-0-GAP-ASSESSMENT.md`; characterization tests for position/cashflow baseline |
-| 1 | Pending | Validation and no-auto-generate guardrails |
+| 1 | Completed | `PORTFOLIO-FLOW-BUNDLE-SLICE-1-VALIDATION-GUARDRAILS.md`; shared guardrail helper + consumer enforcement + unit tests |
 | 2 | Pending | Cashflow-rule and classification alignment |
 | 3 | Pending | Calculator and timeseries semantic harmonization |
 | 4 | Pending | Query/observability and contract hardening |

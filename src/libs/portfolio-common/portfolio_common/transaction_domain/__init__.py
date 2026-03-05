@@ -49,6 +49,11 @@ from .interest_validation import (
     InterestValidationIssue,
     validate_interest_transaction,
 )
+from .portfolio_flow_guardrails import (
+    PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES,
+    assert_portfolio_flow_cash_entry_mode_allowed,
+    is_portfolio_flow_no_auto_generate_transaction_type,
+)
 from .sell_linkage import (
     SELL_AVCO_POLICY_ID,
     SELL_DEFAULT_POLICY_VERSION,
@@ -97,6 +102,9 @@ __all__ = [
     "INTEREST_DEFAULT_POLICY_ID",
     "INTEREST_DEFAULT_POLICY_VERSION",
     "enrich_interest_transaction_metadata",
+    "PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES",
+    "is_portfolio_flow_no_auto_generate_transaction_type",
+    "assert_portfolio_flow_cash_entry_mode_allowed",
     "SellCanonicalTransaction",
     "SellValidationError",
     "SellValidationIssue",

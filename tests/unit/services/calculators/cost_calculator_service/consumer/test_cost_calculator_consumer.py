@@ -708,3 +708,37 @@ async def test_consumer_defers_upstream_mode_until_cash_leg_is_available(
         await cost_calculator_consumer.process_message(mock_interest_kafka_message)
 
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_consumer_fee_auto_generate_mode_sends_to_dlq(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    incoming = json.loads(mock_buy_kafka_message.value().decode("utf-8"))
+    incoming["transaction_id"] = "FEE-AUTO-01"
+    incoming["transaction_type"] = "FEE"
+    incoming["quantity"] = "0"
+    incoming["price"] = "0"
+    incoming["gross_transaction_amount"] = "15"
+    incoming["trade_fee"] = "0"
+    incoming["cash_entry_mode"] = "AUTO_GENERATE"
+    mock_buy_kafka_message.value.return_value = json.dumps(incoming).encode("utf-8")
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.get_transaction_history.return_value = []
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_fx_rate.return_value = None
+    mock_repo.update_transaction_costs.side_effect = lambda arg: arg
+
+    await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_idempotency_repo.mark_event_processed.assert_not_called()
+    cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
