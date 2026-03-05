@@ -16,6 +16,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 
 logger = logging.getLogger(__name__)
 
+
 class GenericPersistenceConsumer(BaseConsumer, ABC):
     """
     An abstract base class for persistence consumers that handles common boilerplate:
@@ -66,40 +67,47 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
         event = None
 
         try:
-            event_data = json.loads(msg.value().decode('utf-8'))
+            event_data = json.loads(msg.value().decode("utf-8"))
             event = self.event_model.model_validate(event_data)
-            
-            idempotency_key = getattr(event, 'transaction_id', event_id)
+
+            idempotency_key = getattr(event, "transaction_id", event_id)
 
             async for db in get_async_db_session():
                 async with db.begin():
                     idempotency_repo = IdempotencyRepository(db)
 
-                    if await idempotency_repo.is_event_processed(idempotency_key, self.service_name):
+                    if await idempotency_repo.is_event_processed(
+                        idempotency_key, self.service_name
+                    ):
                         logger.warning(f"Event {idempotency_key} already processed. Skipping.")
                         return
 
                     persisted_object = await self.handle_persistence(db, event)
-                    
+
                     outbox_details = self.get_outbox_event(persisted_object)
                     if outbox_details:
                         outbox_repo = OutboxRepository(db)
-                        await outbox_repo.create_outbox_event(correlation_id=correlation_id, **outbox_details)
+                        await outbox_repo.create_outbox_event(
+                            correlation_id=correlation_id, **outbox_details
+                        )
 
                     await idempotency_repo.mark_event_processed(
                         event_id=idempotency_key,
-                        portfolio_id=getattr(event, 'portfolio_id', 'N/A'),
+                        portfolio_id=getattr(event, "portfolio_id", "N/A"),
                         service_name=self.service_name,
-                        correlation_id=correlation_id
+                        correlation_id=correlation_id,
                     )
 
         except (json.JSONDecodeError, ValidationError) as e:
             # This is a non-retryable "poison pill" message. Send to DLQ.
             logger.error("Message validation failed. Sending to DLQ.", exc_info=True)
             await self._send_to_dlq_async(msg, e)
-            # IMPORTANT: Re-raise a generic exception to ensure the base consumer commits the offset.
-            raise ValueError("Poison pill message detected") 
+            # IMPORTANT: Re-raise a generic exception so the base consumer commits
+            # the offset for poison-pill messages.
+            raise ValueError("Poison pill message detected")
         except (DBAPIError, IntegrityError, OperationalError) as e:
             # This is a transient DB error. Signal the base consumer to retry.
-            logger.warning(f"DB error for {self.service_name}. Raising RetryableConsumerError.", exc_info=False)
+            logger.warning(
+                f"DB error for {self.service_name}. Raising RetryableConsumerError.", exc_info=False
+            )
             raise RetryableConsumerError(f"Database error: {e}") from e

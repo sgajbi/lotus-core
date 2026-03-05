@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+
 class InstrumentRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -21,19 +22,18 @@ class InstrumentRepository:
 
             stmt = pg_insert(DBInstrument).values(**instrument_data)
 
-            update_dict = {
-                c.name: c for c in stmt.excluded if c.name not in ["id", "security_id"]
-            }
+            update_dict = {c.name: c for c in stmt.excluded if c.name not in ["id", "security_id"]}
 
             final_stmt = stmt.on_conflict_do_update(
-                index_elements=['security_id'],
-                set_=update_dict
+                index_elements=["security_id"], set_=update_dict
             )
-            
+
             await self.db.execute(final_stmt)
             logger.info(f"Successfully staged UPSERT for instrument '{event.security_id}'.")
-            
+
             return DBInstrument(**instrument_data)
         except Exception as e:
-            logger.error(f"Failed to stage UPSERT for instrument '{event.security_id}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to stage UPSERT for instrument '{event.security_id}': {e}", exc_info=True
+            )
             raise

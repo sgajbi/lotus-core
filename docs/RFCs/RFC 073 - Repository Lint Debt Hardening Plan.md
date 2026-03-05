@@ -97,6 +97,20 @@ Slice 1 Progress (Batch 2):
  - `make typecheck` -> passed
  - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
 
+Slice 1 Progress (Batch 3):
+1. Scoped E501 reduction completed for persistence runtime + integration boundary files:
+ - `src/services/persistence_service/app/consumer_manager.py`
+ - `src/services/persistence_service/app/consumers/*` (selected)
+ - `src/services/persistence_service/app/repositories/*` (selected)
+ - `src/services/persistence_service/tests/integration/test_repositories.py`
+2. Scope method:
+ - `ruff format` on selected files, followed by manual wrapping for remaining long literals/comments
+3. Snapshot impact:
+ - runtime-critical scope E501 count: `238 -> 216` (`-22`)
+4. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+
 ### Slice 2 - Core Test Domains
 Deliverables:
 1. Resolve Ruff violations in high-value unit/integration suites.
