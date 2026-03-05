@@ -104,11 +104,15 @@ class TimeseriesRepository:
         Atomically claims eligible PENDING aggregation jobs. A job for date D is eligible if:
         1. The portfolio timeseries record for date D-1 (for the correct epoch) already exists.
         2. OR this job is for the earliest date for a portfolio that has no timeseries records yet.
+        3. The input set is complete for the target portfolio/date/epoch
+           (daily snapshot count equals position-timeseries count).
         """
         p1 = PortfolioAggregationJob
         p2 = aliased(PortfolioAggregationJob)
         pts = PortfolioTimeseries
         ps = PositionState
+        dps = DailyPositionSnapshot
+        position_ts = PositionTimeseries
 
         # Subquery to find the current epoch for a given portfolio
         current_epoch_subq = (
@@ -140,12 +144,42 @@ class TimeseriesRepository:
             .correlate(p1)
         )
 
+        expected_snapshot_count_subq = (
+            select(func.count())
+            .select_from(dps)
+            .where(
+                dps.portfolio_id == p1.portfolio_id,
+                dps.date == p1.aggregation_date,
+                dps.epoch == func.coalesce(current_epoch_subq, 0),
+            )
+            .scalar_subquery()
+            .correlate(p1)
+        )
+
+        actual_position_timeseries_count_subq = (
+            select(func.count())
+            .select_from(position_ts)
+            .where(
+                position_ts.portfolio_id == p1.portfolio_id,
+                position_ts.date == p1.aggregation_date,
+                position_ts.epoch == func.coalesce(current_epoch_subq, 0),
+            )
+            .scalar_subquery()
+            .correlate(p1)
+        )
+
+        completeness_ready_subq = (
+            (expected_snapshot_count_subq > 0)
+            & (actual_position_timeseries_count_subq == expected_snapshot_count_subq)
+        )
+
         # Main query to find the IDs of eligible jobs
         eligibility_query = (
             select(p1.id)
             .where(
                 p1.status == 'PENDING',
-                (prior_day_exists_subq | is_first_job_subq)
+                (prior_day_exists_subq | is_first_job_subq),
+                completeness_ready_subq,
             )
             .order_by(p1.portfolio_id, p1.aggregation_date)
             .limit(batch_size)

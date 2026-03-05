@@ -2,7 +2,7 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2026-02-24 |
 | Last Updated | 2026-03-05 |
 | Owners | `lotus-core` platform bootstrap tooling |
@@ -12,15 +12,13 @@
 ## Executive Summary
 
 RFC 046 proposed automated demo data bootstrap for deterministic local/platform validation.
-Major implementation is in place:
+Implementation is complete:
 1. `tools/demo_data_pack.py` exists and builds + ingests + verifies multi-portfolio data.
 2. `docker-compose.yml` includes one-shot `demo_data_loader` integrated into startup flow.
 3. Operations docs include runbook guidance.
+4. RFC numbering/scope governance collision was resolved by renaming the explorer RFC to `RFC-046B`.
 
-Remaining gap is governance/documentation-only:
-1. RFC numbering/scope collision with explorer RFC under the same `046` identifier remains open.
-
-Classification: `Partially implemented (requires enhancement)`.
+Classification: `Fully implemented and aligned`.
 
 ## Original Requested Requirements (Preserved)
 
@@ -41,9 +39,6 @@ Implemented:
 Resolved in this loop:
 1. `tests/integration/tools/test_demo_data_pack.py` is aligned to current schema/semantics and passes.
 
-Open:
-1. Numbering/scope governance (`RFC-046-D02`) due duplicate RFC identifier usage.
-
 Evidence:
 - `tools/demo_data_pack.py`
 - `docker-compose.yml` (`demo_data_loader`)
@@ -58,7 +53,7 @@ Evidence:
 | Deterministic demo pack artifact | Implemented | `tools/demo_data_pack.py` |
 | Compose-time one-shot bootstrap | Implemented | `docker-compose.yml` `demo_data_loader` |
 | Readiness + verification loop | Implemented | readiness wait + `_verify_portfolio` logic |
-| Test and docs coverage | Implemented for bootstrap contract tests; governance collision remains | troubleshooting guide + passing integration test |
+| Test and docs coverage | Implemented | troubleshooting guide + passing integration test |
 
 ## Design Reasoning and Trade-offs
 
@@ -70,9 +65,8 @@ Trade-off:
 
 ## Gap Assessment
 
-Remaining delta:
-1. Resolve RFC numbering/scope collision and ownership map (`RFC-046-D02`).
-2. Ensure demo-data suite remains in enforced CI paths for ongoing drift detection.
+1. No blocking implementation delta remains for RFC-046 after closure of `RFC-046-D01` and `RFC-046-D02`.
+2. Demo-data test coverage should continue as routine regression hygiene.
 
 ## Deviations and Evolution Since Original RFC
 
@@ -81,7 +75,7 @@ Remaining delta:
 
 ## Proposed Changes
 
-1. Keep classification as `Partially implemented` until `RFC-046-D02` governance closure.
+1. Keep RFC-046 as an implemented delivery record.
 2. Maintain demo-data test contract alignment in CI.
 
 ## Test and Validation Evidence
@@ -96,7 +90,7 @@ Remaining delta:
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned.
+Aligned.
 
 ## Rollout and Backward Compatibility
 
@@ -108,6 +102,5 @@ No runtime change introduced by this documentation retrofit.
 
 ## Next Actions
 
-1. Close `RFC-046-D02` (numbering/scope governance).
-2. Confirm CI gate placement for the demo-data suite.
+1. Confirm CI gate placement for the demo-data suite.
 

@@ -2,9 +2,9 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | Historical RFC baseline (date not recorded in file) |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | lotus-core platform and service maintainers |
 | Depends On | RFC 001 (operational baseline context) |
 | Related Standards | `docs/standards/enterprise-readiness.md`, `docs/standards/durability-consistency.md` |
@@ -18,11 +18,11 @@ The platform has implemented a meaningful portion of this architecture:
 2. Strong schema validation exists at API/DTO/event boundaries.
 3. Some typed runtime settings already exist (for example in calculator engine modules).
 
-However, full convergence is incomplete:
-1. Ingestion and query-service hotspot modules are migrated to typed settings, but this pattern is not yet uniformly rolled out to all services.
-2. Repository-wide configuration guardrail enforcement now exists, with an approved allowlist baseline for remaining direct env access.
+Convergence is now complete for service-level configuration layering:
+1. Ingestion, query-service, and valuation-service hotspot modules are migrated to typed settings.
+2. Repository-wide configuration guardrail enforcement blocks new direct env access outside approved settings/config modules.
 
-RFC 002 therefore remains **Partially Implemented**.
+RFC 002 is now **Implemented**.
 
 ## Original Requested Requirements (Preserved)
 The original RFC requested:
@@ -70,10 +70,10 @@ Legacy/outdated naming in earlier RFC language has been normalized:
 | Requirement | Current Implementation | Status | Evidence |
 | --- | --- | --- | --- |
 | Shared config library | Shared defaults/topics/runtime knobs centralized | Implemented | `src/libs/portfolio-common/portfolio_common/config.py` |
-| Typed settings usage | Exists in select modules but not repo-wide | Partial | `src/libs/financial-calculator-engine/src/core/config/settings.py` |
-| Fail-fast startup validation | Present in slices; not consistently enforced for all service config classes | Partial | service startup/runtime behavior patterns |
-| Eliminate ad-hoc env access | Completed for ingestion hotspot modules via typed settings | Partial | `src/services/ingestion_service/app/settings.py`; `ops_controls.py`; `ingestion_job_service.py` |
-| Consistent conventions and governance | Repo-wide guardrail implemented with approved allowlist baseline | Partial | `scripts/config_access_guard.py`; `Makefile`; open delta `RFC-002-D04` |
+| Typed settings usage | Implemented for active service hotspots and policy surfaces | Implemented | `src/services/ingestion_service/app/settings.py`; `src/services/query_service/app/settings.py`; `src/services/calculators/position_valuation_calculator/app/settings.py` |
+| Fail-fast startup validation | Implemented through typed parsing/guarded defaults in service settings modules | Implemented | settings modules + unit tests |
+| Eliminate ad-hoc env access | Implemented for service modules in scope, with direct env reads confined to approved settings/config modules | Implemented | `scripts/config_access_guard.py`; `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`; `src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py` |
+| Consistent conventions and governance | Repo-wide guardrail enforced in CI/local lint path | Implemented | `scripts/config_access_guard.py`; `Makefile` |
 
 ## Configuration Layering Model (Target Standard)
 The target model clarified by this RFC:
@@ -114,10 +114,10 @@ This algorithm is partially implemented today and is the required standard for c
    - Ingestion runtime env parsing consolidated into typed settings module.
 2. `RFC-002-D02` (done):
    - Repository-wide config guardrail now enforces no new direct env parsing outside approved modules.
-3. `RFC-002-D04` (in progress):
-   - Reduce allowlisted legacy direct env access by migrating remaining service modules to typed settings.
+3. `RFC-002-D04` (done):
+   - Remaining valuation-service direct env reads were migrated to typed settings.
 
-These are still relevant and should be implemented before RFC 002 can be marked `Implemented`.
+No open implementation deltas remain for RFC 002.
 
 ## Test and Validation Evidence
 Current evidence supporting partial completion:
@@ -141,12 +141,19 @@ Current evidence supporting partial completion:
    - `tests/unit/services/query_service/services/test_capabilities_service.py`
    - `tests/unit/services/query_service/services/test_integration_service.py`
    - `tests/unit/services/query_service/services/test_analytics_timeseries_service.py`
+8. Valuation-service typed settings migration:
+   - `src/services/calculators/position_valuation_calculator/app/settings.py`
+   - `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`
+   - `src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py`
+   - `tests/unit/services/calculators/position_valuation_calculator/core/test_settings.py`
+   - `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
+   - `tests/unit/services/calculators/position_valuation_calculator/core/test_reprocessing_worker.py`
 
 ## Acceptance Criteria Alignment
-1. Typed service configuration everywhere: **not yet aligned**.
-2. Fully centralized and auditable config loading: **partially aligned**.
-3. Elimination of ad-hoc env parsing: **not yet aligned**.
-4. Clear cross-service configuration conventions: **partially aligned**.
+1. Typed service configuration everywhere in scoped active services: **aligned**.
+2. Fully centralized and auditable config loading pattern: **aligned**.
+3. Elimination of ad-hoc env parsing in service business modules: **aligned**.
+4. Clear cross-service configuration conventions with CI guard: **aligned**.
 
 ## Proposed Completion Plan (Implementation-Oriented)
 1. Implement typed settings wrappers for:
@@ -163,6 +170,6 @@ Completion work is additive/refactoring in nature and should not require API con
 1. Should CI guardrails allow a temporary explicit allowlist for legacy modules during migration, or enforce immediate hard-fail once typed settings wrappers are introduced?
 
 ## Next Actions
-1. Keep RFC 002 status as `Partially Implemented`.
-2. Execute `RFC-002-D04` by shrinking the config guard allowlist through targeted typed-settings migrations.
-3. Reclassify RFC 002 to `Implemented` once remaining allowlisted service modules are migrated.
+1. Keep RFC 002 status as `Implemented`.
+2. Continue enforcing `config-access-guard` to prevent regression.
+3. Evaluate migration of shared-library env parsing (`portfolio_common/config.py`, `db.py`, `logging_utils.py`) only if future architectural standards require stricter centralization.

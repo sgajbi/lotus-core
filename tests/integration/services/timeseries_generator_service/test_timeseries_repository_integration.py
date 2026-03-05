@@ -1,96 +1,194 @@
-# tests/integration/services/timeseries_generator_service/test_timeseries_repository_integration.py
 import pytest
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-# --- UPDATED IMPORTS ---
-from portfolio_common.database_models import Portfolio, PortfolioAggregationJob, PortfolioTimeseries, PositionState
-from src.services.timeseries_generator_service.app.repositories.timeseries_repository import TimeseriesRepository
+from sqlalchemy.orm import Session
+
+from portfolio_common.database_models import (
+    DailyPositionSnapshot,
+    Instrument,
+    Portfolio,
+    PortfolioAggregationJob,
+    PortfolioTimeseries,
+    PositionState,
+    PositionTimeseries,
+)
+from src.services.timeseries_generator_service.app.repositories.timeseries_repository import (
+    TimeseriesRepository,
+)
 
 pytestmark = pytest.mark.asyncio
 
+
+def _snapshot(
+    portfolio_id: str, security_id: str, a_date: date, *, epoch: int = 0
+) -> DailyPositionSnapshot:
+    return DailyPositionSnapshot(
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        date=a_date,
+        epoch=epoch,
+        quantity=Decimal("10"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+        market_price=Decimal("10"),
+        market_value=Decimal("100"),
+        market_value_local=Decimal("100"),
+        unrealized_gain_loss=Decimal("0"),
+        unrealized_gain_loss_local=Decimal("0"),
+        valuation_status="VALUED",
+    )
+
+
+def _position_ts(
+    portfolio_id: str, security_id: str, a_date: date, *, epoch: int = 0
+) -> PositionTimeseries:
+    return PositionTimeseries(
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        date=a_date,
+        epoch=epoch,
+        bod_market_value=Decimal("100"),
+        bod_cashflow_position=Decimal("0"),
+        eod_cashflow_position=Decimal("0"),
+        bod_cashflow_portfolio=Decimal("0"),
+        eod_cashflow_portfolio=Decimal("0"),
+        eod_market_value=Decimal("100"),
+        fees=Decimal("0"),
+        quantity=Decimal("10"),
+        cost=Decimal("100"),
+    )
+
+
 @pytest.fixture(scope="function")
-def setup_sequential_jobs(db_engine, clean_db):
-    """
-    Sets up a portfolio and two sequential, PENDING aggregation jobs.
-    Also creates the necessary PositionState record for epoch awareness.
-    """
+def setup_sequential_jobs_with_snapshot_completeness(db_engine, clean_db):
     portfolio_id = "SEQ_JOB_TEST_01"
     day1 = date(2025, 8, 18)
     day2 = date(2025, 8, 19)
 
     with Session(db_engine) as session:
-        session.add(Portfolio(portfolio_id=portfolio_id, base_currency="USD", open_date=date(2024,1,1), risk_exposure="a", investment_time_horizon="b", portfolio_type="c", booking_center_code="d", client_id="e", status="f"))
-        
-        # --- NEW: Add PositionState record for the portfolio ---
-        # The scheduler logic now depends on this to determine the correct epoch.
-        # We assume no securities yet, so it's a placeholder for the portfolio's max epoch.
-        # Note: A real flow would create this when a security is first traded.
-        # For this test, we can just ensure a record exists for the portfolio.
-        # A better approach for a real system might be to have a portfolio-level epoch,
-        # but for now, this aligns the test with the query's expectation.
-        # Let's assume the scheduler logic needs a baseline. A "placeholder" security is okay here.
-        session.add(PositionState(
-            portfolio_id=portfolio_id, 
-            security_id="PLACEHOLDER", 
-            epoch=0, 
-            watermark_date=date(2024,1,1))
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
         )
-        
+        session.add_all(
+            [
+                Instrument(
+                    security_id="SEC_A",
+                    name="Sec A",
+                    isin="ISIN_A",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+                Instrument(
+                    security_id="SEC_B",
+                    name="Sec B",
+                    isin="ISIN_B",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_A",
+                    epoch=0,
+                    watermark_date=date(2024, 1, 1),
+                ),
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_B",
+                    epoch=0,
+                    watermark_date=date(2024, 1, 1),
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id, aggregation_date=day1, status="PENDING"
+                ),
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id, aggregation_date=day2, status="PENDING"
+                ),
+            ]
+        )
         session.flush()
 
-        session.add_all([
-            PortfolioAggregationJob(portfolio_id=portfolio_id, aggregation_date=day1, status="PENDING"),
-            PortfolioAggregationJob(portfolio_id=portfolio_id, aggregation_date=day2, status="PENDING"),
-        ])
+        # Day1 inputs: 2 expected snapshots, only 1 produced position-timeseries (incomplete).
+        session.add_all(
+            [
+                _snapshot(portfolio_id, "SEC_A", day1),
+                _snapshot(portfolio_id, "SEC_B", day1),
+                _position_ts(portfolio_id, "SEC_A", day1),
+            ]
+        )
+        # Day2 inputs: keep complete for SEC_A so day2 can claim once day1 portfolio timeseries exists.
+        session.add_all(
+            [
+                _snapshot(portfolio_id, "SEC_A", day2),
+                _position_ts(portfolio_id, "SEC_A", day2),
+            ]
+        )
         session.commit()
-    
+
     return {"portfolio_id": portfolio_id, "day1": day1, "day2": day2}
 
 
-async def test_find_and_claim_eligible_jobs_sequential_logic(setup_sequential_jobs, async_db_session: AsyncSession, db_engine):
-    """
-    GIVEN two sequential PENDING jobs for Day 1 and Day 2
-    WHEN find_and_claim_eligible_jobs is called
-    THEN it should only claim the first job (Day 1).
-    WHEN a timeseries record is created for Day 1
-    THEN a subsequent call should claim the job for Day 2.
-    """
-    # ARRANGE
+async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
+    setup_sequential_jobs_with_snapshot_completeness,
+    async_db_session: AsyncSession,
+    db_engine,
+):
     repo = TimeseriesRepository(async_db_session)
-    portfolio_id = setup_sequential_jobs["portfolio_id"]
-    day1 = setup_sequential_jobs["day1"]
-    day2 = setup_sequential_jobs["day2"]
+    portfolio_id = setup_sequential_jobs_with_snapshot_completeness["portfolio_id"]
+    day1 = setup_sequential_jobs_with_snapshot_completeness["day1"]
+    day2 = setup_sequential_jobs_with_snapshot_completeness["day2"]
 
-    # ACT 1: First call
+    # Day1 should not claim while input set is incomplete (2 expected snapshots vs 1 position-timeseries).
     claimed_jobs_1 = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
+    assert claimed_jobs_1 == []
 
-    # ASSERT 1: Should only claim the first job
-    assert len(claimed_jobs_1) == 1
-    assert claimed_jobs_1[0].aggregation_date == day1
-
-    # ARRANGE 2: Simulate the completion of the first job by creating its timeseries record
+    # Complete day1 input set.
     with Session(db_engine) as session:
-        # --- UPDATED: Explicitly set epoch to match what the query expects (0) ---
-        session.add(PortfolioTimeseries(
-            portfolio_id=portfolio_id, 
-            date=day1, 
-            epoch=0, # The default/initial epoch
-            bod_market_value=0, 
-            bod_cashflow=0, 
-            eod_cashflow=0, 
-            eod_market_value=0, 
-            fees=0
-        ))
+        session.add(_position_ts(portfolio_id, "SEC_B", day1))
         session.commit()
-    
-    # ACT 2: Second call
+
     claimed_jobs_2 = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
-    
-    # ASSERT 2: Should now claim the second job
     assert len(claimed_jobs_2) == 1
-    assert claimed_jobs_2[0].aggregation_date == day2
+    assert claimed_jobs_2[0].aggregation_date == day1
+
+    # Simulate day1 aggregation completion; day2 should now claim (prior-day + completeness satisfied).
+    with Session(db_engine) as session:
+        session.add(
+            PortfolioTimeseries(
+                portfolio_id=portfolio_id,
+                date=day1,
+                epoch=0,
+                bod_market_value=Decimal("0"),
+                bod_cashflow=Decimal("0"),
+                eod_cashflow=Decimal("0"),
+                eod_market_value=Decimal("0"),
+                fees=Decimal("0"),
+            )
+        )
+        session.commit()
+
+    claimed_jobs_3 = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    await async_db_session.commit()
+    assert len(claimed_jobs_3) == 1
+    assert claimed_jobs_3[0].aggregation_date == day2
