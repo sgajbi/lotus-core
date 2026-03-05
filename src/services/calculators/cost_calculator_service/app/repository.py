@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     PositionLotState,
     AccruedIncomeOffsetState,
 )
+from portfolio_common.events import TransactionEvent
 from core.models.transaction import Transaction as EngineTransaction
 
 class CostCalculatorRepository:
@@ -71,6 +72,28 @@ class CostCalculatorRepository:
             db_txn_to_update.realized_gain_loss_local = transaction_result.realized_gain_loss_local
         
         return db_txn_to_update
+
+    async def get_transaction_by_id(
+        self, transaction_id: str, *, portfolio_id: str | None = None
+    ) -> DBTransaction | None:
+        stmt = select(DBTransaction).where(DBTransaction.transaction_id == transaction_id)
+        if portfolio_id:
+            stmt = stmt.where(DBTransaction.portfolio_id == portfolio_id)
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
+    async def create_or_update_transaction_event(self, event: TransactionEvent) -> DBTransaction:
+        event_dict = event.model_dump(
+            exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
+            exclude_none=True,
+        )
+        stmt = pg_insert(DBTransaction).values(**event_dict)
+        update_fields = [k for k in event_dict.keys() if k not in {"id", "transaction_id"}]
+        update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
+        await self.db.execute(
+            stmt.on_conflict_do_update(index_elements=["transaction_id"], set_=update_dict)
+        )
+        return DBTransaction(**event_dict)
 
     async def replace_transaction_cost_breakdown(self, transaction_result: EngineTransaction) -> None:
         """

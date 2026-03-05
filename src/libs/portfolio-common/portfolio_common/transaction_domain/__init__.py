@@ -7,6 +7,12 @@ from .buy_validation import (
     BuyValidationIssue,
     validate_buy_transaction,
 )
+from .adjustment_cash_leg import (
+    ADJUSTMENT_TRANSACTION_TYPE,
+    AdjustmentCashLegError,
+    build_auto_generated_adjustment_cash_leg,
+    should_auto_generate_cash_leg,
+)
 from .cash_entry_mode import (
     AUTO_GENERATE_CASH_ENTRY_MODE,
     UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
@@ -63,6 +69,10 @@ __all__ = [
     "BuyValidationIssue",
     "BuyValidationReasonCode",
     "validate_buy_transaction",
+    "ADJUSTMENT_TRANSACTION_TYPE",
+    "AdjustmentCashLegError",
+    "should_auto_generate_cash_leg",
+    "build_auto_generated_adjustment_cash_leg",
     "AUTO_GENERATE_CASH_ENTRY_MODE",
     "UPSTREAM_PROVIDED_CASH_ENTRY_MODE",
     "normalize_cash_entry_mode",

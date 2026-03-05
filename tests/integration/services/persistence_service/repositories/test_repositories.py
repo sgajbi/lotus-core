@@ -7,7 +7,7 @@ from portfolio_common.database_models import Instrument as DBInstrument
 from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import InstrumentEvent, PortfolioEvent, TransactionEvent
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.persistence_service.app.repositories.instrument_repository import (
@@ -22,6 +22,17 @@ from src.services.persistence_service.app.repositories.transaction_db_repo impor
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
+
+
+async def _transactions_table_has_column(async_db_session: AsyncSession, column_name: str) -> bool:
+    query = text(
+        "SELECT COUNT(*) FROM information_schema.columns "
+        "WHERE table_name = 'transactions' AND column_name = :column_name"
+    )
+    scalar = (
+        await async_db_session.execute(query, {"column_name": column_name})
+    ).scalar()
+    return bool(scalar)
 
 
 # --- Fixtures for reusable data ---
@@ -382,4 +393,66 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
     assert persisted_after_upsert.withholding_tax_amount == Decimal("0")
     assert persisted_after_upsert.other_interest_deductions_amount == Decimal("2")
     assert persisted_after_upsert.net_interest_amount == Decimal("73")
+
+
+async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
+    clean_db, async_db_session: AsyncSession
+):
+    if not await _transactions_table_has_column(async_db_session, "settlement_cash_account_id"):
+        pytest.skip("transactions table is missing dual-leg metadata columns in this DB schema.")
+
+    repo = TransactionDBRepository(async_db_session)
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_META_ADJ_01",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="High",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_META_ADJ_01",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+
+    event = TransactionEvent(
+        transaction_id="META_ADJ_TEST_01",
+        portfolio_id="PORT_META_ADJ_01",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime(2026, 3, 5, 10, 0, 0),
+        settlement_date=datetime(2026, 3, 5, 10, 0, 0),
+        transaction_type="ADJUSTMENT",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="USD",
+        currency="USD",
+        cash_entry_mode="AUTO_GENERATE",
+        external_cash_transaction_id="META_PROD_TEST_01",
+        settlement_cash_account_id="CASH-ACC-USD-001",
+        settlement_cash_instrument_id="CASH-USD",
+        movement_direction="INFLOW",
+        originating_transaction_id="META_PROD_TEST_01",
+        originating_transaction_type="DIVIDEND",
+        adjustment_reason="DIVIDEND_SETTLEMENT",
+        link_type="DIVIDEND_TO_CASH",
+        reconciliation_key="REC-ADJ-001",
+    )
+    await repo.create_or_update_transaction(event)
+    await async_db_session.commit()
+
+    stmt = select(DBTransaction).where(DBTransaction.transaction_id == "META_ADJ_TEST_01")
+    persisted = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted.settlement_cash_account_id == "CASH-ACC-USD-001"
+    assert persisted.settlement_cash_instrument_id == "CASH-USD"
+    assert persisted.movement_direction == "INFLOW"
+    assert persisted.originating_transaction_id == "META_PROD_TEST_01"
+    assert persisted.originating_transaction_type == "DIVIDEND"
+    assert persisted.adjustment_reason == "DIVIDEND_SETTLEMENT"
+    assert persisted.link_type == "DIVIDEND_TO_CASH"
+    assert persisted.reconciliation_key == "REC-ADJ-001"
 

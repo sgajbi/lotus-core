@@ -32,6 +32,7 @@ def should_auto_generate_cash_leg(event: TransactionEvent) -> bool:
     return (
         mode == AUTO_GENERATE_CASH_ENTRY_MODE
         and event.transaction_type.upper() in AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES
+        and bool((event.settlement_cash_account_id or "").strip())
     )
 
 

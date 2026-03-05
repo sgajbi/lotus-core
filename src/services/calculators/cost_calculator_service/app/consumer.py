@@ -23,9 +23,14 @@ from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
+    UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
+    assert_upstream_cash_leg_pairing,
+    build_auto_generated_adjustment_cash_leg,
     enrich_dividend_transaction_metadata,
     enrich_interest_transaction_metadata,
     enrich_sell_transaction_metadata,
+    normalize_cash_entry_mode,
+    should_auto_generate_cash_leg,
 )
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -35,6 +40,7 @@ from .repository import CostCalculatorRepository
 
 logger = logging.getLogger(__name__)
 SERVICE_NAME = "cost-calculator"
+ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
 
 class FxRateNotFoundError(Exception):
@@ -45,6 +51,12 @@ class FxRateNotFoundError(Exception):
 
 class PortfolioNotFoundError(Exception):
     """Raised when the portfolio for a transaction is not yet in the database."""
+
+    pass
+
+
+class UpstreamCashLegUnavailableError(Exception):
+    """Raised when a required upstream cash leg is not yet persisted."""
 
     pass
 
@@ -199,122 +211,162 @@ class CostCalculatorConsumer(BaseConsumer):
                     event = enrich_dividend_transaction_metadata(event)
                     event = enrich_interest_transaction_metadata(event)
 
-                    history_db = await repo.get_transaction_history(
-                        portfolio_id=event.portfolio_id,
-                        security_id=event.security_id,
-                        exclude_id=event.transaction_id,
-                    )
+                    event_transaction_type = event.transaction_type.upper()
+                    events_to_publish: list[TransactionEvent] = []
 
-                    history_raw = [
-                        self._transform_event_for_engine(TransactionEvent.model_validate(t))
-                        for t in history_db
-                    ]
-                    event_raw = self._transform_event_for_engine(event)
-
-                    all_transactions_raw = await self._enrich_transactions_with_fx(
-                        transactions=history_raw + [event_raw],
-                        portfolio_base_currency=portfolio.base_currency,
-                        repo=repo,
-                    )
-
-                    new_transaction_ids = {event.transaction_id}
-
-                    processor = self._get_transaction_processor(cost_basis_method)
-                    processed, errored = processor.process_transactions(
-                        existing_transactions_raw=[], new_transactions_raw=all_transactions_raw
-                    )
-
-                    if errored:
-                        new_errors = [e for e in errored if e.transaction_id in new_transaction_ids]
-                        if new_errors:
-                            raise ValueError(
-                                f"Transaction engine failed: {new_errors[0].error_reason}"
-                            )
-
-                    processed_new = [
-                        p for p in processed if p.transaction_id in new_transaction_ids
-                    ]
-
-                    for p_txn in processed_new:
-                        self._record_lifecycle_stage(
-                            p_txn.transaction_type, "persist_transaction_costs", "attempt"
-                        )
-                        updated_txn = await repo.update_transaction_costs(p_txn)
-                        await repo.replace_transaction_cost_breakdown(p_txn)
-                        self._record_lifecycle_stage(
-                            p_txn.transaction_type, "persist_transaction_costs", "success"
+                    if event_transaction_type == ADJUSTMENT_TRANSACTION_TYPE:
+                        events_to_publish.append(event)
+                    else:
+                        history_db = await repo.get_transaction_history(
+                            portfolio_id=event.portfolio_id,
+                            security_id=event.security_id,
+                            exclude_id=event.transaction_id,
                         )
 
-                        if p_txn.transaction_type == "BUY":
+                        history_raw = [
+                            self._transform_event_for_engine(TransactionEvent.model_validate(t))
+                            for t in history_db
+                        ]
+                        event_raw = self._transform_event_for_engine(event)
+
+                        all_transactions_raw = await self._enrich_transactions_with_fx(
+                            transactions=history_raw + [event_raw],
+                            portfolio_base_currency=portfolio.base_currency,
+                            repo=repo,
+                        )
+
+                        new_transaction_ids = {event.transaction_id}
+
+                        processor = self._get_transaction_processor(cost_basis_method)
+                        processed, errored = processor.process_transactions(
+                            existing_transactions_raw=[], new_transactions_raw=all_transactions_raw
+                        )
+
+                        if errored:
+                            new_errors = [e for e in errored if e.transaction_id in new_transaction_ids]
+                            if new_errors:
+                                raise ValueError(
+                                    f"Transaction engine failed: {new_errors[0].error_reason}"
+                                )
+
+                        processed_new = [
+                            p for p in processed if p.transaction_id in new_transaction_ids
+                        ]
+
+                        for p_txn in processed_new:
                             self._record_lifecycle_stage(
-                                p_txn.transaction_type, "persist_lot_state", "attempt"
+                                p_txn.transaction_type, "persist_transaction_costs", "attempt"
                             )
-                            await repo.upsert_buy_lot_state(p_txn)
+                            updated_txn = await repo.update_transaction_costs(p_txn)
+                            await repo.replace_transaction_cost_breakdown(p_txn)
                             self._record_lifecycle_stage(
-                                p_txn.transaction_type, "persist_lot_state", "success"
-                            )
-                            self._record_lifecycle_stage(
-                                p_txn.transaction_type, "persist_accrued_offset_state", "attempt"
-                            )
-                            await repo.upsert_accrued_income_offset_state(p_txn)
-                            self._record_lifecycle_stage(
-                                p_txn.transaction_type, "persist_accrued_offset_state", "success"
-                            )
-                            logger.info(
-                                "buy_state_persisted",
-                                extra={
-                                    "transaction_id": p_txn.transaction_id,
-                                    "economic_event_id": getattr(p_txn, "economic_event_id", None),
-                                    "linked_transaction_group_id": getattr(
-                                        p_txn, "linked_transaction_group_id", None
-                                    ),
-                                    "calculation_policy_id": getattr(
-                                        p_txn, "calculation_policy_id", None
-                                    ),
-                                    "calculation_policy_version": getattr(
-                                        p_txn, "calculation_policy_version", None
-                                    ),
-                                },
+                                p_txn.transaction_type, "persist_transaction_costs", "success"
                             )
 
-                        if p_txn.transaction_type == "SELL":
-                            logger.info(
-                                "sell_state_persisted",
-                                extra={
-                                    "transaction_id": p_txn.transaction_id,
-                                    "economic_event_id": getattr(p_txn, "economic_event_id", None),
-                                    "linked_transaction_group_id": getattr(
-                                        p_txn, "linked_transaction_group_id", None
-                                    ),
-                                    "calculation_policy_id": getattr(
-                                        p_txn, "calculation_policy_id", None
-                                    ),
-                                    "calculation_policy_version": getattr(
-                                        p_txn, "calculation_policy_version", None
-                                    ),
-                                },
+                            if p_txn.transaction_type == "BUY":
+                                self._record_lifecycle_stage(
+                                    p_txn.transaction_type, "persist_lot_state", "attempt"
+                                )
+                                await repo.upsert_buy_lot_state(p_txn)
+                                self._record_lifecycle_stage(
+                                    p_txn.transaction_type, "persist_lot_state", "success"
+                                )
+                                self._record_lifecycle_stage(
+                                    p_txn.transaction_type, "persist_accrued_offset_state", "attempt"
+                                )
+                                await repo.upsert_accrued_income_offset_state(p_txn)
+                                self._record_lifecycle_stage(
+                                    p_txn.transaction_type, "persist_accrued_offset_state", "success"
+                                )
+                                logger.info(
+                                    "buy_state_persisted",
+                                    extra={
+                                        "transaction_id": p_txn.transaction_id,
+                                        "economic_event_id": getattr(p_txn, "economic_event_id", None),
+                                        "linked_transaction_group_id": getattr(
+                                            p_txn, "linked_transaction_group_id", None
+                                        ),
+                                        "calculation_policy_id": getattr(
+                                            p_txn, "calculation_policy_id", None
+                                        ),
+                                        "calculation_policy_version": getattr(
+                                            p_txn, "calculation_policy_version", None
+                                        ),
+                                    },
+                                )
+
+                            if p_txn.transaction_type == "SELL":
+                                logger.info(
+                                    "sell_state_persisted",
+                                    extra={
+                                        "transaction_id": p_txn.transaction_id,
+                                        "economic_event_id": getattr(p_txn, "economic_event_id", None),
+                                        "linked_transaction_group_id": getattr(
+                                            p_txn, "linked_transaction_group_id", None
+                                        ),
+                                        "calculation_policy_id": getattr(
+                                            p_txn, "calculation_policy_id", None
+                                        ),
+                                        "calculation_policy_version": getattr(
+                                            p_txn, "calculation_policy_version", None
+                                        ),
+                                    },
+                                )
+
+                            if p_txn.fees and p_txn.fees.total_fees > 0:
+                                updated_txn.trade_fee = p_txn.fees.total_fees
+                            else:
+                                updated_txn.trade_fee = Decimal(0)
+
+                            events_to_publish.append(TransactionEvent.model_validate(updated_txn))
+
+                    emitted_events: list[TransactionEvent] = []
+                    for processed_event in events_to_publish:
+                        mode = normalize_cash_entry_mode(processed_event.cash_entry_mode)
+                        if (
+                            processed_event.cash_entry_mode is not None
+                            and mode == UPSTREAM_PROVIDED_CASH_ENTRY_MODE
+                            and processed_event.transaction_type.upper() != ADJUSTMENT_TRANSACTION_TYPE
+                        ):
+                            external_cash_id = (processed_event.external_cash_transaction_id or "").strip()
+                            if not external_cash_id:
+                                raise ValueError(
+                                    "UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg."
+                                )
+                            cash_leg_db = await repo.get_transaction_by_id(
+                                external_cash_id, portfolio_id=processed_event.portfolio_id
                             )
+                            if cash_leg_db is None:
+                                raise UpstreamCashLegUnavailableError(
+                                    f"Cash leg {external_cash_id} not found for portfolio "
+                                    f"{processed_event.portfolio_id}."
+                                )
+                            cash_leg = TransactionEvent.model_validate(cash_leg_db)
+                            assert_upstream_cash_leg_pairing(processed_event, cash_leg)
 
-                        if p_txn.fees and p_txn.fees.total_fees > 0:
-                            updated_txn.trade_fee = p_txn.fees.total_fees
-                        else:
-                            updated_txn.trade_fee = Decimal(0)
+                        emitted_events.append(processed_event)
+                        if should_auto_generate_cash_leg(processed_event):
+                            generated_cash_leg = build_auto_generated_adjustment_cash_leg(processed_event)
+                            generated_cash_leg.external_cash_transaction_id = processed_event.transaction_id
+                            await repo.create_or_update_transaction_event(generated_cash_leg)
+                            processed_event.external_cash_transaction_id = generated_cash_leg.transaction_id
+                            await repo.create_or_update_transaction_event(processed_event)
+                            emitted_events.append(generated_cash_leg)
 
-                        full_event_to_publish = TransactionEvent.model_validate(updated_txn)
-
+                    for publish_event in emitted_events:
                         if event.epoch is not None:
-                            full_event_to_publish.epoch = event.epoch
+                            publish_event.epoch = event.epoch
 
                         await outbox_repo.create_outbox_event(
                             aggregate_type="ProcessedTransaction",
-                            aggregate_id=str(p_txn.portfolio_id),
+                            aggregate_id=str(publish_event.portfolio_id),
                             event_type="ProcessedTransactionPersisted",
                             topic=KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
-                            payload=full_event_to_publish.model_dump(mode="json"),
+                            payload=publish_event.model_dump(mode="json"),
                             correlation_id=correlation_id,
                         )
                         self._record_lifecycle_stage(
-                            p_txn.transaction_type, "emit_outbox", "success"
+                            publish_event.transaction_type, "emit_outbox", "success"
                         )
 
                     await idempotency_repo.mark_event_processed(
@@ -324,7 +376,7 @@ class CostCalculatorConsumer(BaseConsumer):
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error(f"Invalid TransactionEvent; sending to DLQ. Error: {e}", exc_info=True)
             await self._send_to_dlq_async(msg, ValueError("invalid payload"))
-        except FxRateNotFoundError as e:
+        except (FxRateNotFoundError, UpstreamCashLegUnavailableError) as e:
             # Missing FX is a temporal dependency issue. Defer the message so Kafka can redeliver
             # after additional FX events are persisted instead of DLQing the transaction.
             BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()

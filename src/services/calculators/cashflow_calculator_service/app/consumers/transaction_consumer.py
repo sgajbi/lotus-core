@@ -18,7 +18,7 @@ from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
-from portfolio_common.transaction_domain import is_upstream_provided_cash_entry_mode
+from portfolio_common.transaction_domain import normalize_cash_entry_mode
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, stop_after_attempt, wait_fixed
@@ -66,11 +66,10 @@ class NoCashflowRuleError(ValueError):
     pass
 
 
-class ExternalCashLinkageError(ValueError):
-    """Raised when UPSTREAM_PROVIDED cash-entry mode lacks required linkage."""
+class LinkedCashLegError(ValueError):
+    """Raised when a linked-cash-leg contract is malformed."""
 
-
-EXTERNAL_CASHFLOW_BYPASS_TRANSACTION_TYPES = {"DIVIDEND", "INTEREST"}
+ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
 
 class CashflowCalculatorConsumer(BaseConsumer):
@@ -149,18 +148,24 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         return
 
                     event_transaction_type = event.transaction_type.upper()
+                    normalized_mode = (
+                        normalize_cash_entry_mode(event.cash_entry_mode)
+                        if event.cash_entry_mode is not None
+                        else None
+                    )
+                    has_linked_cash_leg = bool(
+                        (event.external_cash_transaction_id or "").strip()
+                    )
+                    if normalized_mode == "UPSTREAM_PROVIDED" and not has_linked_cash_leg:
+                        raise LinkedCashLegError(
+                            "UPSTREAM_PROVIDED product leg requires external_cash_transaction_id."
+                        )
                     if (
-                        event_transaction_type
-                        in EXTERNAL_CASHFLOW_BYPASS_TRANSACTION_TYPES
-                        and is_upstream_provided_cash_entry_mode(event.cash_entry_mode)
+                        event_transaction_type != ADJUSTMENT_TRANSACTION_TYPE
+                        and has_linked_cash_leg
                     ):
-                        if not event.external_cash_transaction_id:
-                            raise ExternalCashLinkageError(
-                                f"{event_transaction_type} with UPSTREAM_PROVIDED cash_entry_mode requires "
-                                "external_cash_transaction_id."
-                            )
                         logger.info(
-                            "Skipping auto cashflow creation for UPSTREAM_PROVIDED cash-entry mode.",
+                            "Skipping product-leg cashflow creation because linked ADJUSTMENT cash leg is authoritative.",
                             extra={
                                 "transaction_id": event.transaction_id,
                                 "transaction_type": event_transaction_type,
@@ -225,8 +230,8 @@ class CashflowCalculatorConsumer(BaseConsumer):
         except NoCashflowRuleError as e:
             logger.error(f"Configuration error: {e}. This is a non-retryable error. Sending to DLQ.")
             await self._send_to_dlq_async(msg, e)
-        except ExternalCashLinkageError as e:
-            logger.error(f"External cash linkage error: {e}. Sending to DLQ.")
+        except LinkedCashLegError as e:
+            logger.error(f"Linked cash-leg contract error: {e}. Sending to DLQ.")
             await self._send_to_dlq_async(msg, e)
         except Exception as e:
             logger.error(

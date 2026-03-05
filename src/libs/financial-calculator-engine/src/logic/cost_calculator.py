@@ -374,6 +374,7 @@ class CostCalculator:
             TransactionType.TRANSFER_IN: SecurityInflowStrategy(),
             TransactionType.TRANSFER_OUT: SecurityOutflowStrategy(),
             TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
+            TransactionType.ADJUSTMENT: DefaultStrategy(),
             TransactionType.FEE: DefaultStrategy(),
             TransactionType.OTHER: DefaultStrategy(),
         }

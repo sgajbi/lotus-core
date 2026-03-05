@@ -656,3 +656,69 @@ async def test_consumer_assigns_interest_metadata_defaults(
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
     assert payload["economic_event_id"] == "EVT-INTEREST-PORT_COST_01-INT01"
     assert payload["linked_transaction_group_id"] == "LTG-INTEREST-PORT_COST_01-INT01"
+
+
+async def test_consumer_auto_generates_adjustment_cash_leg_when_settlement_account_provided(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_dividend_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    incoming = json.loads(mock_dividend_kafka_message.value().decode("utf-8"))
+    incoming["cash_entry_mode"] = "AUTO_GENERATE"
+    incoming["settlement_cash_account_id"] = "CASH-ACC-USD-001"
+    incoming["settlement_cash_instrument_id"] = "CASH-USD"
+    incoming["reconciliation_key"] = "REC-001"
+    mock_dividend_kafka_message.value.return_value = json.dumps(incoming).encode("utf-8")
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.get_transaction_history.return_value = []
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_fx_rate.return_value = None
+    mock_repo.update_transaction_costs.side_effect = lambda arg: arg
+
+    await cost_calculator_consumer.process_message(mock_dividend_kafka_message)
+
+    assert mock_outbox_repo.create_outbox_event.await_count == 2
+    payloads = [call.kwargs["payload"] for call in mock_outbox_repo.create_outbox_event.call_args_list]
+    by_type = {payload["transaction_type"]: payload for payload in payloads}
+    assert "DIVIDEND" in by_type
+    assert "ADJUSTMENT" in by_type
+    assert by_type["DIVIDEND"]["external_cash_transaction_id"] == "DIV01-CASHLEG"
+    assert by_type["ADJUSTMENT"]["originating_transaction_id"] == "DIV01"
+    assert by_type["ADJUSTMENT"]["movement_direction"] == "INFLOW"
+    assert by_type["ADJUSTMENT"]["gross_transaction_amount"] == "120.0"
+    assert mock_repo.create_or_update_transaction_event.await_count == 2
+
+
+async def test_consumer_defers_upstream_mode_until_cash_leg_is_available(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_interest_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+
+    incoming = json.loads(mock_interest_kafka_message.value().decode("utf-8"))
+    incoming["cash_entry_mode"] = "UPSTREAM_PROVIDED"
+    incoming["external_cash_transaction_id"] = "CASH-UP-01"
+    mock_interest_kafka_message.value.return_value = json.dumps(incoming).encode("utf-8")
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.get_transaction_history.return_value = []
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_fx_rate.return_value = None
+    mock_repo.update_transaction_costs.side_effect = lambda arg: arg
+    mock_repo.get_transaction_by_id.return_value = None
+
+    with pytest.raises(RetryableConsumerError):
+        await cost_calculator_consumer.process_message(mock_interest_kafka_message)
+
+    cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()

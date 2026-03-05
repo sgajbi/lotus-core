@@ -17,6 +17,7 @@ class TransactionType(str, Enum):
     FEE = "FEE"
     TRANSFER_IN = "TRANSFER_IN"
     TRANSFER_OUT = "TRANSFER_OUT"
+    ADJUSTMENT = "ADJUSTMENT"
     OTHER = "OTHER" # Catch-all for any other transaction types not explicitly defined
 
     @classmethod
