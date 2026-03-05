@@ -87,6 +87,7 @@ Implementation classification vocabulary:
 | RFC-066 | Institutional-Scale Production Readiness and Performance Assurance | Implemented | Implemented | Fully implemented and aligned | docs/RFCs/RFC 066 - Institutional-Scale Production Readiness and Performance Assurance.md (see implementation and validation sections) | Maintain institutional sign-off CI gate and recency policy as release invariants. |
 | RFC-067 | Active Query Contract Governance and Vocabulary Policy | Implemented | Implemented | Fully implemented and aligned | docs/RFCs/RFC 067 - Active Query Contract Governance and Vocabulary Policy.md (see implementation and validation sections) | Use as active authority for post-RFC-057 decomposition/vocabulary governance. |
 | RFC-068 | Active Query DTO Pyramid Hardening | Implemented | Implemented | Fully implemented and aligned | docs/RFCs/RFC 068 - Active Query DTO Pyramid Hardening.md (see implementation and validation sections) | Use as active authority for DTO pyramid governance on current domains. |
+| RFC-069 | DIVIDEND Transaction RFC Implementation Plan | Implemented | Partially Implemented | Partially implemented (requires enhancement) | docs/RFCs/RFC 069 - DIVIDEND Transaction RFC Implementation Plan.md; docs/rfc-transaction-specs/transactions/DIVIDEND/DIVIDEND-SLICE-6-CONFORMANCE-REPORT.md | Keep delivered slices (0-6) as baseline; schedule follow-on scope for withholding/ROC decomposition and advanced timing semantics tracked in the conformance report. |
 
 ## Loop Execution Notes
 

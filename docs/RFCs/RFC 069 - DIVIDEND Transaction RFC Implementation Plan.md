@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | In Progress |
+| Status | Implemented |
 | Created | 2026-03-05 |
 | Last Updated | 2026-03-05 |
 | Owners | lotus-core engineering |
