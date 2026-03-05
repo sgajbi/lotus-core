@@ -99,6 +99,55 @@ class Transaction(BaseModel):
             "UPSTREAM_PROVIDED."
         ),
     )
+    settlement_cash_account_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CASH-ACC-USD-001"},
+        description=(
+            "Settlement cash account identifier used to build the generated "
+            "ADJUSTMENT cash leg in AUTO_GENERATE mode."
+        ),
+    )
+    settlement_cash_instrument_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CASH-USD"},
+        description=(
+            "Optional direct cash instrument_id for generated ADJUSTMENT cash legs. "
+            "If omitted, engine resolves from settlement_cash_account_id."
+        ),
+    )
+    movement_direction: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "INFLOW"},
+        description=(
+            "Cash movement direction for ADJUSTMENT transactions. "
+            "Supported canonical values are INFLOW and OUTFLOW."
+        ),
+    )
+    originating_transaction_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "TRN001"},
+        description="Product-leg transaction id linked to an ADJUSTMENT cash leg.",
+    )
+    originating_transaction_type: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "BUY"},
+        description="Product-leg transaction type linked to an ADJUSTMENT cash leg.",
+    )
+    adjustment_reason: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "BUY_SETTLEMENT"},
+        description="Canonical reason code describing why an ADJUSTMENT cash leg exists.",
+    )
+    link_type: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "BUY_TO_CASH"},
+        description="Canonical relationship label between product leg and ADJUSTMENT cash leg.",
+    )
+    reconciliation_key: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "REC-2026-0001"},
+        description="Optional reconciliation key shared by paired dual-leg transactions.",
+    )
     interest_direction: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "INCOME"},

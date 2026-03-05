@@ -69,3 +69,16 @@ class DividendCanonicalTransaction(BaseModel):
             "UPSTREAM_PROVIDED."
         ),
     )
+    settlement_cash_account_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Settlement cash account identifier required for AUTO_GENERATE cash-leg "
+            "construction."
+        ),
+    )
+    settlement_cash_instrument_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional direct cash instrument identifier for generated cash legs."
+        ),
+    )

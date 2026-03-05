@@ -90,6 +90,51 @@ class TransactionRecord(BaseModel):
         ),
         examples=["CASH-ENTRY-2026-0001"],
     )
+    settlement_cash_account_id: Optional[str] = Field(
+        None,
+        description=(
+            "Settlement cash account identifier used for generated ADJUSTMENT cash "
+            "leg construction in AUTO_GENERATE mode."
+        ),
+        examples=["CASH-ACC-USD-001"],
+    )
+    settlement_cash_instrument_id: Optional[str] = Field(
+        None,
+        description=(
+            "Cash instrument identifier used for generated ADJUSTMENT cash legs."
+        ),
+        examples=["CASH-USD"],
+    )
+    movement_direction: Optional[str] = Field(
+        None,
+        description="Cash movement direction for ADJUSTMENT transactions (INFLOW or OUTFLOW).",
+        examples=["INFLOW"],
+    )
+    originating_transaction_id: Optional[str] = Field(
+        None,
+        description="Originating product-leg transaction id linked to an ADJUSTMENT cash leg.",
+        examples=["TRN001"],
+    )
+    originating_transaction_type: Optional[str] = Field(
+        None,
+        description="Originating product-leg transaction type linked to an ADJUSTMENT cash leg.",
+        examples=["BUY"],
+    )
+    adjustment_reason: Optional[str] = Field(
+        None,
+        description="Canonical reason code describing why an ADJUSTMENT cash leg exists.",
+        examples=["BUY_SETTLEMENT"],
+    )
+    link_type: Optional[str] = Field(
+        None,
+        description="Canonical relationship label between product leg and ADJUSTMENT cash leg.",
+        examples=["BUY_TO_CASH"],
+    )
+    reconciliation_key: Optional[str] = Field(
+        None,
+        description="Optional reconciliation key shared by paired dual-leg transactions.",
+        examples=["REC-2026-0001"],
+    )
     interest_direction: Optional[str] = Field(
         None,
         description="INTEREST semantic direction when applicable.",

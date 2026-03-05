@@ -115,6 +115,14 @@ class TransactionEvent(BaseModel):
     source_system: Optional[str] = None
     cash_entry_mode: Optional[str] = None
     external_cash_transaction_id: Optional[str] = None
+    settlement_cash_account_id: Optional[str] = None
+    settlement_cash_instrument_id: Optional[str] = None
+    movement_direction: Optional[str] = None
+    originating_transaction_id: Optional[str] = None
+    originating_transaction_type: Optional[str] = None
+    adjustment_reason: Optional[str] = None
+    link_type: Optional[str] = None
+    reconciliation_key: Optional[str] = None
     interest_direction: Optional[str] = None
     withholding_tax_amount: Optional[Decimal] = None
     other_interest_deductions_amount: Optional[Decimal] = None
