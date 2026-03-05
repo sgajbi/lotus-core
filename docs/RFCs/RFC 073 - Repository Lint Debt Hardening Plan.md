@@ -87,6 +87,16 @@ Slice 1 Progress (Batch 1):
  - `make typecheck` -> passed
  - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
 
+Slice 1 Progress (Batch 2):
+1. Resolved remaining non-E501 issues in runtime-critical scope:
+ - `E402`, `E711`, `F541`, and residual `I001`
+2. Post-batch runtime-critical snapshot:
+ - `238 E501` remaining
+ - `0` remaining for `I001/F401/F841/E402/E711/F541`
+3. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+
 ### Slice 2 - Core Test Domains
 Deliverables:
 1. Resolve Ruff violations in high-value unit/integration suites.

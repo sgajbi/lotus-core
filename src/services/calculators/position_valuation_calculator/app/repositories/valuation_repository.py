@@ -145,7 +145,7 @@ class ValuationRepository:
                     (dps.date == date_series_subq.c.expected_date)
                 )
             )
-            .where(dps.id == None)
+            .where(dps.id.is_(None))
         ).correlate(s).scalar_subquery()
 
         # Subquery to find the date of the latest existing snapshot for a key.

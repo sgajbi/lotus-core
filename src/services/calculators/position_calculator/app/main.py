@@ -6,11 +6,10 @@ from app.consumer_manager import ConsumerManager
 from portfolio_common.logging_utils import setup_logging
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from .web import app as web_app
+
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# This import is necessary for the Instrumentator to find the web app
-from .web import app as web_app
 
 
 async def main():

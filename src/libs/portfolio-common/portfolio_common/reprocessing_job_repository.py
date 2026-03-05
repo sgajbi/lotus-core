@@ -23,7 +23,7 @@ class ReprocessingJobRepository:
         self.db.add(job)
         await self.db.flush()
         await self.db.refresh(job)
-        logger.info(f"Created new reprocessing job.", extra={"job_id": job.id, "job_type": job_type})
+        logger.info("Created new reprocessing job.", extra={"job_id": job.id, "job_type": job_type})
         return job
         
     async def find_and_claim_jobs(self, job_type: str, batch_size: int) -> List[ReprocessingJob]:
