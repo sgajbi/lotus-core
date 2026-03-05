@@ -95,3 +95,4 @@ def test_validate_dividend_transaction_requires_settlement_cash_account_for_auto
     assert any(
         i.code == DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT for i in issues
     )
+

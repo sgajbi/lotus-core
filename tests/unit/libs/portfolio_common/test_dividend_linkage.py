@@ -52,3 +52,4 @@ def test_enrich_dividend_metadata_preserves_upstream_values() -> None:
     assert enriched.calculation_policy_version == "2.1.0"
     assert enriched.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert enriched.external_cash_transaction_id == "CASH-UPSTREAM-001"
+
