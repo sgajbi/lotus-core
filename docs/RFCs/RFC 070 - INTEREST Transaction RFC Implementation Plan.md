@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | In Progress |
 | Created | 2026-03-05 |
 | Last Updated | 2026-03-05 |
 | Owners | lotus-core engineering |
@@ -61,7 +61,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 ## Slice Execution Status
 | Slice | Status | Evidence |
 | --- | --- | --- |
-| 0 | Pending | Gap baseline + characterization tests |
+| 0 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-0-GAP-ASSESSMENT.md`, `tests/unit/transaction_specs/test_interest_slice0_characterization.py` |
 | 1 | Pending | Validation model + reason-code taxonomy |
 | 2 | Pending | Metadata enrichment + persistence traceability |
 | 3 | Pending | Calculation invariants + direction semantics baseline |
@@ -200,11 +200,14 @@ Every slice PR must include a short shared-doc conformance note listing which sh
 1. INTEREST implementation should follow existing transaction RFC delivery discipline (slice-based, evidence-first).
 2. INTEREST visibility should be delivered via existing query/support endpoint surfaces (no dedicated transaction endpoint by default).
 
-## Approval Gate (No Implementation Before Approval)
-Implementation work must not start until this plan is approved.
+## Approval Record
+1. Plan approved by requester on `2026-03-05` and Slice 0 execution started.
+
+## Approval Gate (Closed)
+Implementation started after plan approval.
 
 Approval checklist:
 1. Slice boundaries accepted.
-2. Open decisions resolved.
+2. Open decisions to be finalized during execution.
 3. Test/gate expectations accepted.
 4. Residual-risk acceptance criteria confirmed.
