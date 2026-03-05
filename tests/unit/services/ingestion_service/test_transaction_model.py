@@ -1,9 +1,11 @@
-import pytest
-from datetime import date, datetime
-from pydantic import ValidationError
+from datetime import datetime
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+
 
 def test_transaction_model_success():
     """
@@ -139,3 +141,24 @@ def test_transaction_model_accepts_slice1_canonical_metadata_fields():
     assert model.economic_event_id == "EVT-2026-00987"
     assert model.linked_transaction_group_id == "LTG-2026-00456"
     assert model.calculation_policy_id == "BUY_DEFAULT_POLICY"
+
+
+def test_transaction_model_accepts_cash_entry_mode_and_external_cash_link() -> None:
+    payload = {
+        "transaction_id": "DIV_CASH_MODE_001",
+        "portfolio_id": "PORT_META_001",
+        "instrument_id": "SEC_EQ_US_001",
+        "security_id": "SEC_EQ_US_001",
+        "transaction_date": "2026-03-01T10:00:00Z",
+        "transaction_type": "DIVIDEND",
+        "quantity": "0",
+        "price": "0",
+        "gross_transaction_amount": "1000.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "cash_entry_mode": "EXTERNAL",
+        "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
+    }
+    model = Transaction(**payload)
+    assert model.cash_entry_mode == "EXTERNAL"
+    assert model.external_cash_transaction_id == "CASH-ENTRY-2026-0001"

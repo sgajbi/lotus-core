@@ -82,6 +82,21 @@ class Transaction(BaseModel):
         json_schema_extra={"example": "OMS_PRIMARY"},
         description="Upstream source-system identifier for lineage.",
     )
+    cash_entry_mode: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "AUTO"},
+        description=(
+            "Cash-leg generation mode. Use AUTO for service-generated cash leg, "
+            "or EXTERNAL when a separate upstream cash entry is authoritative."
+        ),
+    )
+    external_cash_transaction_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CASH-ENTRY-2026-0001"},
+        description=(
+            "Upstream cash transaction identifier when cash_entry_mode is EXTERNAL."
+        ),
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

@@ -1,18 +1,18 @@
 # libs/portfolio-common/portfolio_common/database_models.py
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Numeric,
-    DateTime,
-    Date,
-    func,
-    ForeignKey,
-    UniqueConstraint,
-    Boolean,
     JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
     Index,
+    Integer,
+    Numeric,
+    String,
     Text,
+    UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -539,6 +539,8 @@ class Transaction(Base):
     calculation_policy_id = Column(String, nullable=True)
     calculation_policy_version = Column(String, nullable=True)
     source_system = Column(String, nullable=True)
+    cash_entry_mode = Column(String, nullable=True)
+    external_cash_transaction_id = Column(String, nullable=True, index=True)
 
     costs = relationship(
         "TransactionCost", back_populates="transaction", cascade="all, delete-orphan"

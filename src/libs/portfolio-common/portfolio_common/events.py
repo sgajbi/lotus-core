@@ -1,8 +1,10 @@
 # libs/portfolio-common/portfolio_common/events.py
 from datetime import date, datetime, timezone
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
 from decimal import Decimal
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class BusinessDateEvent(BaseModel):
     """Event model for a raw business date."""
@@ -111,6 +113,8 @@ class TransactionEvent(BaseModel):
     calculation_policy_id: Optional[str] = None
     calculation_policy_version: Optional[str] = None
     source_system: Optional[str] = None
+    cash_entry_mode: Optional[str] = None
+    external_cash_transaction_id: Optional[str] = None
     created_at: Optional[datetime] = None
     epoch: Optional[int] = None
 

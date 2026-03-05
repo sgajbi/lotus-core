@@ -1,17 +1,17 @@
 # tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py
 
-import pytest
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from logic.cost_basis_strategies import FIFOBasisStrategy
-from logic.disposition_engine import DispositionEngine
-
-from logic.cost_calculator import CostCalculator
-from logic.error_reporter import ErrorReporter
-from core.models.transaction import Transaction, Fees
+import pytest
 from core.enums.transaction_type import TransactionType
+from core.models.transaction import Fees, Transaction
+from logic.cost_basis_strategies import FIFOBasisStrategy
+from logic.cost_calculator import CostCalculator
+from logic.disposition_engine import DispositionEngine
+from logic.error_reporter import ErrorReporter
+
 
 @pytest.fixture
 def mock_disposition_engine():
@@ -249,7 +249,100 @@ def test_dividend_transaction_has_zero_cost(cost_calculator, mock_disposition_en
     )
     cost_calculator.calculate_transaction_costs(dividend_transaction)
     assert dividend_transaction.net_cost == Decimal("0")
-    assert dividend_transaction.realized_gain_loss is None
+    assert dividend_transaction.realized_gain_loss == Decimal("0")
+    assert dividend_transaction.realized_gain_loss_local == Decimal("0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_dividend_strategy_accepts_string_zero_price(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    dividend_transaction = Transaction(
+        transaction_id="DIV_STR_PRICE_0",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.DIVIDEND,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price="0",
+        gross_transaction_amount=Decimal("50.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(dividend_transaction)
+    assert not error_reporter.has_errors_for("DIV_STR_PRICE_0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_dividend_strategy_rejects_non_zero_quantity(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    invalid_dividend = Transaction(
+        transaction_id="DIV_BAD_QTY",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.DIVIDEND,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("1"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("50.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(invalid_dividend)
+    assert error_reporter.has_errors_for("DIV_BAD_QTY")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_dividend_strategy_rejects_non_zero_price(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    invalid_dividend = Transaction(
+        transaction_id="DIV_BAD_PRICE",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.DIVIDEND,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("10"),
+        gross_transaction_amount=Decimal("50.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(invalid_dividend)
+    assert error_reporter.has_errors_for("DIV_BAD_PRICE")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_dividend_strategy_rejects_non_positive_gross_amount(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    invalid_dividend = Transaction(
+        transaction_id="DIV_BAD_GROSS",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.DIVIDEND,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(invalid_dividend)
+    assert error_reporter.has_errors_for("DIV_BAD_GROSS")
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
 def test_transfer_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):

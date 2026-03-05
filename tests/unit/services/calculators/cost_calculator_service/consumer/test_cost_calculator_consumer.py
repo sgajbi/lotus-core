@@ -12,16 +12,18 @@ from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.transaction_domain import (
+    DIVIDEND_DEFAULT_POLICY_ID,
+    DIVIDEND_DEFAULT_POLICY_VERSION,
+    SELL_AVCO_POLICY_ID,
+    SELL_DEFAULT_POLICY_VERSION,
+    SELL_FIFO_POLICY_ID,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculatorConsumer,
     PortfolioNotFoundError,
-)
-from portfolio_common.transaction_domain import (
-    SELL_AVCO_POLICY_ID,
-    SELL_FIFO_POLICY_ID,
-    SELL_DEFAULT_POLICY_VERSION,
 )
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from tests.unit.test_support.async_session_iter import make_single_session_getter
@@ -127,6 +129,32 @@ def mock_buy_kafka_message() -> MagicMock:
     mock_msg.topic.return_value = "raw_transactions_completed"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 2
+    mock_msg.headers.return_value = []
+    return mock_msg
+
+
+@pytest.fixture
+def mock_dividend_kafka_message() -> MagicMock:
+    """Provides a reusable mock Kafka message for a DIVIDEND transaction."""
+    dividend_event = TransactionEvent(
+        transaction_id="DIV01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 25),
+        transaction_type="DIVIDEND",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("120.0"),
+        trade_currency="USD",
+        currency="USD",
+        trade_fee=Decimal("0.0"),
+    )
+    mock_msg = MagicMock()
+    mock_msg.value.return_value = dividend_event.model_dump_json().encode("utf-8")
+    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.partition.return_value = 0
+    mock_msg.offset.return_value = 3
     mock_msg.headers.return_value = []
     return mock_msg
 
@@ -250,7 +278,8 @@ async def test_consumer_uses_fee_breakdown_when_provided(
     """
     GIVEN a BUY event with explicit fee breakdown fields
     WHEN the consumer transforms and processes the event
-    THEN fee components should be used (not only trade_fee), and total trade_fee should match component sum.
+    THEN fee components should be used (not only trade_fee),
+    and total trade_fee should match component sum.
     """
     mock_repo = mock_dependencies["repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
@@ -522,3 +551,44 @@ async def test_consumer_emits_sell_lifecycle_metrics(
     assert ("persist_transaction_costs", "attempt") in stage_calls
     assert ("persist_transaction_costs", "success") in stage_calls
     assert ("emit_outbox", "success") in stage_calls
+
+
+async def test_consumer_assigns_dividend_metadata_defaults(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_dividend_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.get_transaction_history.return_value = []
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_fx_rate.return_value = None
+    mock_repo.update_transaction_costs.side_effect = lambda arg: arg
+
+    await cost_calculator_consumer.process_message(mock_dividend_kafka_message)
+
+    updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
+    assert (
+        updated_transaction_arg.economic_event_id
+        == "EVT-DIVIDEND-PORT_COST_01-DIV01"
+    )
+    assert (
+        updated_transaction_arg.linked_transaction_group_id
+        == "LTG-DIVIDEND-PORT_COST_01-DIV01"
+    )
+    assert updated_transaction_arg.calculation_policy_id == DIVIDEND_DEFAULT_POLICY_ID
+    assert (
+        updated_transaction_arg.calculation_policy_version
+        == DIVIDEND_DEFAULT_POLICY_VERSION
+    )
+
+    payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
+    assert payload["economic_event_id"] == "EVT-DIVIDEND-PORT_COST_01-DIV01"
+    assert (
+        payload["linked_transaction_group_id"] == "LTG-DIVIDEND-PORT_COST_01-DIV01"
+    )

@@ -1,16 +1,24 @@
 # services/persistence_service/tests/integration/test_repositories.py
-import pytest
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import select, func
+
+import pytest
+from portfolio_common.database_models import Instrument as DBInstrument
+from portfolio_common.database_models import Portfolio
+from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.events import InstrumentEvent, PortfolioEvent, TransactionEvent
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.database_models import Instrument as DBInstrument, Transaction as DBTransaction, Portfolio
-from portfolio_common.events import InstrumentEvent, TransactionEvent, PortfolioEvent
-
-from src.services.persistence_service.app.repositories.instrument_repository import InstrumentRepository
-from src.services.persistence_service.app.repositories.transaction_db_repo import TransactionDBRepository
-from src.services.persistence_service.app.repositories.portfolio_repository import PortfolioRepository
+from src.services.persistence_service.app.repositories.instrument_repository import (
+    InstrumentRepository,
+)
+from src.services.persistence_service.app.repositories.portfolio_repository import (
+    PortfolioRepository,
+)
+from src.services.persistence_service.app.repositories.transaction_db_repo import (
+    TransactionDBRepository,
+)
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
@@ -248,6 +256,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
         calculation_policy_id="BUY_DEFAULT_POLICY",
         calculation_policy_version="1.0.0",
         source_system="OMS_PRIMARY",
+        cash_entry_mode="AUTO",
     )
 
     await repo.create_or_update_transaction(event)
@@ -260,11 +269,15 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     assert persisted.calculation_policy_id == "BUY_DEFAULT_POLICY"
     assert persisted.calculation_policy_version == "1.0.0"
     assert persisted.source_system == "OMS_PRIMARY"
+    assert persisted.cash_entry_mode == "AUTO"
+    assert persisted.external_cash_transaction_id is None
 
     updated = event.model_copy(
         update={
             "calculation_policy_version": "1.0.1",
             "source_system": "OMS_FALLBACK",
+            "cash_entry_mode": "EXTERNAL",
+            "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
         }
     )
     await repo.create_or_update_transaction(updated)
@@ -274,3 +287,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
     assert persisted_after_upsert.calculation_policy_version == "1.0.1"
     assert persisted_after_upsert.source_system == "OMS_FALLBACK"
+    assert persisted_after_upsert.cash_entry_mode == "EXTERNAL"
+    assert (
+        persisted_after_upsert.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
+    )
