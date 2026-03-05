@@ -135,6 +135,17 @@ Slice 1 Progress (Batch 5):
  - `make typecheck` -> passed
  - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
 
+Slice 1 Progress (Batch 6):
+1. Scoped E501 reduction completed for valuation repository hotspot:
+ - `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`
+2. Scope method:
+ - `ruff format` on file (no manual follow-up needed)
+3. Snapshot impact:
+ - runtime-critical scope E501 count: `164 -> 150` (`-14`)
+4. Regression evidence:
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+
 ### Slice 2 - Core Test Domains
 Deliverables:
 1. Resolve Ruff violations in high-value unit/integration suites.
