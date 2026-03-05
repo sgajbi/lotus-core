@@ -25,6 +25,11 @@ from .dividend_validation import (
     DividendValidationIssue,
     validate_dividend_transaction,
 )
+from .interest_linkage import (
+    INTEREST_DEFAULT_POLICY_ID,
+    INTEREST_DEFAULT_POLICY_VERSION,
+    enrich_interest_transaction_metadata,
+)
 from .interest_models import InterestCanonicalTransaction
 from .interest_reason_codes import InterestValidationReasonCode
 from .interest_validation import (
@@ -69,6 +74,9 @@ __all__ = [
     "InterestValidationIssue",
     "InterestValidationReasonCode",
     "validate_interest_transaction",
+    "INTEREST_DEFAULT_POLICY_ID",
+    "INTEREST_DEFAULT_POLICY_VERSION",
+    "enrich_interest_transaction_metadata",
     "SellCanonicalTransaction",
     "SellValidationError",
     "SellValidationIssue",
