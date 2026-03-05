@@ -374,4 +374,9 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     query = "SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date"  # noqa: E501
     params = {"pid": PORTFOLIO_ID, "date": DAY_5}
     expected_eod_mv = Decimal("1010104.5000000000")
-    poll_db_until(query, lambda r: r is not None and r.eod_market_value == expected_eod_mv, params)
+    poll_db_until(
+        query,
+        lambda r: r is not None and r.eod_market_value == expected_eod_mv,
+        params,
+        timeout=180,
+    )

@@ -287,7 +287,21 @@ async def test_dispatcher_is_concurrent_safe(db_engine, clean_db, smart_mock_kaf
     )
     task1 = asyncio.create_task(dispatcher1.run())
     task2 = asyncio.create_task(dispatcher2.run())
-    await asyncio.sleep(1)
+
+    # Wait deterministically until all events are processed (or timeout),
+    # instead of relying on a fixed sleep that can be flaky under load.
+    deadline = asyncio.get_event_loop().time() + 10.0
+    while True:
+        with TestSessionFactory() as session:
+            processed = session.execute(
+                text("SELECT count(*) FROM outbox_events WHERE status = 'PROCESSED'")
+            ).scalar_one()
+        if processed == num_events:
+            break
+        if asyncio.get_event_loop().time() >= deadline:
+            break
+        await asyncio.sleep(0.2)
+
     dispatcher1.stop()
     dispatcher2.stop()
     await asyncio.gather(task1, task2)

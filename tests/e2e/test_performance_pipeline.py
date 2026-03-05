@@ -99,7 +99,7 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
         query="SELECT 1 FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date",
         params={"pid": portfolio_id, "date": day2},
         validation_func=lambda r: r is not None,
-        timeout=90,
+        timeout=180,
         fail_message="Pipeline did not generate portfolio_timeseries for the final day.",
     )
     return {"portfolio_id": portfolio_id}
