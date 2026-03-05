@@ -210,7 +210,8 @@ def _write_report(
         lines.append("## Failures")
         for failure in failures:
             lines.append(
-                f"- {failure.name} `{failure.method} {failure.url}` -> {failure.status} ({failure.note})"
+                f"- {failure.name} `{failure.method} {failure.url}` -> "
+                f"{failure.status} ({failure.note})"
             )
     md_path.write_text("\n".join(lines), encoding="utf-8")
     return json_path, md_path

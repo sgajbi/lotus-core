@@ -7,7 +7,6 @@ import re
 import subprocess
 import sys
 
-
 WARNING_SUMMARY_RE = re.compile(r"(?P<count>\d+)\s+warnings?\s+in\s+", re.IGNORECASE)
 
 

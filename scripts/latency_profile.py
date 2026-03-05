@@ -419,7 +419,10 @@ def _write_artifacts(
     for result in sorted(results, key=lambda item: item["p95_ms"], reverse=True):
         statuses = ",".join(str(status) for status in result["status_set"])
         lines.append(
-            "| {name} | {ok}/{runs} | {avg} | {p50} | {p95} | {budget} | {p99} | {statuses} |".format(
+            (
+                "| {name} | {ok}/{runs} | {avg} | {p50} | {p95} | "
+                "{budget} | {p99} | {statuses} |"
+            ).format(
                 name=result["name"],
                 ok=result["ok_runs"],
                 runs=result["runs"],
@@ -440,11 +443,13 @@ def _enforce_gate(results: list[dict[str, Any]]) -> tuple[bool, list[str]]:
     for result in results:
         if result["ok_runs"] != result["runs"]:
             violations.append(
-                f"{result['name']}: non-2xx responses observed ({result['ok_runs']}/{result['runs']})"
+                f"{result['name']}: non-2xx responses observed "
+                f"({result['ok_runs']}/{result['runs']})"
             )
         if result["p95_ms"] > result["p95_budget_ms"]:
             violations.append(
-                f"{result['name']}: p95 {result['p95_ms']}ms exceeds budget {result['p95_budget_ms']}ms"
+                f"{result['name']}: p95 {result['p95_ms']}ms exceeds budget "
+                f"{result['p95_budget_ms']}ms"
             )
     return (len(violations) == 0, violations)
 

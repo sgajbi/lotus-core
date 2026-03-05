@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from argparse import ArgumentParser
-from datetime import UTC, datetime
 import json
-from numbers import Real
-from pathlib import Path
 import re
 import sys
+from argparse import ArgumentParser
+from datetime import UTC, datetime
+from numbers import Real
+from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -543,7 +543,8 @@ def _build_attribute_catalog(
         normalized_names = sorted({_to_snake_case(alias) for alias in aliases})
         if len(normalized_names) > 1:
             semantic_drift.append(
-                f"semantic naming drift for {semantic_id}: multiple canonical names {normalized_names}"
+                "semantic naming drift for "
+                f"{semantic_id}: multiple canonical names {normalized_names}"
             )
 
     return catalog, semantic_drift
@@ -733,7 +734,8 @@ def validate_inventory(inventory: dict[str, Any]) -> list[str]:
             errors.append(f"attribute '{semantic_id}' uses legacy term '{canonical_term}'")
         if any(canonical_term.startswith(prefix) for prefix in BANNED_NAME_PREFIXES):
             errors.append(
-                f"attribute '{semantic_id}' uses implementation-specific prefix in '{canonical_term}'"
+                f"attribute '{semantic_id}' uses implementation-specific "
+                f"prefix in '{canonical_term}'"
             )
         description = str(attribute.get("description", "")).strip()
         if len(description) < 12:
@@ -759,7 +761,8 @@ def validate_inventory(inventory: dict[str, Any]) -> list[str]:
             semantic_id = field.get("semanticId")
             if semantic_id and semantic_id not in attribute_ids:
                 errors.append(
-                    f"{endpoint.get('operationId')} field '{field.get('name')}' references unknown semanticId '{semantic_id}'"
+                    f"{endpoint.get('operationId')} field '{field.get('name')}' "
+                    f"references unknown semanticId '{semantic_id}'"
                 )
 
     controls = inventory.get("controlsCatalog", [])

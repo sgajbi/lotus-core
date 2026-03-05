@@ -21,7 +21,7 @@ The plan runs as a dedicated stream in parallel with feature RFCs and uses stric
 | 0 | Completed | `docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md` |
 | 1 | Completed | Runtime-critical scope now Ruff-clean: `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/libs/financial-calculator-engine --statistics` |
 | 2 | Completed | Test scope now Ruff-clean: `python -m ruff check tests --statistics` |
-| 3 | Pending | Scripts/tooling lint burn-down |
+| 3 | Completed | Scripts/tooling scope now Ruff-clean: `python -m ruff check scripts --statistics` |
 | 4 | Pending | CI/global gate tightening |
 
 ## Baseline (2026-03-05)
@@ -204,6 +204,22 @@ Deliverables:
 
 Exit Criteria:
 1. Governance tooling remains operational and Ruff-clean in cleaned subdomains.
+
+Slice 3 Progress (Accelerated Pass):
+1. Started from scripts-domain baseline captured in Slice 0:
+ - total scripts-domain findings: `24`
+2. Applied targeted cleanup:
+ - manual wrapping for residual `E501` in gating/reporting helpers
+ - preserved script behavior and contracts (lint-only edits)
+3. Slice 3 result:
+ - scripts-domain findings: `24 -> 0`
+ - scripts scope status: Ruff-clean
+4. Regression evidence:
+ - `python -m ruff check scripts --statistics` -> clean
+ - `make typecheck` -> passed
+ - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+5. Slice 3 exit criteria:
+ - governance tooling remains operational and Ruff-clean: `met`
 
 ### Slice 4 - Global Gate Tightening
 Deliverables:

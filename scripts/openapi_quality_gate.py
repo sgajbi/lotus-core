@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from collections import Counter
 from pathlib import Path
-import sys
 
 # Ensure the repository root is importable when script is executed directly.
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -91,7 +91,8 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
 
     if missing_docs:
         errors.append(
-            f"OpenAPI quality gate ({service_name}): missing endpoint documentation/response contract"
+            f"OpenAPI quality gate ({service_name}): missing endpoint "
+            "documentation/response contract"
         )
         errors.extend(
             f"  - {method} {path}: missing {field_name}"
@@ -115,8 +116,8 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
 
 
 def main() -> int:
-    from src.services.query_service.app.main import app as query_app
     from src.services.ingestion_service.app.main import app as ingestion_app
+    from src.services.query_service.app.main import app as query_app
 
     service_schemas = {
         "query_service": query_app.openapi(),

@@ -129,7 +129,8 @@ def _ingest_transactions(
         )
         if response.status_code != 202:
             raise RuntimeError(
-                f"Transaction ingestion failed with status={response.status_code}: {response.text[:300]}"
+                "Transaction ingestion failed with "
+                f"status={response.status_code}: {response.text[:300]}"
             )
         total_records += batch_size
         if sleep_seconds_between_batches > 0:
@@ -230,6 +231,11 @@ def _wait_drain_to_target_backlog(
 
 def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
+    drain_to_baseline = (
+        result.drain_seconds_to_baseline
+        if result.drain_seconds_to_baseline is not None
+        else "timeout"
+    )
     json_path = output_dir / f"{result.run_id}-failure-recovery-gate.json"
     md_path = output_dir / f"{result.run_id}-failure-recovery-gate.md"
     json_path.write_text(json.dumps(asdict(result), indent=2), encoding="utf-8")
@@ -244,12 +250,21 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
         "| Metric | Value |",
         "|---|---:|",
         f"| baseline_backlog_jobs | {result.baseline_backlog_jobs} |",
-        f"| peak_backlog_jobs_during_interruption | {result.peak_backlog_jobs_during_interruption} |",
+        (
+            "| peak_backlog_jobs_during_interruption | "
+            f"{result.peak_backlog_jobs_during_interruption} |"
+        ),
         f"| backlog_growth_jobs | {result.backlog_growth_jobs} |",
-        f"| drain_seconds_to_baseline | {result.drain_seconds_to_baseline if result.drain_seconds_to_baseline is not None else 'timeout'} |",
+        (
+            "| drain_seconds_to_baseline | "
+            f"{drain_to_baseline} |"
+        ),
         f"| backlog_age_seconds_after_recovery | {result.backlog_age_seconds_after_recovery:.3f} |",
         f"| dlq_pressure_ratio_after_recovery | {result.dlq_pressure_ratio_after_recovery:.6f} |",
-        f"| replay_pressure_ratio_after_recovery | {result.replay_pressure_ratio_after_recovery:.6f} |",
+        (
+            "| replay_pressure_ratio_after_recovery | "
+            f"{result.replay_pressure_ratio_after_recovery:.6f} |"
+        ),
     ]
     if result.failed_checks:
         lines.extend(["", "## Failed checks"])
@@ -265,8 +280,12 @@ def main() -> int:
     )
     parser.add_argument("--repo-root", default=".", help="Path to lotus-core repository root.")
     parser.add_argument("--compose-file", default="docker-compose.yml")
-    parser.add_argument("--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200"))
-    parser.add_argument("--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201"))
+    parser.add_argument(
+        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
+    )
+    parser.add_argument(
+        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
+    )
     parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
@@ -356,7 +375,8 @@ def main() -> int:
         failed_checks.append(f"recovery drain {drain_seconds:.2f}s exceeded max 420.00s")
     if drain_seconds is None and backlog_age > 1200:
         failed_checks.append(
-            "recovery drain timeout with elevated backlog age (>1200s) indicates incomplete recovery"
+            "recovery drain timeout with elevated backlog age (>1200s) "
+            "indicates incomplete recovery"
         )
     if backlog_age > 1800:
         failed_checks.append(f"backlog age after recovery {backlog_age:.2f}s exceeded 1800s")
@@ -394,4 +414,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

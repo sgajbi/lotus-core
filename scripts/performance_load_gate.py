@@ -124,7 +124,8 @@ def _ingest_transactions(
         )
         if response.status_code != 202:
             raise RuntimeError(
-                f"Transaction ingestion failed with status={response.status_code}: {response.text[:300]}"
+                "Transaction ingestion failed with "
+                f"status={response.status_code}: {response.text[:300]}"
             )
         total_records += batch_size
         total_batches += 1
@@ -269,12 +270,15 @@ def _evaluate_profile(
         )
     if replay_pressure > thresholds["max_replay_pressure_ratio"]:
         failed_checks.append(
-            f"replay_pressure {replay_pressure:.4f} > max {thresholds['max_replay_pressure_ratio']:.4f}"
+            f"replay_pressure {replay_pressure:.4f} > max "
+            f"{thresholds['max_replay_pressure_ratio']:.4f}"
         )
     max_drain = thresholds.get("max_drain_seconds")
     if max_drain is not None and (drain_seconds is None or drain_seconds > max_drain):
         failed_checks.append(
-            f"drain_seconds {drain_seconds if drain_seconds is not None else 'timeout'} > max {max_drain:.2f}"
+            "drain_seconds "
+            f"{drain_seconds if drain_seconds is not None else 'timeout'} "
+            f"> max {max_drain:.2f}"
         )
 
     return ProfileResult(
@@ -321,12 +325,18 @@ def _write_report(
         f"- Overall passed: {overall_passed}",
         f"- Enforce mode: {enforce}",
         "",
-        "| Profile | Passed | Throughput rps | Backlog age sec | DLQ pressure | Replay pressure | Drain sec |",
+        (
+            "| Profile | Passed | Throughput rps | Backlog age sec | "
+            "DLQ pressure | Replay pressure | Drain sec |"
+        ),
         "|---|---|---:|---:|---:|---:|---:|",
     ]
     for item in results:
         lines.append(
-            "| {profile} | {passed} | {throughput:.3f} | {backlog_age:.3f} | {dlq:.6f} | {replay:.6f} | {drain} |".format(
+            (
+                "| {profile} | {passed} | {throughput:.3f} | "
+                "{backlog_age:.3f} | {dlq:.6f} | {replay:.6f} | {drain} |"
+            ).format(
                 profile=item.profile_name,
                 passed="yes" if item.checks_passed else "no",
                 throughput=item.throughput_records_per_second,
