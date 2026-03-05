@@ -96,3 +96,17 @@ def test_validate_dividend_transaction_requires_settlement_cash_account_for_auto
         i.code == DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT for i in issues
     )
 
+
+def test_validate_dividend_transaction_requires_settlement_cash_account_for_auto_mode() -> None:
+    txn = _base_txn().model_copy(
+        update={
+            "cash_entry_mode": "AUTO_GENERATE",
+            "settlement_cash_account_id": None,
+        }
+    )
+    issues = validate_dividend_transaction(txn)
+    assert any(
+        i.code == DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT
+        for i in issues
+    )
+
