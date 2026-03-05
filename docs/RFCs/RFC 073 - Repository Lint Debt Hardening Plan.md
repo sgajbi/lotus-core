@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | In Progress |
 | Created | 2026-03-05 |
 | Last Updated | 2026-03-05 |
 | Owners | lotus-core engineering |
@@ -14,6 +14,15 @@
 This RFC defines a controlled, non-disruptive burn-down plan for repository-wide Ruff debt so that code quality reaches a sustainable institutional standard without blocking active transaction RFC delivery.
 
 The plan runs as a dedicated stream in parallel with feature RFCs and uses strict scope boundaries to avoid mixing large hygiene changes into functional slices.
+
+## Slice Execution Status
+| Slice | Status | Evidence |
+| --- | --- | --- |
+| 0 | Completed | `docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md` |
+| 1 | Pending | Runtime-critical services lint burn-down |
+| 2 | Pending | Core test-domain lint burn-down |
+| 3 | Pending | Scripts/tooling lint burn-down |
+| 4 | Pending | CI/global gate tightening |
 
 ## Baseline (2026-03-05)
 1. Full-repo Ruff run reports significant pre-existing violations (import order, line length, unused imports).
@@ -41,6 +50,15 @@ Deliverables:
 
 Exit Criteria:
 1. Baseline inventory and owner map are documented and accepted.
+
+Slice 0 Completion Notes:
+1. Baseline inventory is published in `docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md`.
+2. Rule-distribution and domain-distribution counts are captured using deterministic `ruff --statistics` commands.
+3. Execution order for burn-down is set to:
+ - `tests` (highest volume),
+ - `src/services`,
+ - `src/libs`,
+ - `scripts`.
 
 ### Slice 1 - Runtime-Critical Services
 Deliverables:
