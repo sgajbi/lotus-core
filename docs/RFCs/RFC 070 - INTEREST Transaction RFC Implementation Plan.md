@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | In Progress |
+| Status | Implemented |
 | Created | 2026-03-05 |
 | Last Updated | 2026-03-05 |
 | Owners | lotus-core engineering |
@@ -66,8 +66,8 @@ This plan closes those gaps incrementally with deterministic validation, explici
 | 2 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-2-PERSISTENCE-METADATA.md`, `tests/unit/libs/portfolio_common/test_interest_linkage.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` |
 | 3 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-3-CALCULATION-INVARIANTS.md`, `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py` |
 | 4 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-4-CASH-LINKAGE-WITHHOLDING.md`, `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py` |
-| 5 | Pending | Query/observability supportability artifacts |
-| 6 | Pending | Conformance suite wiring + closure report |
+| 5 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-5-QUERY-OBSERVABILITY.md`, `tests/integration/services/query_service/test_transactions_router.py` |
+| 6 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md`, `scripts/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml` |
 
 ### Slice 0 - Gap Assessment and Characterization Baseline (docs + tests, no behavior change)
 Deliverables:

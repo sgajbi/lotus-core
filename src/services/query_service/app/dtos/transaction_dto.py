@@ -86,6 +86,26 @@ class TransactionRecord(BaseModel):
         description="Linked upstream cash transaction id when cash_entry_mode is EXTERNAL.",
         examples=["CASH-ENTRY-2026-0001"],
     )
+    interest_direction: Optional[str] = Field(
+        None,
+        description="INTEREST semantic direction when applicable.",
+        examples=["INCOME"],
+    )
+    withholding_tax_amount: Optional[Decimal] = Field(
+        None,
+        description="Withholding tax amount captured for INTEREST transactions.",
+        examples=[15.25],
+    )
+    other_interest_deductions_amount: Optional[Decimal] = Field(
+        None,
+        description="Other deductions captured for INTEREST transactions.",
+        examples=[1.0],
+    )
+    net_interest_amount: Optional[Decimal] = Field(
+        None,
+        description="Net-interest amount when provided for reconciliation.",
+        examples=[108.2],
+    )
     cashflow: Optional[CashflowRecord] = Field(
         None, description="Linked cashflow details when available."
     )

@@ -541,6 +541,10 @@ class Transaction(Base):
     source_system = Column(String, nullable=True)
     cash_entry_mode = Column(String, nullable=True)
     external_cash_transaction_id = Column(String, nullable=True, index=True)
+    interest_direction = Column(String, nullable=True, index=True)
+    withholding_tax_amount = Column(Numeric(18, 10), nullable=True)
+    other_interest_deductions_amount = Column(Numeric(18, 10), nullable=True)
+    net_interest_amount = Column(Numeric(18, 10), nullable=True)
 
     costs = relationship(
         "TransactionCost", back_populates="transaction", cascade="all, delete-orphan"

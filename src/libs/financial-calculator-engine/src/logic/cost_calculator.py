@@ -297,7 +297,11 @@ class InterestStrategy:
         transaction.realized_gain_loss = Decimal(0)
         transaction.realized_gain_loss_local = Decimal(0)
 
-        direction = str(getattr(transaction, "interest_direction", "INCOME")).upper()
+        raw_direction = getattr(transaction, "interest_direction", None)
+        if raw_direction in (None, ""):
+            direction = "INCOME"
+        else:
+            direction = str(raw_direction).upper()
         if direction not in {"INCOME", "EXPENSE"}:
             _add_interest_invariant_error(
                 error_reporter,

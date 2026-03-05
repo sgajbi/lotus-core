@@ -334,6 +334,10 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
         calculation_policy_version="1.0.0",
         source_system="OMS_PRIMARY",
         cash_entry_mode="AUTO",
+        interest_direction="INCOME",
+        withholding_tax_amount=Decimal("10"),
+        other_interest_deductions_amount=Decimal("5"),
+        net_interest_amount=Decimal("60"),
     )
 
     await repo.create_or_update_transaction(event)
@@ -348,6 +352,10 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
     assert persisted.source_system == "OMS_PRIMARY"
     assert persisted.cash_entry_mode == "AUTO"
     assert persisted.external_cash_transaction_id is None
+    assert persisted.interest_direction == "INCOME"
+    assert persisted.withholding_tax_amount == Decimal("10")
+    assert persisted.other_interest_deductions_amount == Decimal("5")
+    assert persisted.net_interest_amount == Decimal("60")
 
     updated = event.model_copy(
         update={
@@ -355,6 +363,10 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
             "source_system": "OMS_FALLBACK",
             "cash_entry_mode": "EXTERNAL",
             "external_cash_transaction_id": "CASH-INT-2026-0001",
+            "interest_direction": "EXPENSE",
+            "withholding_tax_amount": Decimal("0"),
+            "other_interest_deductions_amount": Decimal("2"),
+            "net_interest_amount": Decimal("73"),
         }
     )
     await repo.create_or_update_transaction(updated)
@@ -366,3 +378,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
     assert persisted_after_upsert.source_system == "OMS_FALLBACK"
     assert persisted_after_upsert.cash_entry_mode == "EXTERNAL"
     assert persisted_after_upsert.external_cash_transaction_id == "CASH-INT-2026-0001"
+    assert persisted_after_upsert.interest_direction == "EXPENSE"
+    assert persisted_after_upsert.withholding_tax_amount == Decimal("0")
+    assert persisted_after_upsert.other_interest_deductions_amount == Decimal("2")
+    assert persisted_after_upsert.net_interest_amount == Decimal("73")
