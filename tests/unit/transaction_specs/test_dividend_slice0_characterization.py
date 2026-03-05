@@ -102,8 +102,8 @@ def test_dividend_cost_calculation_current_behavior_zero_cost_and_no_realized_pn
     assert dividend_transaction.net_cost == Decimal("0")
     assert dividend_transaction.net_cost_local == Decimal("0")
     assert dividend_transaction.gross_cost == Decimal("0")
-    assert dividend_transaction.realized_gain_loss is None
-    assert dividend_transaction.realized_gain_loss_local is None
+    assert dividend_transaction.realized_gain_loss == Decimal("0")
+    assert dividend_transaction.realized_gain_loss_local == Decimal("0")
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
 

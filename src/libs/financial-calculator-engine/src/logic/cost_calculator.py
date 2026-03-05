@@ -1,11 +1,12 @@
 # libs/financial-calculator-engine/src/logic/cost_calculator.py
-from typing import Protocol
 from decimal import Decimal
+from typing import Protocol
 
-from core.models.transaction import Transaction
 from core.enums.transaction_type import TransactionType
+from core.models.transaction import Transaction
 from logic.disposition_engine import DispositionEngine
 from logic.error_reporter import ErrorReporter
+
 
 class TransactionCostStrategy(Protocol):
     def calculate_costs(self, transaction: Transaction, disposition_engine: DispositionEngine, error_reporter: ErrorReporter) -> None: ...
@@ -31,6 +32,14 @@ def _add_sell_invariant_error(
     error_reporter: ErrorReporter, transaction: Transaction, message: str
 ) -> None:
     error_reporter.add_error(transaction.transaction_id, f"SELL invariant violation: {message}")
+
+
+def _add_dividend_invariant_error(
+    error_reporter: ErrorReporter, transaction: Transaction, message: str
+) -> None:
+    error_reporter.add_error(
+        transaction.transaction_id, f"DIVIDEND invariant violation: {message}"
+    )
 
 
 class BuyStrategy:
@@ -202,6 +211,57 @@ class IncomeStrategy:
         transaction.realized_gain_loss = None
         transaction.realized_gain_loss_local = None
 
+
+class DividendStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        transaction.net_cost = Decimal(0)
+        transaction.net_cost_local = Decimal(0)
+        transaction.gross_cost = Decimal(0)
+        transaction.realized_gain_loss = Decimal(0)
+        transaction.realized_gain_loss_local = Decimal(0)
+
+        if transaction.quantity != Decimal(0):
+            _add_dividend_invariant_error(
+                error_reporter, transaction, "quantity_delta must be 0 for DIVIDEND."
+            )
+            return
+
+        if transaction.price != Decimal(0):
+            _add_dividend_invariant_error(
+                error_reporter, transaction, "price must be 0 for DIVIDEND."
+            )
+            return
+
+        if transaction.gross_transaction_amount <= Decimal(0):
+            _add_dividend_invariant_error(
+                error_reporter,
+                transaction,
+                "gross_dividend_local must be > 0 for DIVIDEND.",
+            )
+            return
+
+        if transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0):
+            _add_dividend_invariant_error(
+                error_reporter, transaction, "net_cost and net_cost_local must be 0."
+            )
+            return
+
+        if (
+            transaction.realized_gain_loss != Decimal(0)
+            or transaction.realized_gain_loss_local != Decimal(0)
+        ):
+            _add_dividend_invariant_error(
+                error_reporter,
+                transaction,
+                "realized capital/FX P&L must be explicit zero for DIVIDEND.",
+            )
+            return
+
 class DefaultStrategy:
     def calculate_costs(self, transaction: Transaction, disposition_engine: DispositionEngine, error_reporter: ErrorReporter) -> None:
         transaction.gross_cost = transaction.gross_transaction_amount
@@ -217,7 +277,7 @@ class CostCalculator:
             TransactionType.BUY: BuyStrategy(),
             TransactionType.SELL: SellStrategy(),
             TransactionType.INTEREST: IncomeStrategy(),
-            TransactionType.DIVIDEND: IncomeStrategy(),
+            TransactionType.DIVIDEND: DividendStrategy(),
             TransactionType.DEPOSIT: CashInflowStrategy(),
             TransactionType.TRANSFER_IN: SecurityInflowStrategy(),
             TransactionType.TRANSFER_OUT: SecurityOutflowStrategy(),
