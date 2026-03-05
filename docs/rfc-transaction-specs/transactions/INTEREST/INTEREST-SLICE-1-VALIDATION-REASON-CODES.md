@@ -47,7 +47,7 @@ Implemented reason codes:
 - required currencies present
 - transaction date must not be after settlement date
 - strict metadata mode requires linkage and policy metadata
-- `cash_entry_mode=EXTERNAL` requires `external_cash_transaction_id`
+- `cash_entry_mode=UPSTREAM_PROVIDED` requires `external_cash_transaction_id`
 
 ## Shared-Doc Conformance Note (Slice 1)
 
@@ -64,3 +64,4 @@ Validated shared standards for this slice:
 - INTEREST calculation invariants and direction semantics are Slice 3.
 - cash-entry mode execution behavior is Slice 4.
 - query/observability surfaces are Slice 5.
+
