@@ -42,6 +42,13 @@ def _add_dividend_invariant_error(
     )
 
 
+def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
+    try:
+        return Decimal(str(value))
+    except Exception as exc:  # pragma: no cover - defensive normalization path
+        raise ValueError(f"invalid decimal for {field_name}: {value!r}") from exc
+
+
 class BuyStrategy:
     def calculate_costs(self, transaction: Transaction, disposition_engine: DispositionEngine, error_reporter: ErrorReporter) -> None:
         total_fees_local = transaction.fees.total_fees if transaction.fees else Decimal(0)
@@ -231,7 +238,13 @@ class DividendStrategy:
             )
             return
 
-        if transaction.price != Decimal(0):
+        try:
+            price = _normalize_decimal_field(getattr(transaction, "price", Decimal(0)), "price")
+        except ValueError as exc:
+            _add_dividend_invariant_error(error_reporter, transaction, str(exc))
+            return
+
+        if price != Decimal(0):
             _add_dividend_invariant_error(
                 error_reporter, transaction, "price must be 0 for DIVIDEND."
             )

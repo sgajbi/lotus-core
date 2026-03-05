@@ -254,6 +254,29 @@ def test_dividend_transaction_has_zero_cost(cost_calculator, mock_disposition_en
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
 
+def test_dividend_strategy_accepts_string_zero_price(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    dividend_transaction = Transaction(
+        transaction_id="DIV_STR_PRICE_0",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="S1",
+        transaction_type=TransactionType.DIVIDEND,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price="0",
+        gross_transaction_amount=Decimal("50.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(dividend_transaction)
+    assert not error_reporter.has_errors_for("DIV_STR_PRICE_0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
 def test_dividend_strategy_rejects_non_zero_quantity(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
