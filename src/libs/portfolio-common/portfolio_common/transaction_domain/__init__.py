@@ -7,6 +7,11 @@ from .buy_validation import (
     BuyValidationIssue,
     validate_buy_transaction,
 )
+from .dividend_linkage import (
+    DIVIDEND_DEFAULT_POLICY_ID,
+    DIVIDEND_DEFAULT_POLICY_VERSION,
+    enrich_dividend_transaction_metadata,
+)
 from .dividend_models import DividendCanonicalTransaction
 from .dividend_reason_codes import DividendValidationReasonCode
 from .dividend_validation import (
@@ -39,6 +44,9 @@ __all__ = [
     "DividendValidationIssue",
     "DividendValidationReasonCode",
     "validate_dividend_transaction",
+    "DIVIDEND_DEFAULT_POLICY_ID",
+    "DIVIDEND_DEFAULT_POLICY_VERSION",
+    "enrich_dividend_transaction_metadata",
     "SellCanonicalTransaction",
     "SellValidationError",
     "SellValidationIssue",
