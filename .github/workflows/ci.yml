@@ -13,7 +13,9 @@ on:
     - cron: "0 2 * * *"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Collapse only push-to-main runs into one queue so newer merges cancel older in-flight main runs.
+  # Keep PR/merge_group/scheduled/manual runs independent to avoid cross-canceling validation work.
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'main' || github.run_id }}
   cancel-in-progress: true
 
 permissions:
