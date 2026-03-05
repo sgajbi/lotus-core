@@ -20,7 +20,10 @@ class ArtifactStatus:
 
 
 def _latest_artifact(output_dir: Path, pattern: str) -> Path | None:
-    matches = sorted(output_dir.glob(pattern), key=lambda p: p.stat().st_mtime)
+    # CI artifact downloads can include nested paths.
+    # Use recursive discovery so sign-off generation remains robust
+    # regardless of upload path prefixes.
+    matches = sorted(output_dir.rglob(pattern), key=lambda p: p.stat().st_mtime)
     if not matches:
         return None
     return matches[-1]

@@ -5,6 +5,7 @@ from scripts.institutional_signoff_pack import (
     _docker_smoke_status,
     _failure_recovery_status,
     _latency_status,
+    _latest_artifact,
     _performance_status,
 )
 
@@ -68,3 +69,15 @@ def test_failure_recovery_status_uses_checks_passed(tmp_path: Path) -> None:
 
     assert status.passed is False
     assert "timeout" in status.summary
+
+
+def test_latest_artifact_discovers_nested_download_paths(tmp_path: Path) -> None:
+    nested = tmp_path / "output" / "task-runs"
+    nested.mkdir(parents=True)
+    artifact = nested / "20260305T082418Z-failure-recovery-gate.json"
+    _write_json(artifact, {"checks_passed": True, "failed_checks": []})
+
+    discovered = _latest_artifact(tmp_path, "*-failure-recovery-gate.json")
+
+    assert discovered is not None
+    assert discovered == artifact
