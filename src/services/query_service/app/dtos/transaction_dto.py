@@ -76,14 +76,18 @@ class TransactionRecord(BaseModel):
     cash_entry_mode: Optional[str] = Field(
         None,
         description=(
-            "Cash-leg generation mode. AUTO indicates service-generated cashflow; "
-            "EXTERNAL indicates upstream-provided separate cash entry."
+            "Cash-leg generation mode. AUTO_GENERATE indicates service-generated "
+            "cashflow; UPSTREAM_PROVIDED indicates upstream-provided separate cash "
+            "entry."
         ),
-        examples=["AUTO"],
+        examples=["AUTO_GENERATE"],
     )
     external_cash_transaction_id: Optional[str] = Field(
         None,
-        description="Linked upstream cash transaction id when cash_entry_mode is EXTERNAL.",
+        description=(
+            "Linked upstream cash transaction id when cash_entry_mode is "
+            "UPSTREAM_PROVIDED."
+        ),
         examples=["CASH-ENTRY-2026-0001"],
     )
     interest_direction: Optional[str] = Field(

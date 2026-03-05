@@ -8,9 +8,9 @@ from .buy_validation import (
     validate_buy_transaction,
 )
 from .cash_entry_mode import (
-    AUTO_CASH_ENTRY_MODE,
-    EXTERNAL_CASH_ENTRY_MODE,
-    is_external_cash_entry_mode,
+    AUTO_GENERATE_CASH_ENTRY_MODE,
+    UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
+    is_upstream_provided_cash_entry_mode,
     normalize_cash_entry_mode,
 )
 from .dividend_linkage import (
@@ -24,6 +24,12 @@ from .dividend_validation import (
     DividendValidationError,
     DividendValidationIssue,
     validate_dividend_transaction,
+)
+from .dual_leg_pairing import (
+    DualLegPairingError,
+    DualLegPairingIssue,
+    assert_upstream_cash_leg_pairing,
+    validate_upstream_cash_leg_pairing,
 )
 from .interest_linkage import (
     INTEREST_DEFAULT_POLICY_ID,
@@ -57,10 +63,10 @@ __all__ = [
     "BuyValidationIssue",
     "BuyValidationReasonCode",
     "validate_buy_transaction",
-    "AUTO_CASH_ENTRY_MODE",
-    "EXTERNAL_CASH_ENTRY_MODE",
+    "AUTO_GENERATE_CASH_ENTRY_MODE",
+    "UPSTREAM_PROVIDED_CASH_ENTRY_MODE",
     "normalize_cash_entry_mode",
-    "is_external_cash_entry_mode",
+    "is_upstream_provided_cash_entry_mode",
     "DividendCanonicalTransaction",
     "DividendValidationError",
     "DividendValidationIssue",
@@ -69,6 +75,10 @@ __all__ = [
     "DIVIDEND_DEFAULT_POLICY_ID",
     "DIVIDEND_DEFAULT_POLICY_VERSION",
     "enrich_dividend_transaction_metadata",
+    "DualLegPairingError",
+    "DualLegPairingIssue",
+    "validate_upstream_cash_leg_pairing",
+    "assert_upstream_cash_leg_pairing",
     "InterestCanonicalTransaction",
     "InterestValidationError",
     "InterestValidationIssue",

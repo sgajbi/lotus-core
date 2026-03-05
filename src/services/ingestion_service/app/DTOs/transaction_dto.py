@@ -84,17 +84,19 @@ class Transaction(BaseModel):
     )
     cash_entry_mode: Optional[str] = Field(
         default=None,
-        json_schema_extra={"example": "AUTO"},
+        json_schema_extra={"example": "AUTO_GENERATE"},
         description=(
-            "Cash-leg generation mode. Use AUTO for service-generated cash leg, "
-            "or EXTERNAL when a separate upstream cash entry is authoritative."
+            "Cash-leg generation mode. Use AUTO_GENERATE for service-generated cash "
+            "leg, or UPSTREAM_PROVIDED when a separate upstream cash entry is "
+            "authoritative."
         ),
     )
     external_cash_transaction_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "CASH-ENTRY-2026-0001"},
         description=(
-            "Upstream cash transaction identifier when cash_entry_mode is EXTERNAL."
+            "Upstream cash transaction identifier when cash_entry_mode is "
+            "UPSTREAM_PROVIDED."
         ),
     )
     interest_direction: Optional[str] = Field(

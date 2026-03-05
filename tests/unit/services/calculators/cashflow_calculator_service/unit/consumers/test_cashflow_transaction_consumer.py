@@ -397,7 +397,7 @@ async def test_process_message_dividend_external_mode_skips_auto_cashflow_creati
         trade_fee=Decimal("0"),
         trade_currency="USD",
         currency="USD",
-        cash_entry_mode="EXTERNAL",
+        cash_entry_mode="UPSTREAM_PROVIDED",
         external_cash_transaction_id="CASH_EXT_01",
         epoch=1,
     )
@@ -444,7 +444,7 @@ async def test_process_message_dividend_external_mode_without_link_sends_to_dlq(
         trade_fee=Decimal("0"),
         trade_currency="USD",
         currency="USD",
-        cash_entry_mode="EXTERNAL",
+        cash_entry_mode="UPSTREAM_PROVIDED",
         external_cash_transaction_id=None,
         epoch=1,
     )
@@ -493,7 +493,7 @@ async def test_process_message_interest_external_mode_skips_auto_cashflow_creati
         trade_fee=Decimal("0"),
         trade_currency="USD",
         currency="USD",
-        cash_entry_mode="EXTERNAL",
+        cash_entry_mode="UPSTREAM_PROVIDED",
         external_cash_transaction_id="CASH_INT_EXT_01",
         epoch=1,
     )
@@ -540,7 +540,7 @@ async def test_process_message_interest_external_mode_without_link_sends_to_dlq(
         trade_fee=Decimal("0"),
         trade_currency="USD",
         currency="USD",
-        cash_entry_mode="EXTERNAL",
+        cash_entry_mode="UPSTREAM_PROVIDED",
         external_cash_transaction_id=None,
         epoch=1,
     )
@@ -564,3 +564,4 @@ async def test_process_message_interest_external_mode_without_link_sends_to_dlq(
     cashflow_consumer._send_to_dlq_async.assert_awaited_once()
     dlq_error_arg = cashflow_consumer._send_to_dlq_async.call_args[0][1]
     assert isinstance(dlq_error_arg, ExternalCashLinkageError)
+

@@ -37,7 +37,7 @@ async def async_test_client():
                     price=0.0,
                     gross_transaction_amount=125.0,
                     currency="USD",
-                    cash_entry_mode="EXTERNAL",
+                    cash_entry_mode="UPSTREAM_PROVIDED",
                     external_cash_transaction_id="CASH-ENTRY-2026-0001",
                     interest_direction="INCOME",
                     withholding_tax_amount=Decimal("10.00"),
@@ -80,7 +80,7 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     payload = response.json()
     assert payload["portfolio_id"] == "P1"
     assert payload["transactions"][0]["transaction_id"] == "T1"
-    assert payload["transactions"][0]["cash_entry_mode"] == "EXTERNAL"
+    assert payload["transactions"][0]["cash_entry_mode"] == "UPSTREAM_PROVIDED"
     assert (
         payload["transactions"][0]["external_cash_transaction_id"]
         == "CASH-ENTRY-2026-0001"
@@ -145,3 +145,4 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
         sort_by=None,
         sort_order="desc",
     )
+

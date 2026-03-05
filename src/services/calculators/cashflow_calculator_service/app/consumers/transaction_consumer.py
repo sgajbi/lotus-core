@@ -18,7 +18,7 @@ from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
-from portfolio_common.transaction_domain import is_external_cash_entry_mode
+from portfolio_common.transaction_domain import is_upstream_provided_cash_entry_mode
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, stop_after_attempt, wait_fixed
@@ -67,7 +67,7 @@ class NoCashflowRuleError(ValueError):
 
 
 class ExternalCashLinkageError(ValueError):
-    """Raised when EXTERNAL cash-entry mode is configured without required linkage."""
+    """Raised when UPSTREAM_PROVIDED cash-entry mode lacks required linkage."""
 
 
 EXTERNAL_CASHFLOW_BYPASS_TRANSACTION_TYPES = {"DIVIDEND", "INTEREST"}
@@ -152,15 +152,15 @@ class CashflowCalculatorConsumer(BaseConsumer):
                     if (
                         event_transaction_type
                         in EXTERNAL_CASHFLOW_BYPASS_TRANSACTION_TYPES
-                        and is_external_cash_entry_mode(event.cash_entry_mode)
+                        and is_upstream_provided_cash_entry_mode(event.cash_entry_mode)
                     ):
                         if not event.external_cash_transaction_id:
                             raise ExternalCashLinkageError(
-                                f"{event_transaction_type} with EXTERNAL cash_entry_mode requires "
+                                f"{event_transaction_type} with UPSTREAM_PROVIDED cash_entry_mode requires "
                                 "external_cash_transaction_id."
                             )
                         logger.info(
-                            "Skipping auto cashflow creation for EXTERNAL cash-entry mode.",
+                            "Skipping auto cashflow creation for UPSTREAM_PROVIDED cash-entry mode.",
                             extra={
                                 "transaction_id": event.transaction_id,
                                 "transaction_type": event_transaction_type,

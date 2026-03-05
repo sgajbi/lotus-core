@@ -256,7 +256,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
         calculation_policy_id="BUY_DEFAULT_POLICY",
         calculation_policy_version="1.0.0",
         source_system="OMS_PRIMARY",
-        cash_entry_mode="AUTO",
+        cash_entry_mode="AUTO_GENERATE",
     )
 
     await repo.create_or_update_transaction(event)
@@ -269,14 +269,14 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     assert persisted.calculation_policy_id == "BUY_DEFAULT_POLICY"
     assert persisted.calculation_policy_version == "1.0.0"
     assert persisted.source_system == "OMS_PRIMARY"
-    assert persisted.cash_entry_mode == "AUTO"
+    assert persisted.cash_entry_mode == "AUTO_GENERATE"
     assert persisted.external_cash_transaction_id is None
 
     updated = event.model_copy(
         update={
             "calculation_policy_version": "1.0.1",
             "source_system": "OMS_FALLBACK",
-            "cash_entry_mode": "EXTERNAL",
+            "cash_entry_mode": "UPSTREAM_PROVIDED",
             "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
         }
     )
@@ -287,7 +287,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
     assert persisted_after_upsert.calculation_policy_version == "1.0.1"
     assert persisted_after_upsert.source_system == "OMS_FALLBACK"
-    assert persisted_after_upsert.cash_entry_mode == "EXTERNAL"
+    assert persisted_after_upsert.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert (
         persisted_after_upsert.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
     )
@@ -333,7 +333,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
         calculation_policy_id="INTEREST_DEFAULT_POLICY",
         calculation_policy_version="1.0.0",
         source_system="OMS_PRIMARY",
-        cash_entry_mode="AUTO",
+        cash_entry_mode="AUTO_GENERATE",
         interest_direction="INCOME",
         withholding_tax_amount=Decimal("10"),
         other_interest_deductions_amount=Decimal("5"),
@@ -350,7 +350,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
     assert persisted.calculation_policy_id == "INTEREST_DEFAULT_POLICY"
     assert persisted.calculation_policy_version == "1.0.0"
     assert persisted.source_system == "OMS_PRIMARY"
-    assert persisted.cash_entry_mode == "AUTO"
+    assert persisted.cash_entry_mode == "AUTO_GENERATE"
     assert persisted.external_cash_transaction_id is None
     assert persisted.interest_direction == "INCOME"
     assert persisted.withholding_tax_amount == Decimal("10")
@@ -361,7 +361,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
         update={
             "calculation_policy_version": "1.0.1",
             "source_system": "OMS_FALLBACK",
-            "cash_entry_mode": "EXTERNAL",
+            "cash_entry_mode": "UPSTREAM_PROVIDED",
             "external_cash_transaction_id": "CASH-INT-2026-0001",
             "interest_direction": "EXPENSE",
             "withholding_tax_amount": Decimal("0"),
@@ -376,9 +376,10 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
     persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
     assert persisted_after_upsert.calculation_policy_version == "1.0.1"
     assert persisted_after_upsert.source_system == "OMS_FALLBACK"
-    assert persisted_after_upsert.cash_entry_mode == "EXTERNAL"
+    assert persisted_after_upsert.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert persisted_after_upsert.external_cash_transaction_id == "CASH-INT-2026-0001"
     assert persisted_after_upsert.interest_direction == "EXPENSE"
     assert persisted_after_upsert.withholding_tax_amount == Decimal("0")
     assert persisted_after_upsert.other_interest_deductions_amount == Decimal("2")
     assert persisted_after_upsert.net_interest_amount == Decimal("73")
+

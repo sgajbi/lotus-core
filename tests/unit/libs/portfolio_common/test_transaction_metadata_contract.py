@@ -23,7 +23,7 @@ def test_transaction_event_accepts_linkage_and_policy_metadata() -> None:
         calculation_policy_id="BUY_DEFAULT_POLICY",
         calculation_policy_version="1.0.0",
         source_system="OMS_PRIMARY",
-        cash_entry_mode="EXTERNAL",
+        cash_entry_mode="UPSTREAM_PROVIDED",
         external_cash_transaction_id="CASH-ENTRY-2026-0001",
     )
 
@@ -32,7 +32,7 @@ def test_transaction_event_accepts_linkage_and_policy_metadata() -> None:
     assert event.calculation_policy_id == "BUY_DEFAULT_POLICY"
     assert event.calculation_policy_version == "1.0.0"
     assert event.source_system == "OMS_PRIMARY"
-    assert event.cash_entry_mode == "EXTERNAL"
+    assert event.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert event.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
 
 
@@ -46,3 +46,4 @@ def test_transaction_db_model_exposes_metadata_columns() -> None:
     assert "source_system" in column_names
     assert "cash_entry_mode" in column_names
     assert "external_cash_transaction_id" in column_names
+
