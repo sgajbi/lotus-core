@@ -1,9 +1,9 @@
 # services/persistence_service/app/main.py
-import logging
 import asyncio
-import contextlib
+import logging
 
 from portfolio_common.logging_utils import setup_logging
+
 from .consumer_manager import ConsumerManager
 
 setup_logging()

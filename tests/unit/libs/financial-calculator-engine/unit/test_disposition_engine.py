@@ -1,24 +1,27 @@
 # tests/unit/libs/financial-calculator-engine/unit/test_disposition_engine.py
 
-import pytest
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from logic.disposition_engine import DispositionEngine
-from logic.cost_basis_strategies import CostBasisStrategy
-from core.models.transaction import Transaction
+import pytest
 from core.enums.transaction_type import TransactionType
+from core.models.transaction import Transaction
+from logic.cost_basis_strategies import CostBasisStrategy
+from logic.disposition_engine import DispositionEngine
+
 
 @pytest.fixture
 def mock_strategy() -> MagicMock:
     """Provides a mock of the CostBasisStrategy for testing the engine's delegation."""
     return MagicMock(spec=CostBasisStrategy)
 
+
 @pytest.fixture
 def disposition_engine(mock_strategy: MagicMock) -> DispositionEngine:
     """Provides a DispositionEngine instance initialized with the mock strategy."""
     return DispositionEngine(cost_basis_strategy=mock_strategy)
+
 
 @pytest.fixture
 def sample_transaction() -> Transaction:
@@ -35,10 +38,13 @@ def sample_transaction() -> Transaction:
         net_cost=Decimal("105"),
         net_cost_local=Decimal("105"),
         trade_currency="USD",
-        portfolio_base_currency="USD"
+        portfolio_base_currency="USD",
     )
 
-def test_add_buy_lot_delegates_to_strategy(disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction):
+
+def test_add_buy_lot_delegates_to_strategy(
+    disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction
+):
     """
     Tests that add_buy_lot correctly calls the underlying strategy.
     """
@@ -48,7 +54,10 @@ def test_add_buy_lot_delegates_to_strategy(disposition_engine: DispositionEngine
     # Assert
     mock_strategy.add_buy_lot.assert_called_once_with(sample_transaction)
 
-def test_add_buy_lot_ignores_zero_quantity(disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction):
+
+def test_add_buy_lot_ignores_zero_quantity(
+    disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction
+):
     """
     Tests that a transaction with zero quantity is not added as a lot.
     """
@@ -61,24 +70,37 @@ def test_add_buy_lot_ignores_zero_quantity(disposition_engine: DispositionEngine
     # Assert
     mock_strategy.add_buy_lot.assert_not_called()
 
-def test_consume_sell_quantity_delegates_to_strategy(disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction):
+
+def test_consume_sell_quantity_delegates_to_strategy(
+    disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction
+):
     """
     Tests that consume_sell_quantity correctly calls and returns values from the strategy.
     """
     # Arrange
     sample_transaction.transaction_type = TransactionType.SELL
-    mock_strategy.consume_sell_quantity.return_value = (Decimal("105"), Decimal("105"), Decimal("10"), None)
+    mock_strategy.consume_sell_quantity.return_value = (
+        Decimal("105"),
+        Decimal("105"),
+        Decimal("10"),
+        None,
+    )
 
     # Act
     result = disposition_engine.consume_sell_quantity(sample_transaction)
 
     # Assert
     mock_strategy.consume_sell_quantity.assert_called_once_with(
-        sample_transaction.portfolio_id, sample_transaction.instrument_id, sample_transaction.quantity
+        sample_transaction.portfolio_id,
+        sample_transaction.instrument_id,
+        sample_transaction.quantity,
     )
     assert result == (Decimal("105"), Decimal("105"), Decimal("10"), None)
 
-def test_set_initial_lots_delegates_to_strategy(disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction):
+
+def test_set_initial_lots_delegates_to_strategy(
+    disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction
+):
     """
     Tests that set_initial_lots correctly calls the underlying strategy with only BUY transactions.
     """

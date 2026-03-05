@@ -35,9 +35,7 @@ def validate_interest_transaction(
             InterestValidationIssue(
                 code=InterestValidationReasonCode.INVALID_TRANSACTION_TYPE,
                 field="transaction_type",
-                message=(
-                    "transaction_type must be INTEREST for INTEREST canonical validation."
-                ),
+                message=("transaction_type must be INTEREST for INTEREST canonical validation."),
             )
         )
 
@@ -73,9 +71,7 @@ def validate_interest_transaction(
             InterestValidationIssue(
                 code=InterestValidationReasonCode.NON_POSITIVE_GROSS_AMOUNT,
                 field="gross_transaction_amount",
-                message=(
-                    "gross_transaction_amount must be greater than zero for INTEREST."
-                ),
+                message=("gross_transaction_amount must be greater than zero for INTEREST."),
             )
         )
 
@@ -113,9 +109,7 @@ def validate_interest_transaction(
 
     if txn.net_interest_amount is not None:
         expected_net = (
-            txn.gross_transaction_amount
-            - withholding_tax_amount
-            - other_interest_deductions_amount
+            txn.gross_transaction_amount - withholding_tax_amount - other_interest_deductions_amount
         )
         if txn.net_interest_amount != expected_net:
             issues.append(

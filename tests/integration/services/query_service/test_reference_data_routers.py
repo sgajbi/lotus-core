@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.db import get_async_db_session
 from src.services.query_service.app.dtos.fx_rate_dto import FxRateResponse
 from src.services.query_service.app.dtos.instrument_dto import PaginatedInstrumentResponse
 from src.services.query_service.app.dtos.portfolio_dto import PortfolioQueryResponse
@@ -369,4 +369,3 @@ async def test_get_currency_lookups_source_and_query(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "USD", "label": "USD"}]
     mock_portfolio_service.get_portfolios.assert_not_called()
-

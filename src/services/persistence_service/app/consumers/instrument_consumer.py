@@ -1,13 +1,16 @@
 # src/services/persistence_service/app/consumers/instrument_consumer.py
-from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.events import InstrumentEvent
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..repositories.instrument_repository import InstrumentRepository
 from .base_consumer import GenericPersistenceConsumer
+
 
 class InstrumentConsumer(GenericPersistenceConsumer):
     """
     Consumes, validates, and persists instrument events using the generic persistence consumer.
     """
+
     @property
     def event_model(self):
         return InstrumentEvent

@@ -11,10 +11,7 @@ def test_normalize_cash_entry_mode_defaults_to_auto() -> None:
 
 
 def test_normalize_cash_entry_mode_accepts_known_mode_case_insensitively() -> None:
-    assert (
-        normalize_cash_entry_mode("upstream_provided")
-        == UPSTREAM_PROVIDED_CASH_ENTRY_MODE
-    )
+    assert normalize_cash_entry_mode("upstream_provided") == UPSTREAM_PROVIDED_CASH_ENTRY_MODE
 
 
 def test_normalize_cash_entry_mode_rejects_unknown_mode() -> None:

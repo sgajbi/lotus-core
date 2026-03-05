@@ -1,7 +1,9 @@
 # tests/e2e/test_ingestion_service_api.py
 import pytest
 import requests
+
 from .api_client import E2EApiClient
+
 
 def test_ingest_empty_transaction_list_succeeds(e2e_api_client: E2EApiClient):
     """
@@ -22,6 +24,7 @@ def test_ingest_empty_transaction_list_succeeds(e2e_api_client: E2EApiClient):
     assert body["accepted_count"] == 0
     assert "job_id" in body
     assert body["message"] == "Transactions accepted for asynchronous ingestion processing."
+
 
 def test_ingest_malformed_transaction_payload_fails(e2e_api_client: E2EApiClient):
     """

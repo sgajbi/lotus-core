@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.db import get_async_db_session
 from src.services.query_service.app.dtos.instrument_dto import PaginatedInstrumentResponse
 from src.services.query_service.app.dtos.portfolio_dto import PortfolioQueryResponse
 from src.services.query_service.app.main import app
@@ -193,4 +193,3 @@ async def test_currency_lookup_contract_source_scope_and_uppercase(async_test_cl
     _assert_lookup_items_contract(items)
     assert items == [{"id": "USD", "label": "USD"}]
     mock_portfolio_service.get_portfolios.assert_not_called()
-

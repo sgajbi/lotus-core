@@ -1,22 +1,22 @@
 # src/libs/portfolio-common/portfolio_common/outbox_dispatcher.py
-import logging
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from sqlalchemy import update, func
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import func, update
+from sqlalchemy.orm import sessionmaker
 
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.db import SessionLocal
+from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.monitoring import (
-    observe_outbox_published,
     observe_outbox_failed,
+    observe_outbox_published,
     observe_outbox_retried,
-    set_outbox_pending,
     outbox_batch_timer,
+    set_outbox_pending,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,13 @@ class OutboxDispatcher:
     Emits Prometheus metrics for visibility.
     """
 
-    def __init__(self, kafka_producer: KafkaProducer, poll_interval: int = 5, batch_size: int = 50, db_session_factory: Optional[sessionmaker] = None):
+    def __init__(
+        self,
+        kafka_producer: KafkaProducer,
+        poll_interval: int = 5,
+        batch_size: int = 50,
+        db_session_factory: Optional[sessionmaker] = None,
+    ):
         self._producer = kafka_producer
         self._poll_interval = poll_interval
         self._batch_size = batch_size
@@ -47,7 +53,10 @@ class OutboxDispatcher:
     def _read_pending_gauge(self) -> None:
         """Reads PENDING count in a short-lived session to avoid interfering with the batch tx."""
         with self._session_factory() as s:  # type: Session
-            pending_total = s.query(func.count(OutboxEvent.id)).filter(OutboxEvent.status == "PENDING").scalar() or 0
+            pending_total = (
+                s.query(func.count(OutboxEvent.id)).filter(OutboxEvent.status == "PENDING").scalar()
+                or 0
+            )
             set_outbox_pending(int(pending_total))
 
     def _process_batch_sync(self) -> None:
@@ -80,12 +89,15 @@ class OutboxDispatcher:
                     delivery_errs: Dict[int, str] = {}
 
                     def _make_on_delivery(outbox_id: int):
-                        def _cb(replayed_outbox_id: str, success: bool, error_message: Optional[str]):
+                        def _cb(
+                            replayed_outbox_id: str, success: bool, error_message: Optional[str]
+                        ):
                             if success:
                                 delivery_ack[outbox_id] = True
                             else:
                                 delivery_ack[outbox_id] = False
                                 delivery_errs[outbox_id] = str(error_message)
+
                         return _cb
 
                     for event in events_to_process:
@@ -93,7 +105,11 @@ class OutboxDispatcher:
                         if event.correlation_id:
                             headers.append(("correlation_id", event.correlation_id.encode("utf-8")))
 
-                        payload_obj = event.payload if isinstance(event.payload, dict) else json.loads(event.payload)
+                        payload_obj = (
+                            event.payload
+                            if isinstance(event.payload, dict)
+                            else json.loads(event.payload)
+                        )
 
                         self._producer.publish_message(
                             topic=event.topic,
@@ -103,10 +119,12 @@ class OutboxDispatcher:
                             outbox_id=str(event.id),
                             on_delivery=_make_on_delivery(event.id),
                         )
-                    
+
                     try:
                         self._producer.flush(timeout=10)
-                        logger.info(f"OutboxDispatcher: Flush complete for {len(events_to_process)} events.")
+                        logger.info(
+                            f"OutboxDispatcher: Flush complete for {len(events_to_process)} events."
+                        )
                     except Exception as e:
                         logger.error("OutboxDispatcher: Kafka flush failed.", exc_info=True)
                         for event in events_to_process:
@@ -126,7 +144,10 @@ class OutboxDispatcher:
                         for e in events_to_process:
                             if e.id in success_ids:
                                 observe_outbox_published(e.aggregate_type, e.topic)
-                        logger.info(f"OutboxDispatcher: Marked {len(success_ids)} events as PROCESSED in DB.")
+                        logger.info(
+                            "OutboxDispatcher: Marked "
+                            f"{len(success_ids)} events as PROCESSED in DB."
+                        )
 
                     if failure_ids:
                         db.execute(
@@ -152,7 +173,7 @@ class OutboxDispatcher:
 
     async def run(self):
         logger.info(f"Outbox dispatcher started. Polling every {self._poll_interval} seconds.")
-        
+
         while self._running:
             try:
                 await asyncio.to_thread(self._process_batch_sync)
@@ -163,5 +184,5 @@ class OutboxDispatcher:
                 await asyncio.sleep(self._poll_interval)
             except asyncio.CancelledError:
                 break
-        
+
         logger.info("Outbox dispatcher has stopped.")

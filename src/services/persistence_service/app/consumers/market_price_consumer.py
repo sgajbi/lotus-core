@@ -1,15 +1,19 @@
 # src/services/persistence_service/app/consumers/market_price_consumer.py
-from typing import Dict, Any, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.events import MarketPriceEvent, MarketPricePersistedEvent
-from ..repositories.market_price_repository import MarketPriceRepository
+from typing import Any, Dict, Optional
+
 from portfolio_common.config import KAFKA_MARKET_PRICE_PERSISTED_TOPIC
+from portfolio_common.events import MarketPriceEvent, MarketPricePersistedEvent
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..repositories.market_price_repository import MarketPriceRepository
 from .base_consumer import GenericPersistenceConsumer
+
 
 class MarketPriceConsumer(GenericPersistenceConsumer):
     """
     Validates and persists market price events, then publishes a completion event.
     """
+
     @property
     def event_model(self):
         return MarketPriceEvent
@@ -26,11 +30,13 @@ class MarketPriceConsumer(GenericPersistenceConsumer):
 
     def get_outbox_event(self, persisted_object: Any) -> Optional[Dict[str, Any]]:
         """Creates the MarketPricePersisted event to be sent via the outbox."""
-        outbound_event = MarketPricePersistedEvent.model_validate(persisted_object, from_attributes=True)
+        outbound_event = MarketPricePersistedEvent.model_validate(
+            persisted_object, from_attributes=True
+        )
         return {
-            'aggregate_type': 'MarketPrice',
-            'aggregate_id': persisted_object.security_id,
-            'event_type': 'MarketPricePersisted',
-            'topic': KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
-            'payload': outbound_event.model_dump(mode='json'),
+            "aggregate_type": "MarketPrice",
+            "aggregate_id": persisted_object.security_id,
+            "event_type": "MarketPricePersisted",
+            "topic": KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
+            "payload": outbound_event.model_dump(mode="json"),
         }

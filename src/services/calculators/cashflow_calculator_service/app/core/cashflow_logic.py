@@ -10,16 +10,16 @@ from .enums import CashflowClassification
 
 logger = logging.getLogger(__name__)
 
+
 class CashflowLogic:
     """
     A stateless calculator that generates a Cashflow object from a transaction
     based on a given business rule from the database.
     """
+
     @staticmethod
     def calculate(
-        transaction: TransactionEvent,
-        rule: CashflowRule,
-        epoch: Optional[int] = 0
+        transaction: TransactionEvent, rule: CashflowRule, epoch: Optional[int] = 0
     ) -> Cashflow:
         """
         Applies the calculation rule to a transaction to generate a cashflow.
@@ -29,14 +29,14 @@ class CashflowLogic:
         # For NET, we adjust the gross amount by the fee.
         if transaction.transaction_type in ["BUY", "FEE"]:
             amount = transaction.gross_transaction_amount + (transaction.trade_fee or 0)
-        else: # SELL, DIVIDEND, INTEREST, etc.
+        else:  # SELL, DIVIDEND, INTEREST, etc.
             amount = transaction.gross_transaction_amount - (transaction.trade_fee or 0)
 
         # Convention: Inflows to the portfolio are positive, outflows are negative.
         positive_classifications = [
             CashflowClassification.INVESTMENT_INFLOW,  # From a SELL
-            CashflowClassification.INCOME,             # From DIVIDEND, INTEREST
-            CashflowClassification.CASHFLOW_IN         # From DEPOSIT
+            CashflowClassification.INCOME,  # From DIVIDEND, INTEREST
+            CashflowClassification.CASHFLOW_IN,  # From DEPOSIT
         ]
 
         # INTEREST direction baseline: default INCOME (inflow), EXPENSE (outflow).
@@ -54,7 +54,7 @@ class CashflowLogic:
         elif rule.classification == CashflowClassification.TRANSFER:
             if transaction.transaction_type == "TRANSFER_IN":
                 amount = abs(amount)
-            else: # TRANSFER_OUT
+            else:  # TRANSFER_OUT
                 amount = -abs(amount)
         else:
             # All other classifications are outflows (INVESTMENT_OUTFLOW, EXPENSE, CASHFLOW_OUT)
@@ -70,19 +70,20 @@ class CashflowLogic:
             currency=transaction.currency,
             classification=rule.classification,
             timing=rule.timing,
-            calculation_type="NET", # Currently all are NET
+            calculation_type="NET",  # Currently all are NET
             is_position_flow=rule.is_position_flow,
             is_portfolio_flow=rule.is_portfolio_flow,
             economic_event_id=transaction.economic_event_id,
             linked_transaction_group_id=transaction.linked_transaction_group_id,
-            epoch=epoch or 0
+            epoch=epoch or 0,
         )
 
         # Increment the Prometheus counter
-        CASHFLOWS_CREATED_TOTAL.labels(
-            classification=rule.classification,
-            timing=rule.timing
-        ).inc()
-        
-        logger.info(f"Calculated cashflow for txn {transaction.transaction_id}: Amount={amount}, Class='{rule.classification}'")
+        CASHFLOWS_CREATED_TOTAL.labels(classification=rule.classification, timing=rule.timing).inc()
+
+        logger.info(
+            "Calculated cashflow for txn "
+            f"{transaction.transaction_id}: Amount={amount}, "
+            f"Class='{rule.classification}'"
+        )
         return cashflow

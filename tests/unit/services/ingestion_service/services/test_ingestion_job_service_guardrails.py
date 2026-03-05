@@ -30,6 +30,7 @@ async def test_assert_retry_allowed_for_records_blocks_large_replay(
         "REPLAY_MAX_RECORDS_PER_REQUEST",
         2,
     )
+
     async def _mock_get_ops_mode() -> SimpleNamespace:
         return SimpleNamespace(mode="normal", replay_window_start=None, replay_window_end=None)
 
@@ -39,7 +40,9 @@ async def test_assert_retry_allowed_for_records_blocks_large_replay(
     monkeypatch.setattr(service, "get_ops_mode", _mock_get_ops_mode)
     monkeypatch.setattr(service, "_count_backlog_jobs", _mock_count_backlog_jobs)
 
-    with pytest.raises(PermissionError, match="requested replay record count exceeds configured limit"):
+    with pytest.raises(
+        PermissionError, match="requested replay record count exceeds configured limit"
+    ):
         await service.assert_retry_allowed_for_records(
             submitted_at=now - timedelta(minutes=1),
             replay_record_count=3,
@@ -53,6 +56,7 @@ async def test_assert_retry_allowed_for_records_blocks_when_backlog_high(
     now = datetime.now(UTC)
     monkeypatch.setattr(service_module, "REPLAY_MAX_RECORDS_PER_REQUEST", 100)
     monkeypatch.setattr(service_module, "REPLAY_MAX_BACKLOG_JOBS", 5)
+
     async def _mock_get_ops_mode() -> SimpleNamespace:
         return SimpleNamespace(mode="normal", replay_window_start=None, replay_window_end=None)
 

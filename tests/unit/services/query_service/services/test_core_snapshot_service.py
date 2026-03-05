@@ -388,8 +388,16 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
 async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dependencies):
     (position_repo, _, _, _, _, _) = mock_dependencies
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
-        (_snapshot_row("SEC_CASH", Decimal("1"), Decimal("1"), Decimal("1")), _instrument("SEC_CASH", "USD", "CASH"), SimpleNamespace(status="CURRENT")),
-        (_snapshot_row("SEC_ZERO", Decimal("0"), Decimal("0"), Decimal("0")), _instrument("SEC_ZERO", "USD", "EQUITY"), SimpleNamespace(status="CURRENT")),
+        (
+            _snapshot_row("SEC_CASH", Decimal("1"), Decimal("1"), Decimal("1")),
+            _instrument("SEC_CASH", "USD", "CASH"),
+            SimpleNamespace(status="CURRENT"),
+        ),
+        (
+            _snapshot_row("SEC_ZERO", Decimal("0"), Decimal("0"), Decimal("0")),
+            _instrument("SEC_ZERO", "USD", "EQUITY"),
+            SimpleNamespace(status="CURRENT"),
+        ),
     ]
     service = CoreSnapshotService(AsyncMock())
     rows, _source = await service._resolve_baseline_positions(

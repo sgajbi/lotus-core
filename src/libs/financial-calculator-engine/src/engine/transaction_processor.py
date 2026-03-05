@@ -1,31 +1,34 @@
 # libs/financial-calculator-engine/src/engine/transaction_processor.py
 import logging
 import time
-from typing import Tuple, List, Any
+from typing import Any, Tuple
 
-from core.models.transaction import Transaction
 from core.models.response import ErroredTransaction
+from core.models.transaction import Transaction
+from logic.cost_calculator import CostCalculator
+from logic.disposition_engine import DispositionEngine
+from logic.error_reporter import ErrorReporter
 from logic.parser import TransactionParser
 from logic.sorter import TransactionSorter
-from logic.disposition_engine import DispositionEngine
-from logic.cost_calculator import CostCalculator
-from logic.error_reporter import ErrorReporter
+
 from .monitoring import RECALCULATION_DEPTH, RECALCULATION_DURATION_SECONDS
 
 logger = logging.getLogger(__name__)
+
 
 class TransactionProcessor:
     """
     Orchestrates the end-to-end processing of financial transactions by
     recalculating a full history to ensure correctness and idempotency.
     """
+
     def __init__(
         self,
         parser: TransactionParser,
         sorter: TransactionSorter,
         disposition_engine: DispositionEngine,
         cost_calculator: CostCalculator,
-        error_reporter: ErrorReporter
+        error_reporter: ErrorReporter,
     ):
         self._parser = parser
         self._sorter = sorter
@@ -36,7 +39,7 @@ class TransactionProcessor:
     def process_transactions(
         self,
         existing_transactions_raw: list[dict[str, Any]],
-        new_transactions_raw: list[dict[str, Any]]
+        new_transactions_raw: list[dict[str, Any]],
     ) -> Tuple[list[Transaction], list[ErroredTransaction]]:
         start_time = time.monotonic()
         try:
@@ -46,11 +49,12 @@ class TransactionProcessor:
             parsed_existing = self._parser.parse_transactions(existing_transactions_raw)
             parsed_new = self._parser.parse_transactions(new_transactions_raw)
             new_transaction_ids = {txn.transaction_id for txn in parsed_new if not txn.error_reason}
-            
+
             # 2. Combine and sort the full, valid transaction history
-            all_valid_transactions = [txn for txn in parsed_existing if not txn.error_reason] + \
-                                     [txn for txn in parsed_new if not txn.error_reason]
-            
+            all_valid_transactions = [txn for txn in parsed_existing if not txn.error_reason] + [
+                txn for txn in parsed_new if not txn.error_reason
+            ]
+
             # Observe the depth of the recalculation
             RECALCULATION_DEPTH.observe(len(all_valid_transactions))
 
@@ -66,8 +70,13 @@ class TransactionProcessor:
                     if not self._error_reporter.has_errors_for(transaction.transaction_id):
                         processed_timeline.append(transaction)
                 except Exception as e:
-                    logger.error(f"Unexpected error for transaction {transaction.transaction_id}: {e}", exc_info=True)
-                    self._error_reporter.add_error(transaction.transaction_id, f"Unexpected error: {str(e)}")
+                    logger.error(
+                        f"Unexpected error for transaction {transaction.transaction_id}: {e}",
+                        exc_info=True,
+                    )
+                    self._error_reporter.add_error(
+                        transaction.transaction_id, f"Unexpected error: {str(e)}"
+                    )
 
             # 4. Filter results to return only the newly processed transactions
             final_processed_new = [

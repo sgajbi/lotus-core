@@ -1,16 +1,21 @@
 # tests/unit/services/persistence_service/repositories/test_portfolio_repository.py
-import pytest
-from unittest.mock import AsyncMock
 from datetime import date
+from unittest.mock import AsyncMock
+
+import pytest
+from portfolio_common.database_models import Portfolio as DBPortfolio
+from portfolio_common.events import PortfolioEvent
 
 # FIX: Import the actual 'Insert' class for the type check
 from sqlalchemy.dialects.postgresql import Insert as PGInsert
-from portfolio_common.events import PortfolioEvent
-from portfolio_common.database_models import Portfolio as DBPortfolio
-from src.services.persistence_service.app.repositories.portfolio_repository import PortfolioRepository
+
+from src.services.persistence_service.app.repositories.portfolio_repository import (
+    PortfolioRepository,
+)
 
 # FIX: Mark tests as async
 pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
@@ -19,10 +24,12 @@ def mock_db_session() -> AsyncMock:
     session.execute = AsyncMock()
     return session
 
+
 @pytest.fixture
 def repository(mock_db_session: AsyncMock) -> PortfolioRepository:
     """Provides an instance of the PortfolioRepository with a mock session."""
     return PortfolioRepository(mock_db_session)
+
 
 @pytest.fixture
 def sample_portfolio_event() -> PortfolioEvent:
@@ -36,11 +43,16 @@ def sample_portfolio_event() -> PortfolioEvent:
         risk_exposure="High",
         investment_time_horizon="Long",
         portfolio_type="Discretionary",
-        booking_center_code="SG"
+        booking_center_code="SG",
     )
 
+
 # FIX: Convert to a proper async test
-async def test_create_or_update_portfolio(repository: PortfolioRepository, mock_db_session: AsyncMock, sample_portfolio_event: PortfolioEvent):
+async def test_create_or_update_portfolio(
+    repository: PortfolioRepository,
+    mock_db_session: AsyncMock,
+    sample_portfolio_event: PortfolioEvent,
+):
     """
     GIVEN a portfolio event
     WHEN create_or_update_portfolio is called
@@ -52,7 +64,7 @@ async def test_create_or_update_portfolio(repository: PortfolioRepository, mock_
     # Assert
     # 1. Check that execute was called once
     mock_db_session.execute.assert_awaited_once()
-    
+
     # 2. Check the object returned by the method
     assert isinstance(result, DBPortfolio)
     assert result.portfolio_id == sample_portfolio_event.portfolio_id

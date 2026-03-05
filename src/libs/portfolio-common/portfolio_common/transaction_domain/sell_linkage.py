@@ -16,21 +16,17 @@ def enrich_sell_transaction_metadata(
         return event
 
     economic_event_id = (
-        event.economic_event_id
-        or f"EVT-SELL-{event.portfolio_id}-{event.transaction_id}"
+        event.economic_event_id or f"EVT-SELL-{event.portfolio_id}-{event.transaction_id}"
     )
     linked_transaction_group_id = (
-        event.linked_transaction_group_id
-        or f"LTG-SELL-{event.portfolio_id}-{event.transaction_id}"
+        event.linked_transaction_group_id or f"LTG-SELL-{event.portfolio_id}-{event.transaction_id}"
     )
     if cost_basis_method == "AVCO":
         resolved_policy_id = SELL_AVCO_POLICY_ID
     else:
         resolved_policy_id = SELL_FIFO_POLICY_ID
     calculation_policy_id = event.calculation_policy_id or resolved_policy_id
-    calculation_policy_version = (
-        event.calculation_policy_version or SELL_DEFAULT_POLICY_VERSION
-    )
+    calculation_policy_version = event.calculation_policy_version or SELL_DEFAULT_POLICY_VERSION
 
     return event.model_copy(
         update={

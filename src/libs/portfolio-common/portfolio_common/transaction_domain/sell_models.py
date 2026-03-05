@@ -30,9 +30,7 @@ class SellCanonicalTransaction(BaseModel):
     gross_transaction_amount: Decimal = Field(
         ..., description="Gross proceeds amount in trade currency."
     )
-    trade_fee: Optional[Decimal] = Field(
-        default=Decimal(0), description="Trade fee amount."
-    )
+    trade_fee: Optional[Decimal] = Field(default=Decimal(0), description="Trade fee amount.")
 
     trade_currency: str = Field(..., description="Trade/settlement currency.")
     currency: str = Field(..., description="Booked transaction currency.")

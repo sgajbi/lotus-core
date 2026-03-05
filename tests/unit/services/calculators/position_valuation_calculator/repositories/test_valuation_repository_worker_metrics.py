@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (
+from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
 

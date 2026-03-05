@@ -1,8 +1,10 @@
-import logging
-from confluent_kafka import Producer, KafkaException
-from .config import KAFKA_BOOTSTRAP_SERVERS
 import json
-from typing import Dict, Any, Optional, List, Tuple, Callable
+import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from confluent_kafka import KafkaException, Producer
+
+from .config import KAFKA_BOOTSTRAP_SERVERS
 
 logger = logging.getLogger(__name__)
 
@@ -29,20 +31,17 @@ class KafkaProducer:
                 # Broker connectivity
                 "bootstrap.servers": self.bootstrap_servers,
                 "client.id": "portfolio-analytics-producer",
-
                 # Reliability
-                "enable.idempotence": True,             # ensure de-dup on broker
+                "enable.idempotence": True,  # ensure de-dup on broker
                 "acks": "all",
                 "retries": 5,
                 "max.in.flight.requests.per.connection": 5,  # safe with idempotence
-
                 # Throughput (tune as needed per env)
                 "linger.ms": 5,
                 "batch.num.messages": 1000,
                 "compression.type": "zstd",
-
                 # Timeouts & keepalive
-                "delivery.timeout.ms": 120000,          # cap end-to-end delivery
+                "delivery.timeout.ms": 120000,  # cap end-to-end delivery
                 "request.timeout.ms": 30000,
                 "socket.keepalive.enable": True,
             }
@@ -65,11 +64,14 @@ class KafkaProducer:
         on_delivery: Optional[Callable[[str, bool, Optional[str]], None]] = None,
     ):
         """
-        Publish a message and optionally invoke an external on_delivery callback with the original outbox_id.
+        Publish a message and optionally invoke an external on_delivery callback
+        with the original outbox_id.
         on_delivery(outbox_id, success, error_message)
         """
         if not self.producer:
-            logger.error(f"Kafka producer not initialized. Cannot publish message to topic {topic}.")
+            logger.error(
+                f"Kafka producer not initialized. Cannot publish message to topic {topic}."
+            )
             raise RuntimeError("Kafka producer is not initialized.")
 
         try:
@@ -101,9 +103,15 @@ class KafkaProducer:
                         try:
                             on_delivery(_oid, False, str(err))
                         except Exception:
-                            logger.exception("on_delivery callback raised an exception (failure path).")
+                            logger.exception(
+                                "on_delivery callback raised an exception (failure path)."
+                            )
                 else:
-                    log_extra = {"topic": msg.topic(), "partition": msg.partition(), "offset": msg.offset()}
+                    log_extra = {
+                        "topic": msg.topic(),
+                        "partition": msg.partition(),
+                        "offset": msg.offset(),
+                    }
                     try:
                         key_repr = msg.key().decode("utf-8") if msg.key() else ""
                     except Exception:
@@ -113,7 +121,9 @@ class KafkaProducer:
                         try:
                             on_delivery(_oid, True, None)
                         except Exception:
-                            logger.exception("on_delivery callback raised an exception (success path).")
+                            logger.exception(
+                                "on_delivery callback raised an exception (success path)."
+                            )
 
             self.producer.produce(
                 topic,
@@ -124,7 +134,9 @@ class KafkaProducer:
             )
             self.producer.poll(0)
         except Exception as e:
-            logger.error(f"An unexpected error occurred during message production: {e}", exc_info=True)
+            logger.error(
+                f"An unexpected error occurred during message production: {e}", exc_info=True
+            )
             raise
 
     def flush(self, timeout: int = 10):

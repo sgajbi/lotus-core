@@ -1,13 +1,16 @@
 # src/services/persistence_service/app/consumers/fx_rate_consumer.py
-from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.events import FxRateEvent
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..repositories.fx_rate_repository import FxRateRepository
 from .base_consumer import GenericPersistenceConsumer
+
 
 class FxRateConsumer(GenericPersistenceConsumer):
     """
     Consumes, validates, and persists FX rate events idempotently.
     """
+
     @property
     def event_model(self):
         return FxRateEvent

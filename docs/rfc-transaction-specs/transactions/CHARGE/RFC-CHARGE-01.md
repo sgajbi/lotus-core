@@ -4,7 +4,7 @@
 
 * **Document ID:** RFC-CHARGE-01
 * **Title:** Canonical FEE and TAX Transaction Specification
-* **Version:** 1.0.0
+* **Version:** 1.1.0
 * **Status:** Draft
 * **Owner:** *TBD*
 * **Reviewers:** *TBD*
@@ -14,9 +14,10 @@
 
 ### 1.1 Change Log
 
-| Version | Date  | Author | Summary                                     |
-| ------- | ----- | ------ | ------------------------------------------- |
-| 1.0.0   | *TBD* | *TBD*  | Initial canonical FEE and TAX specification |
+| Version | Date  | Author | Summary                                                                                  |
+| ------- | ----- | ------ | ---------------------------------------------------------------------------------------- |
+| 1.0.0   | *TBD* | *TBD*  | Initial canonical FEE and TAX specification                                              |
+| 1.1.0   | *TBD* | *TBD*  | Clarified single-leg charge behavior and alignment with shared dual-leg accounting model |
 
 ### 1.2 Purpose
 
@@ -100,8 +101,22 @@ The following shared documents are normative for `FEE` and `TAX` unless explicit
 * `shared/10-query-audit-and-observability.md`
 * `shared/11-test-strategy-and-gap-assessment.md`
 * `shared/12-canonical-modeling-guidelines.md`
+* `shared/13-dual-leg-accounting-and-cash-adjustment-model.md`
 
-### 2.2 Override rule
+### 2.2 Explicit interaction with the dual-leg standard
+
+`FEE` and `TAX` are **standalone charge transactions**.
+
+They are **not** position-level dual-leg events by default.
+
+Therefore:
+
+* they are modeled as **single-leg charge transactions**
+* if cash settlement exists, the charge transaction itself carries the cash semantics
+* they do **not** use `ADJUSTMENT` as a linked cash leg for a product transaction
+* only if a future RFC explicitly defines a charge as a derived cash leg of another event may different behavior apply
+
+### 2.3 Override rule
 
 This RFC defines all `FEE`- and `TAX`-specific behavior.
 
@@ -154,6 +169,12 @@ The engine must distinguish at minimum between:
 * tax refunds/reclaims
 
 This distinction must remain visible in reporting and audit outputs.
+
+### 3.4 Single-leg charge rule
+
+`FEE` and `TAX` are single-leg charge transactions.
+
+They must be represented directly as charge events and must not be modeled as product leg + linked `ADJUSTMENT` cash leg events.
 
 ---
 
@@ -250,7 +271,6 @@ The engine must resolve and attach:
 * calculation policy version
 * charge-recognition policy
 * accrual-vs-cash policy
-* cash-entry mode
 * timing policy
 * precision policy
 * duplicate/replay policy
@@ -320,7 +340,6 @@ The canonical logical model must be `ChargeTransaction`.
 * `PositionEffect`
 * `ChargeEffect`
 * `RealizedPnlDetails`
-* `CashflowInstruction`
 * `LinkageDetails`
 * `AuditMetadata`
 * `AdvisoryMetadata`
@@ -443,15 +462,7 @@ Each field must have one of the following mutability classifications:
 | `realized_fx_pnl_base`       | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Realized FX P&L in base currency       | `0.00` |
 | `realized_total_pnl_base`    | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Total realized P&L in base currency    | `0.00` |
 
-#### 6.5.11 CashflowInstruction
-
-| Field                        | Type            | Required | Source               | Mutability | Description                                                      | Sample                 |
-| ---------------------------- | --------------- | -------: | -------------------- | ---------- | ---------------------------------------------------------------- | ---------------------- |
-| `cash_entry_mode`            | `CashEntryMode` |      Yes | CONFIGURED           | IMMUTABLE  | Whether cash entry is engine-generated or expected from upstream | `AUTO_GENERATE`        |
-| `auto_generate_cash_entry`   | `bool`          |      Yes | DERIVED / CONFIGURED | IMMUTABLE  | Whether the engine must generate the linked cash entry           | `true`                 |
-| `linked_cash_transaction_id` | `str \| None`   |       No | LINKED / DERIVED     | RECOMPUTED | Linked cash transaction identifier                               | `TXN-CASH-2026-000723` |
-
-#### 6.5.12 LinkageDetails
+#### 6.5.11 LinkageDetails
 
 | Field                        | Type          | Required | Source               | Mutability | Description                                                            | Sample                |
 | ---------------------------- | ------------- | -------: | -------------------- | ---------- | ---------------------------------------------------------------------- | --------------------- |
@@ -459,7 +470,7 @@ Each field must have one of the following mutability classifications:
 | `link_type`                  | `LinkType`    |      Yes | DERIVED / CONFIGURED | IMMUTABLE  | Semantic meaning of the charge linkage                                 | `CHARGE_TO_CASH`      |
 | `reconciliation_key`         | `str \| None` |       No | UPSTREAM / DERIVED   | IMMUTABLE  | Key used to reconcile with upstream billing/tax systems                | `RECON-STU-901`       |
 
-#### 6.5.13 AuditMetadata
+#### 6.5.12 AuditMetadata
 
 | Field                | Type               | Required | Source             | Mutability | Description                             | Sample                 |
 | -------------------- | ------------------ | -------: | ------------------ | ---------- | --------------------------------------- | ---------------------- |
@@ -469,7 +480,7 @@ Each field must have one of the following mutability classifications:
 | `created_at`         | `datetime`         |      Yes | UPSTREAM / DERIVED | IMMUTABLE  | Record creation timestamp               | `2026-04-15T14:00:00Z` |
 | `processed_at`       | `datetime \| None` |       No | DERIVED            | RECOMPUTED | Processing completion timestamp         | `2026-04-15T14:00:02Z` |
 
-#### 6.5.14 AdvisoryMetadata
+#### 6.5.13 AdvisoryMetadata
 
 | Field                   | Type          | Required | Source   | Mutability | Description                                          | Sample           |
 | ----------------------- | ------------- | -------: | -------- | ---------- | ---------------------------------------------------- | ---------------- |
@@ -477,15 +488,14 @@ Each field must have one of the following mutability classifications:
 | `client_instruction_id` | `str \| None` |       No | UPSTREAM | IMMUTABLE  | Client instruction reference if manually triggered   | `CI-2026-7805`   |
 | `mandate_reference`     | `str \| None` |       No | UPSTREAM | IMMUTABLE  | Mandate linkage if relevant                          | `DPM-MANDATE-01` |
 
-#### 6.5.15 PolicyMetadata
+#### 6.5.14 PolicyMetadata
 
 | Field                        | Type  | Required | Source     | Mutability | Description                                                  | Sample                        |
 | ---------------------------- | ----- | -------: | ---------- | ---------- | ------------------------------------------------------------ | ----------------------------- |
 | `calculation_policy_id`      | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy identifier used for this calculation                  | `POLICY-CHARGE-STD`           |
-| `calculation_policy_version` | `str` |      Yes | CONFIGURED | IMMUTABLE  | Version of the calculation policy applied                    | `1.0.0`                       |
+| `calculation_policy_version` | `str` |      Yes | CONFIGURED | IMMUTABLE  | Version of the calculation policy applied                    | `1.1.0`                       |
 | `recognition_policy`         | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling when/how the charge is recognized         | `RECOGNIZE_ON_EFFECTIVE_DATE` |
 | `accrual_cash_policy`        | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling accrual-only vs immediate cash settlement | `IMMEDIATE_CASH_SETTLEMENT`   |
-| `cash_generation_policy`     | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling how linked cash entries are created       | `AUTO_GENERATE_LINKED_CASH`   |
 
 ---
 
@@ -643,7 +653,16 @@ For accrual-only postings:
 
 `cash_balance_delta_local = 0`
 
-### 8.7 Base-currency conversion
+### 8.7 Directional source-of-truth rule
+
+For `FEE` and `TAX`:
+
+* the authoritative charge-flow amount is the **net charge amount**
+* the authoritative cash direction is the **actual cash movement direction**
+* the charge transaction itself is the authoritative source for the cash movement when cash settlement exists
+* there is no separate linked `ADJUSTMENT` cash leg for charge-flow sourcing
+
+### 8.8 Base-currency conversion
 
 The engine must convert all relevant local amounts to base currency using the active FX policy.
 
@@ -651,7 +670,7 @@ By default:
 
 `amount_base = amount_local × charge_fx_rate`
 
-### 8.8 Realized P&L fields
+### 8.9 Realized P&L fields
 
 For every `FEE` and `TAX`, the engine must explicitly produce:
 
@@ -664,7 +683,7 @@ For every `FEE` and `TAX`, the engine must explicitly produce:
 
 These fields must be present and must not be omitted.
 
-### 8.9 Rounding and precision
+### 8.10 Rounding and precision
 
 The engine must define:
 
@@ -707,7 +726,15 @@ If `accrual_only = true`:
 * cash must not change immediately
 * later settlement must remain linkable and auditable as a separate or linked event
 
-### 9.5 Cash balance views
+### 9.5 Single-leg cash ownership rule
+
+For cash-settled `FEE` and `TAX`:
+
+* the charge transaction itself is the source of truth for cash balance mutation
+* the charge transaction itself is the source of truth for charge cash-flow reporting
+* there is no separate `ADJUSTMENT` cash leg for charge semantics
+
+### 9.6 Cash balance views
 
 The platform must distinguish, where relevant:
 
@@ -716,7 +743,7 @@ The platform must distinguish, where relevant:
 * projected cash
 * ledger cash
 
-### 9.6 Cash invariants
+### 9.7 Cash invariants
 
 * A charge cash effect must always be linked or explicitly externally expected.
 * Duplicate cash creation must be prevented.
@@ -793,7 +820,14 @@ At minimum:
 * cash-balance delta local/base
 * accrual-only indicator
 
-### 11.4 Consistency expectation
+### 11.4 Required source-of-truth clarification
+
+The output contract must make it clear that:
+
+* this transaction is the authoritative charge-flow and cash-flow record for the event
+* there is no separate linked `ADJUSTMENT` cash leg for this transaction type
+
+### 11.5 Consistency expectation
 
 The platform must define whether these surfaces are:
 
@@ -834,6 +868,7 @@ and must document the expected latency/SLA for visibility.
 * fee expense recognized
 * no quantity change
 * no lot activity
+* this transaction is the authoritative charge-flow and cash-flow record
 
 ---
 
@@ -858,6 +893,7 @@ and must document the expected latency/SLA for visibility.
 * cash decreases by `12.50`
 * tax charge recognized
 * transaction classified as `TAX`
+* no `ADJUSTMENT` leg exists
 
 ---
 
@@ -882,6 +918,7 @@ and must document the expected latency/SLA for visibility.
 * cash increases by `10.00`
 * fee refund/rebate recognized
 * no realized P&L
+* this transaction remains single-leg
 
 ---
 
@@ -930,6 +967,7 @@ and must document the expected latency/SLA for visibility.
 * local and base charge values populated
 * no realized FX P&L
 * FX conversion remains explicit and traceable
+* this transaction itself remains the authoritative record
 
 ---
 
@@ -1009,7 +1047,8 @@ The implementation is not complete unless the following test categories are cove
 * cash-settled inflow increases cash
 * accrual-only charge produces zero immediate cash delta
 * correct cash delta in local and base currency
-* correct timing application across supported timing modes
+* charge transaction itself is consumed as the authoritative cash-flow record
+* no linked `ADJUSTMENT` cash leg is created for charge semantics
 
 ### 14.4 Query tests
 
@@ -1018,6 +1057,7 @@ The implementation is not complete unless the following test categories are cove
 * cash effect visibility
 * linkage visibility
 * policy metadata visibility
+* explicit single-leg charge visibility
 
 ### 14.5 Idempotency and replay tests
 
@@ -1092,7 +1132,6 @@ The following must be configurable:
 * FX precision
 * reconciliation tolerance
 * offset handling
-* cash-entry mode
 * linkage enforcement
 * duplicate/replay handling
 * strictness of required linked references
@@ -1147,6 +1186,7 @@ If the current implementation already matches a requirement in this RFC, that be
 * the full input contract is implemented
 * all mandatory validations are enforced
 * all mandatory calculations are implemented
+* explicit single-leg charge semantics are implemented
 * charge direction support is implemented
 * accrual-only vs cash-settled behavior is implemented
 * timing behavior is implemented

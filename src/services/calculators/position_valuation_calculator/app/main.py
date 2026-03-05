@@ -1,6 +1,7 @@
 # services/calculators/position-valuation-calculator/app/main.py
-import logging
 import asyncio
+import logging
+
 from app.consumer_manager import ConsumerManager
 from portfolio_common.logging_utils import setup_logging
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -10,6 +11,7 @@ from .web import app as web_app
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
 
 async def main():
     """
@@ -25,9 +27,12 @@ async def main():
     try:
         await manager.run()
     except Exception as e:
-        logger.critical(f"Position Valuation Service encountered a critical error: {e}", exc_info=True)
+        logger.critical(
+            f"Position Valuation Service encountered a critical error: {e}", exc_info=True
+        )
     finally:
         logger.info("Position Valuation Service has shut down.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

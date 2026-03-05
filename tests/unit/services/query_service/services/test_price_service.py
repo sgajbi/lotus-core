@@ -1,12 +1,13 @@
 # tests/unit/services/query_service/services/test_price_service.py
-import pytest
-from unittest.mock import AsyncMock, patch
 from datetime import date
 from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 
-from src.services.query_service.app.services.price_service import MarketPriceService
-from src.services.query_service.app.repositories.price_repository import MarketPriceRepository
+import pytest
 from portfolio_common.database_models import MarketPrice
+
+from src.services.query_service.app.repositories.price_repository import MarketPriceRepository
+from src.services.query_service.app.services.price_service import MarketPriceService
 
 pytestmark = pytest.mark.asyncio
 

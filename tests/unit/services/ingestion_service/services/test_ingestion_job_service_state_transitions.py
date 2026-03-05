@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
-
 from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
+
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 from tests.unit.test_support.async_session_iter import make_single_session_getter
@@ -121,6 +121,9 @@ async def test_mark_retried_uses_atomic_increment_update(
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
     assert "UPDATE ingestion_jobs" in compiled_sql
-    assert "retry_count=(coalesce(ingestion_jobs.retry_count, :coalesce_1) + :coalesce_2)" in compiled_sql
+    assert (
+        "retry_count=(coalesce(ingestion_jobs.retry_count, :coalesce_1) + :coalesce_2)"
+        in compiled_sql
+    )
     assert "last_retried_at=:last_retried_at" in compiled_sql
     assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql

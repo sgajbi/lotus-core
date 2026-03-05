@@ -69,10 +69,7 @@ async def test_get_capacity_status_aggregates_groups(service: IngestionJobServic
     assert first.processed_records == 900
     assert first.backlog_records == 300
     assert first.lambda_in_events_per_second == Decimal("0.3333333333333333333333333333")
-    assert (
-        first.mu_msg_per_replica_events_per_second
-        == Decimal("0.25")
-    )
+    assert first.mu_msg_per_replica_events_per_second == Decimal("0.25")
     assert first.effective_capacity_events_per_second == Decimal("0.50")
     assert first.utilization_ratio == Decimal("0.6666666666666666666666666666")
     assert first.saturation_state == "stable"

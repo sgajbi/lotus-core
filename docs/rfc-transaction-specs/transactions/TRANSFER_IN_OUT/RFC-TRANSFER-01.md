@@ -4,7 +4,7 @@
 
 * **Document ID:** RFC-TRANSFER-01
 * **Title:** Canonical TRANSFER_IN and TRANSFER_OUT Transaction Specification
-* **Version:** 1.0.0
+* **Version:** 1.1.0
 * **Status:** Draft
 * **Owner:** *TBD*
 * **Reviewers:** *TBD*
@@ -14,9 +14,10 @@
 
 ### 1.1 Change Log
 
-| Version | Date  | Author | Summary                                                      |
-| ------- | ----- | ------ | ------------------------------------------------------------ |
-| 1.0.0   | *TBD* | *TBD*  | Initial canonical TRANSFER_IN and TRANSFER_OUT specification |
+| Version | Date  | Author | Summary                                                                                    |
+| ------- | ----- | ------ | ------------------------------------------------------------------------------------------ |
+| 1.0.0   | *TBD* | *TBD*  | Initial canonical TRANSFER_IN and TRANSFER_OUT specification                               |
+| 1.1.0   | *TBD* | *TBD*  | Clarified single-leg transfer behavior and alignment with shared dual-leg accounting model |
 
 ### 1.2 Purpose
 
@@ -98,8 +99,22 @@ The following shared documents are normative for `TRANSFER_IN` and `TRANSFER_OUT
 * `shared/10-query-audit-and-observability.md`
 * `shared/11-test-strategy-and-gap-assessment.md`
 * `shared/12-canonical-modeling-guidelines.md`
+* `shared/13-dual-leg-accounting-and-cash-adjustment-model.md`
 
-### 2.2 Override rule
+### 2.2 Explicit interaction with the dual-leg standard
+
+`TRANSFER_IN` and `TRANSFER_OUT` are **portfolio-level transfer transactions**.
+
+They are **not** position-level dual-leg events by default.
+
+Therefore:
+
+* **security-only transfers** are **single-leg product transactions**
+* **cash-only transfers** are **single-leg cash transactions**
+* they do **not** use `ADJUSTMENT` as a linked cash leg for a product transaction
+* if a transfer contains both a security component and a cash component, both components must still be represented explicitly as transfer semantics, not as a product leg plus `ADJUSTMENT`
+
+### 2.3 Override rule
 
 This RFC defines all `TRANSFER_IN`- and `TRANSFER_OUT`-specific behavior.
 
@@ -131,7 +146,7 @@ A transfer must not:
 
 ### 3.1 Non-negotiable semantic invariant
 
-A transfer moves ownership, custody, or booking location of an asset or cash balance without market realization. By default, it changes holdings and/or cash, preserves economic continuity, and must not create realized capital or FX P&L unless an approved policy explicitly states otherwise.
+A transfer moves ownership, custody, or booking location of an asset or cash balance without market realization. By default, it changes holdings and/or cash, preserves economic continuity, and must not create realized capital or FX P&L.
 
 ### 3.2 Direction rule
 
@@ -148,6 +163,16 @@ Transfers must support both:
 * **restated continuity**: preserve quantity but rebase or re-document cost basis under controlled policy
 
 The active policy must explicitly define which applies.
+
+### 3.4 Single-leg transfer rule
+
+Transfers are not dual-leg `product + ADJUSTMENT` events.
+
+Instead:
+
+* a **security-only transfer** is a **single-leg transfer with product semantics**
+* a **cash-only transfer** is a **single-leg transfer with cash semantics**
+* a **mixed transfer** is still a **transfer transaction**, not a position-level product event with linked `ADJUSTMENT`
 
 ---
 
@@ -171,6 +196,7 @@ The following invariants are mandatory for every valid transfer.
 
 * `transfer_quantity >= 0`
 * `transfer_cash_amount_local >= 0`
+* `transfer_cash_amount_base >= 0`
 * `transfer_cost_basis_local >= 0`
 * `transfer_cost_basis_base >= 0`
 * `TRANSFER_IN` quantity/cash deltas are positive
@@ -249,7 +275,6 @@ The engine must resolve and attach:
 * continuity policy
 * lot-preservation policy
 * cost-basis policy
-* cash-entry mode
 * timing policy
 * precision policy
 * duplicate/replay policy
@@ -475,12 +500,12 @@ Each field must have one of the following mutability classifications:
 
 #### 6.5.14 LinkageDetails
 
-| Field                            | Type          | Required | Source               | Mutability | Description                                           | Sample            |
-| -------------------------------- | ------------- | -------: | -------------------- | ---------- | ----------------------------------------------------- | ----------------- |
-| `paired_transfer_transaction_id` | `str \| None` |       No | LINKED               | IMMUTABLE  | Matching in/out side if known in-platform             | `TXN-2026-000624` |
-| `originating_transaction_id`     | `str \| None` |       No | LINKED               | IMMUTABLE  | Source transaction for linked entries                 | `TXN-2026-000623` |
-| `link_type`                      | `LinkType`    |      Yes | DERIVED / CONFIGURED | IMMUTABLE  | Semantic meaning of the transfer linkage              | `TRANSFER_PAIR`   |
-| `reconciliation_key`             | `str \| None` |       No | UPSTREAM / DERIVED   | IMMUTABLE  | Key used to reconcile with upstream/custodian systems | `RECON-PQR-678`   |
+| Field                            | Type          | Required | Source               | Mutability | Description                                            | Sample            |
+| -------------------------------- | ------------- | -------: | -------------------- | ---------- | ------------------------------------------------------ | ----------------- |
+| `paired_transfer_transaction_id` | `str \| None` |       No | LINKED               | IMMUTABLE  | Matching in/out side if known in-platform              | `TXN-2026-000624` |
+| `originating_transaction_id`     | `str \| None` |       No | LINKED               | IMMUTABLE  | Source transaction for linked entries where applicable | `TXN-2026-000623` |
+| `link_type`                      | `LinkType`    |      Yes | DERIVED / CONFIGURED | IMMUTABLE  | Semantic meaning of the transfer linkage               | `TRANSFER_PAIR`   |
+| `reconciliation_key`             | `str \| None` |       No | UPSTREAM / DERIVED   | IMMUTABLE  | Key used to reconcile with upstream/custodian systems  | `RECON-PQR-678`   |
 
 #### 6.5.15 AuditMetadata
 
@@ -505,7 +530,7 @@ Each field must have one of the following mutability classifications:
 | Field                         | Type  | Required | Source     | Mutability | Description                                                       | Sample                         |
 | ----------------------------- | ----- | -------: | ---------- | ---------- | ----------------------------------------------------------------- | ------------------------------ |
 | `calculation_policy_id`       | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy identifier used for this calculation                       | `POLICY-TRANSFER-STD`          |
-| `calculation_policy_version`  | `str` |      Yes | CONFIGURED | IMMUTABLE  | Version of the calculation policy applied                         | `1.0.0`                        |
+| `calculation_policy_version`  | `str` |      Yes | CONFIGURED | IMMUTABLE  | Version of the calculation policy applied                         | `1.1.0`                        |
 | `continuity_policy`           | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling cost-basis continuity                          | `PRESERVE_ORIGINAL_COST_BASIS` |
 | `lot_transfer_policy`         | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling lot preservation/restatement                   | `PRESERVE_LOTS_IF_AVAILABLE`   |
 | `insufficient_balance_policy` | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling outgoing transfer when balance is insufficient | `REJECT_IF_INSUFFICIENT`       |
@@ -523,7 +548,6 @@ A valid transfer must include, at minimum:
 * effective date
 * portfolio identifier
 * transfer asset type
-* explicit movement direction
 * required quantity and/or cash amount depending on asset type
 * required policy identifiers if not resolved externally
 
@@ -574,7 +598,6 @@ The engine must validate all enum-constrained fields, including:
 * transfer status
 * settlement status
 * transfer asset type
-* movement direction
 * continuity mode
 * lot transfer mode
 * link type
@@ -701,7 +724,15 @@ By default:
 
 `amount_base = amount_local × transfer_fx_rate`
 
-### 8.8 Realized P&L fields
+### 8.8 Directional source-of-truth rule
+
+For transfers:
+
+* the authoritative quantity movement is the **transfer’s quantity delta**
+* the authoritative cash movement, if present, is the **transfer’s cash delta**
+* there is no separate linked `ADJUSTMENT` cash leg for transfer cash semantics
+
+### 8.9 Realized P&L fields
 
 For every transfer, the engine must explicitly produce by default:
 
@@ -714,7 +745,7 @@ For every transfer, the engine must explicitly produce by default:
 
 If a customer-specific approved policy allows realization on transfer, that behavior must be explicitly documented and override this default.
 
-### 8.9 Rounding and precision
+### 8.10 Rounding and precision
 
 The engine must define:
 
@@ -788,7 +819,14 @@ The engine must support:
 * resulting cash-balance delta
 * linked receiving/sending cash account when known
 
-### 10.4 Cash balance views
+### 10.4 Single-leg cash ownership rule
+
+For any cash component inside a transfer:
+
+* the transfer transaction itself is the source of truth for that cash movement
+* there is no separate `ADJUSTMENT` cash leg for transfer cash semantics
+
+### 10.5 Cash balance views
 
 The platform must distinguish, where relevant:
 
@@ -797,7 +835,7 @@ The platform must distinguish, where relevant:
 * projected cash
 * ledger cash
 
-### 10.5 Cash invariants
+### 10.6 Cash invariants
 
 * Cash transfer effects must always be explicit.
 * Duplicate cash creation must be prevented.
@@ -888,7 +926,14 @@ At minimum:
 * cash account references where applicable
 * transfer flow indicators
 
-### 12.5 Consistency expectation
+### 12.5 Required source-of-truth clarification
+
+The output contract must make it clear that:
+
+* the transfer transaction itself is the authoritative record for transfer quantity and transfer cash semantics
+* there is no linked `ADJUSTMENT` cash leg for transfer semantics
+
+### 12.6 Consistency expectation
 
 The platform must define whether these surfaces are:
 
@@ -925,6 +970,7 @@ and must document the expected latency/SLA for visibility.
 * cost basis increases by `15005.50`
 * source lot lineage is preserved in target context
 * no cash movement
+* this remains a single-leg transfer event
 
 ---
 
@@ -949,6 +995,7 @@ and must document the expected latency/SLA for visibility.
 * cost basis decreases by `15005.50`
 * lots are reduced/exported
 * no realized P&L
+* this remains a single-leg transfer event
 
 ---
 
@@ -971,7 +1018,8 @@ and must document the expected latency/SLA for visibility.
 
 * cash increases by `5000.00`
 * no security quantity change
-* classified per transfer cashflow policy
+* transfer transaction itself is the authoritative cash-flow record
+* no `ADJUSTMENT` leg exists
 
 ---
 
@@ -1103,6 +1151,8 @@ The implementation is not complete unless the following test categories are cove
 * cash transfer out decreases cash
 * correct cash delta in local and base currency
 * correct timing application across supported timing modes
+* transfer itself is consumed as the authoritative cash-flow record when cash is present
+* no linked `ADJUSTMENT` cash leg is created for transfer semantics
 
 ### 15.5 Pairing and linkage tests
 
@@ -1118,6 +1168,7 @@ The implementation is not complete unless the following test categories are cove
 * cash effect visibility
 * lot transfer visibility
 * policy metadata visibility
+* explicit single-leg transfer visibility
 
 ### 15.7 Idempotency and replay tests
 
@@ -1194,7 +1245,6 @@ The following must be configurable:
 * precision rules
 * FX precision
 * reconciliation tolerance
-* cash-entry / linked-ledger mode
 * position timing
 * cash timing
 * performance timing
@@ -1253,6 +1303,7 @@ If the current implementation already matches a requirement in this RFC, that be
 * the full input contract is implemented
 * all mandatory validations are enforced
 * all mandatory calculations are implemented
+* explicit single-leg transfer semantics are implemented
 * continuity behavior is implemented
 * lot transfer behavior is implemented
 * timing behavior is implemented

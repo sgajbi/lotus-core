@@ -1,10 +1,12 @@
 # tests/unit/libs/portfolio-common/test_outbox_repository.py
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
 pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
@@ -14,12 +16,16 @@ def mock_db_session() -> AsyncMock:
     session.add = MagicMock()
     return session
 
+
 @pytest.fixture
 def repository(mock_db_session: AsyncMock) -> OutboxRepository:
     """Provides an instance of the OutboxRepository with a mock session."""
     return OutboxRepository(mock_db_session)
 
-async def test_create_outbox_event_success(repository: OutboxRepository, mock_db_session: AsyncMock):
+
+async def test_create_outbox_event_success(
+    repository: OutboxRepository, mock_db_session: AsyncMock
+):
     """
     GIVEN valid event details
     WHEN create_outbox_event is called
@@ -32,7 +38,7 @@ async def test_create_outbox_event_success(repository: OutboxRepository, mock_db
         "event_type": "TestEvent",
         "payload": {"data": "value"},
         "topic": "test.topic",
-        "correlation_id": "corr-123"
+        "correlation_id": "corr-123",
     }
 
     # Act
@@ -49,6 +55,7 @@ async def test_create_outbox_event_success(repository: OutboxRepository, mock_db
     assert added_object.payload == event_details["payload"]
     assert added_object.status == "PENDING"
 
+
 async def test_create_outbox_event_raises_type_error_for_bad_payload(repository: OutboxRepository):
     """
     GIVEN a payload that is not a dictionary
@@ -60,8 +67,8 @@ async def test_create_outbox_event_raises_type_error_for_bad_payload(repository:
         "aggregate_type": "Test",
         "aggregate_id": "agg-123",
         "event_type": "TestEvent",
-        "payload": "just a string", # Invalid payload type
-        "topic": "test.topic"
+        "payload": "just a string",  # Invalid payload type
+        "topic": "test.topic",
     }
 
     # Act & Assert

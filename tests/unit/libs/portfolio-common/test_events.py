@@ -4,7 +4,9 @@ from decimal import Decimal
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
 
 
-def _txn(transaction_id: str, transaction_date: datetime, created_at: datetime | None) -> TransactionEvent:
+def _txn(
+    transaction_id: str, transaction_date: datetime, created_at: datetime | None
+) -> TransactionEvent:
     return TransactionEvent(
         transaction_id=transaction_id,
         portfolio_id="P1",

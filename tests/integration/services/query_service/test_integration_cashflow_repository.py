@@ -1,17 +1,17 @@
 # tests/integration/services/query_service/test_cashflow_repository.py
-import pytest
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
+import pytest
 from portfolio_common.database_models import (
-    Portfolio,
-    Transaction,
     Cashflow,
+    Portfolio,
     PositionState,
-    Instrument,
+    Transaction,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+
 from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
 
 pytestmark = pytest.mark.asyncio
@@ -251,4 +251,3 @@ async def test_get_income_cashflows_is_epoch_aware(
     # Verify it returned the record from epoch 1 and filtered out the one from epoch 0
     assert results[0].epoch == 1
     assert results[0].amount == Decimal("100")
-

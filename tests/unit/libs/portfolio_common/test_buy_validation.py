@@ -38,9 +38,7 @@ def test_validate_buy_transaction_detects_non_positive_quantity() -> None:
 
 
 def test_validate_buy_transaction_detects_invalid_date_order() -> None:
-    txn = _base_txn().model_copy(
-        update={"settlement_date": datetime(2026, 2, 28, 10, 0, 0)}
-    )
+    txn = _base_txn().model_copy(update={"settlement_date": datetime(2026, 2, 28, 10, 0, 0)})
     issues = validate_buy_transaction(txn)
     assert any(i.code == BuyValidationReasonCode.INVALID_DATE_ORDER for i in issues)
 
@@ -50,4 +48,3 @@ def test_validate_buy_transaction_strict_metadata() -> None:
     codes = {i.code for i in issues}
     assert BuyValidationReasonCode.MISSING_LINKAGE_IDENTIFIER in codes
     assert BuyValidationReasonCode.MISSING_POLICY_METADATA in codes
-

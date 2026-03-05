@@ -1,12 +1,13 @@
 # tests/unit/services/query_service/services/test_portfolio_service.py
-import pytest
-from unittest.mock import AsyncMock, patch
 from datetime import date
+from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.services.query_service.app.services.portfolio_service import PortfolioService
-from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
+import pytest
 from portfolio_common.database_models import Portfolio
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
+from src.services.query_service.app.services.portfolio_service import PortfolioService
 
 pytestmark = pytest.mark.asyncio
 
@@ -116,4 +117,3 @@ async def test_get_portfolio_by_id_not_found(mock_portfolio_repo: AsyncMock):
 
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_portfolio_by_id("P404")
-

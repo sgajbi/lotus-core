@@ -26,11 +26,7 @@ def mock_repo() -> AsyncMock:
             date(2026, 3, 1): Decimal("-1000"),
             date(2026, 3, 3): Decimal("250"),
         }
-        return [
-            (d, amount)
-            for d, amount in universe.items()
-            if start_date <= d <= end_date
-        ]
+        return [(d, amount) for d, amount in universe.items() if start_date <= d <= end_date]
 
     repo.get_portfolio_cashflow_series.side_effect = _series
     return repo

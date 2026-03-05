@@ -1,18 +1,20 @@
 # libs/financial-calculator-engine/src/logic/parser.py
 import logging
-from typing import Any
-from pydantic import ValidationError, TypeAdapter
 from decimal import Decimal
+from typing import Any
 
 from core.models.transaction import Transaction
 from logic.error_reporter import ErrorReporter
+from pydantic import TypeAdapter, ValidationError
 
 logger = logging.getLogger(__name__)
+
 
 class TransactionParser:
     """
     Parses raw transaction dictionaries into validated Transaction objects.
     """
+
     def __init__(self, error_reporter: ErrorReporter):
         self._single_transaction_adapter = TypeAdapter(Transaction)
         self._error_reporter = error_reporter
@@ -25,7 +27,9 @@ class TransactionParser:
                 validated_txn = self._single_transaction_adapter.validate_python(raw_txn_data)
                 parsed_transactions.append(validated_txn)
             except ValidationError as e:
-                error_messages = "; ".join([f"{err.get('loc', ['unknown'])[0]}: {err['msg']}" for err in e.errors()])
+                error_messages = "; ".join(
+                    [f"{err.get('loc', ['unknown'])[0]}: {err['msg']}" for err in e.errors()]
+                )
                 error_reason = f"Validation error: {error_messages}"
                 self._error_reporter.add_error(transaction_id, error_reason)
                 stub_txn = self._create_stub_transaction(raw_txn_data, error_reason)
@@ -52,5 +56,5 @@ class TransactionParser:
             trade_currency=raw_data.get("trade_currency", "UNK"),
             # --- FIX: Add required field with a sensible default ---
             portfolio_base_currency=raw_data.get("portfolio_base_currency", "UNK"),
-            error_reason=error_reason
+            error_reason=error_reason,
         )

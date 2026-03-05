@@ -2,16 +2,18 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from core.models.transaction import Transaction as EngineTransaction
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     Portfolio,
     PositionLotState,
+)
+from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )

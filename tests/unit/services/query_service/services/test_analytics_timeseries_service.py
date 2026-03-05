@@ -3,11 +3,10 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import MagicMock
 
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
@@ -235,14 +234,14 @@ async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_
                     valuation_date=date(2025, 1, 2),
                     bod_market_value=Decimal("10"),
                     eod_market_value=Decimal("11"),
-                bod_cashflow_position=Decimal("0"),
-                eod_cashflow_position=Decimal("0"),
-                bod_cashflow_portfolio=Decimal("0"),
-                eod_cashflow_portfolio=Decimal("0"),
-                fees=Decimal("0"),
-                quantity=Decimal("1"),
-                epoch=7,
-                asset_class="Equity",
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("1"),
+                    epoch=7,
+                    asset_class="Equity",
                     sector="Technology",
                     country="US",
                     position_currency="USD",
@@ -546,7 +545,9 @@ async def test_create_export_job_completed() -> None:
     service.export_repo = SimpleNamespace(
         get_latest_by_fingerprint=AsyncMock(return_value=None),
         create_job=AsyncMock(return_value=row),
-        mark_running=AsyncMock(side_effect=lambda *_args, **_kwargs: setattr(row, "status", "running")),
+        mark_running=AsyncMock(
+            side_effect=lambda *_args, **_kwargs: setattr(row, "status", "running")
+        ),
         mark_completed=AsyncMock(
             side_effect=lambda *_args, **_kwargs: setattr(row, "status", "completed")
         ),
@@ -734,7 +735,11 @@ async def test_get_export_result_ndjson_error_and_plain_branches() -> None:
                 status="completed",
                 job_id="aexp_ok",
                 dataset_type="portfolio_timeseries",
-                result_payload={"generated_at": "2026-03-01T00:00:00Z", "contract_version": "rfc_063_v1", "data": "bad"},
+                result_payload={
+                    "generated_at": "2026-03-01T00:00:00Z",
+                    "contract_version": "rfc_063_v1",
+                    "data": "bad",
+                },
             )
         )
     )

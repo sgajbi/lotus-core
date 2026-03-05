@@ -3,7 +3,12 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from portfolio_common.database_models import AccruedIncomeOffsetState, Cashflow, PositionLotState, Transaction
+from portfolio_common.database_models import (
+    AccruedIncomeOffsetState,
+    Cashflow,
+    PositionLotState,
+    Transaction,
+)
 
 from src.services.query_service.app.repositories.buy_state_repository import BuyStateRepository
 from src.services.query_service.app.services.buy_state_service import BuyStateService
@@ -134,7 +139,9 @@ async def test_get_accrued_offsets_raises_when_portfolio_missing(mock_buy_state_
             await service.get_accrued_offsets("P404", "US0378331005")
 
 
-async def test_get_buy_cash_linkage_raises_when_transaction_not_found(mock_buy_state_repo: AsyncMock):
+async def test_get_buy_cash_linkage_raises_when_transaction_not_found(
+    mock_buy_state_repo: AsyncMock,
+):
     with patch(
         "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
         return_value=mock_buy_state_repo,

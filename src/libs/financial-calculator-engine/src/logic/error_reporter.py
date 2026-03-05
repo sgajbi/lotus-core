@@ -1,10 +1,12 @@
 # libs/financial-calculator-engine/src/logic/error_reporter.py
 from core.models.response import ErroredTransaction
 
+
 class ErrorReporter:
     """
     Manages the collection and reporting of processing errors for transactions.
     """
+
     def __init__(self):
         self._errored_transactions: dict[str, ErroredTransaction] = {}
 
@@ -15,8 +17,7 @@ class ErrorReporter:
                 self._errored_transactions[transaction_id].error_reason += f"; {error_reason}"
         else:
             self._errored_transactions[transaction_id] = ErroredTransaction(
-                transaction_id=transaction_id,
-                error_reason=error_reason
+                transaction_id=transaction_id, error_reason=error_reason
             )
 
     def get_errors(self) -> list[ErroredTransaction]:

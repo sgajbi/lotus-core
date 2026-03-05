@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi import HTTPException
 
 from src.services.query_service.app.dtos.core_snapshot_dto import (
@@ -13,44 +14,42 @@ from src.services.query_service.app.dtos.integration_dto import (
     PolicyProvenanceMetadata,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkMarketSeriesRequest,
-    BenchmarkReturnSeriesRequest,
-    ClassificationTaxonomyRequest,
     BenchmarkAssignmentRequest,
     BenchmarkCatalogRequest,
     BenchmarkDefinitionRequest,
+    BenchmarkMarketSeriesRequest,
+    BenchmarkReturnSeriesRequest,
+    ClassificationTaxonomyRequest,
     CoverageRequest,
-    IntegrationWindow,
     IndexCatalogRequest,
     IndexSeriesRequest,
+    IntegrationWindow,
     RiskFreeSeriesRequest,
 )
 from src.services.query_service.app.routers.integration import (
     create_core_snapshot,
+    fetch_benchmark_catalog,
+    fetch_benchmark_definition,
     fetch_benchmark_market_series,
     fetch_benchmark_return_series,
     fetch_classification_taxonomy,
-    fetch_benchmark_catalog,
-    fetch_benchmark_definition,
+    fetch_index_catalog,
     fetch_index_price_series,
     fetch_index_return_series,
-    fetch_index_catalog,
     fetch_risk_free_series,
     get_benchmark_coverage,
-    get_instrument_enrichment_bulk,
-    get_risk_free_coverage,
     get_core_snapshot_service,
     get_effective_integration_policy,
+    get_instrument_enrichment_bulk,
     get_integration_service,
+    get_risk_free_coverage,
     resolve_portfolio_benchmark_assignment,
 )
-from src.services.query_service.app.services.core_snapshot_service import CoreSnapshotService
-from src.services.query_service.app.services.core_snapshot_service import CoreSnapshotNotFoundError
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
-)
-from src.services.query_service.app.services.core_snapshot_service import CoreSnapshotConflictError
-from src.services.query_service.app.services.core_snapshot_service import (
+    CoreSnapshotConflictError,
+    CoreSnapshotNotFoundError,
+    CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -487,37 +486,41 @@ async def test_fetch_benchmark_and_index_catalog_router_functions() -> None:
 @pytest.mark.asyncio
 async def test_fetch_benchmark_definition_and_coverage_router_functions() -> None:
     mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_definition = AsyncMock(return_value={
-        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
-        "benchmark_name": "Global Balanced 60/40 (TR)",
-        "benchmark_type": "composite",
-        "benchmark_currency": "USD",
-        "return_convention": "total_return_index",
-        "benchmark_status": "active",
-        "benchmark_family": None,
-        "benchmark_provider": "MSCI",
-        "rebalance_frequency": "quarterly",
-        "classification_set_id": None,
-        "classification_labels": {},
-        "effective_from": "2025-01-01",
-        "effective_to": None,
-        "quality_status": "accepted",
-        "source_timestamp": None,
-        "source_vendor": "MSCI",
-        "source_record_id": "bmk_v20260131",
-        "components": [],
-        "contract_version": "rfc_062_v1",
-    })
-    mock_service.get_benchmark_coverage = AsyncMock(return_value={
-        "observed_start_date": "2026-01-01",
-        "observed_end_date": "2026-01-31",
-        "expected_start_date": "2026-01-01",
-        "expected_end_date": "2026-01-31",
-        "total_points": 31,
-        "missing_dates_count": 0,
-        "missing_dates_sample": [],
-        "quality_status_distribution": {"accepted": 31},
-    })
+    mock_service.get_benchmark_definition = AsyncMock(
+        return_value={
+            "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+            "benchmark_name": "Global Balanced 60/40 (TR)",
+            "benchmark_type": "composite",
+            "benchmark_currency": "USD",
+            "return_convention": "total_return_index",
+            "benchmark_status": "active",
+            "benchmark_family": None,
+            "benchmark_provider": "MSCI",
+            "rebalance_frequency": "quarterly",
+            "classification_set_id": None,
+            "classification_labels": {},
+            "effective_from": "2025-01-01",
+            "effective_to": None,
+            "quality_status": "accepted",
+            "source_timestamp": None,
+            "source_vendor": "MSCI",
+            "source_record_id": "bmk_v20260131",
+            "components": [],
+            "contract_version": "rfc_062_v1",
+        }
+    )
+    mock_service.get_benchmark_coverage = AsyncMock(
+        return_value={
+            "observed_start_date": "2026-01-01",
+            "observed_end_date": "2026-01-31",
+            "expected_start_date": "2026-01-01",
+            "expected_end_date": "2026-01-31",
+            "total_points": 31,
+            "missing_dates_count": 0,
+            "missing_dates_sample": [],
+            "quality_status_distribution": {"accepted": 31},
+        }
+    )
 
     definition_response = await fetch_benchmark_definition(
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
@@ -526,7 +529,9 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
     )
     coverage_response = await get_benchmark_coverage(
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
-        request=CoverageRequest(window=IntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")),
+        request=CoverageRequest(
+            window=IntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
+        ),
         integration_service=mock_service,
     )
 
@@ -707,4 +712,3 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         start_date=request_window.start_date,
         end_date=request_window.end_date,
     )
-

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.test_manifest import SUITES, SUITE_PYTEST_ARGS, get_suite, validate_suite_paths
+from scripts.test_manifest import SUITE_PYTEST_ARGS, SUITES, get_suite, validate_suite_paths
 
 
 def test_integration_lite_suite_includes_lookup_contract_router() -> None:

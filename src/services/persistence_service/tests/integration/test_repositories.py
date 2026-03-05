@@ -1,15 +1,19 @@
 # services/persistence_service/tests/integration/test_repositories.py
-import pytest
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy.orm import Session
+
+import pytest
 
 # CORRECTED IMPORT: Add Portfolio model
-from portfolio_common.database_models import Instrument, Transaction as DBTransaction, Portfolio
+from portfolio_common.database_models import Instrument, Portfolio
+from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import InstrumentEvent, TransactionEvent
+from sqlalchemy.orm import Session
 
 from services.persistence_service.app.repositories.instrument_repository import InstrumentRepository
-from services.persistence_service.app.repositories.transaction_db_repo import TransactionDBRepository
+from services.persistence_service.app.repositories.transaction_db_repo import (
+    TransactionDBRepository,
+)
 
 
 # --- Fixtures for reusable data ---
@@ -20,20 +24,23 @@ def instrument_event_buy():
         name="Apple Inc. (Test)",
         isin="US0378331005",
         instrumentCurrency="USD",
-        productType="Equity"
+        productType="Equity",
     )
+
 
 @pytest.fixture
 def instrument_event_update():
     return InstrumentEvent(
         securityId="SEC_AAPL_001",
-        name="Apple Inc. (Updated)", # Name changed
-        isin="US0378331005_NEW", # ISIN changed
+        name="Apple Inc. (Updated)",  # Name changed
+        isin="US0378331005_NEW",  # ISIN changed
         instrumentCurrency="USD",
-        productType="Equity_Updated" # Product type changed
+        productType="Equity_Updated",  # Product type changed
     )
 
+
 # --- Integration Tests for InstrumentRepository ---
+
 
 def test_instrument_repository_create_new_instrument(clean_db, db_engine):
     """
@@ -41,24 +48,27 @@ def test_instrument_repository_create_new_instrument(clean_db, db_engine):
     """
     with Session(db_engine) as db:
         repo = InstrumentRepository(db)
-        
+
         event = InstrumentEvent(
             securityId="TEST_SEC_NEW",
             name="Test New Instrument",
             isin="TESTISIN123",
             instrumentCurrency="SGD",
-            productType="Bond"
+            productType="Bond",
         )
-        
+
         repo.create_or_update_instrument(event)
-        
+
         fetched_instrument = db.query(Instrument).filter_by(security_id="TEST_SEC_NEW").first()
         assert fetched_instrument.name == "Test New Instrument"
 
 
-def test_instrument_repository_upsert_update_existing_instrument(clean_db, db_engine, instrument_event_buy, instrument_event_update):
+def test_instrument_repository_upsert_update_existing_instrument(
+    clean_db, db_engine, instrument_event_buy, instrument_event_update
+):
     """
-    Tests that an existing instrument is updated when an UPSERT event with the same security_id occurs.
+    Tests that an existing instrument is updated when an UPSERT event with
+    the same security_id occurs.
     """
     with Session(db_engine) as db:
         repo = InstrumentRepository(db)
@@ -77,7 +87,9 @@ def test_instrument_repository_upsert_update_existing_instrument(clean_db, db_en
         assert fetched_instrument.updated_at > fetched_instrument.created_at
 
 
-def test_instrument_repository_upsert_no_change_on_identical_event(clean_db, db_engine, instrument_event_buy):
+def test_instrument_repository_upsert_no_change_on_identical_event(
+    clean_db, db_engine, instrument_event_buy
+):
     """
     Tests that an UPSERT event with identical data results in no effective change.
     """
@@ -86,11 +98,12 @@ def test_instrument_repository_upsert_no_change_on_identical_event(clean_db, db_
 
         repo.create_or_update_instrument(instrument_event_buy)
         db.flush()
-        
+
         repo.create_or_update_instrument(instrument_event_buy)
-        
+
         count_in_db = db.query(Instrument).filter_by(security_id="SEC_AAPL_001").count()
         assert count_in_db == 1
+
 
 # --- Test for TransactionDBRepository ---
 def test_transaction_repository_is_idempotent(clean_db, db_engine):
@@ -110,7 +123,7 @@ def test_transaction_repository_is_idempotent(clean_db, db_engine):
             portfolio_type="Discretionary",
             booking_center_code="SG",
             client_id="CIF_123",
-            status="ACTIVE"
+            status="ACTIVE",
         )
         db.add(test_portfolio)
 

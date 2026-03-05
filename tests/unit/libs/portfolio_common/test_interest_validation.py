@@ -50,45 +50,33 @@ def test_validate_interest_transaction_detects_non_zero_price() -> None:
 def test_validate_interest_transaction_detects_non_positive_gross_amount() -> None:
     txn = _base_txn().model_copy(update={"gross_transaction_amount": Decimal("0")})
     issues = validate_interest_transaction(txn)
-    assert any(
-        i.code == InterestValidationReasonCode.NON_POSITIVE_GROSS_AMOUNT for i in issues
-    )
+    assert any(i.code == InterestValidationReasonCode.NON_POSITIVE_GROSS_AMOUNT for i in issues)
 
 
 def test_validate_interest_transaction_rejects_unknown_direction() -> None:
     txn = _base_txn().model_copy(update={"interest_direction": "UNKNOWN"})
     issues = validate_interest_transaction(txn)
-    assert any(
-        i.code == InterestValidationReasonCode.INVALID_INTEREST_DIRECTION
-        for i in issues
-    )
+    assert any(i.code == InterestValidationReasonCode.INVALID_INTEREST_DIRECTION for i in issues)
 
 
 def test_validate_interest_transaction_accepts_expense_direction() -> None:
     txn = _base_txn().model_copy(update={"interest_direction": "EXPENSE"})
     issues = validate_interest_transaction(txn)
     assert not any(
-        i.code == InterestValidationReasonCode.INVALID_INTEREST_DIRECTION
-        for i in issues
+        i.code == InterestValidationReasonCode.INVALID_INTEREST_DIRECTION for i in issues
     )
 
 
 def test_validate_interest_transaction_rejects_negative_withholding_tax() -> None:
     txn = _base_txn().model_copy(update={"withholding_tax_amount": Decimal("-1")})
     issues = validate_interest_transaction(txn)
-    assert any(
-        i.code == InterestValidationReasonCode.NEGATIVE_WITHHOLDING_TAX for i in issues
-    )
+    assert any(i.code == InterestValidationReasonCode.NEGATIVE_WITHHOLDING_TAX for i in issues)
 
 
 def test_validate_interest_transaction_rejects_negative_other_deductions() -> None:
-    txn = _base_txn().model_copy(
-        update={"other_interest_deductions_amount": Decimal("-1")}
-    )
+    txn = _base_txn().model_copy(update={"other_interest_deductions_amount": Decimal("-1")})
     issues = validate_interest_transaction(txn)
-    assert any(
-        i.code == InterestValidationReasonCode.NEGATIVE_OTHER_DEDUCTIONS for i in issues
-    )
+    assert any(i.code == InterestValidationReasonCode.NEGATIVE_OTHER_DEDUCTIONS for i in issues)
 
 
 def test_validate_interest_transaction_rejects_net_reconciliation_mismatch() -> None:
@@ -101,8 +89,7 @@ def test_validate_interest_transaction_rejects_net_reconciliation_mismatch() -> 
     )
     issues = validate_interest_transaction(txn)
     assert any(
-        i.code == InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
-        for i in issues
+        i.code == InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH for i in issues
     )
 
 
@@ -116,15 +103,12 @@ def test_validate_interest_transaction_accepts_reconciled_net_interest_amount() 
     )
     issues = validate_interest_transaction(txn)
     assert not any(
-        i.code == InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
-        for i in issues
+        i.code == InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH for i in issues
     )
 
 
 def test_validate_interest_transaction_detects_invalid_date_order() -> None:
-    txn = _base_txn().model_copy(
-        update={"transaction_date": datetime(2026, 3, 8, 10, 0, 0)}
-    )
+    txn = _base_txn().model_copy(update={"transaction_date": datetime(2026, 3, 8, 10, 0, 0)})
     issues = validate_interest_transaction(txn)
     assert any(i.code == InterestValidationReasonCode.INVALID_DATE_ORDER for i in issues)
 
@@ -139,12 +123,8 @@ def test_validate_interest_transaction_strict_metadata() -> None:
         }
     )
     issues = validate_interest_transaction(txn, strict_metadata=True)
-    assert any(
-        i.code == InterestValidationReasonCode.MISSING_LINKAGE_IDENTIFIER for i in issues
-    )
-    assert any(
-        i.code == InterestValidationReasonCode.MISSING_POLICY_METADATA for i in issues
-    )
+    assert any(i.code == InterestValidationReasonCode.MISSING_LINKAGE_IDENTIFIER for i in issues)
+    assert any(i.code == InterestValidationReasonCode.MISSING_POLICY_METADATA for i in issues)
 
 
 def test_validate_interest_transaction_requires_external_cash_link_for_external_mode() -> None:
@@ -155,10 +135,7 @@ def test_validate_interest_transaction_requires_external_cash_link_for_external_
         }
     )
     issues = validate_interest_transaction(txn)
-    assert any(
-        i.code == InterestValidationReasonCode.MISSING_EXTERNAL_CASH_LINK
-        for i in issues
-    )
+    assert any(i.code == InterestValidationReasonCode.MISSING_EXTERNAL_CASH_LINK for i in issues)
 
 
 def test_validate_interest_transaction_requires_settlement_cash_account_for_auto_mode() -> None:
@@ -170,7 +147,5 @@ def test_validate_interest_transaction_requires_settlement_cash_account_for_auto
     )
     issues = validate_interest_transaction(txn)
     assert any(
-        i.code == InterestValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT
-        for i in issues
+        i.code == InterestValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT for i in issues
     )
-

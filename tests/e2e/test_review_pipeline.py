@@ -1,11 +1,13 @@
 # tests/e2e/test_review_pipeline.py
 import pytest
+
 from .api_client import E2EApiClient
 from .assertions import assert_legacy_endpoint_status
 
 # --- Test Data Constants ---
 PORTFOLIO_ID = "E2E_REVIEW_01"
 AS_OF_DATE = "2025-08-30"
+
 
 @pytest.fixture(scope="module")
 def setup_review_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until):
@@ -14,39 +16,192 @@ def setup_review_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_unt
     portfolio review E2E test.
     """
     # 1. Ingest prerequisite data
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": PORTFOLIO_ID, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "REVIEW_CIF", "status": "ACTIVE", "riskExposure":"Growth", "investmentTimeHorizon":"b", "portfolioType":"Discretionary", "bookingCenter":"d"}]})
-    e2e_api_client.ingest("/ingest/instruments", {"instruments": [
-        {"securityId": "CASH_USD", "name": "US Dollar", "isin": "CASH_USD_ISIN", "instrumentCurrency": "USD", "productType": "Cash", "assetClass": "Cash"},
-        {"securityId": "SEC_AAPL", "name": "Apple Inc.", "isin": "US_AAPL_REVIEW", "instrumentCurrency": "USD", "productType": "Equity", "assetClass": "Equity"},
-        {"securityId": "SEC_BOND", "name": "US Treasury Bond", "isin": "US_BOND_REVIEW", "instrumentCurrency": "USD", "productType": "Bond", "assetClass": "Fixed Income"}
-    ]})
-    e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": "2025-08-20"}, {"businessDate": "2025-08-25"}, {"businessDate": AS_OF_DATE}]})
+    e2e_api_client.ingest(
+        "/ingest/portfolios",
+        {
+            "portfolios": [
+                {
+                    "portfolioId": PORTFOLIO_ID,
+                    "baseCurrency": "USD",
+                    "openDate": "2025-01-01",
+                    "cifId": "REVIEW_CIF",
+                    "status": "ACTIVE",
+                    "riskExposure": "Growth",
+                    "investmentTimeHorizon": "b",
+                    "portfolioType": "Discretionary",
+                    "bookingCenter": "d",
+                }
+            ]
+        },
+    )
+    e2e_api_client.ingest(
+        "/ingest/instruments",
+        {
+            "instruments": [
+                {
+                    "securityId": "CASH_USD",
+                    "name": "US Dollar",
+                    "isin": "CASH_USD_ISIN",
+                    "instrumentCurrency": "USD",
+                    "productType": "Cash",
+                    "assetClass": "Cash",
+                },
+                {
+                    "securityId": "SEC_AAPL",
+                    "name": "Apple Inc.",
+                    "isin": "US_AAPL_REVIEW",
+                    "instrumentCurrency": "USD",
+                    "productType": "Equity",
+                    "assetClass": "Equity",
+                },
+                {
+                    "securityId": "SEC_BOND",
+                    "name": "US Treasury Bond",
+                    "isin": "US_BOND_REVIEW",
+                    "instrumentCurrency": "USD",
+                    "productType": "Bond",
+                    "assetClass": "Fixed Income",
+                },
+            ]
+        },
+    )
+    e2e_api_client.ingest(
+        "/ingest/business-dates",
+        {
+            "business_dates": [
+                {"businessDate": "2025-08-20"},
+                {"businessDate": "2025-08-25"},
+                {"businessDate": AS_OF_DATE},
+            ]
+        },
+    )
 
     # 2. Ingest transactions to build a history
     transactions = [
-        {"transaction_id": "REVIEW_DEPOSIT_01", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-20T09:00:00Z", "transaction_type": "DEPOSIT", "quantity": 100000, "price": 1, "gross_transaction_amount": 100000, "trade_currency": "USD", "currency": "USD"},
-        
+        {
+            "transaction_id": "REVIEW_DEPOSIT_01",
+            "portfolio_id": PORTFOLIO_ID,
+            "instrument_id": "CASH_USD",
+            "security_id": "CASH_USD",
+            "transaction_date": "2025-08-20T09:00:00Z",
+            "transaction_type": "DEPOSIT",
+            "quantity": 100000,
+            "price": 1,
+            "gross_transaction_amount": 100000,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
         # Apple Purchase
-        {"transaction_id": "REVIEW_BUY_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "SEC_AAPL", "security_id": "SEC_AAPL", "transaction_date": "2025-08-20T10:00:00Z", "transaction_type": "BUY", "quantity": 100, "price": 150, "gross_transaction_amount": 15000, "trade_currency": "USD", "currency": "USD"},
-        {"transaction_id": "REVIEW_CASH_SETTLE_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-20T10:00:00Z", "transaction_type": "SELL", "quantity": 15000, "price": 1, "gross_transaction_amount": 15000, "trade_currency": "USD", "currency": "USD"},
-        
+        {
+            "transaction_id": "REVIEW_BUY_AAPL",
+            "portfolio_id": PORTFOLIO_ID,
+            "instrument_id": "SEC_AAPL",
+            "security_id": "SEC_AAPL",
+            "transaction_date": "2025-08-20T10:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": 100,
+            "price": 150,
+            "gross_transaction_amount": 15000,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
+        {
+            "transaction_id": "REVIEW_CASH_SETTLE_AAPL",
+            "portfolio_id": PORTFOLIO_ID,
+            "instrument_id": "CASH_USD",
+            "security_id": "CASH_USD",
+            "transaction_date": "2025-08-20T10:00:00Z",
+            "transaction_type": "SELL",
+            "quantity": 15000,
+            "price": 1,
+            "gross_transaction_amount": 15000,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
         # Bond Purchase
-        {"transaction_id": "REVIEW_BUY_BOND", "portfolio_id": PORTFOLIO_ID, "instrument_id": "SEC_BOND", "security_id": "SEC_BOND", "transaction_date": "2025-08-20T11:00:00Z", "transaction_type": "BUY", "quantity": 10, "price": 980, "gross_transaction_amount": 9800, "trade_currency": "USD", "currency": "USD"},
-        {"transaction_id": "REVIEW_CASH_SETTLE_BOND", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-20T11:00:00Z", "transaction_type": "SELL", "quantity": 9800, "price": 1, "gross_transaction_amount": 9800, "trade_currency": "USD", "currency": "USD"},
-
+        {
+            "transaction_id": "REVIEW_BUY_BOND",
+            "portfolio_id": PORTFOLIO_ID,
+            "instrument_id": "SEC_BOND",
+            "security_id": "SEC_BOND",
+            "transaction_date": "2025-08-20T11:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": 10,
+            "price": 980,
+            "gross_transaction_amount": 9800,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
+        {
+            "transaction_id": "REVIEW_CASH_SETTLE_BOND",
+            "portfolio_id": PORTFOLIO_ID,
+            "instrument_id": "CASH_USD",
+            "security_id": "CASH_USD",
+            "transaction_date": "2025-08-20T11:00:00Z",
+            "transaction_type": "SELL",
+            "quantity": 9800,
+            "price": 1,
+            "gross_transaction_amount": 9800,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
         # Dividend Payment
-        {"transaction_id": "REVIEW_DIV_AAPL", "portfolio_id": PORTFOLIO_ID, "instrument_id": "SEC_AAPL", "security_id": "SEC_AAPL", "transaction_date": "2025-08-25T10:00:00Z", "transaction_type": "DIVIDEND", "quantity": 0, "price": 0, "gross_transaction_amount": 120, "trade_currency": "USD", "currency": "USD"},
-        {"transaction_id": "REVIEW_CASH_SETTLE_DIV", "portfolio_id": PORTFOLIO_ID, "instrument_id": "CASH_USD", "security_id": "CASH_USD", "transaction_date": "2025-08-25T10:00:00Z", "transaction_type": "BUY", "quantity": 120, "price": 1, "gross_transaction_amount": 120, "trade_currency": "USD", "currency": "USD"}
+        {
+            "transaction_id": "REVIEW_DIV_AAPL",
+            "portfolio_id": PORTFOLIO_ID,
+            "instrument_id": "SEC_AAPL",
+            "security_id": "SEC_AAPL",
+            "transaction_date": "2025-08-25T10:00:00Z",
+            "transaction_type": "DIVIDEND",
+            "quantity": 0,
+            "price": 0,
+            "gross_transaction_amount": 120,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
+        {
+            "transaction_id": "REVIEW_CASH_SETTLE_DIV",
+            "portfolio_id": PORTFOLIO_ID,
+            "instrument_id": "CASH_USD",
+            "security_id": "CASH_USD",
+            "transaction_date": "2025-08-25T10:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": 120,
+            "price": 1,
+            "gross_transaction_amount": 120,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
     ]
     e2e_api_client.ingest("/ingest/transactions", {"transactions": transactions})
-    
+
     # 3. Ingest market prices for valuation
-    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [
-        {"securityId": "SEC_AAPL", "priceDate": AS_OF_DATE, "price": 160.0, "currency": "USD"},
-        {"securityId": "SEC_BOND", "priceDate": AS_OF_DATE, "price": 995.0, "currency": "USD"},
-        {"securityId": "CASH_USD", "priceDate": AS_OF_DATE, "price": 1.0, "currency": "USD"}
-    ]})
-    
+    e2e_api_client.ingest(
+        "/ingest/market-prices",
+        {
+            "market_prices": [
+                {
+                    "securityId": "SEC_AAPL",
+                    "priceDate": AS_OF_DATE,
+                    "price": 160.0,
+                    "currency": "USD",
+                },
+                {
+                    "securityId": "SEC_BOND",
+                    "priceDate": AS_OF_DATE,
+                    "price": 995.0,
+                    "currency": "USD",
+                },
+                {
+                    "securityId": "CASH_USD",
+                    "priceDate": AS_OF_DATE,
+                    "price": 1.0,
+                    "currency": "USD",
+                },
+            ]
+        },
+    )
+
     # 4. Poll until positions are fully queryable with valuation payload
     e2e_api_client.poll_for_data(
         f"/portfolios/{PORTFOLIO_ID}/positions",
@@ -69,9 +224,7 @@ def test_portfolio_review_endpoint(setup_review_data, e2e_api_client: E2EApiClie
     api_url = f"/portfolios/{portfolio_id}/review"
     request_payload = {
         "as_of_date": AS_OF_DATE,
-        "sections": [
-            "OVERVIEW", "HOLDINGS", "TRANSACTIONS", "PERFORMANCE", "RISK_ANALYTICS"
-        ]
+        "sections": ["OVERVIEW", "HOLDINGS", "TRANSACTIONS", "PERFORMANCE", "RISK_ANALYTICS"],
     }
 
     # ACT
@@ -92,22 +245,39 @@ def test_portfolio_review_for_empty_portfolio(clean_db, e2e_api_client: E2EApiCl
     # ARRANGE
     empty_portfolio_id = "E2E_REVIEW_EMPTY_01"
     as_of = "2025-08-31"
-    
+
     # 1. Ingest only the portfolio and a business date
-    e2e_api_client.ingest("/ingest/portfolios", {"portfolios": [{"portfolioId": empty_portfolio_id, "baseCurrency": "USD", "openDate": "2025-01-01", "cifId": "REVIEW_EMPTY_CIF", "status": "ACTIVE", "riskExposure":"Balanced", "investmentTimeHorizon":"c", "portfolioType":"d", "bookingCenter":"e"}]})
+    e2e_api_client.ingest(
+        "/ingest/portfolios",
+        {
+            "portfolios": [
+                {
+                    "portfolioId": empty_portfolio_id,
+                    "baseCurrency": "USD",
+                    "openDate": "2025-01-01",
+                    "cifId": "REVIEW_EMPTY_CIF",
+                    "status": "ACTIVE",
+                    "riskExposure": "Balanced",
+                    "investmentTimeHorizon": "c",
+                    "portfolioType": "d",
+                    "bookingCenter": "e",
+                }
+            ]
+        },
+    )
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": as_of}]})
-    
+
     # 2. Wait for the portfolio to be queryable
     e2e_api_client.poll_for_data(
         f"/portfolios?portfolio_id={empty_portfolio_id}",
-        lambda data: data and data.get("portfolios") and len(data["portfolios"]) == 1
+        lambda data: data and data.get("portfolios") and len(data["portfolios"]) == 1,
     )
 
     # 3. Define the request for the review endpoint
     api_url = f"/portfolios/{empty_portfolio_id}/review"
     request_payload = {
         "as_of_date": as_of,
-        "sections": ["OVERVIEW", "HOLDINGS", "TRANSACTIONS", "PERFORMANCE", "RISK_ANALYTICS"]
+        "sections": ["OVERVIEW", "HOLDINGS", "TRANSACTIONS", "PERFORMANCE", "RISK_ANALYTICS"],
     }
 
     # ACT

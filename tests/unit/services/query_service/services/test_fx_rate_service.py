@@ -1,12 +1,13 @@
 # tests/unit/services/query_service/services/test_fx_rate_service.py
-import pytest
-from unittest.mock import AsyncMock, patch
 from datetime import date
 from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 
-from src.services.query_service.app.services.fx_rate_service import FxRateService
-from src.services.query_service.app.repositories.fx_rate_repository import FxRateRepository
+import pytest
 from portfolio_common.database_models import FxRate
+
+from src.services.query_service.app.repositories.fx_rate_repository import FxRateRepository
+from src.services.query_service.app.services.fx_rate_service import FxRateService
 
 pytestmark = pytest.mark.asyncio
 

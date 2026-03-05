@@ -22,7 +22,9 @@ from .db_base import Base
 class BusinessDate(Base):
     __tablename__ = "business_dates"
 
-    calendar_code = Column(String, primary_key=True, nullable=False, default="GLOBAL", server_default="GLOBAL")
+    calendar_code = Column(
+        String, primary_key=True, nullable=False, default="GLOBAL", server_default="GLOBAL"
+    )
     date = Column(Date, primary_key=True, nullable=False)
     market_code = Column(String, nullable=True)
     source_system = Column(String, nullable=True)
@@ -228,7 +230,9 @@ class PortfolioBenchmarkAssignment(Base):
     assignment_status = Column(String, nullable=False, server_default="active", index=True)
     policy_pack_id = Column(String, nullable=True)
     source_system = Column(String, nullable=True)
-    assignment_recorded_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    assignment_recorded_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     assignment_version = Column(Integer, nullable=False, server_default="1")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -837,9 +841,7 @@ class IngestionJobFailure(Base):
     failed_record_keys = Column(JSON, nullable=True)
     failed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    __table_args__ = (
-        Index("ix_ingestion_job_failures_job_failed_at", "job_id", failed_at.desc()),
-    )
+    __table_args__ = (Index("ix_ingestion_job_failures_job_failed_at", "job_id", failed_at.desc()),)
 
 
 class IngestionOpsControl(Base):
@@ -862,7 +864,9 @@ class ConsumerDlqEvent(Base):
     consumer_group = Column(String, index=True, nullable=False)
     dlq_topic = Column(String, index=True, nullable=False)
     original_key = Column(String, nullable=True)
-    error_reason_code = Column(String, index=True, nullable=False, server_default="UNCLASSIFIED_PROCESSING_ERROR")
+    error_reason_code = Column(
+        String, index=True, nullable=False, server_default="UNCLASSIFIED_PROCESSING_ERROR"
+    )
     error_reason = Column(Text, nullable=False)
     correlation_id = Column(String, nullable=True)
     payload_excerpt = Column(Text, nullable=True)
@@ -992,6 +996,7 @@ class AnalyticsExportJob(Base):
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
 
 class CashflowRule(Base):
     """

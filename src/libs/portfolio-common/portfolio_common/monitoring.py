@@ -347,6 +347,7 @@ def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:
 def observe_valuation_worker_stale_resets(count: int = 1) -> None:
     VALUATION_WORKER_STALE_RESETS_TOTAL.inc(count)
 
+
 # --------------------------------------------------------------------------------------
 # Optional generic HTTP metrics (use across services if helpful)
 # --------------------------------------------------------------------------------------

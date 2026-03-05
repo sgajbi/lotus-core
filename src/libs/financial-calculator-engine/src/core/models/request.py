@@ -1,25 +1,34 @@
 # src/core/models/request.py
 
 import logging
-from pydantic import BaseModel, Field, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
+
 
 class TransactionProcessingRequest(BaseModel):
     """
     Represents the input payload for the transaction processing API.
     """
+
     existing_transactions: list[dict] = Field(
         default_factory=list,
-        description="List of previously processed transactions (raw dictionaries) with cost fields already computed."
+        description=(
+            "List of previously processed transactions "
+            "(raw dictionaries) with cost fields already computed."
+        ),
     )
     new_transactions: list[dict] = Field(
         ...,
-        description="New transactions to be processed (raw dictionaries, including possible backdated ones)."
+        description=(
+            "New transactions to be processed "
+            "(raw dictionaries, including possible backdated ones)."
+        ),
     )
 
     model_config = ConfigDict(
-        json_schema_extra = {
+        json_schema_extra={
             "example": {
                 "existing_transactions": [],
                 "new_transactions": [
@@ -34,10 +43,10 @@ class TransactionProcessingRequest(BaseModel):
                         "quantity": 5.0,
                         "gross_transaction_amount": 760.0,
                         "fees": {"brokerage": 2.0},
-                        "trade_currency": "USD"
+                        "trade_currency": "USD",
                     }
-                ]
+                ],
             }
         },
-        extra='ignore'
+        extra="ignore",
     )

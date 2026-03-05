@@ -38,9 +38,7 @@ def test_validate_sell_transaction_detects_non_positive_quantity() -> None:
 
 
 def test_validate_sell_transaction_detects_invalid_date_order() -> None:
-    txn = _base_txn().model_copy(
-        update={"settlement_date": datetime(2026, 3, 3, 10, 0, 0)}
-    )
+    txn = _base_txn().model_copy(update={"settlement_date": datetime(2026, 3, 3, 10, 0, 0)})
     issues = validate_sell_transaction(txn)
     assert any(i.code == SellValidationReasonCode.INVALID_DATE_ORDER for i in issues)
 

@@ -1,9 +1,10 @@
 # tests/unit/services/query_service/repositories/test_fx_rate_repository.py
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from datetime import date
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.services.query_service.app.repositories.fx_rate_repository import FxRateRepository
 
 pytestmark = pytest.mark.asyncio

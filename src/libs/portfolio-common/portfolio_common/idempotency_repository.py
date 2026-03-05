@@ -1,18 +1,21 @@
 # libs/portfolio-common/portfolio_common/idempotency_repository.py
 import logging
 from typing import Optional
-from sqlalchemy import select, exists
+
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ProcessedEvent
 
 logger = logging.getLogger(__name__)
 
+
 class IdempotencyRepository:
     """
     Handles all database interactions for ensuring idempotency via the
     processed_events table. Now supports AsyncSession.
     """
+
     def __init__(self, db: AsyncSession):
         """
         Initializes the repository with an asynchronous database session.
@@ -33,8 +36,7 @@ class IdempotencyRepository:
         """
         stmt = select(
             exists().where(
-                ProcessedEvent.event_id == event_id,
-                ProcessedEvent.service_name == service_name
+                ProcessedEvent.event_id == event_id, ProcessedEvent.service_name == service_name
             )
         )
         result = await self.db.execute(stmt)
@@ -45,7 +47,7 @@ class IdempotencyRepository:
         event_id: str,
         portfolio_id: str,
         service_name: str,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
     ) -> None:
         """
         Asynchronously marks an event as processed by adding its details to the
@@ -60,10 +62,14 @@ class IdempotencyRepository:
             event_id=event_id,
             portfolio_id=portfolio_id,
             service_name=service_name,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
         self.db.add(processed_event)
         logger.debug(
             f"Event {event_id} staged to be marked as processed for service {service_name}",
-            extra={"event_id": event_id, "service_name": service_name, "correlation_id": correlation_id}
+            extra={
+                "event_id": event_id,
+                "service_name": service_name,
+                "correlation_id": correlation_id,
+            },
         )

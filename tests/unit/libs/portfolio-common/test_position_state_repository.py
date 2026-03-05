@@ -1,16 +1,15 @@
 # tests/unit/libs/portfolio-common/test_position_state_repository.py
-import pytest
 from datetime import date
-from sqlalchemy.ext.asyncio import AsyncSession
+
+import pytest
 from portfolio_common.database_models import PositionState
 from portfolio_common.position_state_repository import PositionStateRepository
+from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 
 
-async def test_get_or_create_state_creates_new_record(
-    clean_db, async_db_session: AsyncSession
-):
+async def test_get_or_create_state_creates_new_record(clean_db, async_db_session: AsyncSession):
     """
     GIVEN an empty database
     WHEN get_or_create_state is called for a new key
@@ -31,11 +30,10 @@ async def test_get_or_create_state_creates_new_record(
     assert state.security_id == security_id
     assert state.epoch == 0
     assert state.watermark_date == date(1970, 1, 1)
-    assert state.status == 'CURRENT'
+    assert state.status == "CURRENT"
 
-async def test_get_or_create_state_is_idempotent(
-    clean_db, async_db_session: AsyncSession
-):
+
+async def test_get_or_create_state_is_idempotent(clean_db, async_db_session: AsyncSession):
     """
     GIVEN an existing state record
     WHEN get_or_create_state is called again for the same key
@@ -45,11 +43,11 @@ async def test_get_or_create_state_is_idempotent(
     repo = PositionStateRepository(async_db_session)
     portfolio_id = "STATE_P1"
     security_id = "STATE_S1"
-    
+
     # Call it once to create the initial state
     initial_state = await repo.get_or_create_state(portfolio_id, security_id)
     await async_db_session.commit()
-    
+
     # ACT: Call it a second time
     second_state = await repo.get_or_create_state(portfolio_id, security_id)
     await async_db_session.commit()
@@ -59,9 +57,8 @@ async def test_get_or_create_state_is_idempotent(
     assert second_state.watermark_date == initial_state.watermark_date
     assert second_state.status == initial_state.status
 
-async def test_increment_epoch_and_reset_watermark(
-    clean_db, async_db_session: AsyncSession
-):
+
+async def test_increment_epoch_and_reset_watermark(clean_db, async_db_session: AsyncSession):
     """
     GIVEN an existing state record
     WHEN increment_epoch_and_reset_watermark is called
@@ -72,7 +69,7 @@ async def test_increment_epoch_and_reset_watermark(
     portfolio_id = "STATE_P1"
     security_id = "STATE_S1"
     new_watermark = date(2025, 5, 9)
-    
+
     # Create the initial state
     await repo.get_or_create_state(portfolio_id, security_id)
     await async_db_session.commit()
@@ -82,19 +79,18 @@ async def test_increment_epoch_and_reset_watermark(
         portfolio_id, security_id, new_watermark
     )
     await async_db_session.commit()
-    
+
     # ASSERT
     assert updated_state.epoch == 1
     assert updated_state.watermark_date == new_watermark
-    assert updated_state.status == 'REPROCESSING'
+    assert updated_state.status == "REPROCESSING"
 
     # Verify the change was persisted
     fetched_state = await async_db_session.get(PositionState, (portfolio_id, security_id))
     assert fetched_state.epoch == 1
 
-async def test_update_watermarks_if_older(
-    clean_db, async_db_session: AsyncSession
-):
+
+async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSession):
     """
     GIVEN multiple existing state records
     WHEN update_watermarks_if_older is called
@@ -103,14 +99,32 @@ async def test_update_watermarks_if_older(
     # ARRANGE
     repo = PositionStateRepository(async_db_session)
     keys_to_update = [("P1", "S1"), ("P2", "S2"), ("P3", "S3")]
-    
+
     # P1: Watermark is newer, should be updated
-    state1 = PositionState(portfolio_id="P1", security_id="S1", watermark_date=date(2025, 6, 15), epoch=0, status='CURRENT')
+    state1 = PositionState(
+        portfolio_id="P1",
+        security_id="S1",
+        watermark_date=date(2025, 6, 15),
+        epoch=0,
+        status="CURRENT",
+    )
     # P2: Watermark is older, should NOT be updated
-    state2 = PositionState(portfolio_id="P2", security_id="S2", watermark_date=date(2025, 5, 1), epoch=0, status='CURRENT')
+    state2 = PositionState(
+        portfolio_id="P2",
+        security_id="S2",
+        watermark_date=date(2025, 5, 1),
+        epoch=0,
+        status="CURRENT",
+    )
     # P3: Watermark is newer, should be updated
-    state3 = PositionState(portfolio_id="P3", security_id="S3", watermark_date=date(2025, 8, 1), epoch=0, status='CURRENT')
-    
+    state3 = PositionState(
+        portfolio_id="P3",
+        security_id="S3",
+        watermark_date=date(2025, 8, 1),
+        epoch=0,
+        status="CURRENT",
+    )
+
     async_db_session.add_all([state1, state2, state3])
     await async_db_session.commit()
 
@@ -124,18 +138,19 @@ async def test_update_watermarks_if_older(
 
     # ASSERT
     assert updated_count == 2
-    
+
     p1_state = await async_db_session.get(PositionState, ("P1", "S1"))
     assert p1_state.watermark_date == new_watermark
-    assert p1_state.status == 'REPROCESSING'
-    
+    assert p1_state.status == "REPROCESSING"
+
     p2_state = await async_db_session.get(PositionState, ("P2", "S2"))
-    assert p2_state.watermark_date == date(2025, 5, 1) # Unchanged
-    assert p2_state.status == 'CURRENT' # Unchanged
-    
+    assert p2_state.watermark_date == date(2025, 5, 1)  # Unchanged
+    assert p2_state.status == "CURRENT"  # Unchanged
+
     p3_state = await async_db_session.get(PositionState, ("P3", "S3"))
     assert p3_state.watermark_date == new_watermark
-    assert p3_state.status == 'REPROCESSING'
+    assert p3_state.status == "REPROCESSING"
+
 
 async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
     """
@@ -145,15 +160,37 @@ async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
     """
     # ARRANGE
     repo = PositionStateRepository(async_db_session)
-    
-    state1 = PositionState(portfolio_id="P1", security_id="S1", watermark_date=date(2025, 6, 1), epoch=1, status='REPROCESSING')
-    state2 = PositionState(portfolio_id="P2", security_id="S2", watermark_date=date(2025, 6, 1), epoch=2, status='REPROCESSING')
+
+    state1 = PositionState(
+        portfolio_id="P1",
+        security_id="S1",
+        watermark_date=date(2025, 6, 1),
+        epoch=1,
+        status="REPROCESSING",
+    )
+    state2 = PositionState(
+        portfolio_id="P2",
+        security_id="S2",
+        watermark_date=date(2025, 6, 1),
+        epoch=2,
+        status="REPROCESSING",
+    )
     async_db_session.add_all([state1, state2])
     await async_db_session.commit()
-    
+
     updates = [
-        {"portfolio_id": "P1", "security_id": "S1", "watermark_date": date(2025, 6, 15), "status": "CURRENT"},
-        {"portfolio_id": "P2", "security_id": "S2", "watermark_date": date(2025, 6, 20), "status": "REPROCESSING"},
+        {
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "watermark_date": date(2025, 6, 15),
+            "status": "CURRENT",
+        },
+        {
+            "portfolio_id": "P2",
+            "security_id": "S2",
+            "watermark_date": date(2025, 6, 20),
+            "status": "REPROCESSING",
+        },
     ]
 
     # ACT
@@ -165,11 +202,11 @@ async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
 
     # ASSERT
     assert updated_count == 2
-    
+
     p1_state = await async_db_session.get(PositionState, ("P1", "S1"))
     assert p1_state.watermark_date == date(2025, 6, 15)
-    assert p1_state.status == 'CURRENT'
-    
+    assert p1_state.status == "CURRENT"
+
     p2_state = await async_db_session.get(PositionState, ("P2", "S2"))
     assert p2_state.watermark_date == date(2025, 6, 20)
-    assert p2_state.status == 'REPROCESSING'
+    assert p2_state.status == "REPROCESSING"

@@ -3,9 +3,11 @@
 import pytest
 from logic.error_reporter import ErrorReporter
 
+
 @pytest.fixture
 def error_reporter():
     return ErrorReporter()
+
 
 def test_add_and_get_error(error_reporter):
     error_reporter.add_error("txn1", "Invalid quantity")

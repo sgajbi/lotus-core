@@ -1,10 +1,11 @@
 # libs/portfolio-common/portfolio_common/db.py
 import os
+
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from .config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB
-from .db_base import Base
+
+from .config import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_USER
 
 
 def get_sync_database_url():
@@ -25,8 +26,10 @@ def get_sync_database_url():
 
     return url
 
+
 engine = create_engine(get_sync_database_url(), pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def get_db_session():
     """
@@ -37,7 +40,6 @@ def get_db_session():
         yield db
     finally:
         db.close()
-
 
 
 def get_async_database_url():
@@ -57,6 +59,7 @@ def get_async_database_url():
 
     return url
 
+
 async_engine = create_async_engine(
     get_async_database_url(),
     pool_pre_ping=True,
@@ -69,6 +72,7 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
     expire_on_commit=False,
 )
+
 
 async def get_async_db_session() -> AsyncSession:
     """

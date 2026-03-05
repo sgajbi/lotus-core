@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class BusinessDateEvent(BaseModel):
     """Event model for a raw business date."""
+
     model_config = ConfigDict(from_attributes=True)
     business_date: date = Field(...)
     calendar_code: str = Field("GLOBAL")
@@ -15,10 +16,12 @@ class BusinessDateEvent(BaseModel):
     source_system: Optional[str] = Field(None)
     source_batch_id: Optional[str] = Field(None)
 
+
 class PortfolioEvent(BaseModel):
     """
     Event model for raw portfolio data.
     """
+
     model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str = Field(...)
@@ -36,6 +39,7 @@ class PortfolioEvent(BaseModel):
     status: str
     cost_basis_method: Optional[str] = Field("FIFO")
 
+
 class FxRateEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,6 +47,7 @@ class FxRateEvent(BaseModel):
     to_currency: str = Field(...)
     rate_date: date = Field(...)
     rate: Decimal
+
 
 class MarketPriceEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -52,16 +57,19 @@ class MarketPriceEvent(BaseModel):
     price: Decimal
     currency: str
 
+
 class MarketPricePersistedEvent(BaseModel):
     """
     Event published after a market price has been successfully persisted.
     """
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     security_id: str
     price_date: date
     price: Decimal
     currency: str
+
 
 class InstrumentEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -80,6 +88,7 @@ class InstrumentEvent(BaseModel):
     issuer_name: Optional[str] = Field(None)
     ultimate_parent_issuer_id: Optional[str] = Field(None)
     ultimate_parent_issuer_name: Optional[str] = Field(None)
+
 
 class TransactionEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -131,7 +140,9 @@ class TransactionEvent(BaseModel):
     epoch: Optional[int] = None
 
 
-def transaction_event_ordering_key(event: "TransactionEvent") -> tuple[date, datetime, datetime, str]:
+def transaction_event_ordering_key(
+    event: "TransactionEvent",
+) -> tuple[date, datetime, datetime, str]:
     """
     Deterministic intra-partition ordering for transaction processing.
     Priority:
@@ -148,18 +159,21 @@ def transaction_event_ordering_key(event: "TransactionEvent") -> tuple[date, dat
         event.transaction_id,
     )
 
+
 class DailyPositionSnapshotPersistedEvent(BaseModel):
     """
     Event published after a daily position snapshot has been created or updated.
     This is the definitive trigger for time series generation.
     """
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: int
     portfolio_id: str
     security_id: str
     date: date
     epoch: int
+
 
 class CashflowCalculatedEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -178,33 +192,39 @@ class CashflowCalculatedEvent(BaseModel):
     is_portfolio_flow: bool
     calculation_type: str = Field(...)
 
+
 class PositionTimeseriesGeneratedEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     portfolio_id: str
     security_id: str
     date: date
 
+
 class PortfolioTimeseriesGeneratedEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     portfolio_id: str
     date: date
+
 
 class PortfolioAggregationRequiredEvent(BaseModel):
     """
     Event published by the AggregationScheduler to trigger a portfolio
     time series calculation for a specific portfolio and date.
     """
+
     model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     aggregation_date: date
     correlation_id: Optional[str] = None
 
+
 class PortfolioValuationRequiredEvent(BaseModel):
     """
     Event published by the ValuationScheduler to trigger a position valuation
     for a specific portfolio, security, and date.
     """
+
     model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
@@ -212,4 +232,3 @@ class PortfolioValuationRequiredEvent(BaseModel):
     valuation_date: date
     epoch: int
     correlation_id: Optional[str] = None
-

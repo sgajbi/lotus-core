@@ -57,8 +57,18 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         "/ingest/fx-rates",
         {
             "fx_rates": [
-                {"from_currency": "EUR", "to_currency": "USD", "rate_date": "2025-08-28", "rate": "1.1"},
-                {"from_currency": "EUR", "to_currency": "USD", "rate_date": "2025-08-29", "rate": "1.2"},
+                {
+                    "from_currency": "EUR",
+                    "to_currency": "USD",
+                    "rate_date": "2025-08-28",
+                    "rate": "1.1",
+                },
+                {
+                    "from_currency": "EUR",
+                    "to_currency": "USD",
+                    "rate_date": "2025-08-29",
+                    "rate": "1.2",
+                },
             ]
         },
     )
@@ -110,13 +120,22 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
                     "gross_transaction_amount": 5500,
                     "trade_currency": "USD",
                     "currency": "USD",
-                }
+                },
             ]
         },
     )
     e2e_api_client.ingest(
         "/ingest/market-prices",
-        {"market_prices": [{"security_id": "SEC_EUR_STOCK", "price_date": "2025-08-28", "price": 52, "currency": "EUR"}]},
+        {
+            "market_prices": [
+                {
+                    "security_id": "SEC_EUR_STOCK",
+                    "price_date": "2025-08-28",
+                    "price": 52,
+                    "currency": "EUR",
+                }
+            ]
+        },
     )
 
     # Day 2
@@ -144,7 +163,12 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         "/ingest/market-prices",
         {
             "market_prices": [
-                {"security_id": "SEC_EUR_STOCK", "price_date": "2025-08-29", "price": 55, "currency": "EUR"},
+                {
+                    "security_id": "SEC_EUR_STOCK",
+                    "price_date": "2025-08-29",
+                    "price": 55,
+                    "currency": "EUR",
+                },
                 {"security_id": "CASH", "price_date": "2025-08-29", "price": 1, "currency": "USD"},
             ]
         },

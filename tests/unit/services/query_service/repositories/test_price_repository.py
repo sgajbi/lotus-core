@@ -1,9 +1,10 @@
 # tests/unit/services/query_service/repositories/test_price_repository.py
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from datetime import date
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.services.query_service.app.repositories.price_repository import MarketPriceRepository
 
 pytestmark = pytest.mark.asyncio
