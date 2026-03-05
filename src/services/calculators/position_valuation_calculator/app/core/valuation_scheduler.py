@@ -1,7 +1,6 @@
 # src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py
 import logging
 import asyncio
-import os
 from typing import List, Dict, Any
 from datetime import date, timedelta
 
@@ -22,6 +21,7 @@ from portfolio_common.monitoring import (
     INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
     POSITION_STATE_WATERMARK_LAG_DAYS
 )
+from ..settings import get_valuation_runtime_settings
 
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,14 @@ class ValuationScheduler:
     dispatches them, and advances watermarks upon completion.
     """
     def __init__(self, poll_interval: int = 30, batch_size: int = 100):
-        self._poll_interval = int(os.getenv("VALUATION_SCHEDULER_POLL_INTERVAL", poll_interval))
-        self._batch_size = int(os.getenv("VALUATION_SCHEDULER_BATCH_SIZE", str(batch_size)))
-        self._dispatch_rounds_per_poll = int(
-            os.getenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "3")
+        runtime_settings = get_valuation_runtime_settings(
+            scheduler_poll_interval_default=poll_interval,
+            scheduler_batch_size_default=batch_size,
+            scheduler_dispatch_rounds_default=3,
         )
+        self._poll_interval = runtime_settings.valuation_scheduler_poll_interval_seconds
+        self._batch_size = runtime_settings.valuation_scheduler_batch_size
+        self._dispatch_rounds_per_poll = runtime_settings.valuation_scheduler_dispatch_rounds
         self._running = True
         self._producer: KafkaProducer = get_kafka_producer()
 

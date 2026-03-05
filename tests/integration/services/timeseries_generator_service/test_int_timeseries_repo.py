@@ -11,7 +11,7 @@ from src.services.timeseries_generator_service.app.repositories.timeseries_repos
 pytestmark = pytest.mark.asyncio
 
 @pytest.fixture(scope="function")
-def setup_stale_aggregation_job_data(db_engine):
+def setup_stale_aggregation_job_data(db_engine, clean_db):
     """
     Sets up a variety of aggregation jobs in the database:
     - One stale 'PROCESSING' job (should be reset).

@@ -2,9 +2,9 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2025-09-02 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-03-05 |
 | Owners | `timeseries_generator_service`, `position_valuation_calculator` |
 | Depends On | RFC 003, RFC 018 |
 | Scope | Deterministic/complete-input gating for portfolio-level timeseries aggregation |
@@ -12,10 +12,14 @@
 ## Executive Summary
 
 RFC 024 identified a correctness risk: portfolio aggregation can run before all position-level inputs for the day are present.
-The RFC proposed a manifest-based completeness gate (`daily_aggregation_manifest` + expected count checks).
+The RFC proposed a manifest-based completeness gate.
 
-Current implementation includes a partial mitigation (sequential day-eligibility gating) but not the manifest design.
-Classification is therefore `Partially implemented (requires enhancement)`.
+Implemented approach uses an equivalent deterministic count contract in claim logic:
+1. For each pending job, expected inputs are counted from `daily_position_snapshots` for portfolio/date/current-epoch.
+2. Actual transformed inputs are counted from `position_timeseries` for portfolio/date/current-epoch.
+3. Job is claimable only when counts are equal and non-zero, in addition to sequential day rules.
+
+Classification: `Fully implemented and aligned`.
 
 ## Original Requested Requirements (Preserved)
 
@@ -33,11 +37,13 @@ Implemented today:
 2. Eligibility requires prior-day portfolio timeseries existence or first-job condition.
 3. Integration tests verify sequential claim behavior for day ordering.
 
-Not implemented from RFC 024 proposal:
-1. No `daily_aggregation_manifest` model or migration.
-2. No manifest expected-count gating in claim query.
-3. No `timeseries_aggregation_pending_manifests` metric.
-4. Feature docs still document unresolved aggregation integrity gap.
+Not implemented exactly as originally proposed:
+1. No dedicated `daily_aggregation_manifest` table was introduced.
+2. No manifest-pending metric was introduced under that naming.
+
+Implemented equivalently:
+1. Deterministic completeness gating is now enforced directly in claim query using authoritative table counts.
+2. Integration tests validate that incomplete same-day inputs block claims.
 
 Evidence:
 - `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`
@@ -50,47 +56,46 @@ Evidence:
 
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
-| Manifest table for expected input count | Not implemented | `database_models.py` (no manifest model) |
-| Upstream manifest creation | Not implemented | valuation paths + schema review |
-| Claim based on completeness count | Partially addressed by sequential-day eligibility only | `timeseries_repository.py`; integration tests |
-| Pending-manifest metric | Not implemented | monitoring + service paths |
-| Atomic completeness validation tests | Partial sequencing tests only | `test_timeseries_repository_integration.py` |
+| Manifest table for expected input count | Not implemented as a separate table (superseded by equivalent count contract) | `database_models.py` (no manifest model) |
+| Upstream manifest creation | Not applicable under equivalent design | claim-query count contract |
+| Claim based on completeness count | Implemented (snapshot count must equal position-timeseries count) | `timeseries_repository.py`; integration tests |
+| Pending-manifest metric | Not implemented under manifest naming | monitoring + service paths |
+| Atomic completeness validation tests | Implemented | `test_timeseries_repository_integration.py` |
 
 ## Design Reasoning and Trade-offs
 
-1. Current sequential claim rule improves ordering but does not prove all same-day position inputs are present.
-2. Manifest-based gating remains the stronger correctness design when completeness must be guaranteed explicitly.
+1. The previous sequential-only gate improved ordering but was insufficient for completeness.
+2. The implemented count-based gate provides deterministic completeness guarantees without adding new manifest table lifecycle complexity.
 
 Trade-off:
 - Full manifest implementation adds schema and orchestration complexity, but materially strengthens correctness and auditability.
 
 ## Gap Assessment
 
-Remaining high-value gap:
-1. Implement explicit completeness gating (manifest or equivalent deterministic count contract) before claiming aggregation jobs.
+1. No remaining blocking correctness gap for RFC-024 acceptance criteria.
 
 ## Deviations and Evolution Since Original RFC
 
-1. System evolved to include stronger job-state handling and sequencing safeguards.
-2. Original RFC’s manifest architecture was not adopted yet; docs still acknowledge residual integrity risk.
+1. System evolved from sequencing-only safeguards to sequencing + deterministic completeness gate.
+2. Original manifest-table approach was replaced with an equivalent in-query count contract.
 
 ## Proposed Changes
 
-1. Implement RFC 024 manifest design (or an equivalent explicit completeness contract) and retire known gap from feature docs.
-2. Add integration/E2E test that proves portfolio-day aggregation waits for full position input set.
+1. Keep the equivalent count-based completeness contract as the active implementation pattern.
+2. Maintain integration coverage proving portfolio-day aggregation waits for full position input set.
 
 ## Test and Validation Evidence
 
-1. Current sequential-eligibility verification:
+1. Completeness and sequential eligibility verification:
    - `tests/integration/services/timeseries_generator_service/test_timeseries_repository_integration.py`
 2. Repository claim logic under current design:
    - `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`
 
 ## Original Acceptance Criteria Alignment
 
-Partially aligned:
+Aligned:
 1. Stateful aggregation job orchestration exists.
-2. Manifest-based atomic completeness gate and associated observability/tests are not yet delivered.
+2. Atomic completeness gating is delivered via deterministic count contract and integration tests.
 
 ## Rollout and Backward Compatibility
 
@@ -98,10 +103,9 @@ No runtime change introduced by this documentation retrofit.
 
 ## Open Questions
 
-1. Should completeness gating use proposed manifest table or a lighter-weight derived-count contract with equivalent deterministic guarantees?
-2. Which service should own expected-count generation in the final design (`position_valuation_calculator` vs `timeseries_generator_service`)?
+1. Should a dedicated completeness metric be added to expose blocked jobs by missing-input count for faster operations triage?
 
 ## Next Actions
 
-1. Track manifest/completeness implementation as an open delta in `RFC-DELTA-BACKLOG.md`.
-2. Keep current sequential mitigation while implementing full correctness gate.
+1. Keep RFC 024 marked implemented with equivalent deterministic completeness contract.
+2. Maintain integration regression coverage for claim gating behavior.

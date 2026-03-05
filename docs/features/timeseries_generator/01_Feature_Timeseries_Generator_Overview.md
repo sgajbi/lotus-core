@@ -18,4 +18,4 @@ These time-series tables are the foundational datasets that power the entire `qu
 
 ## 3. Gaps and Design Considerations
 
-* **Data Integrity Risk in Aggregation:** There is a significant data integrity gap in the current scheduling logic. The portfolio-level aggregation for a given day can be triggered before all of that day's individual position time-series records have been generated. This can lead to the creation of a permanent, incorrect `portfolio_timeseries` record based on a partial set of data. This is a race condition that needs to be addressed to guarantee correctness.
+* **Completeness Gating (Implemented):** Aggregation claim logic now enforces deterministic completeness for each portfolio/day/epoch before processing. A job is claimable only when `daily_position_snapshots` input count equals transformed `position_timeseries` count, in addition to sequential prior-day ordering rules.
