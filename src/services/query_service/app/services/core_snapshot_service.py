@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Depends
@@ -11,12 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.core_snapshot_dto import (
     CoreSnapshotDeltaRecord,
-    CoreSnapshotInstrumentEnrichmentRecord,
-    CoreSnapshotMode,
     CoreSnapshotFreshnessMetadata,
     CoreSnapshotGovernanceMetadata,
-    CoreSnapshotPortfolioTotals,
+    CoreSnapshotInstrumentEnrichmentRecord,
+    CoreSnapshotMode,
     CoreSnapshotPolicyProvenance,
+    CoreSnapshotPortfolioTotals,
     CoreSnapshotPositionRecord,
     CoreSnapshotRequest,
     CoreSnapshotResponse,
@@ -32,9 +32,7 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
-
-_POSITIVE_TYPES = {"BUY", "DEPOSIT", "TRANSFER_IN"}
-_NEGATIVE_TYPES = {"SELL", "WITHDRAWAL", "TRANSFER_OUT", "FEE", "TAX"}
+from .position_flow_effects import transaction_quantity_effect_decimal
 
 
 class CoreSnapshotBadRequestError(ValueError):
@@ -448,13 +446,10 @@ class CoreSnapshotService:
 
     @staticmethod
     def _change_quantity_effect(change) -> Decimal:
-        txn_type = str(change.transaction_type).upper()
-        magnitude = Decimal(str(change.quantity or change.amount or 0))
-        if txn_type in _POSITIVE_TYPES:
-            return magnitude
-        if txn_type in _NEGATIVE_TYPES:
-            return -magnitude
-        return Decimal(0)
+        return transaction_quantity_effect_decimal(
+            transaction_type=getattr(change, "transaction_type", None),
+            quantity=getattr(change, "quantity", None),
+        )
 
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]

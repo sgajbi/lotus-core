@@ -24,6 +24,7 @@ from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
     UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
+    assert_portfolio_flow_cash_entry_mode_allowed,
     assert_upstream_cash_leg_pairing,
     build_auto_generated_adjustment_cash_leg,
     enrich_dividend_transaction_metadata,
@@ -329,6 +330,7 @@ class CostCalculatorConsumer(BaseConsumer):
 
                     emitted_events: list[TransactionEvent] = []
                     for processed_event in events_to_publish:
+                        assert_portfolio_flow_cash_entry_mode_allowed(processed_event)
                         mode = normalize_cash_entry_mode(processed_event.cash_entry_mode)
                         if (
                             processed_event.cash_entry_mode is not None

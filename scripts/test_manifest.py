@@ -82,6 +82,18 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/query_service/test_transactions_router.py",
         "tests/integration/services/persistence_service/repositories/test_repositories.py",
     ],
+    "transaction-portfolio-flow-bundle-contract": [
+        "tests/unit/libs/portfolio_common/test_portfolio_flow_guardrails.py",
+        "tests/unit/services/calculators/portfolio_flow_bundle/test_portfolio_flow_bundle_slice0_characterization.py",
+        "tests/unit/services/calculators/portfolio_flow_bundle/test_portfolio_flow_bundle_slice2_classification.py",
+        "tests/unit/services/calculators/position_calculator/core/test_position_logic.py",
+        "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py",
+        "tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py",
+        "tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py",
+        "tests/unit/services/query_service/services/test_position_flow_effects.py",
+        "tests/unit/services/query_service/services/test_core_snapshot_service.py",
+        "tests/unit/services/query_service/services/test_simulation_service.py",
+    ],
 }
 
 # Backward-compatible aliases for previous suite names.
@@ -89,6 +101,7 @@ SUITES["buy-rfc"] = SUITES["transaction-buy-contract"]
 SUITES["sell-rfc"] = SUITES["transaction-sell-contract"]
 SUITES["dividend-rfc"] = SUITES["transaction-dividend-contract"]
 SUITES["interest-rfc"] = SUITES["transaction-interest-contract"]
+SUITES["portfolio-flow-bundle-rfc"] = SUITES["transaction-portfolio-flow-bundle-contract"]
 
 SOURCE = "src/services/query_service/app"
 SUITE_PYTEST_ARGS: dict[str, list[str]] = {
@@ -104,10 +117,12 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "transaction-sell-contract": "integration",
     "transaction-dividend-contract": "integration",
     "transaction-interest-contract": "integration",
+    "transaction-portfolio-flow-bundle-contract": "integration",
     "buy-rfc": "integration",
     "sell-rfc": "integration",
     "dividend-rfc": "integration",
     "interest-rfc": "integration",
+    "portfolio-flow-bundle-rfc": "integration",
     "e2e-smoke": "e2e",
 }
 

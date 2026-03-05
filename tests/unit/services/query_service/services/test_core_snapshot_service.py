@@ -342,8 +342,12 @@ async def test_core_snapshot_raises_when_new_security_has_no_market_price(mock_d
     [
         ("BUY", Decimal("2"), None, Decimal("2")),
         ("SELL", Decimal("2"), None, Decimal("-2")),
-        ("DEPOSIT", None, Decimal("7"), Decimal("7")),
-        ("WITHDRAWAL", None, Decimal("7"), Decimal("-7")),
+        ("TRANSFER_IN", Decimal("5"), Decimal("9"), Decimal("5")),
+        ("TRANSFER_OUT", Decimal("3"), Decimal("9"), Decimal("-3")),
+        ("DEPOSIT", None, Decimal("7"), Decimal("0")),
+        ("WITHDRAWAL", None, Decimal("7"), Decimal("0")),
+        ("FEE", None, Decimal("7"), Decimal("0")),
+        ("TAX", None, Decimal("7"), Decimal("0")),
         ("UNKNOWN", Decimal("3"), None, Decimal("0")),
     ],
 )

@@ -18,7 +18,10 @@ from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
-from portfolio_common.transaction_domain import normalize_cash_entry_mode
+from portfolio_common.transaction_domain import (
+    assert_portfolio_flow_cash_entry_mode_allowed,
+    normalize_cash_entry_mode,
+)
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, stop_after_attempt, wait_fixed
@@ -150,6 +153,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         return
 
                     event_transaction_type = event.transaction_type.upper()
+                    assert_portfolio_flow_cash_entry_mode_allowed(event)
                     normalized_mode = (
                         normalize_cash_entry_mode(event.cash_entry_mode)
                         if event.cash_entry_mode is not None

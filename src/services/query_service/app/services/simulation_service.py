@@ -18,10 +18,7 @@ from ..dtos.simulation_dto import (
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.simulation_repository import SimulationRepository
-
-
-_POSITIVE_TYPES = {"BUY", "DEPOSIT", "TRANSFER_IN"}
-_NEGATIVE_TYPES = {"SELL", "WITHDRAWAL", "TRANSFER_OUT", "FEE", "TAX"}
+from .position_flow_effects import transaction_quantity_effect_float
 
 
 class SimulationService:
@@ -184,13 +181,10 @@ class SimulationService:
 
     @staticmethod
     def _change_quantity_effect(change) -> float:
-        txn_type = str(change.transaction_type).upper()
-        magnitude = float(change.quantity or change.amount or 0.0)
-        if txn_type in _POSITIVE_TYPES:
-            return magnitude
-        if txn_type in _NEGATIVE_TYPES:
-            return -magnitude
-        return 0.0
+        return transaction_quantity_effect_float(
+            transaction_type=getattr(change, "transaction_type", None),
+            quantity=getattr(change, "quantity", None),
+        )
 
     @staticmethod
     def _validate_session_active(session_id: str, session) -> None:
