@@ -420,8 +420,7 @@ def _write_artifacts(
         statuses = ",".join(str(status) for status in result["status_set"])
         lines.append(
             (
-                "| {name} | {ok}/{runs} | {avg} | {p50} | {p95} | "
-                "{budget} | {p99} | {statuses} |"
+                "| {name} | {ok}/{runs} | {avg} | {p50} | {p95} | {budget} | {p99} | {statuses} |"
             ).format(
                 name=result["name"],
                 ok=result["ok_runs"],
