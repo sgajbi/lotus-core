@@ -4,7 +4,7 @@
 
 * **Document ID:** RFC-CASH-MOVEMENT-01
 * **Title:** Canonical DEPOSIT and WITHDRAWAL Transaction Specification
-* **Version:** 1.0.0
+* **Version:** 1.1.0
 * **Status:** Draft
 * **Owner:** *TBD*
 * **Reviewers:** *TBD*
@@ -14,9 +14,10 @@
 
 ### 1.1 Change Log
 
-| Version | Date  | Author | Summary                                                |
-| ------- | ----- | ------ | ------------------------------------------------------ |
-| 1.0.0   | *TBD* | *TBD*  | Initial canonical DEPOSIT and WITHDRAWAL specification |
+| Version | Date  | Author | Summary                                                                                       |
+| ------- | ----- | ------ | --------------------------------------------------------------------------------------------- |
+| 1.0.0   | *TBD* | *TBD*  | Initial canonical DEPOSIT and WITHDRAWAL specification                                        |
+| 1.1.0   | *TBD* | *TBD*  | Clarified single-leg cash-native behavior and alignment with shared dual-leg accounting model |
 
 ### 1.2 Purpose
 
@@ -96,8 +97,22 @@ The following shared documents are normative for `DEPOSIT` and `WITHDRAWAL` unle
 * `shared/10-query-audit-and-observability.md`
 * `shared/11-test-strategy-and-gap-assessment.md`
 * `shared/12-canonical-modeling-guidelines.md`
+* `shared/13-dual-leg-accounting-and-cash-adjustment-model.md`
 
-### 2.2 Override rule
+### 2.2 Explicit interaction with the dual-leg standard
+
+`DEPOSIT` and `WITHDRAWAL` are **cash-native portfolio-level transactions**.
+
+They are **not** dual-leg position-level events.
+
+Therefore:
+
+* they contain only a **cash leg**
+* they do **not** require a separate product leg
+* they do **not** use `ADJUSTMENT` as a linked cash leg for a product transaction
+* cash data is expected to come directly from upstream systems or equivalent portfolio-level booking sources
+
+### 2.3 Override rule
 
 This RFC defines all `DEPOSIT`- and `WITHDRAWAL`-specific behavior.
 
@@ -129,7 +144,7 @@ A `DEPOSIT` or `WITHDRAWAL` must not:
 
 ### 3.1 Non-negotiable semantic invariant
 
-A `DEPOSIT` or `WITHDRAWAL` is a cash movement affecting portfolio cash, not an investment realization or income event. It must change cash, must not change holdings quantity, and must not create realized capital or FX P&L.
+A `DEPOSIT` or `WITHDRAWAL` is a cash-native portfolio-level movement affecting portfolio cash, not an investment realization or income event. It must change cash, must not change holdings quantity, and must not create realized capital or FX P&L.
 
 ### 3.2 Direction rule
 
@@ -141,6 +156,12 @@ The direction must be explicit and must not be inferred ambiguously from sign al
 ### 3.3 Portfolio-flow rule
 
 Both `DEPOSIT` and `WITHDRAWAL` must be treated as external portfolio flows by default for performance and funding semantics, unless a customer-specific policy explicitly classifies a subtype differently.
+
+### 3.4 Single-leg rule
+
+`DEPOSIT` and `WITHDRAWAL` are single-leg cash transactions.
+
+They must be represented directly as cash movements and must not be modeled as product leg + linked `ADJUSTMENT` cash leg events.
 
 ---
 
@@ -162,8 +183,8 @@ The following invariants are mandatory for every valid `DEPOSIT` and `WITHDRAWAL
 
 ### 4.2 Numeric invariants
 
-* `cash_amount_local >= 0`
-* `cash_amount_base >= 0`
+* `gross_cash_amount_local >= 0`
+* `gross_cash_amount_base >= 0`
 * `net_cash_amount_local >= 0`
 * `net_cash_amount_base >= 0`
 * `DEPOSIT` increases cash by the configured net amount
@@ -434,7 +455,7 @@ Each field must have one of the following mutability classifications:
 
 | Field                        | Type          | Required | Source               | Mutability | Description                                            | Sample                    |
 | ---------------------------- | ------------- | -------: | -------------------- | ---------- | ------------------------------------------------------ | ------------------------- |
-| `originating_transaction_id` | `str \| None` |       No | LINKED               | IMMUTABLE  | Source transaction for linked entries                  | `TXN-2026-000523`         |
+| `originating_transaction_id` | `str \| None` |       No | LINKED               | IMMUTABLE  | Source transaction for linked entries where applicable | `TXN-2026-000523`         |
 | `link_type`                  | `LinkType`    |      Yes | DERIVED / CONFIGURED | IMMUTABLE  | Semantic meaning of the transaction linkage            | `CASH_MOVEMENT_TO_LEDGER` |
 | `reconciliation_key`         | `str \| None` |       No | UPSTREAM / DERIVED   | IMMUTABLE  | Key used to reconcile with upstream or banking systems | `RECON-MNO-345`           |
 
@@ -458,13 +479,13 @@ Each field must have one of the following mutability classifications:
 
 #### 6.5.14 PolicyMetadata
 
-| Field                        | Type  | Required | Source     | Mutability | Description                                                   | Sample                        |
-| ---------------------------- | ----- | -------: | ---------- | ---------- | ------------------------------------------------------------- | ----------------------------- |
-| `calculation_policy_id`      | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy identifier used for this calculation                   | `POLICY-CASHMOVE-STD`         |
-| `calculation_policy_version` | `str` |      Yes | CONFIGURED | IMMUTABLE  | Version of the calculation policy applied                     | `1.0.0`                       |
-| `fee_treatment_policy`       | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling treatment of movement-related fees         | `DEDUCT_FROM_GROSS`           |
-| `negative_cash_policy`       | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling withdrawals when cash is insufficient      | `REJECT_IF_INSUFFICIENT_CASH` |
-| `cash_generation_policy`     | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling how linked ledger/cash entries are created | `AUTO_GENERATE_LINKED_LEDGER` |
+| Field                        | Type  | Required | Source     | Mutability | Description                                                   | Sample                                        |
+| ---------------------------- | ----- | -------: | ---------- | ---------- | ------------------------------------------------------------- | --------------------------------------------- |
+| `calculation_policy_id`      | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy identifier used for this calculation                   | `POLICY-CASHMOVE-STD`                         |
+| `calculation_policy_version` | `str` |      Yes | CONFIGURED | IMMUTABLE  | Version of the calculation policy applied                     | `1.1.0`                                       |
+| `fee_treatment_policy`       | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling treatment of movement-related fees         | `DEDUCT_FROM_GROSS`                           |
+| `negative_cash_policy`       | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling withdrawals when cash is insufficient      | `REJECT_IF_INSUFFICIENT_CASH`                 |
+| `cash_generation_policy`     | `str` |      Yes | CONFIGURED | IMMUTABLE  | Policy controlling how linked ledger/cash entries are created | `USE_UPSTREAM_CASH_MOVEMENT_OR_LINKED_LEDGER` |
 
 ---
 
@@ -620,7 +641,7 @@ By default:
 
 For `DEPOSIT` by default:
 
-`cash_balance_delta_local = net_cash_amount_local`
+`cash_balance_delta_local = +net_cash_amount_local`
 
 For `WITHDRAWAL` by default:
 
@@ -628,7 +649,17 @@ For `WITHDRAWAL` by default:
 
 The same directional rule applies in base currency.
 
-### 8.7 Realized P&L fields
+### 8.7 Directional source-of-truth rule
+
+For `DEPOSIT` and `WITHDRAWAL`, the transaction itself is the authoritative source of the cash movement.
+
+Therefore:
+
+* the authoritative cash-flow amount is the **net cash amount**
+* the authoritative cash-flow direction is the **actual cash movement direction**
+* there is no separate `ADJUSTMENT` leg for cash-flow sourcing
+
+### 8.8 Realized P&L fields
 
 For every `DEPOSIT` and `WITHDRAWAL`, the engine must explicitly produce:
 
@@ -641,7 +672,7 @@ For every `DEPOSIT` and `WITHDRAWAL`, the engine must explicitly produce:
 
 These fields must be present and must not be omitted.
 
-### 8.8 Rounding and precision
+### 8.9 Rounding and precision
 
 The engine must define:
 
@@ -676,7 +707,15 @@ The engine must support:
 * net movement amount
 * resulting cash-balance delta
 
-### 9.4 Cash balance views
+### 9.4 Single-leg cash ownership rule
+
+Because `DEPOSIT` and `WITHDRAWAL` are cash-native single-leg transactions:
+
+* this transaction is the source of truth for cash balance mutation
+* this transaction is the source of truth for performance portfolio flow
+* this transaction is the source of truth for contribution cash-flow input where applicable
+
+### 9.5 Cash balance views
 
 The platform must distinguish, where relevant:
 
@@ -685,11 +724,11 @@ The platform must distinguish, where relevant:
 * projected cash
 * ledger cash
 
-### 9.5 Balance application rule
+### 9.6 Balance application rule
 
 The movement must update the correct cash view(s) according to active timing policy.
 
-### 9.6 Cash invariants
+### 9.7 Cash invariants
 
 * A cash movement must always be linked or explicitly externally expected.
 * Duplicate ledger/cash creation must be prevented.
@@ -765,7 +804,14 @@ At minimum:
 * cash-balance delta local/base
 * portfolio-flow indicators
 
-### 11.4 Consistency expectation
+### 11.4 Required source-of-truth clarification
+
+The output contract must make it clear that:
+
+* this transaction is the authoritative cash movement record
+* there is no separate linked `ADJUSTMENT` cash leg for this transaction type
+
+### 11.5 Consistency expectation
 
 The platform must define whether these surfaces are:
 
@@ -794,7 +840,7 @@ and must document the expected latency/SLA for visibility.
 
 * `total_fees_local = 10.00`
 * `net_cash_amount_local = 10000.00 - 10.00 = 9990.00`
-* `cash_balance_delta_local = 9990.00`
+* `cash_balance_delta_local = +9990.00`
 * base equivalents are identical
 * realized P&L fields = `0.00`
 
@@ -804,6 +850,7 @@ and must document the expected latency/SLA for visibility.
 * transaction classified as portfolio flow
 * no quantity change
 * no lot activity
+* this transaction is the authoritative cash-flow record
 
 ---
 
@@ -826,6 +873,7 @@ and must document the expected latency/SLA for visibility.
 * transaction classified as portfolio flow
 * no quantity change
 * no lot activity
+* this transaction is the authoritative cash-flow record
 
 ---
 
@@ -844,13 +892,14 @@ and must document the expected latency/SLA for visibility.
 * `net_cash_amount_local = 9990.00`
 * `gross_cash_amount_base = 13500.00`
 * `net_cash_amount_base = 9990.00 × 1.35 = 13486.50`
-* `cash_balance_delta_base = 13486.50`
+* `cash_balance_delta_base = +13486.50`
 
 #### Expected outputs
 
 * local and base cash effects populated
 * no realized FX P&L
 * FX conversion remains explicit and traceable
+* this transaction remains single-leg and cash-native
 
 ---
 
@@ -943,6 +992,7 @@ The implementation is not complete unless the following test categories are cove
 * correct cash-balance delta in local and base currency
 * correct portfolio-flow flags
 * correct timing application across supported timing modes
+* transaction itself is consumed as the authoritative cash-flow record
 
 ### 14.4 Query tests
 
@@ -950,6 +1000,7 @@ The implementation is not complete unless the following test categories are cove
 * cash-balance effect visibility
 * linkage visibility
 * policy metadata visibility
+* explicit single-leg cash-native visibility
 
 ### 14.5 Idempotency and replay tests
 
@@ -1081,6 +1132,7 @@ If the current implementation already matches a requirement in this RFC, that be
 * all mandatory validations are enforced
 * all mandatory calculations are implemented
 * cash-balance direction support is implemented
+* explicit single-leg cash-native behavior is implemented
 * timing behavior is implemented
 * all required metadata is preserved
 * all required query outputs are available
