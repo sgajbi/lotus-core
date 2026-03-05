@@ -90,6 +90,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py",
         "tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py",
         "tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py",
+        "tests/unit/services/query_service/services/test_position_flow_effects.py",
         "tests/unit/services/query_service/services/test_core_snapshot_service.py",
         "tests/unit/services/query_service/services/test_simulation_service.py",
     ],
