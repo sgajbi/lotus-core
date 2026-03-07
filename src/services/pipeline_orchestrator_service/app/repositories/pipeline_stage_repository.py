@@ -40,7 +40,7 @@ class PipelineStageRepository:
             .on_conflict_do_update(
                 index_elements=["stage_name", "transaction_id", "epoch"],
                 set_={
-                    "portfolio_id": portfolio_id,
+                    "portfolio_id": PipelineStageState.portfolio_id,
                     "security_id": security_id,
                     "business_date": business_date,
                     "cost_event_seen": PipelineStageState.cost_event_seen | cost_event_seen,
@@ -62,6 +62,12 @@ class PipelineStageRepository:
             .execution_options(populate_existing=True)
         )
         stage = result.scalar_one()
+        if stage.portfolio_id != portfolio_id:
+            raise ValueError(
+                "Pipeline stage key collision detected for different portfolios: "
+                f"{stage_name}/{transaction_id}/{epoch} "
+                f"existing={stage.portfolio_id} incoming={portfolio_id}"
+            )
         await self.db.refresh(stage)
         return stage
 

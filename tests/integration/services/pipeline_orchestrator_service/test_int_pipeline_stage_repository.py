@@ -75,3 +75,35 @@ async def test_mark_stage_completed_if_pending_is_idempotent(
     assert persisted is not None
     assert persisted.status == "COMPLETED"
     assert persisted.ready_emitted_at is not None
+
+
+async def test_upsert_stage_flags_rejects_cross_portfolio_collision(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = PipelineStageRepository(async_db_session)
+
+    first = await repo.upsert_stage_flags(
+        stage_name="TRANSACTION_PROCESSING",
+        transaction_id="TXN-COLLIDE-1",
+        portfolio_id="PORT-INT-A",
+        security_id="SEC-INT-1",
+        business_date=date(2026, 3, 7),
+        epoch=0,
+        source_event_type="processed_transaction",
+        cost_event_seen=True,
+        cashflow_event_seen=False,
+    )
+    with pytest.raises(ValueError, match="Pipeline stage key collision detected"):
+        await repo.upsert_stage_flags(
+            stage_name="TRANSACTION_PROCESSING",
+            transaction_id="TXN-COLLIDE-1",
+            portfolio_id="PORT-INT-B",
+            security_id="SEC-INT-1",
+            business_date=date(2026, 3, 7),
+            epoch=0,
+            source_event_type="cashflow_calculated",
+            cost_event_seen=False,
+            cashflow_event_seen=True,
+        )
+    await async_db_session.commit()
+    assert first.id is not None

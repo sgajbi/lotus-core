@@ -348,6 +348,8 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 - Added durable stage-state model:
   - `pipeline_stage_state` table + Alembic migration
   - repository upsert/merge behavior for independent prerequisite signals
+  - explicit collision guard to reject cross-portfolio key reuse
+    for `(stage_name, transaction_id, epoch)` before state mutation.
   - concurrency-safe claim transition to prevent duplicate readiness emission.
 - Added explicit event contract:
   - `TransactionProcessingCompletedEvent` in canonical event model.
@@ -360,6 +362,20 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   - gate epoch is applied before position calculation for deterministic replay alignment.
   - replay compatibility retained by continuing to accept `processed_transactions_completed`
     for epoch-based reprocessing emissions.
+- Added valuation-readiness trigger path:
+  - orchestrator emits `portfolio_day_ready_for_valuation` alongside transaction completion
+  - valuation service consumes readiness events and idempotently upserts valuation jobs.
+
+### 15.4 Race-condition safeguards applied in this slice
+
+- Stage completion emission remains single-claim via conditional transition
+  (`mark_stage_completed_if_pending`), preventing duplicate readiness publication.
+- Stage-state repository rejects cross-portfolio collision on shared
+  `(stage_name, transaction_id, epoch)` keys to avoid silent cross-talk.
+- Consumer idempotency (`processed_events`) is enforced before any state mutation
+  in orchestrator and valuation-readiness consumers.
+- Valuation readiness job creation is race-safe via `upsert_job` with
+  `ON CONFLICT DO UPDATE`, making duplicate readiness signals harmless.
 
 ### 15.2 Current scope boundary
 
