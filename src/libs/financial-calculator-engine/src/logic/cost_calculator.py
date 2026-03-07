@@ -273,7 +273,9 @@ class PartialTransferOutStrategy:
         apply explicit basis reduction without consuming lots through SELL logic.
         """
         if transaction.quantity > Decimal(0):
-            SecurityOutflowStrategy().calculate_costs(transaction, disposition_engine, error_reporter)
+            SecurityOutflowStrategy().calculate_costs(
+                transaction, disposition_engine, error_reporter
+            )
             return
 
         fx_rate = transaction.transaction_fx_rate or Decimal(1)
