@@ -7,10 +7,14 @@ from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+    KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC,
     KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
+from portfolio_common.kafka_utils import get_kafka_producer
+from portfolio_common.outbox_dispatcher import OutboxDispatcher
 
 from .consumers.portfolio_timeseries_consumer import PortfolioTimeseriesConsumer
 from .consumers.position_timeseries_consumer import PositionTimeseriesConsumer
@@ -63,6 +67,7 @@ class ConsumerManager:
         )
 
         self.scheduler = AggregationScheduler()
+        self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
 
         logger.info(
             "ConsumerManager initialized with %s consumer(s) and 1 scheduler.",
@@ -78,6 +83,8 @@ class ConsumerManager:
 
     async def run(self):
         required_topics = [consumer.topic for consumer in self.consumers]
+        required_topics.append(KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC)
+        required_topics.append(KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC)
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -89,6 +96,7 @@ class ConsumerManager:
         logger.info("Starting all consumer tasks, the scheduler, and the web server...")
         self.tasks = [asyncio.create_task(c.run()) for c in self.consumers]
         self.tasks.append(asyncio.create_task(self.scheduler.run()))
+        self.tasks.append(asyncio.create_task(self.dispatcher.run()))
         self.tasks.append(asyncio.create_task(server.serve()))
 
         logger.info("ConsumerManager is running. Press Ctrl+C to exit.")
@@ -98,6 +106,7 @@ class ConsumerManager:
         for consumer in self.consumers:
             consumer.shutdown()
         self.scheduler.stop()
+        self.dispatcher.stop()
         server.should_exit = True
 
         await asyncio.gather(*self.tasks, return_exceptions=True)

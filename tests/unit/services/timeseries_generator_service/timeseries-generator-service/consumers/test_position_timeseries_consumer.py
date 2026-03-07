@@ -13,6 +13,7 @@ from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
     ValuationDayCompletedEvent,
 )
+from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.timeseries_generator_service.app.consumers.position_timeseries_consumer import (
@@ -61,6 +62,7 @@ def mock_kafka_message(mock_event: DailyPositionSnapshotPersistedEvent) -> Magic
 @pytest.fixture
 def mock_dependencies():
     mock_repo = AsyncMock(spec=TimeseriesRepository)
+    mock_outbox_repo = AsyncMock(spec=OutboxRepository)
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_transaction = AsyncMock()
@@ -77,8 +79,12 @@ def mock_dependencies():
             "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.TimeseriesRepository",
             return_value=mock_repo,
         ),
+        patch(
+            "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.OutboxRepository",
+            return_value=mock_outbox_repo,
+        ),
     ):
-        yield {"repo": mock_repo, "db_session": mock_db_session}
+        yield {"repo": mock_repo, "db_session": mock_db_session, "outbox_repo": mock_outbox_repo}
 
 
 async def test_process_message_success(
@@ -90,6 +96,7 @@ async def test_process_message_success(
     # ARRANGE
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
 
     mock_repo.get_instrument.return_value = Instrument(
         security_id=mock_event.security_id, currency="USD"
@@ -119,6 +126,7 @@ async def test_process_message_success(
         # ASSERT
         mock_fencer_instance.check.assert_awaited_once()
         mock_repo.upsert_position_timeseries.assert_awaited_once()
+        mock_outbox_repo.create_outbox_event.assert_awaited_once()
         created_record = mock_repo.upsert_position_timeseries.call_args[0][0]
         assert created_record.epoch == 1
 
@@ -131,6 +139,7 @@ async def test_process_message_skips_stale_epoch(
 ):
     # ARRANGE
     mock_repo = mock_dependencies["repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
 
     # Mock the fencer to return False (discard the message)
     with patch(
@@ -147,6 +156,7 @@ async def test_process_message_skips_stale_epoch(
         # ASSERT
         mock_repo.get_instrument.assert_not_called()
         mock_repo.upsert_position_timeseries.assert_not_called()
+        mock_outbox_repo.create_outbox_event.assert_not_called()
         # The fencer now handles logging, so we don't need to check caplog here.
         # The key assertion is that the business logic was not executed.
 
@@ -157,6 +167,7 @@ async def test_process_message_accepts_valuation_day_completed_event(
 ):
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
     valuation_event = ValuationDayCompletedEvent(
         daily_position_snapshot_id=123,
         portfolio_id="PORT_TS_POS_01",
@@ -192,3 +203,4 @@ async def test_process_message_accepts_valuation_day_completed_event(
         await consumer._process_message_with_retry(msg)
 
     mock_repo.upsert_position_timeseries.assert_awaited_once()
+    mock_outbox_repo.create_outbox_event.assert_awaited_once()

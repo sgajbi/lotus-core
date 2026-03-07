@@ -3,14 +3,17 @@ import logging
 from datetime import date
 
 from confluent_kafka import Message
+from portfolio_common.config import KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC
 from portfolio_common.database_models import DailyPositionSnapshot, PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
+    PositionTimeseriesDayCompletedEvent,
     ValuationDayCompletedEvent,
 )
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
 from pydantic import ValidationError
 from sqlalchemy import func
@@ -109,6 +112,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
             async for db in get_async_db_session():
                 async with db.begin():
                     repo = TimeseriesRepository(db)
+                    outbox_repo = OutboxRepository(db)
 
                     # --- REFACTORED: Use EpochFencer ---
                     fencer = EpochFencer(db, service_name=SERVICE_NAME)
@@ -151,6 +155,23 @@ class PositionTimeseriesConsumer(BaseConsumer):
                     await repo.upsert_position_timeseries(new_timeseries_record)
                     await self._stage_aggregation_job(
                         db, event.portfolio_id, event.date, correlation_id
+                    )
+                    position_completion_event = PositionTimeseriesDayCompletedEvent(
+                        portfolio_id=event.portfolio_id,
+                        security_id=event.security_id,
+                        timeseries_date=event.date,
+                        epoch=event.epoch,
+                        correlation_id=correlation_id,
+                    )
+                    await outbox_repo.create_outbox_event(
+                        aggregate_type="PositionTimeseriesStage",
+                        aggregate_id=(
+                            f"{event.portfolio_id}:{event.security_id}:{event.date}:{event.epoch}"
+                        ),
+                        event_type="PositionTimeseriesDayCompleted",
+                        topic=KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC,
+                        payload=position_completion_event.model_dump(mode="json"),
+                        correlation_id=correlation_id,
                     )
 
         except (json.JSONDecodeError, ValidationError) as e:
