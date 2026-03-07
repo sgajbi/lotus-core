@@ -1,8 +1,10 @@
 from typing import Any
 
-CA_BUNDLE_A_SOURCE_OUT_TYPES = {"SPIN_OFF", "DEMERGER_OUT"}
-CA_BUNDLE_A_TARGET_IN_TYPES = {"SPIN_IN", "DEMERGER_IN"}
-CA_BUNDLE_A_CASH_CONSIDERATION_TYPE = "CASH_CONSIDERATION"
+from .ca_bundle_a_constants import (
+    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
+    CA_BUNDLE_A_SOURCE_OUT_TYPES,
+    CA_BUNDLE_A_TARGET_IN_TYPES,
+)
 
 
 def ca_bundle_a_dependency_rank(event: Any) -> int:

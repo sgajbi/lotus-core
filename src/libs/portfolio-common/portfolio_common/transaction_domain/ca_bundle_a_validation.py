@@ -1,20 +1,21 @@
 from dataclasses import dataclass
 from typing import Iterable
 
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE as CASH_CONSIDERATION_TRANSACTION_TYPE,
+)
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_SOURCE_OUT_TYPES as CA_BUNDLE_A_OUT_TYPES,
+)
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_TARGET_IN_TYPES as CA_BUNDLE_A_IN_TYPES,
+)
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_TRANSACTION_TYPES,
+)
 from portfolio_common.events import TransactionEvent
 
 from .ca_bundle_a_reason_codes import CaBundleAValidationReasonCode
-
-CA_BUNDLE_A_TRANSACTION_TYPES = {
-    "SPIN_OFF",
-    "SPIN_IN",
-    "DEMERGER_OUT",
-    "DEMERGER_IN",
-    "CASH_CONSIDERATION",
-}
-CA_BUNDLE_A_OUT_TYPES = {"SPIN_OFF", "DEMERGER_OUT"}
-CA_BUNDLE_A_IN_TYPES = {"SPIN_IN", "DEMERGER_IN"}
-CASH_CONSIDERATION_TRANSACTION_TYPE = "CASH_CONSIDERATION"
 
 
 @dataclass(frozen=True)

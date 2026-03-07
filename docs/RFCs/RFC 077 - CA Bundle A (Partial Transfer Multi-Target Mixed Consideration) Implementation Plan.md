@@ -1,6 +1,6 @@
 # RFC 077 - CA Bundle A (Partial Transfer Multi-Target Mixed Consideration) Implementation Plan
 
-**Status**: In Progress  
+**Status**: Implemented  
 **Date**: 2026-03-07  
 **Owner**: *TBD*  
 **Reviewers**: *TBD*  

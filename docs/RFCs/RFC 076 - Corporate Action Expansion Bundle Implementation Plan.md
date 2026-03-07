@@ -1,10 +1,15 @@
 # RFC 076 - Corporate Action Expansion Bundle Implementation Plan
 
-**Status**: Draft  
+**Status**: In Progress  
 **Date**: 2026-03-07  
 **Owner**: *TBD*  
 **Reviewers**: *TBD*  
 **Approvers**: *TBD*
+
+## 0. Implementation Status Snapshot
+
+- Bundle A (RFC-077) is completed.
+- Bundles B/C/D remain pending implementation per execution order in this RFC.
 
 ## 1. Purpose
 
@@ -160,4 +165,3 @@ Upon approval, implementation RFCs will proceed as:
 - RFC-078: Bundle B implementation plan.
 - RFC-079: Reversal framework implementation plan.
 - RFC-080: Rights issue family implementation plan.
-

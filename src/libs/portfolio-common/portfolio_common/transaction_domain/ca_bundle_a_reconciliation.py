@@ -2,14 +2,18 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE as CASH_CONSIDERATION_TRANSACTION_TYPE,
+)
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_SOURCE_OUT_TYPES as CA_BUNDLE_A_OUT_TYPES,
+)
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_TARGET_IN_TYPES as CA_BUNDLE_A_IN_TYPES,
+)
 from portfolio_common.events import TransactionEvent
 
-from .ca_bundle_a_validation import (
-    CA_BUNDLE_A_IN_TYPES,
-    CA_BUNDLE_A_OUT_TYPES,
-    CASH_CONSIDERATION_TRANSACTION_TYPE,
-    is_ca_bundle_a_transaction_type,
-)
+from .ca_bundle_a_validation import is_ca_bundle_a_transaction_type
 
 DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE = Decimal("0.01")
 

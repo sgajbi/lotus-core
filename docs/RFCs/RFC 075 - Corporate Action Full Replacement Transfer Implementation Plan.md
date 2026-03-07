@@ -1,10 +1,16 @@
 # RFC 075 - Corporate Action Full Replacement Transfer Implementation Plan
 
-**Status**: Draft  
+**Status**: Implemented  
 **Date**: 2026-03-07  
 **Owner**: *TBD*  
 **Reviewers**: *TBD*  
 **Approvers**: *TBD*  
+
+## 0. Implementation Status Snapshot
+
+- RFC-075 baseline delivery is implemented in lotus-core.
+- Core CA full-replacement type support, schema/metadata extensions, synthetic-flow fields, and calculator alignment are in place.
+- Follow-on CA expansion work proceeds under RFC-076/RFC-077 bundles.
 
 ## 1. Purpose
 
