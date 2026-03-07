@@ -384,6 +384,12 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   in orchestrator and valuation-readiness consumers.
 - Valuation readiness job creation is race-safe via `upsert_job` with
   `ON CONFLICT DO UPDATE`, making duplicate readiness signals harmless.
+- Cashflow rule-cache refresh path now uses an async lock around stale/miss refresh
+  to prevent concurrent duplicate database loads under burst traffic.
+- Cashflow runtime now fails fast when any critical task exits unexpectedly
+  (consumer, outbox dispatcher, or web server), preventing silent partial-outage mode.
+- Cashflow service startup now enforces a single outbox-dispatcher owner
+  (`ConsumerManager`) to prevent duplicate dispatch loops on the same outbox table.
 
 ### 15.2 Current scope boundary
 
