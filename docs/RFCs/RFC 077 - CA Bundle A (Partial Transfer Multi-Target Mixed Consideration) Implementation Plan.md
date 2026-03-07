@@ -85,3 +85,4 @@ This bundle extends RFC-075 with source-retained transfer behavior, multi-target
 - Slice A1: **Completed** (Bundle A validation module + consumer guardrails + tests)
 - Slice A2: **Completed** (deterministic Bundle A dependency/target ordering in replay + engine sort)
 - Slice A3: **Completed** (group-level basis reconciliation + dependency-gap diagnostics with observability logs)
+- Merged on `main`, verified at commit `001e084b06f1da4ba955ce9de7ec5833a7a73181` (2026-03-07).

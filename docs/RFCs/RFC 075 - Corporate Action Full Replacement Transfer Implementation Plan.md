@@ -11,6 +11,7 @@
 - RFC-075 baseline delivery is implemented in lotus-core.
 - Core CA full-replacement type support, schema/metadata extensions, synthetic-flow fields, and calculator alignment are in place.
 - Follow-on CA expansion work proceeds under RFC-076/RFC-077 bundles.
+- Merged on `main`, verified at commit `001e084b06f1da4ba955ce9de7ec5833a7a73181` (2026-03-07).
 
 ## 1. Purpose
 
