@@ -53,7 +53,7 @@ This bundle extends RFC-075 with source-retained transfer behavior, multi-target
 - Ingestion/canonical validation reason-code coverage for Bundle A types.
 - Strict linkage checks for mixed consideration (`CASH_CONSIDERATION` marker to `ADJUSTMENT`).
 
-### Slice A2
+### Slice A2 (implemented in this change set)
 
 - Parent-child dependency orchestration for one-source-many-target processing.
 - Deterministic target leg ordering (`target_leg_index` fallback rules).
@@ -83,4 +83,5 @@ This bundle extends RFC-075 with source-retained transfer behavior, multi-target
 
 - Slice A0: **Completed** (code + tests + migration added)
 - Slice A1: **Completed** (Bundle A validation module + consumer guardrails + tests)
-- Slice A2+: Pending
+- Slice A2: **Completed** (deterministic Bundle A dependency/target ordering in replay + engine sort)
+- Slice A3+: Pending
