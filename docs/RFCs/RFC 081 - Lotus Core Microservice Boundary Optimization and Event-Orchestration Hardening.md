@@ -410,6 +410,12 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   `portfolio_common.runtime_supervision.wait_for_shutdown_or_task_failure`,
   removing duplicated lifecycle logic across service managers and reducing
   maintenance and drift risk.
+- Phase 2 valuation split delivered:
+  - added `valuation_orchestrator_service` for valuation readiness ingestion,
+    market-price reprocessing triggers, scheduler dispatch, and reprocessing worker loops.
+  - narrowed `position_valuation_calculator` to worker-only valuation compute
+    (`valuation_required` consumer + outbox publication).
+  - updated container topology and observability wiring for the new service.
 
 ### 15.2 Current scope boundary
 
@@ -424,6 +430,6 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 
 ### 15.3 Remaining roadmap alignment
 
-- Next slices should focus on service decomposition work (valuation orchestration split,
-  timeseries split, and query control-plane extraction) while preserving the now-explicit
-  end-to-end gate chain.
+- Next slices should focus on remaining service decomposition work
+  (timeseries split and query control-plane extraction) while preserving the
+  now-explicit end-to-end gate chain.
