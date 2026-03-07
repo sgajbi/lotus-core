@@ -10,6 +10,35 @@ from .enums import CashflowClassification
 
 logger = logging.getLogger(__name__)
 
+TRANSFER_INFLOW_TRANSACTION_TYPES = {
+    "TRANSFER_IN",
+    "MERGER_IN",
+    "EXCHANGE_IN",
+    "REPLACEMENT_IN",
+    "SPIN_IN",
+    "DEMERGER_IN",
+    "SPLIT",
+    "BONUS_ISSUE",
+    "STOCK_DIVIDEND",
+    "RIGHTS_ALLOCATE",
+    "RIGHTS_SHARE_DELIVERY",
+    "RIGHTS_REFUND",
+}
+TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
+    "TRANSFER_OUT",
+    "MERGER_OUT",
+    "EXCHANGE_OUT",
+    "REPLACEMENT_OUT",
+    "SPIN_OFF",
+    "DEMERGER_OUT",
+    "REVERSE_SPLIT",
+    "CONSOLIDATION",
+    "RIGHTS_SUBSCRIBE",
+    "RIGHTS_OVERSUBSCRIBE",
+    "RIGHTS_SELL",
+    "RIGHTS_EXPIRE",
+}
+
 
 class CashflowLogic:
     """
@@ -53,10 +82,12 @@ class CashflowLogic:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.TRANSFER:
             tx_type = transaction.transaction_type.upper()
-            if tx_type.endswith("_IN") or tx_type == "TRANSFER_IN":
+            if tx_type in TRANSFER_INFLOW_TRANSACTION_TYPES:
                 amount = abs(amount)
-            else:
+            elif tx_type in TRANSFER_OUTFLOW_TRANSACTION_TYPES:
                 amount = -abs(amount)
+            else:
+                amount = abs(amount) if transaction.quantity > 0 else -abs(amount)
         else:
             # All other classifications are outflows (INVESTMENT_OUTFLOW, EXPENSE, CASHFLOW_OUT)
             amount = -abs(amount)

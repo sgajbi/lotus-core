@@ -302,6 +302,24 @@ class IncomeStrategy:
         transaction.realized_gain_loss_local = None
 
 
+class QuantityRestatementStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        """
+        Handles same-instrument corporate-action quantity restatements where
+        quantity changes but total basis must remain unchanged.
+        """
+        transaction.gross_cost = Decimal(0)
+        transaction.net_cost = Decimal(0)
+        transaction.net_cost_local = Decimal(0)
+        transaction.realized_gain_loss = Decimal(0)
+        transaction.realized_gain_loss_local = Decimal(0)
+
+
 class DividendStrategy:
     def calculate_costs(
         self,
@@ -464,6 +482,20 @@ class CostCalculator:
             TransactionType.DEMERGER_OUT: PartialTransferOutStrategy(),
             TransactionType.CASH_CONSIDERATION: IncomeStrategy(),
             TransactionType.CASH_IN_LIEU: SellStrategy(),
+            TransactionType.SPLIT: QuantityRestatementStrategy(),
+            TransactionType.REVERSE_SPLIT: QuantityRestatementStrategy(),
+            TransactionType.CONSOLIDATION: QuantityRestatementStrategy(),
+            TransactionType.BONUS_ISSUE: QuantityRestatementStrategy(),
+            TransactionType.STOCK_DIVIDEND: QuantityRestatementStrategy(),
+            TransactionType.RIGHTS_ANNOUNCE: DefaultStrategy(),
+            TransactionType.RIGHTS_ALLOCATE: SecurityInflowStrategy(),
+            TransactionType.RIGHTS_EXPIRE: SecurityOutflowStrategy(),
+            TransactionType.RIGHTS_ADJUSTMENT: DefaultStrategy(),
+            TransactionType.RIGHTS_SELL: SecurityOutflowStrategy(),
+            TransactionType.RIGHTS_SUBSCRIBE: SecurityOutflowStrategy(),
+            TransactionType.RIGHTS_OVERSUBSCRIBE: SecurityOutflowStrategy(),
+            TransactionType.RIGHTS_REFUND: IncomeStrategy(),
+            TransactionType.RIGHTS_SHARE_DELIVERY: SecurityInflowStrategy(),
             TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
             TransactionType.ADJUSTMENT: DefaultStrategy(),
             TransactionType.FEE: DefaultStrategy(),

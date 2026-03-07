@@ -100,3 +100,19 @@ def test_transaction_event_ordering_key_orders_bundle_a_targets_by_sequence_then
         "TXN_TARGET_2",
         "TXN_TARGET_FALLBACK",
     ]
+
+
+def test_transaction_event_ordering_key_orders_rights_lifecycle_dependencies() -> None:
+    ts = datetime(2026, 1, 10, 8, 0, tzinfo=UTC)
+    allocate = _txn("TXN_ALLOCATE", ts, None, transaction_type="RIGHTS_ALLOCATE")
+    subscribe = _txn("TXN_SUBSCRIBE", ts, None, transaction_type="RIGHTS_SUBSCRIBE")
+    delivery = _txn("TXN_DELIVERY", ts, None, transaction_type="RIGHTS_SHARE_DELIVERY")
+    refund = _txn("TXN_REFUND", ts, None, transaction_type="RIGHTS_REFUND")
+
+    ordered = sorted([refund, delivery, subscribe, allocate], key=transaction_event_ordering_key)
+    assert [t.transaction_id for t in ordered] == [
+        "TXN_ALLOCATE",
+        "TXN_SUBSCRIBE",
+        "TXN_DELIVERY",
+        "TXN_REFUND",
+    ]

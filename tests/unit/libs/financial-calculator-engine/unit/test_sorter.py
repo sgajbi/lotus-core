@@ -144,3 +144,67 @@ def test_sort_bundle_a_dependency_and_target_ordering(sorter):
 
     sorted_list = sorter.sort_transactions([], [target_2, source, target_1])
     assert [t.transaction_id for t in sorted_list] == ["t_source", "t_target_1", "t_target_2"]
+
+
+def test_sort_rights_lifecycle_dependency_ordering(sorter):
+    same_day = datetime(2026, 1, 10)
+    allocate = Transaction(
+        transaction_id="t_allocate",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        portfolio_id="P1",
+        instrument_id="RIGHTS_SEC",
+        security_id="RIGHTS_SEC",
+        transaction_type="RIGHTS_ALLOCATE",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    subscribe = Transaction(
+        transaction_id="t_subscribe",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        portfolio_id="P1",
+        instrument_id="RIGHTS_SEC",
+        security_id="RIGHTS_SEC",
+        transaction_type="RIGHTS_SUBSCRIBE",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    delivery = Transaction(
+        transaction_id="t_delivery",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        portfolio_id="P1",
+        instrument_id="NEW_SEC",
+        security_id="NEW_SEC",
+        transaction_type="RIGHTS_SHARE_DELIVERY",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    refund = Transaction(
+        transaction_id="t_refund",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="RIGHTS_REFUND",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+
+    sorted_list = sorter.sort_transactions([], [refund, delivery, subscribe, allocate])
+    assert [t.transaction_id for t in sorted_list] == [
+        "t_allocate",
+        "t_subscribe",
+        "t_delivery",
+        "t_refund",
+    ]
