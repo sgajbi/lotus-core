@@ -76,6 +76,7 @@ class LinkedCashLegError(ValueError):
 
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
+LINKED_CASHFLOW_SKIP_TRANSACTION_TYPES = {"BUY", "SELL", "DIVIDEND", "INTEREST"}
 
 
 class CashflowCalculatorConsumer(BaseConsumer):
@@ -165,7 +166,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
                             "UPSTREAM_PROVIDED product leg requires external_cash_transaction_id."
                         )
                     if (
-                        event_transaction_type != ADJUSTMENT_TRANSACTION_TYPE
+                        event_transaction_type in LINKED_CASHFLOW_SKIP_TRANSACTION_TYPES
                         and has_linked_cash_leg
                     ):
                         logger.info(
