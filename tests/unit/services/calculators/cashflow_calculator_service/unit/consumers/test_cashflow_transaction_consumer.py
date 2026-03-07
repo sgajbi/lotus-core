@@ -1,4 +1,5 @@
 # tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py  # noqa: E501
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -35,6 +36,7 @@ def reset_cache():
     )
 
     transaction_consumer._cashflow_rule_cache_state = None
+    transaction_consumer._cashflow_rule_cache_lock = None
     yield
 
 
@@ -312,7 +314,7 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
         ),
         patch(
             "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
-            side_effect=[10.0, 20.0, 1200.0, 1210.0],
+            side_effect=[10.0, 11.0, 400.0, 401.0, 402.0, 403.0],
         ),
     ):
         first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
@@ -823,3 +825,42 @@ async def test_process_message_cash_consideration_missing_parent_reference_sends
     mock_outbox_repo.create_outbox_event.assert_not_called()
     mock_idempotency_repo.mark_event_processed.assert_not_called()
     cashflow_consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_get_rule_for_transaction_concurrent_refresh_loads_rules_once(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    from src.services.calculators.cashflow_calculator_service.app.consumers import (
+        transaction_consumer,
+    )
+
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.return_value = [
+        CashflowRule(
+            transaction_type="BUY",
+            classification="INVESTMENT_OUTFLOW",
+            timing="BOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    ]
+
+    with (
+        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            return_value=rules_repo,
+        ),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            side_effect=[100.0, 101.0, 102.0, 103.0, 104.0, 105.0],
+        ),
+    ):
+        results = await asyncio.gather(
+            cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY"),
+            cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY"),
+        )
+        assert results[0] is not None
+        assert results[1] is not None
+        assert rules_repo.get_all_rules.await_count == 1
