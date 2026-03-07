@@ -390,6 +390,9 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   (consumer, outbox dispatcher, or web server), preventing silent partial-outage mode.
 - Cashflow service startup now enforces a single outbox-dispatcher owner
   (`ConsumerManager`) to prevent duplicate dispatch loops on the same outbox table.
+- Pipeline orchestrator runtime now applies the same fail-fast supervision model,
+  ensuring consumer/dispatcher/web task crashes trigger deterministic service shutdown
+  instead of silent degraded processing.
 
 ### 15.2 Current scope boundary
 
