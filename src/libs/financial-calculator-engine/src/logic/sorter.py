@@ -36,11 +36,25 @@ def _ca_bundle_a_dependency_rank(txn: Transaction) -> int:
     transaction_type = str(getattr(txn, "transaction_type", "") or "").upper()
     if transaction_type in {"SPIN_OFF", "DEMERGER_OUT"}:
         return 0
+    if transaction_type in {"RIGHTS_ANNOUNCE", "RIGHTS_ALLOCATE"}:
+        return 0
     if transaction_type in {"SPIN_IN", "DEMERGER_IN"}:
+        return 1
+    if transaction_type in {
+        "RIGHTS_SUBSCRIBE",
+        "RIGHTS_OVERSUBSCRIBE",
+        "RIGHTS_SELL",
+        "RIGHTS_EXPIRE",
+        "RIGHTS_ADJUSTMENT",
+    }:
         return 1
     if transaction_type == "CASH_CONSIDERATION":
         return 2
-    return 3
+    if transaction_type == "RIGHTS_SHARE_DELIVERY":
+        return 2
+    if transaction_type == "RIGHTS_REFUND":
+        return 3
+    return 4
 
 
 def _ca_bundle_a_target_order_key(txn: Transaction) -> tuple[int, str]:

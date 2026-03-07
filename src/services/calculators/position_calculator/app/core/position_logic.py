@@ -206,10 +206,23 @@ class PositionCalculator:
             "REPLACEMENT_OUT",
             "SPIN_IN",
             "DEMERGER_IN",
+            "RIGHTS_ALLOCATE",
+            "RIGHTS_SHARE_DELIVERY",
+            "RIGHTS_SUBSCRIBE",
+            "RIGHTS_OVERSUBSCRIBE",
+            "RIGHTS_SELL",
+            "RIGHTS_EXPIRE",
         ]:
             transfer_quantity = transaction.quantity
             if transfer_quantity > 0:
-                inflow_types = {"TRANSFER_IN", "MERGER_IN", "EXCHANGE_IN", "REPLACEMENT_IN"}
+                inflow_types = {
+                    "TRANSFER_IN",
+                    "MERGER_IN",
+                    "EXCHANGE_IN",
+                    "REPLACEMENT_IN",
+                    "RIGHTS_ALLOCATE",
+                    "RIGHTS_SHARE_DELIVERY",
+                }
                 transfer_sign = Decimal(1) if txn_type in inflow_types else Decimal(-1)
                 quantity += transfer_sign * transfer_quantity
 
@@ -232,6 +245,19 @@ class PositionCalculator:
                     "cash-only transfer and does not change security position quantity/cost.",
                     txn_type,
                 )
+
+        elif txn_type in {
+            "SPLIT",
+            "REVERSE_SPLIT",
+            "CONSOLIDATION",
+            "BONUS_ISSUE",
+            "STOCK_DIVIDEND",
+        }:
+            # Same-instrument corporate actions: quantity changes, basis is preserved.
+            quantity_delta_sign = (
+                Decimal(-1) if txn_type in {"REVERSE_SPLIT", "CONSOLIDATION"} else Decimal(1)
+            )
+            quantity += quantity_delta_sign * transaction.quantity
 
         elif txn_type in {"SPIN_OFF", "DEMERGER_OUT"}:
             if transaction.quantity > Decimal(0):

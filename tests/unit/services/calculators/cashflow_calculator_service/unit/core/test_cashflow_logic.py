@@ -311,6 +311,84 @@ def test_calculate_transfer_out_transaction(mock_metric, base_transaction_event:
     mock_metric.labels.return_value.inc.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ("transaction_type", "expected_sign"),
+    [
+        ("SPLIT", Decimal("1")),
+        ("BONUS_ISSUE", Decimal("1")),
+        ("STOCK_DIVIDEND", Decimal("1")),
+        ("RIGHTS_ALLOCATE", Decimal("1")),
+        ("RIGHTS_SHARE_DELIVERY", Decimal("1")),
+        ("RIGHTS_REFUND", Decimal("1")),
+        ("REVERSE_SPLIT", Decimal("-1")),
+        ("CONSOLIDATION", Decimal("-1")),
+        ("RIGHTS_SUBSCRIBE", Decimal("-1")),
+        ("RIGHTS_OVERSUBSCRIBE", Decimal("-1")),
+        ("RIGHTS_SELL", Decimal("-1")),
+        ("RIGHTS_EXPIRE", Decimal("-1")),
+    ],
+)
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_transfer_classification_for_ca_expansion_types(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    transaction_type: str,
+    expected_sign: Decimal,
+):
+    event = base_transaction_event.model_copy(update={"transaction_type": transaction_type})
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+    assert cashflow.amount * expected_sign > 0
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("quantity", "expected_sign"),
+    [
+        (Decimal("10"), Decimal("1")),
+        (Decimal("-10"), Decimal("-1")),
+    ],
+)
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_transfer_fallback_sign_uses_quantity_for_unmapped_transfer_type(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    quantity: Decimal,
+    expected_sign: Decimal,
+):
+    """
+    For TRANSFER-classified types not explicitly mapped as in/out,
+    sign must follow quantity direction.
+    """
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "RIGHTS_ADJUSTMENT",  # intentionally not in in/out sign maps
+            "quantity": quantity,
+            "trade_fee": Decimal("0"),
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+    assert cashflow.amount * expected_sign > 0
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
 @patch(
     "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
 )

@@ -738,3 +738,90 @@ def test_spin_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_eng
 
     mock_disposition_engine.add_buy_lot.assert_called_once_with(spin_in_transaction)
     assert spin_in_transaction.net_cost == Decimal("2500")
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    [
+        "SPLIT",
+        "REVERSE_SPLIT",
+        "CONSOLIDATION",
+        "BONUS_ISSUE",
+        "STOCK_DIVIDEND",
+    ],
+)
+def test_same_instrument_ca_restatement_types_preserve_total_basis(
+    cost_calculator, mock_disposition_engine, transaction_type
+):
+    txn = Transaction(
+        transaction_id=f"{transaction_type}_01",
+        portfolio_id="P1",
+        instrument_id="EQ1",
+        security_id="EQ1",
+        transaction_type=transaction_type,
+        transaction_date=datetime(2024, 1, 1),
+        quantity=Decimal("10"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(txn)
+
+    assert txn.net_cost == Decimal("0")
+    assert txn.net_cost_local == Decimal("0")
+    assert txn.gross_cost == Decimal("0")
+    assert txn.realized_gain_loss == Decimal("0")
+    assert txn.realized_gain_loss_local == Decimal("0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_rights_delivery_and_allocate_use_inflow_strategy(cost_calculator, mock_disposition_engine):
+    for tx_type in ("RIGHTS_ALLOCATE", "RIGHTS_SHARE_DELIVERY"):
+        txn = Transaction(
+            transaction_id=f"{tx_type}_01",
+            portfolio_id="P1",
+            instrument_id="RIGHTS_SEC",
+            security_id="RIGHTS_SEC",
+            transaction_type=tx_type,
+            transaction_date=datetime(2024, 1, 1),
+            quantity=Decimal("5"),
+            price=Decimal("0"),
+            gross_transaction_amount=Decimal("0"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+            transaction_fx_rate=Decimal("1.0"),
+        )
+        cost_calculator.calculate_transaction_costs(txn)
+    assert mock_disposition_engine.add_buy_lot.call_count >= 2
+
+
+def test_rights_outflow_types_consume_lots_without_realized_pnl(
+    cost_calculator, mock_disposition_engine
+):
+    mock_disposition_engine.consume_sell_quantity.return_value = (
+        Decimal("100"),
+        Decimal("100"),
+        Decimal("1"),
+        None,
+    )
+    for tx_type in ("RIGHTS_SUBSCRIBE", "RIGHTS_OVERSUBSCRIBE", "RIGHTS_SELL", "RIGHTS_EXPIRE"):
+        txn = Transaction(
+            transaction_id=f"{tx_type}_01",
+            portfolio_id="P1",
+            instrument_id="RIGHTS_SEC",
+            security_id="RIGHTS_SEC",
+            transaction_type=tx_type,
+            transaction_date=datetime(2024, 1, 1),
+            quantity=Decimal("1"),
+            price=Decimal("0"),
+            gross_transaction_amount=Decimal("0"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+            transaction_fx_rate=Decimal("1.0"),
+        )
+        cost_calculator.calculate_transaction_costs(txn)
+        assert txn.realized_gain_loss is None

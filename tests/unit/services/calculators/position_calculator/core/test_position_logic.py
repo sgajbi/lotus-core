@@ -351,6 +351,10 @@ def test_calculate_next_position_for_adjustment_uses_movement_direction():
         ("MERGER_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
         ("EXCHANGE_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
         ("REPLACEMENT_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
+        ("RIGHTS_ALLOCATE", Decimal("5"), Decimal("0"), Decimal("105"), Decimal("10000")),
+        ("RIGHTS_SHARE_DELIVERY", Decimal("2"), Decimal("0"), Decimal("102"), Decimal("10000")),
+        ("RIGHTS_SUBSCRIBE", Decimal("3"), Decimal("0"), Decimal("97"), Decimal("10000")),
+        ("RIGHTS_SELL", Decimal("4"), Decimal("0"), Decimal("96"), Decimal("10000")),
     ],
 )
 def test_calculate_next_position_for_ca_transfer_types(
@@ -375,6 +379,47 @@ def test_calculate_next_position_for_ca_transfer_types(
         transaction_date=datetime.now(),
         price=Decimal("0"),
         gross_transaction_amount=gross_amount,
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    assert next_state.quantity == expected_quantity
+    assert next_state.cost_basis == expected_cost
+    assert next_state.cost_basis_local == expected_cost
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "quantity", "expected_quantity", "expected_cost"),
+    [
+        ("SPLIT", Decimal("20"), Decimal("120"), Decimal("10000")),
+        ("BONUS_ISSUE", Decimal("10"), Decimal("110"), Decimal("10000")),
+        ("STOCK_DIVIDEND", Decimal("5"), Decimal("105"), Decimal("10000")),
+        ("REVERSE_SPLIT", Decimal("15"), Decimal("85"), Decimal("10000")),
+        ("CONSOLIDATION", Decimal("12"), Decimal("88"), Decimal("10000")),
+    ],
+)
+def test_calculate_next_position_for_ca_same_instrument_restatement_types(
+    transaction_type: str,
+    quantity: Decimal,
+    expected_quantity: Decimal,
+    expected_cost: Decimal,
+) -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    event = TransactionEvent(
+        transaction_id=f"{transaction_type}_01",
+        transaction_type=transaction_type,
+        quantity=quantity,
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
         trade_currency="USD",
         currency="USD",
     )
