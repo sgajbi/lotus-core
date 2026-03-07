@@ -690,3 +690,51 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
 
     # Crucially, it should NOT have calculated a realized gain/loss
     assert withdrawal_transaction.realized_gain_loss is None
+
+
+def test_spin_off_basis_only_strategy_reduces_cost_without_lot_consumption(
+    cost_calculator, mock_disposition_engine
+):
+    spin_off_transaction = Transaction(
+        transaction_id="SPIN_OFF_01",
+        portfolio_id="P1",
+        instrument_id="SRC_SEC",
+        security_id="SRC_SEC",
+        transaction_type="SPIN_OFF",
+        transaction_date=datetime(2023, 3, 1),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("2500"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(spin_off_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert spin_off_transaction.net_cost == Decimal("-2500")
+    assert spin_off_transaction.net_cost_local == Decimal("-2500")
+    assert spin_off_transaction.realized_gain_loss is None
+
+
+def test_spin_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
+    spin_in_transaction = Transaction(
+        transaction_id="SPIN_IN_01",
+        portfolio_id="P1",
+        instrument_id="NEW_SEC",
+        security_id="NEW_SEC",
+        transaction_type="SPIN_IN",
+        transaction_date=datetime(2023, 3, 1),
+        quantity=Decimal("20"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("2500"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(spin_in_transaction)
+
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(spin_in_transaction)
+    assert spin_in_transaction.net_cost == Decimal("2500")

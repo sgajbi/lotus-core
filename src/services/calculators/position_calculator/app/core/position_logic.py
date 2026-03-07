@@ -204,6 +204,8 @@ class PositionCalculator:
             "EXCHANGE_OUT",
             "REPLACEMENT_IN",
             "REPLACEMENT_OUT",
+            "SPIN_IN",
+            "DEMERGER_IN",
         ]:
             transfer_quantity = transaction.quantity
             if transfer_quantity > 0:
@@ -230,6 +232,20 @@ class PositionCalculator:
                     "cash-only transfer and does not change security position quantity/cost.",
                     txn_type,
                 )
+
+        elif txn_type in {"SPIN_OFF", "DEMERGER_OUT"}:
+            if transaction.quantity > Decimal(0):
+                quantity -= transaction.quantity
+
+            if transaction.net_cost is not None:
+                cost_basis += transaction.net_cost
+            else:
+                cost_basis -= transaction.gross_transaction_amount
+
+            if transaction.net_cost_local is not None:
+                cost_basis_local += transaction.net_cost_local
+            else:
+                cost_basis_local -= transaction.gross_transaction_amount
 
         elif txn_type == "ADJUSTMENT":
             movement_direction = str(transaction.movement_direction or "INFLOW").upper()

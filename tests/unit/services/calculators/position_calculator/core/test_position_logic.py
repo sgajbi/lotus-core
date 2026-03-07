@@ -383,3 +383,31 @@ def test_calculate_next_position_for_ca_transfer_types(
     assert next_state.quantity == expected_quantity
     assert next_state.cost_basis == expected_cost
     assert next_state.cost_basis_local == expected_cost
+
+
+def test_calculate_next_position_for_spin_off_basis_only_transfer() -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    event = TransactionEvent(
+        transaction_id="SPIN_OFF_BASIS_ONLY_01",
+        transaction_type="SPIN_OFF",
+        quantity=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="SRC_SEC",
+        security_id="SRC_SEC",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("2500"),
+        net_cost=Decimal("-2500"),
+        net_cost_local=Decimal("-2500"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    assert next_state.quantity == Decimal("100")
+    assert next_state.cost_basis == Decimal("7500")
+    assert next_state.cost_basis_local == Decimal("7500")
