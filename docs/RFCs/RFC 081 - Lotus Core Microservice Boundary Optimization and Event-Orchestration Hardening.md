@@ -365,6 +365,10 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 - Added valuation-readiness trigger path:
   - orchestrator emits `portfolio_day_ready_for_valuation` alongside transaction completion
   - valuation service consumes readiness events and idempotently upserts valuation jobs.
+- Added valuation completion gate path:
+  - valuation service emits `valuation_day_completed` after valuation snapshot persistence
+  - timeseries service consumes `valuation_day_completed` as canonical trigger while
+    retaining `daily_position_snapshot_persisted` compatibility.
 
 ### 15.4 Race-condition safeguards applied in this slice
 
@@ -384,10 +388,10 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   - processed transaction signal present
   - cashflow signal present.
   - `portfolio_day_ready_for_valuation` for security-scoped stage completions.
-- Valuation-day and timeseries-day completion gates remain in planned follow-on slices.
+- `valuation_day_completed` from valuation to timeseries is now implemented.
+- Timeseries-day and aggregation-day completion gates remain in planned follow-on slices.
 
 ### 15.3 Remaining roadmap alignment
 
-- Keep `valuation_day_completed`, `position_timeseries_day_completed`,
-  and `portfolio_aggregation_day_completed`
+- Keep `position_timeseries_day_completed` and `portfolio_aggregation_day_completed`
   as next-stage gates for subsequent RFC-081 slices.

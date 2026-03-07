@@ -3,12 +3,16 @@ import json
 import logging
 
 from confluent_kafka import Message
-from portfolio_common.config import KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC
+from portfolio_common.config import (
+    KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
+    KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
+)
 from portfolio_common.database_models import DailyPositionSnapshot
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
     PortfolioValuationRequiredEvent,
+    ValuationDayCompletedEvent,
 )
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -215,6 +219,28 @@ class ValuationConsumer(BaseConsumer):
                             event_type="DailyPositionSnapshotPersisted",
                             topic=KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
                             payload=completion_event.model_dump(mode="json"),
+                            correlation_id=correlation_id,
+                        )
+                        valuation_completion_event = ValuationDayCompletedEvent(
+                            daily_position_snapshot_id=persisted_snapshot.id,
+                            portfolio_id=persisted_snapshot.portfolio_id,
+                            security_id=persisted_snapshot.security_id,
+                            valuation_date=persisted_snapshot.date,
+                            epoch=persisted_snapshot.epoch,
+                            valuation_status=persisted_snapshot.valuation_status,
+                            correlation_id=correlation_id,
+                        )
+                        await outbox_repo.create_outbox_event(
+                            aggregate_type="ValuationStage",
+                            aggregate_id=(
+                                f"{persisted_snapshot.portfolio_id}:"
+                                f"{persisted_snapshot.security_id}:"
+                                f"{persisted_snapshot.date}:"
+                                f"{persisted_snapshot.epoch}"
+                            ),
+                            event_type="ValuationDayCompleted",
+                            topic=KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
+                            payload=valuation_completion_event.model_dump(mode="json"),
                             correlation_id=correlation_id,
                         )
 

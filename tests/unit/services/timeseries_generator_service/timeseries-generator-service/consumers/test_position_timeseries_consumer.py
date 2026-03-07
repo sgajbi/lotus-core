@@ -9,7 +9,10 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     Instrument,
 )
-from portfolio_common.events import DailyPositionSnapshotPersistedEvent
+from portfolio_common.events import (
+    DailyPositionSnapshotPersistedEvent,
+    ValuationDayCompletedEvent,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.timeseries_generator_service.app.consumers.position_timeseries_consumer import (
@@ -146,3 +149,46 @@ async def test_process_message_skips_stale_epoch(
         mock_repo.upsert_position_timeseries.assert_not_called()
         # The fencer now handles logging, so we don't need to check caplog here.
         # The key assertion is that the business logic was not executed.
+
+
+async def test_process_message_accepts_valuation_day_completed_event(
+    consumer: PositionTimeseriesConsumer,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    valuation_event = ValuationDayCompletedEvent(
+        daily_position_snapshot_id=123,
+        portfolio_id="PORT_TS_POS_01",
+        security_id="SEC_TS_POS_01",
+        valuation_date=date(2025, 8, 12),
+        epoch=1,
+    )
+    msg = MagicMock()
+    msg.value.return_value = valuation_event.model_dump_json().encode("utf-8")
+    msg.headers.return_value = []
+
+    mock_repo.get_instrument.return_value = Instrument(
+        security_id=valuation_event.security_id, currency="USD"
+    )
+    mock_db_session.get.return_value = DailyPositionSnapshot(
+        id=valuation_event.daily_position_snapshot_id,
+        quantity=Decimal(100),
+        cost_basis=Decimal(1000),
+        market_value_local=Decimal(1100),
+    )
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal(1050)
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+
+    with patch(
+        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = True
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await consumer._process_message_with_retry(msg)
+
+    mock_repo.upsert_position_timeseries.assert_awaited_once()

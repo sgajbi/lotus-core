@@ -306,3 +306,20 @@ class PortfolioDayReadyForValuationEvent(BaseModel):
     epoch: int = 0
     readiness_reason: str = "transaction_processing_completed"
     correlation_id: Optional[str] = None
+
+
+class ValuationDayCompletedEvent(BaseModel):
+    """
+    Stage-gate completion event emitted after valuation persistence for a
+    portfolio-security business day.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    daily_position_snapshot_id: int
+    portfolio_id: str
+    security_id: str
+    valuation_date: date
+    epoch: int = 0
+    valuation_status: Optional[str] = None
+    correlation_id: Optional[str] = None

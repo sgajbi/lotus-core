@@ -1,27 +1,30 @@
-# services/timeseries-generator-service/app/consumer_manager.py
+import asyncio
 import logging
 import signal
-import asyncio
-import uvicorn
 
+import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
+    KAFKA_PERSISTENCE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
-    KAFKA_PERSISTENCE_DLQ_TOPIC
+    KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
 )
-from .consumers.position_timeseries_consumer import PositionTimeseriesConsumer
-from .consumers.portfolio_timeseries_consumer import PortfolioTimeseriesConsumer
-from .core.aggregation_scheduler import AggregationScheduler
 from portfolio_common.kafka_admin import ensure_topics_exist
+
+from .consumers.portfolio_timeseries_consumer import PortfolioTimeseriesConsumer
+from .consumers.position_timeseries_consumer import PositionTimeseriesConsumer
+from .core.aggregation_scheduler import AggregationScheduler
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
+
 
 class ConsumerManager:
     """
     Manages the lifecycle of Kafka consumers and the aggregation scheduler.
     """
+
     def __init__(self):
         self.consumers = []
         self.tasks = []
@@ -39,6 +42,15 @@ class ConsumerManager:
                 service_prefix=service_prefix
             )
         )
+        self.consumers.append(
+            PositionTimeseriesConsumer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                topic=KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
+                group_id="timeseries_generator_group_positions_gate",
+                dlq_topic=dlq_topic,
+                service_prefix=service_prefix,
+            )
+        )
 
         self.consumers.append(
             PortfolioTimeseriesConsumer(
@@ -52,10 +64,16 @@ class ConsumerManager:
 
         self.scheduler = AggregationScheduler()
 
-        logger.info(f"ConsumerManager initialized with {len(self.consumers)} consumer(s) and 1 scheduler.")
+        logger.info(
+            "ConsumerManager initialized with %s consumer(s) and 1 scheduler.",
+            len(self.consumers),
+        )
 
     def _signal_handler(self, signum, frame):
-        logger.info(f"Received shutdown signal: {signal.Signals(signum).name}. Initiating graceful shutdown...")
+        logger.info(
+            "Received shutdown signal: %s. Initiating graceful shutdown...",
+            signal.Signals(signum).name,
+        )
         self._shutdown_event.set()
 
     async def run(self):
