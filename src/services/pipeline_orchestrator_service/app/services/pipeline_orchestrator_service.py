@@ -1,6 +1,10 @@
-from portfolio_common.config import KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC
+from portfolio_common.config import (
+    KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
+    KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
+)
 from portfolio_common.events import (
     CashflowCalculatedEvent,
+    PortfolioDayReadyForValuationEvent,
     TransactionEvent,
     TransactionProcessingCompletedEvent,
 )
@@ -76,3 +80,22 @@ class PipelineOrchestratorService:
             payload=completion_event.model_dump(mode="json"),
             correlation_id=correlation_id,
         )
+
+        if stage.security_id:
+            readiness_event = PortfolioDayReadyForValuationEvent(
+                portfolio_id=stage.portfolio_id,
+                security_id=stage.security_id,
+                valuation_date=stage.business_date,
+                epoch=stage.epoch,
+                correlation_id=correlation_id,
+            )
+            await self.outbox_repo.create_outbox_event(
+                aggregate_type="ValuationReadiness",
+                aggregate_id=(
+                    f"{stage.portfolio_id}:{stage.security_id}:{stage.business_date}:{stage.epoch}"
+                ),
+                event_type="PortfolioDayReadyForValuation",
+                topic=KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
+                payload=readiness_event.model_dump(mode="json"),
+                correlation_id=correlation_id,
+            )

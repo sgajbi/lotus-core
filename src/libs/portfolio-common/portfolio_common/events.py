@@ -290,3 +290,19 @@ class TransactionProcessingCompletedEvent(BaseModel):
     stage_name: str = "TRANSACTION_PROCESSING"
     readiness_reason: str = "cost_and_cashflow_completed"
     correlation_id: Optional[str] = None
+
+
+class PortfolioDayReadyForValuationEvent(BaseModel):
+    """
+    Stage-gate event emitted when a portfolio-security business day is ready
+    for valuation scheduling.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    portfolio_id: str
+    security_id: str
+    valuation_date: date
+    epoch: int = 0
+    readiness_reason: str = "transaction_processing_completed"
+    correlation_id: Optional[str] = None

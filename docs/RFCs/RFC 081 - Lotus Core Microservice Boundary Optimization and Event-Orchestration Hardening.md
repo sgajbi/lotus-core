@@ -379,13 +379,15 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 
 ### 15.2 Current scope boundary
 
-- Implemented gate in this slice is `transaction_processing_completed` based on:
+- Implemented gates in this slice are:
+  - `transaction_processing_completed` based on:
   - processed transaction signal present
   - cashflow signal present.
-- Valuation-day and timeseries-day gate events remain in planned follow-on slices.
+  - `portfolio_day_ready_for_valuation` for security-scoped stage completions.
+- Valuation-day and timeseries-day completion gates remain in planned follow-on slices.
 
 ### 15.3 Remaining roadmap alignment
 
-- Keep `portfolio_day_ready_for_valuation`, `valuation_day_completed`,
-  `position_timeseries_day_completed`, and `portfolio_aggregation_day_completed`
+- Keep `valuation_day_completed`, `position_timeseries_day_completed`,
+  and `portfolio_aggregation_day_completed`
   as next-stage gates for subsequent RFC-081 slices.

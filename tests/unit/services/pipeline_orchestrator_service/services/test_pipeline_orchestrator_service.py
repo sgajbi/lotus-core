@@ -111,11 +111,15 @@ async def test_cost_and_cashflow_signals_emit_single_completion_event():
     await service.register_processed_transaction(_txn_event(), correlation_id="corr-2")
     await service.register_cashflow_calculated(_cashflow_event(), correlation_id="corr-2")
 
-    outbox_repo.create_outbox_event.assert_awaited_once()
-    payload = outbox_repo.create_outbox_event.await_args.kwargs["payload"]
-    assert payload["transaction_id"] == "TXN-PIPE-1"
-    assert payload["stage_name"] == "TRANSACTION_PROCESSING"
-    assert payload["readiness_reason"] == "cost_and_cashflow_completed"
+    assert outbox_repo.create_outbox_event.await_count == 2
+    calls = outbox_repo.create_outbox_event.await_args_list
+    completion_payload = calls[0].kwargs["payload"]
+    readiness_payload = calls[1].kwargs["payload"]
+    assert completion_payload["transaction_id"] == "TXN-PIPE-1"
+    assert completion_payload["stage_name"] == "TRANSACTION_PROCESSING"
+    assert completion_payload["readiness_reason"] == "cost_and_cashflow_completed"
+    assert readiness_payload["portfolio_id"] == "PORT-1"
+    assert readiness_payload["security_id"] == "SEC-1"
 
 
 @pytest.mark.asyncio
