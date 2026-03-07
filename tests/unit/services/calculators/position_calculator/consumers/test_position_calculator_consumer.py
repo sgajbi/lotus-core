@@ -82,6 +82,19 @@ def mock_kafka_message(mock_stage_event: TransactionProcessingCompletedEvent) ->
 
 
 @pytest.fixture
+def mock_kafka_message_replay(mock_transaction_event: TransactionEvent) -> MagicMock:
+    mock_msg = MagicMock()
+    mock_msg.value.return_value = mock_transaction_event.model_dump_json().encode("utf-8")
+    mock_msg.key.return_value = mock_transaction_event.portfolio_id.encode("utf-8")
+    mock_msg.topic.return_value = "processed_transactions_completed"
+    mock_msg.partition.return_value = 0
+    mock_msg.offset.return_value = 124
+    mock_msg.error.return_value = None
+    mock_msg.headers.return_value = [("correlation_id", b"test-corr-id")]
+    return mock_msg
+
+
+@pytest.fixture
 def mock_dependencies():
     """Mocks all external dependencies for the consumer."""
     mock_db_session = AsyncMock(spec=AsyncSession)
@@ -198,6 +211,19 @@ async def test_consumer_retries_when_transaction_not_available_yet(
         await position_consumer.process_message(mock_kafka_message)
 
     position_consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_consumer_accepts_replay_transaction_payload(
+    position_consumer: TransactionEventConsumer,
+    mock_kafka_message_replay: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+
+    await position_consumer.process_message(mock_kafka_message_replay)
+
+    mock_dependencies["calculate_logic"].assert_awaited_once()
+    mock_dependencies["position_repo"].get_transaction_by_id.assert_not_awaited()
 
 
 async def test_consumer_sends_to_dlq_on_logic_failure(
