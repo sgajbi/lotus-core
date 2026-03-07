@@ -55,6 +55,7 @@ TOPICS_TO_CREATE = [
     # Valuation Job Topic
     "valuation_required",
     "portfolio_day_ready_for_valuation",
+    "valuation_day_completed",
     # Reprocessing Topic
     "transactions_reprocessing_requested", # <-- NEW TOPIC
 ]
