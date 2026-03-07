@@ -406,6 +406,10 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   gated/replay consumers, outbox dispatcher, and web server tasks.
 - Cost calculation runtime now applies fail-fast supervision for
   core/reprocessing consumers, outbox dispatcher, and web server tasks.
+- Runtime supervision logic is now centralized in shared
+  `portfolio_common.runtime_supervision.wait_for_shutdown_or_task_failure`,
+  removing duplicated lifecycle logic across service managers and reducing
+  maintenance and drift risk.
 
 ### 15.2 Current scope boundary
 
