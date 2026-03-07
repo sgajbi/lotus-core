@@ -1022,6 +1022,48 @@ class AnalyticsExportJob(Base):
     )
 
 
+class PipelineStageState(Base):
+    """
+    Durable state tracker for orchestrated stage gates.
+    Stage-1 scope tracks transaction-level readiness across independent processors.
+    """
+
+    __tablename__ = "pipeline_stage_state"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stage_name = Column(String, nullable=False, index=True)
+    transaction_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, nullable=False, index=True)
+    security_id = Column(String, nullable=True, index=True)
+    business_date = Column(Date, nullable=False, index=True)
+    epoch = Column(Integer, nullable=False, default=0, server_default="0", index=True)
+    status = Column(String, nullable=False, default="PENDING", server_default="PENDING", index=True)
+    cost_event_seen = Column(Boolean, nullable=False, default=False, server_default="f")
+    cashflow_event_seen = Column(Boolean, nullable=False, default=False, server_default="f")
+    ready_emitted_at = Column(DateTime(timezone=True), nullable=True)
+    last_source_event_type = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "stage_name",
+            "transaction_id",
+            "epoch",
+            name="_pipeline_stage_state_stage_tx_epoch_uc",
+        ),
+        Index(
+            "ix_pipeline_stage_state_portfolio_date_stage_status",
+            "portfolio_id",
+            "business_date",
+            "stage_name",
+            "status",
+        ),
+    )
+
+
 class CashflowRule(Base):
     """
     Defines the business rules for generating a cashflow from a transaction type.
