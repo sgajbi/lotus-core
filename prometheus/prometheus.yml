@@ -18,6 +18,9 @@ scrape_configs:
   - job_name: 'pipeline_orchestrator_service'
     static_configs:
       - targets: ['pipeline_orchestrator_service:8086']
+  - job_name: 'valuation_orchestrator_service'
+    static_configs:
+      - targets: ['valuation_orchestrator_service:8087']
   - job_name: 'cashflow_calculator_service'
     static_configs:
       - targets: ['cashflow_calculator_service:8082']

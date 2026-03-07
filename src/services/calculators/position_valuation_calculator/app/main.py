@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """
-    Initializes and runs the ConsumerManager.
+    Initializes and runs the valuation worker runtime.
     """
-    logger.info("Position Valuation Service starting up...")
+    logger.info("Position Valuation Worker Service starting up...")
 
     # Instrument the web app before starting the server
     Instrumentator().instrument(web_app).expose(web_app)
@@ -28,10 +28,10 @@ async def main():
         await manager.run()
     except Exception as e:
         logger.critical(
-            f"Position Valuation Service encountered a critical error: {e}", exc_info=True
+            f"Position Valuation Worker Service encountered a critical error: {e}", exc_info=True
         )
     finally:
-        logger.info("Position Valuation Service has shut down.")
+        logger.info("Position Valuation Worker Service has shut down.")
 
 
 if __name__ == "__main__":
