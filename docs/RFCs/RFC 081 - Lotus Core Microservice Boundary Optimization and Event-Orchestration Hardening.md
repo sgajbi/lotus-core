@@ -354,6 +354,12 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 - Added quality coverage for stage gate behavior:
   - unit tests for orchestrator gate logic
   - integration tests for repository merge/idempotent-completion behavior.
+- Routed position calculation trigger to orchestrator gate:
+  - `position_calculator_service` now consumes `transaction_processing_completed`
+  - consumer resolves canonical transaction from persistence by `transaction_id`
+  - gate epoch is applied before position calculation for deterministic replay alignment.
+  - replay compatibility retained by continuing to accept `processed_transactions_completed`
+    for epoch-based reprocessing emissions.
 
 ### 15.2 Current scope boundary
 

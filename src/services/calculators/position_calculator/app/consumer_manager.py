@@ -8,6 +8,7 @@ from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
     KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+    KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -33,8 +34,19 @@ class ConsumerManager:
         self.consumers.append(
             TransactionEventConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                topic=KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
+                group_id="position_calculator_group_gated",
+                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                service_prefix="POS",
+            )
+        )
+
+        # Replay and backdated correction flow currently emits processed transaction events.
+        self.consumers.append(
+            TransactionEventConsumer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
-                group_id="position_calculator_group",
+                group_id="position_calculator_group_replay",
                 dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
                 service_prefix="POS",
             )
