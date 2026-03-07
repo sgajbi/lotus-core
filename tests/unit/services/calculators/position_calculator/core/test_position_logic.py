@@ -340,3 +340,46 @@ def test_calculate_next_position_for_adjustment_uses_movement_direction():
     assert mid_state.cost_basis == Decimal("1050")
     assert final_state.quantity == Decimal("1030")
     assert final_state.cost_basis == Decimal("1030")
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "quantity", "gross_amount", "expected_quantity", "expected_cost"),
+    [
+        ("MERGER_OUT", Decimal("10"), Decimal("1000"), Decimal("90"), Decimal("9000")),
+        ("EXCHANGE_OUT", Decimal("10"), Decimal("1000"), Decimal("90"), Decimal("9000")),
+        ("REPLACEMENT_OUT", Decimal("10"), Decimal("1000"), Decimal("90"), Decimal("9000")),
+        ("MERGER_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
+        ("EXCHANGE_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
+        ("REPLACEMENT_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
+    ],
+)
+def test_calculate_next_position_for_ca_transfer_types(
+    transaction_type: str,
+    quantity: Decimal,
+    gross_amount: Decimal,
+    expected_quantity: Decimal,
+    expected_cost: Decimal,
+) -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    event = TransactionEvent(
+        transaction_id=f"{transaction_type}_01",
+        transaction_type=transaction_type,
+        quantity=quantity,
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=gross_amount,
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    assert next_state.quantity == expected_quantity
+    assert next_state.cost_basis == expected_cost
+    assert next_state.cost_basis_local == expected_cost

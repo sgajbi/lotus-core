@@ -2,8 +2,21 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-POSITION_INCREASE_TRANSACTION_TYPES = {"BUY", "TRANSFER_IN"}
-POSITION_DECREASE_TRANSACTION_TYPES = {"SELL", "TRANSFER_OUT"}
+POSITION_INCREASE_TRANSACTION_TYPES = {
+    "BUY",
+    "TRANSFER_IN",
+    "MERGER_IN",
+    "EXCHANGE_IN",
+    "REPLACEMENT_IN",
+}
+POSITION_DECREASE_TRANSACTION_TYPES = {
+    "SELL",
+    "CASH_IN_LIEU",
+    "TRANSFER_OUT",
+    "MERGER_OUT",
+    "EXCHANGE_OUT",
+    "REPLACEMENT_OUT",
+}
 
 
 def transaction_quantity_effect_decimal(transaction_type: str | None, quantity) -> Decimal:

@@ -19,6 +19,13 @@ class TransactionType(str, Enum):
     FEE = "FEE"
     TRANSFER_IN = "TRANSFER_IN"
     TRANSFER_OUT = "TRANSFER_OUT"
+    MERGER_OUT = "MERGER_OUT"
+    MERGER_IN = "MERGER_IN"
+    EXCHANGE_OUT = "EXCHANGE_OUT"
+    EXCHANGE_IN = "EXCHANGE_IN"
+    REPLACEMENT_OUT = "REPLACEMENT_OUT"
+    REPLACEMENT_IN = "REPLACEMENT_IN"
+    CASH_IN_LIEU = "CASH_IN_LIEU"
     ADJUSTMENT = "ADJUSTMENT"
     OTHER = "OTHER"  # Catch-all for any other transaction types not explicitly defined
 

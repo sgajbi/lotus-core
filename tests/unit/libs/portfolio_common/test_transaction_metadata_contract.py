@@ -25,6 +25,13 @@ def test_transaction_event_accepts_linkage_and_policy_metadata() -> None:
         source_system="OMS_PRIMARY",
         cash_entry_mode="UPSTREAM_PROVIDED",
         external_cash_transaction_id="CASH-ENTRY-2026-0001",
+        parent_event_reference="UPSTREAM-CA-REF-2026-0001",
+        child_role="SOURCE_POSITION_CLOSE",
+        source_instrument_id="OLD_SEC_001",
+        target_instrument_id="NEW_SEC_001",
+        linked_cash_transaction_id="CA-CIL-CASH-001",
+        has_synthetic_flow=True,
+        synthetic_flow_classification="POSITION_TRANSFER_OUT",
     )
 
     assert event.economic_event_id == "EVT-2026-001"
@@ -34,6 +41,13 @@ def test_transaction_event_accepts_linkage_and_policy_metadata() -> None:
     assert event.source_system == "OMS_PRIMARY"
     assert event.cash_entry_mode == "UPSTREAM_PROVIDED"
     assert event.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
+    assert event.parent_event_reference == "UPSTREAM-CA-REF-2026-0001"
+    assert event.child_role == "SOURCE_POSITION_CLOSE"
+    assert event.source_instrument_id == "OLD_SEC_001"
+    assert event.target_instrument_id == "NEW_SEC_001"
+    assert event.linked_cash_transaction_id == "CA-CIL-CASH-001"
+    assert event.has_synthetic_flow is True
+    assert event.synthetic_flow_classification == "POSITION_TRANSFER_OUT"
 
 
 def test_transaction_db_model_exposes_metadata_columns() -> None:
@@ -46,3 +60,10 @@ def test_transaction_db_model_exposes_metadata_columns() -> None:
     assert "source_system" in column_names
     assert "cash_entry_mode" in column_names
     assert "external_cash_transaction_id" in column_names
+    assert "parent_event_reference" in column_names
+    assert "child_role" in column_names
+    assert "source_instrument_id" in column_names
+    assert "target_instrument_id" in column_names
+    assert "linked_cash_transaction_id" in column_names
+    assert "has_synthetic_flow" in column_names
+    assert "synthetic_flow_classification" in column_names
