@@ -7,6 +7,7 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
     KAFKA_VALUATION_REQUIRED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -17,6 +18,7 @@ from .consumers.price_event_consumer import PriceEventConsumer
 
 # --- END NEW IMPORTS ---
 from .consumers.valuation_consumer import ValuationConsumer
+from .consumers.valuation_readiness_consumer import ValuationReadinessConsumer
 
 # --- NEW IMPORTS ---
 from .core.reprocessing_worker import ReprocessingWorker
@@ -45,6 +47,14 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_VALUATION_REQUIRED_TOPIC,
                 group_id=f"{group_id}_jobs",
+                service_prefix=service_prefix,
+            )
+        )
+        self.consumers.append(
+            ValuationReadinessConsumer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                topic=KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
+                group_id=f"{group_id}_readiness",
                 service_prefix=service_prefix,
             )
         )

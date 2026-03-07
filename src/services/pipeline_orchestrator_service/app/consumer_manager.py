@@ -7,6 +7,7 @@ from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_CASHFLOW_CALCULATED_TOPIC,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
     KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
     KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
 )
@@ -55,6 +56,7 @@ class ConsumerManager:
     async def run(self):
         required_topics = [consumer.topic for consumer in self.consumers]
         required_topics.append(KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC)
+        required_topics.append(KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC)
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)
