@@ -399,6 +399,13 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 - Timeseries runtime now applies fail-fast supervision across
   timeseries consumers, aggregation scheduler, outbox dispatcher,
   and web server tasks to enforce deterministic shutdown on critical task failure.
+- Persistence runtime now applies fail-fast supervision across
+  domain consumers, outbox dispatcher, and web server tasks, eliminating
+  silent degraded processing when a critical runtime task exits unexpectedly.
+- Position calculation runtime now applies fail-fast supervision for
+  gated/replay consumers, outbox dispatcher, and web server tasks.
+- Cost calculation runtime now applies fail-fast supervision for
+  core/reprocessing consumers, outbox dispatcher, and web server tasks.
 
 ### 15.2 Current scope boundary
 
