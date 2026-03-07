@@ -393,6 +393,9 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 - Pipeline orchestrator runtime now applies the same fail-fast supervision model,
   ensuring consumer/dispatcher/web task crashes trigger deterministic service shutdown
   instead of silent degraded processing.
+- Position valuation runtime now applies fail-fast supervision across
+  consumers, outbox dispatcher, valuation scheduler, reprocessing worker,
+  and web server tasks to prevent silent partial-outage operation.
 
 ### 15.2 Current scope boundary
 

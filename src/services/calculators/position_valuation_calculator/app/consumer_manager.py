@@ -114,7 +114,30 @@ class ConsumerManager:
         self.tasks.append(asyncio.create_task(server.serve()))
 
         logger.info("ConsumerManager is running. Press Ctrl+C to exit.")
-        await self._shutdown_event.wait()
+        shutdown_wait_task = asyncio.create_task(self._shutdown_event.wait())
+        runtime_error = None
+
+        done, _ = await asyncio.wait(
+            [*self.tasks, shutdown_wait_task], return_when=asyncio.FIRST_COMPLETED
+        )
+        if shutdown_wait_task not in done:
+            failed_task = next(iter(done))
+            task_name = failed_task.get_name() or "unnamed-task"
+            if failed_task.cancelled():
+                runtime_error = RuntimeError(
+                    f"Critical service task '{task_name}' was cancelled unexpectedly."
+                )
+            else:
+                task_error = failed_task.exception()
+                if task_error is None:
+                    runtime_error = RuntimeError(
+                        f"Critical service task '{task_name}' exited unexpectedly."
+                    )
+                else:
+                    runtime_error = RuntimeError(f"Critical service task '{task_name}' failed.")
+                    runtime_error.__cause__ = task_error
+            logger.error("Critical runtime task failure detected; initiating shutdown.")
+            self._shutdown_event.set()
 
         logger.info("Shutdown event received. Stopping all tasks...")
         for consumer in self.consumers:
@@ -126,7 +149,10 @@ class ConsumerManager:
         self.reprocessing_worker.stop()
         server.should_exit = True
 
+        shutdown_wait_task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
         logger.info(
             "All consumer, dispatcher, and web server tasks have been successfully shut down."
         )
+        if runtime_error is not None:
+            raise runtime_error
