@@ -148,6 +148,16 @@ class PositionRepository:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
+    @async_timed(repository="PositionRepository", method="get_transaction_by_id")
+    async def get_transaction_by_id(
+        self, transaction_id: str, *, portfolio_id: str | None = None
+    ) -> Optional[Transaction]:
+        stmt = select(Transaction).where(Transaction.transaction_id == transaction_id)
+        if portfolio_id:
+            stmt = stmt.where(Transaction.portfolio_id == portfolio_id)
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
     @async_timed(repository="PositionRepository", method="delete_positions_from")
     async def delete_positions_from(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int

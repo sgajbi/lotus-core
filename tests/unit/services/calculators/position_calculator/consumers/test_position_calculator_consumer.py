@@ -4,13 +4,14 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import TransactionEvent, TransactionProcessingCompletedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.position_calculator.app.consumers.transaction_event_consumer import (
     TransactionEventConsumer,
+    TransactionNotYetAvailableError,
 )
 from src.services.calculators.position_calculator.app.repositories.position_repository import (
     PositionRepository,
@@ -25,7 +26,7 @@ def position_consumer():
     """Provides a clean instance of the consumer for each test."""
     consumer = TransactionEventConsumer(
         bootstrap_servers="mock_server",
-        topic="processed_transactions_completed",
+        topic="transaction_processing_completed",
         group_id="test_group",
         dlq_topic="test.dlq",
     )
@@ -56,12 +57,23 @@ def mock_transaction_event() -> TransactionEvent:
 
 
 @pytest.fixture
-def mock_kafka_message(mock_transaction_event: TransactionEvent) -> MagicMock:
-    """Creates a mock Kafka message from a transaction event."""
+def mock_stage_event() -> TransactionProcessingCompletedEvent:
+    return TransactionProcessingCompletedEvent(
+        transaction_id="TXN_POS_CALC_02",
+        portfolio_id="PORT_POS_CALC_01",
+        security_id="SEC_POS_CALC_01",
+        business_date=datetime(2025, 8, 1).date(),
+        epoch=2,
+    )
+
+
+@pytest.fixture
+def mock_kafka_message(mock_stage_event: TransactionProcessingCompletedEvent) -> MagicMock:
+    """Creates a mock Kafka message from a stage gate event."""
     mock_msg = MagicMock()
-    mock_msg.value.return_value = mock_transaction_event.model_dump_json().encode("utf-8")
-    mock_msg.key.return_value = mock_transaction_event.portfolio_id.encode("utf-8")
-    mock_msg.topic.return_value = "processed_transactions_completed"
+    mock_msg.value.return_value = mock_stage_event.model_dump_json().encode("utf-8")
+    mock_msg.key.return_value = mock_stage_event.portfolio_id.encode("utf-8")
+    mock_msg.topic.return_value = "transaction_processing_completed"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 123
     mock_msg.error.return_value = None
@@ -115,33 +127,13 @@ def mock_dependencies():
 async def test_consumer_calls_logic_with_original_event(
     position_consumer: TransactionEventConsumer,
     mock_kafka_message: MagicMock,
+    mock_transaction_event: TransactionEvent,
     mock_dependencies: dict,
 ):
     """Tests that an original event (no epoch in payload) calls the logic, and the event object passed has epoch=None."""  # noqa: E501
     # ARRANGE
     mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
-
-    # ACT
-    await position_consumer.process_message(mock_kafka_message)
-
-    # ASSERT
-    mock_dependencies["calculate_logic"].assert_awaited_once()
-    call_kwargs = mock_dependencies["calculate_logic"].call_args.kwargs
-    passed_event: TransactionEvent = call_kwargs["event"]
-    assert passed_event.epoch is None
-
-
-async def test_consumer_passes_epoch_from_payload_to_logic(
-    position_consumer: TransactionEventConsumer,
-    mock_kafka_message: MagicMock,
-    mock_transaction_event: TransactionEvent,
-    mock_dependencies: dict,
-):
-    """Tests that the consumer correctly parses the epoch from the payload and passes it to the logic layer inside the event object."""  # noqa: E501
-    # ARRANGE
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
-    mock_transaction_event.epoch = 2
-    mock_kafka_message.value.return_value = mock_transaction_event.model_dump_json().encode("utf-8")
+    mock_dependencies["position_repo"].get_transaction_by_id.return_value = mock_transaction_event
 
     # ACT
     await position_consumer.process_message(mock_kafka_message)
@@ -151,6 +143,30 @@ async def test_consumer_passes_epoch_from_payload_to_logic(
     call_kwargs = mock_dependencies["calculate_logic"].call_args.kwargs
     passed_event: TransactionEvent = call_kwargs["event"]
     assert passed_event.epoch == 2
+
+
+async def test_consumer_passes_epoch_from_payload_to_logic(
+    position_consumer: TransactionEventConsumer,
+    mock_kafka_message: MagicMock,
+    mock_transaction_event: TransactionEvent,
+    mock_stage_event: TransactionProcessingCompletedEvent,
+    mock_dependencies: dict,
+):
+    """Consumer must apply stage epoch to the loaded canonical transaction payload."""
+    # ARRANGE
+    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["position_repo"].get_transaction_by_id.return_value = mock_transaction_event
+    mock_stage_event.epoch = 7
+    mock_kafka_message.value.return_value = mock_stage_event.model_dump_json().encode("utf-8")
+
+    # ACT
+    await position_consumer.process_message(mock_kafka_message)
+
+    # ASSERT
+    mock_dependencies["calculate_logic"].assert_awaited_once()
+    call_kwargs = mock_dependencies["calculate_logic"].call_args.kwargs
+    passed_event: TransactionEvent = call_kwargs["event"]
+    assert passed_event.epoch == 7
 
 
 async def test_consumer_skips_already_processed_events(
@@ -170,10 +186,24 @@ async def test_consumer_skips_already_processed_events(
     mock_dependencies["calculate_logic"].assert_not_awaited()
 
 
-# --- NEW TEST ---
+async def test_consumer_retries_when_transaction_not_available_yet(
+    position_consumer: TransactionEventConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["position_repo"].get_transaction_by_id.return_value = None
+
+    with pytest.raises(TransactionNotYetAvailableError):
+        await position_consumer.process_message(mock_kafka_message)
+
+    position_consumer._send_to_dlq_async.assert_not_awaited()
+
+
 async def test_consumer_sends_to_dlq_on_logic_failure(
     position_consumer: TransactionEventConsumer,
     mock_kafka_message: MagicMock,
+    mock_transaction_event: TransactionEvent,
     mock_dependencies: dict,
 ):
     """
@@ -184,8 +214,10 @@ async def test_consumer_sends_to_dlq_on_logic_failure(
     # ARRANGE
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_calculate_logic = mock_dependencies["calculate_logic"]
+    mock_position_repo = mock_dependencies["position_repo"]
 
     mock_idempotency_repo.is_event_processed.return_value = False
+    mock_position_repo.get_transaction_by_id.return_value = mock_transaction_event
 
     # Simulate a crash inside the core business logic
     processing_error = Exception("Unexpected database constraint violation!")
