@@ -58,7 +58,7 @@ This bundle extends RFC-075 with source-retained transfer behavior, multi-target
 - Parent-child dependency orchestration for one-source-many-target processing.
 - Deterministic target leg ordering (`target_leg_index` fallback rules).
 
-### Slice A3
+### Slice A3 (implemented in this change set)
 
 - Allocation-group reconciliation and multi-target basis conservation checks.
 - Observability and replay diagnostics for bundle-specific failure modes.
@@ -84,4 +84,4 @@ This bundle extends RFC-075 with source-retained transfer behavior, multi-target
 - Slice A0: **Completed** (code + tests + migration added)
 - Slice A1: **Completed** (Bundle A validation module + consumer guardrails + tests)
 - Slice A2: **Completed** (deterministic Bundle A dependency/target ordering in replay + engine sort)
-- Slice A3+: Pending
+- Slice A3: **Completed** (group-level basis reconciliation + dependency-gap diagnostics with observability logs)

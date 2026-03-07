@@ -23,6 +23,7 @@ from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
+    DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
     UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
     assert_ca_bundle_a_transaction_valid,
     assert_portfolio_flow_cash_entry_mode_allowed,
@@ -31,6 +32,8 @@ from portfolio_common.transaction_domain import (
     enrich_dividend_transaction_metadata,
     enrich_interest_transaction_metadata,
     enrich_sell_transaction_metadata,
+    evaluate_ca_bundle_a_reconciliation,
+    find_missing_ca_bundle_a_dependencies,
     is_ca_bundle_a_transaction_type,
     normalize_cash_entry_mode,
     should_auto_generate_cash_leg,
@@ -333,6 +336,7 @@ class CostCalculatorConsumer(BaseConsumer):
                             events_to_publish.append(TransactionEvent.model_validate(updated_txn))
 
                     emitted_events: list[TransactionEvent] = []
+                    reconciled_bundle_groups: set[tuple[str, str]] = set()
                     for processed_event in events_to_publish:
                         assert_portfolio_flow_cash_entry_mode_allowed(processed_event)
                         mode = normalize_cash_entry_mode(processed_event.cash_entry_mode)
@@ -372,6 +376,88 @@ class CostCalculatorConsumer(BaseConsumer):
                             )
                             await repo.create_or_update_transaction_event(processed_event)
                             emitted_events.append(generated_cash_leg)
+
+                        if is_ca_bundle_a_transaction_type(processed_event.transaction_type):
+                            linked_group = (
+                                processed_event.linked_transaction_group_id or ""
+                            ).strip()
+                            parent_ref = (processed_event.parent_event_reference or "").strip()
+                            if linked_group and parent_ref:
+                                group_key = (linked_group, parent_ref)
+                                if group_key not in reconciled_bundle_groups:
+                                    group_txns = await repo.get_bundle_a_group_transactions(
+                                        portfolio_id=processed_event.portfolio_id,
+                                        linked_transaction_group_id=linked_group,
+                                        parent_event_reference=parent_ref,
+                                    )
+                                    group_events = [
+                                        TransactionEvent.model_validate(t) for t in group_txns
+                                    ]
+                                    reconciliation = evaluate_ca_bundle_a_reconciliation(
+                                        group_events,
+                                        basis_tolerance=DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
+                                    )
+                                    available_ids = {e.transaction_id for e in group_events}
+                                    missing_dependencies = find_missing_ca_bundle_a_dependencies(
+                                        processed_event, available_ids
+                                    )
+                                    logger.info(
+                                        "bundle_a_reconciliation_state",
+                                        extra={
+                                            "portfolio_id": processed_event.portfolio_id,
+                                            "transaction_id": processed_event.transaction_id,
+                                            "linked_transaction_group_id": linked_group,
+                                            "parent_event_reference": parent_ref,
+                                            "reconciliation_status": reconciliation.status,
+                                            "source_leg_count": reconciliation.source_leg_count,
+                                            "target_leg_count": reconciliation.target_leg_count,
+                                            "cash_consideration_count": (
+                                                reconciliation.cash_consideration_count
+                                            ),
+                                            "source_basis_out_local": str(
+                                                reconciliation.source_basis_out_local
+                                            ),
+                                            "target_basis_in_local": str(
+                                                reconciliation.target_basis_in_local
+                                            ),
+                                            "net_basis_delta_local": str(
+                                                reconciliation.net_basis_delta_local
+                                            ),
+                                            "basis_tolerance": str(reconciliation.basis_tolerance),
+                                            "missing_dependency_reference_ids": (
+                                                missing_dependencies
+                                            ),
+                                        },
+                                    )
+                                    if reconciliation.status == "basis_mismatch":
+                                        logger.warning(
+                                            "bundle_a_basis_mismatch_detected",
+                                            extra={
+                                                "portfolio_id": processed_event.portfolio_id,
+                                                "linked_transaction_group_id": linked_group,
+                                                "parent_event_reference": parent_ref,
+                                                "net_basis_delta_local": str(
+                                                    reconciliation.net_basis_delta_local
+                                                ),
+                                                "basis_tolerance": str(
+                                                    reconciliation.basis_tolerance
+                                                ),
+                                            },
+                                        )
+                                    if missing_dependencies:
+                                        logger.warning(
+                                            "bundle_a_dependency_gap_detected",
+                                            extra={
+                                                "portfolio_id": processed_event.portfolio_id,
+                                                "transaction_id": processed_event.transaction_id,
+                                                "linked_transaction_group_id": linked_group,
+                                                "parent_event_reference": parent_ref,
+                                                "missing_dependency_reference_ids": (
+                                                    missing_dependencies
+                                                ),
+                                            },
+                                        )
+                                    reconciled_bundle_groups.add(group_key)
 
                     for publish_event in emitted_events:
                         if event.epoch is not None:

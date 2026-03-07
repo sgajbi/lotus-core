@@ -14,6 +14,12 @@ from .buy_validation import (
     validate_buy_transaction,
 )
 from .ca_bundle_a_reason_codes import CaBundleAValidationReasonCode
+from .ca_bundle_a_reconciliation import (
+    DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
+    CaBundleAReconciliationResult,
+    evaluate_ca_bundle_a_reconciliation,
+    find_missing_ca_bundle_a_dependencies,
+)
 from .ca_bundle_a_validation import (
     CA_BUNDLE_A_TRANSACTION_TYPES,
     CaBundleAValidationError,
@@ -84,6 +90,10 @@ __all__ = [
     "BuyValidationReasonCode",
     "validate_buy_transaction",
     "CA_BUNDLE_A_TRANSACTION_TYPES",
+    "DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE",
+    "CaBundleAReconciliationResult",
+    "evaluate_ca_bundle_a_reconciliation",
+    "find_missing_ca_bundle_a_dependencies",
     "CaBundleAValidationError",
     "CaBundleAValidationIssue",
     "CaBundleAValidationReasonCode",
