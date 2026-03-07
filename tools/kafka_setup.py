@@ -3,16 +3,11 @@ import logging
 import os
 import sys
 import time
-from confluent_kafka.admin import AdminClient, NewTopic
+
 from confluent_kafka import KafkaException
-
-# Ensure the script can find the portfolio-common library
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-from portfolio_common.logging_utils import setup_logging
+from confluent_kafka.admin import AdminClient, NewTopic
 from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS
+from portfolio_common.logging_utils import setup_logging
 
 # Setup basic logging for the tool
 setup_logging()
@@ -48,6 +43,7 @@ TOPICS_TO_CREATE = [
     "market_price_persisted", # Restored topic
     # Calculation completion topics
     "processed_transactions_completed",
+    "transaction_processing_completed",
     "cashflow_calculated",
     "daily_position_snapshot_persisted",
     "position_valued",
@@ -58,6 +54,7 @@ TOPICS_TO_CREATE = [
     "persistence_service.dlq",
     # Valuation Job Topic
     "valuation_required",
+    "portfolio_day_ready_for_valuation",
     # Reprocessing Topic
     "transactions_reprocessing_requested", # <-- NEW TOPIC
 ]
@@ -112,7 +109,13 @@ def main():
             logger.info("Successfully connected to Kafka.")
             break
         except KafkaException as e:
-            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Failed to connect to Kafka, retrying in {retry_delay}s... Error: {e}")
+            logger.warning(
+                "Attempt %s/%s: Failed to connect to Kafka, retrying in %ss... Error: %s",
+                attempt + 1,
+                max_retries,
+                retry_delay,
+                e,
+            )
             if attempt == max_retries - 1:
                 logger.critical("Could not connect to Kafka after multiple retries. Exiting.")
                 sys.exit(1)

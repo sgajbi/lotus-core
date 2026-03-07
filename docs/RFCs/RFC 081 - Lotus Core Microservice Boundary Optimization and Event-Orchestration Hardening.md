@@ -1,6 +1,6 @@
 # RFC 081 - Lotus Core Microservice Boundary Optimization and Event-Orchestration Hardening
 
-**Status**: Draft  
+**Status**: In Progress  
 **Date**: 2026-03-07  
 **Owner**: lotus-core Architecture  
 **Reviewers**: Platform Architecture, Data Engineering, QA, SRE  
@@ -169,7 +169,7 @@ Risk:
 
 Introduce explicit gate events:
 
-- `transaction_processing_completed` (cost + cashflow + position required signals attached)
+- `transaction_processing_completed` (cost + cashflow required signals attached)
 - `portfolio_day_ready_for_valuation`
 - `valuation_day_completed`
 - `position_timeseries_day_completed`
@@ -336,3 +336,34 @@ Exit criteria:
 - **Add**: orchestrator service, replay service, reconciliation service.
 
 The highest-priority change is explicit event-gate orchestration. It delivers the strongest correctness gain under scale while preserving the current domain decomposition strengths.
+
+## 15. Implementation Progress (2026-03-07)
+
+### 15.1 Delivered in this iteration (Phase 1 foundation)
+
+- Added new `pipeline_orchestrator_service` runtime surface:
+  - dual consumers for `processed_transactions_completed` and `cashflow_calculated`
+  - durable outbox emission of `transaction_processing_completed`
+  - service packaging, Docker image, compose integration, and Prometheus scrape target.
+- Added durable stage-state model:
+  - `pipeline_stage_state` table + Alembic migration
+  - repository upsert/merge behavior for independent prerequisite signals
+  - concurrency-safe claim transition to prevent duplicate readiness emission.
+- Added explicit event contract:
+  - `TransactionProcessingCompletedEvent` in canonical event model.
+- Added quality coverage for stage gate behavior:
+  - unit tests for orchestrator gate logic
+  - integration tests for repository merge/idempotent-completion behavior.
+
+### 15.2 Current scope boundary
+
+- Implemented gate in this slice is `transaction_processing_completed` based on:
+  - processed transaction signal present
+  - cashflow signal present.
+- Valuation-day and timeseries-day gate events remain in planned follow-on slices.
+
+### 15.3 Remaining roadmap alignment
+
+- Keep `portfolio_day_ready_for_valuation`, `valuation_day_completed`,
+  `position_timeseries_day_completed`, and `portfolio_aggregation_day_completed`
+  as next-stage gates for subsequent RFC-081 slices.

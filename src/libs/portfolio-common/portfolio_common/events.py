@@ -268,3 +268,25 @@ class PortfolioValuationRequiredEvent(BaseModel):
     valuation_date: date
     epoch: int
     correlation_id: Optional[str] = None
+
+
+class TransactionProcessingCompletedEvent(BaseModel):
+    """
+    Stage-gate event emitted when transaction processing prerequisites are satisfied.
+    Current prerequisite pair:
+    - processed transaction record is available
+    - cashflow calculation record is available
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    transaction_id: str
+    portfolio_id: str
+    security_id: Optional[str] = None
+    business_date: date
+    epoch: int = 0
+    cost_event_seen: bool = True
+    cashflow_event_seen: bool = True
+    stage_name: str = "TRANSACTION_PROCESSING"
+    readiness_reason: str = "cost_and_cashflow_completed"
+    correlation_id: Optional[str] = None

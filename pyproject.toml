@@ -34,6 +34,7 @@ pythonpath = [
     "src/services/calculators/position_calculator",
     "src/services/calculators/position_valuation_calculator",
     "src/services/timeseries_generator_service",
+    "src/services/pipeline_orchestrator_service",
 ]
 addopts = "--strict-markers"
 minversion = "6.0"

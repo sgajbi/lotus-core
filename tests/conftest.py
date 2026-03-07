@@ -41,6 +41,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_COST_CALCULATOR_HOST_PORT": "8083",
         "LOTUS_POSITION_VALUATION_HOST_PORT": "8084",
         "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8085",
+        "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT": "8086",
     },
     "integration": {
         "LOTUS_ZOOKEEPER_PORT": "2281",
@@ -55,6 +56,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_COST_CALCULATOR_HOST_PORT": "8183",
         "LOTUS_POSITION_VALUATION_HOST_PORT": "8184",
         "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8185",
+        "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT": "8186",
     },
     "e2e": {
         "LOTUS_ZOOKEEPER_PORT": "2381",
@@ -69,6 +71,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_COST_CALCULATOR_HOST_PORT": "8283",
         "LOTUS_POSITION_VALUATION_HOST_PORT": "8284",
         "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8285",
+        "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT": "8286",
     },
 }
 
@@ -145,6 +148,7 @@ def docker_services(request):  # noqa: ARG001
             "cost_calculator_service",
             "cashflow_calculator_service",
             "position_calculator_service",
+            "pipeline_orchestrator_service",
             "position_valuation_calculator",
             "timeseries_generator_service",
         ]
@@ -255,6 +259,7 @@ TABLES_TO_TRUNCATE = [
     "portfolios",
     "processed_events",
     "outbox_events",
+    "pipeline_stage_state",
 ]
 TERMINATE_ACTIVE_SESSIONS_SQL = """
 SELECT pg_terminate_backend(pid)

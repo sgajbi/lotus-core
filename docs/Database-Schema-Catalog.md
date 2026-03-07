@@ -652,6 +652,29 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `pipeline_stage_state`
+
+- **Purpose**: Durable stage-gate state for orchestrated pipeline readiness.
+- **Description**: Tracks prerequisite completion signals and emission state for gate events at transaction scope.
+- **Relationships**: No explicit foreign-key relationships declared.
+- **Usage (modules/features)**: `src/services/pipeline_orchestrator_service/app/repositories/pipeline_stage_repository.py`, `src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py`
+- **Typical access patterns**: Idempotent upserts from independent completion streams, conditional status transition updates, and status-filtered operational reads.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `stage_name` (String): Stage identifier (for example `TRANSACTION_PROCESSING`).
+  - `transaction_id` (String): Canonical transaction identifier.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `security_id` (String): Canonical security identifier when stage is security-scoped.
+  - `business_date` (Date): Business date for stage progression.
+  - `epoch` (Integer): Deterministic reprocessing generation/version for stage isolation.
+  - `status` (String): Stage lifecycle status.
+  - `cost_event_seen` (Boolean): Whether cost-side prerequisite signal has been observed.
+  - `cashflow_event_seen` (Boolean): Whether cashflow-side prerequisite signal has been observed.
+  - `ready_emitted_at` (DateTime): Timestamp when readiness event was emitted.
+  - `last_source_event_type` (String): Last source signal type processed for this stage key.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `ingestion_jobs`
 
 - **Purpose**: Ingestion job tracking and ops visibility.
