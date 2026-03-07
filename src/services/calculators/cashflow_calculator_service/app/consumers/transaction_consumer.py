@@ -19,7 +19,9 @@ from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
 from portfolio_common.transaction_domain import (
+    assert_ca_bundle_a_transaction_valid,
     assert_portfolio_flow_cash_entry_mode_allowed,
+    is_ca_bundle_a_transaction_type,
     normalize_cash_entry_mode,
 )
 from pydantic import ValidationError
@@ -154,6 +156,8 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         return
 
                     event_transaction_type = event.transaction_type.upper()
+                    if is_ca_bundle_a_transaction_type(event_transaction_type):
+                        assert_ca_bundle_a_transaction_valid(event)
                     assert_portfolio_flow_cash_entry_mode_allowed(event)
                     normalized_mode = (
                         normalize_cash_entry_mode(event.cash_entry_mode)

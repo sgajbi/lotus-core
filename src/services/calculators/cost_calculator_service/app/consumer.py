@@ -24,12 +24,14 @@ from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
     UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
+    assert_ca_bundle_a_transaction_valid,
     assert_portfolio_flow_cash_entry_mode_allowed,
     assert_upstream_cash_leg_pairing,
     build_auto_generated_adjustment_cash_leg,
     enrich_dividend_transaction_metadata,
     enrich_interest_transaction_metadata,
     enrich_sell_transaction_metadata,
+    is_ca_bundle_a_transaction_type,
     normalize_cash_entry_mode,
     should_auto_generate_cash_leg,
 )
@@ -208,6 +210,8 @@ class CostCalculatorConsumer(BaseConsumer):
                     )
                     event = enrich_dividend_transaction_metadata(event)
                     event = enrich_interest_transaction_metadata(event)
+                    if is_ca_bundle_a_transaction_type(event.transaction_type):
+                        assert_ca_bundle_a_transaction_valid(event)
 
                     event_transaction_type = event.transaction_type.upper()
                     events_to_publish: list[TransactionEvent] = []

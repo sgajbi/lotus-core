@@ -48,7 +48,7 @@ This bundle extends RFC-075 with source-retained transfer behavior, multi-target
   - cost calculation basis-only transfer behavior
   - query quantity effect mapping
 
-### Slice A1
+### Slice A1 (implemented in this change set)
 
 - Ingestion/canonical validation reason-code coverage for Bundle A types.
 - Strict linkage checks for mixed consideration (`CASH_CONSIDERATION` marker to `ADJUSTMENT`).
@@ -82,5 +82,5 @@ This bundle extends RFC-075 with source-retained transfer behavior, multi-target
 ## 6. Current Status
 
 - Slice A0: **Completed** (code + tests + migration added)
-- Slice A1+: Pending
-
+- Slice A1: **Completed** (Bundle A validation module + consumer guardrails + tests)
+- Slice A2+: Pending
