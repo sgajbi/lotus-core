@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-03-05 |
-| Last Updated | 2026-03-05 |
+| Last Updated | 2026-03-07 |
 | Owners | lotus-core engineering |
 | Depends On | `docs/rfc-transaction-specs/transactions/CHARGE/RFC-CHARGE-01.md`; `docs/rfc-transaction-specs/transactions/CASH MOVEMENT/RFC-CASH-MOVEMENT-01.md`; `docs/rfc-transaction-specs/transactions/TRANSFER_IN_OUT/RFC-TRANSFER-01.md`; shared transaction specs |
 | Related Standards | RFC-0067 OpenAPI/vocabulary governance; shared transaction lifecycle standards; RFC-071 dual-leg ADJUSTMENT alignment |
@@ -212,3 +212,8 @@ Approval checklist:
 2. no-auto-generate direction accepted for this bundle;
 3. portfolio-level flow classification direction accepted for all six types;
 4. slice plan and validation gates accepted.
+
+## Merge Verification (2026-03-07)
+1. RFC-074 implementation is merged on `main`.
+2. Verified on commit `001e084b06f1da4ba955ce9de7ec5833a7a73181`.
+3. Merge evidence includes previous closure on `#190` and post-merge verification in current main line.

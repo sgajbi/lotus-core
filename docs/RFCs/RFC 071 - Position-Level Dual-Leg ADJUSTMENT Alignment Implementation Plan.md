@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-03-05 |
-| Last Updated | 2026-03-05 |
+| Last Updated | 2026-03-07 |
 | Owners | lotus-core engineering |
 | Depends On | `docs/rfc-transaction-specs/transactions/RFC-POSITION-DUAL-LEG-ALIGNMENT-01.md`; `docs/rfc-transaction-specs/shared/13-dual-leg-accounting-and-cash-adjustment-model.md`; `docs/rfc-transaction-specs/shared/12-canonical-modeling-guidelines.md` |
 | Related Standards | RFC-0067 OpenAPI/vocabulary governance; shared transaction lifecycle standards |
@@ -224,3 +224,8 @@ Approval checklist:
 2. No-dedicated-endpoint direction accepted.
 3. Slice boundaries and gates accepted.
 4. Cross-calculator source-of-truth rule accepted.
+
+## Merge Verification (2026-03-07)
+1. RFC-071 implementation is merged on `main`.
+2. Verified on commit `001e084b06f1da4ba955ce9de7ec5833a7a73181`.
+3. PR evidence: `#191` (final forward-port coverage parity on latest main).

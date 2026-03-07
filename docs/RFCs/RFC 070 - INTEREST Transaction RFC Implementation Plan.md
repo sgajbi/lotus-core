@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-03-05 |
-| Last Updated | 2026-03-05 |
+| Last Updated | 2026-03-07 |
 | Owners | lotus-core engineering |
 | Depends On | `docs/rfc-transaction-specs/transactions/INTEREST/RFC-INTEREST-01.md`; shared transaction lifecycle specs |
 | Related Standards | RFC-0067 OpenAPI/vocabulary governance; durability/consistency and rounding standards |
@@ -211,3 +211,8 @@ Approval checklist:
 2. Open decisions to be finalized during execution.
 3. Test/gate expectations accepted.
 4. Residual-risk acceptance criteria confirmed.
+
+## Merge Verification (2026-03-07)
+1. RFC-070 implementation is merged on `main`.
+2. Verified on commit `001e084b06f1da4ba955ce9de7ec5833a7a73181`.
+3. PR evidence: `#191` (coverage parity closure for RFC-070/071 on latest main).
