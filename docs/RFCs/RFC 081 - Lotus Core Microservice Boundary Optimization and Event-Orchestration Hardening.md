@@ -396,6 +396,9 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 - Position valuation runtime now applies fail-fast supervision across
   consumers, outbox dispatcher, valuation scheduler, reprocessing worker,
   and web server tasks to prevent silent partial-outage operation.
+- Timeseries runtime now applies fail-fast supervision across
+  timeseries consumers, aggregation scheduler, outbox dispatcher,
+  and web server tasks to enforce deterministic shutdown on critical task failure.
 
 ### 15.2 Current scope boundary
 
