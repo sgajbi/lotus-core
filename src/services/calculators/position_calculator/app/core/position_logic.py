@@ -180,7 +180,7 @@ class PositionCalculator:
             if transaction.net_cost_local is not None:
                 cost_basis_local += transaction.net_cost_local
 
-        elif txn_type in ["SELL", "TRANSFER_OUT"]:
+        elif txn_type in {"SELL", "CASH_IN_LIEU"}:
             quantity -= transaction.quantity
 
             if transaction.net_cost is not None:
@@ -195,22 +195,34 @@ class PositionCalculator:
                 txn_type,
             )
 
-        elif txn_type in ["TRANSFER_IN", "TRANSFER_OUT"]:
+        elif txn_type in [
+            "TRANSFER_IN",
+            "TRANSFER_OUT",
+            "MERGER_IN",
+            "MERGER_OUT",
+            "EXCHANGE_IN",
+            "EXCHANGE_OUT",
+            "REPLACEMENT_IN",
+            "REPLACEMENT_OUT",
+            "SPIN_IN",
+            "DEMERGER_IN",
+        ]:
             transfer_quantity = transaction.quantity
             if transfer_quantity > 0:
-                transfer_sign = Decimal(1) if txn_type == "TRANSFER_IN" else Decimal(-1)
+                inflow_types = {"TRANSFER_IN", "MERGER_IN", "EXCHANGE_IN", "REPLACEMENT_IN"}
+                transfer_sign = Decimal(1) if txn_type in inflow_types else Decimal(-1)
                 quantity += transfer_sign * transfer_quantity
 
                 if transaction.net_cost is not None:
                     cost_basis += transaction.net_cost
-                elif txn_type == "TRANSFER_IN":
+                elif txn_type in inflow_types:
                     cost_basis += transaction.gross_transaction_amount
                 else:
                     cost_basis -= transaction.gross_transaction_amount
 
                 if transaction.net_cost_local is not None:
                     cost_basis_local += transaction.net_cost_local
-                elif txn_type == "TRANSFER_IN":
+                elif txn_type in inflow_types:
                     cost_basis_local += transaction.gross_transaction_amount
                 else:
                     cost_basis_local -= transaction.gross_transaction_amount
@@ -220,6 +232,20 @@ class PositionCalculator:
                     "cash-only transfer and does not change security position quantity/cost.",
                     txn_type,
                 )
+
+        elif txn_type in {"SPIN_OFF", "DEMERGER_OUT"}:
+            if transaction.quantity > Decimal(0):
+                quantity -= transaction.quantity
+
+            if transaction.net_cost is not None:
+                cost_basis += transaction.net_cost
+            else:
+                cost_basis -= transaction.gross_transaction_amount
+
+            if transaction.net_cost_local is not None:
+                cost_basis_local += transaction.net_cost_local
+            else:
+                cost_basis_local -= transaction.gross_transaction_amount
 
         elif txn_type == "ADJUSTMENT":
             movement_direction = str(transaction.movement_direction or "INFLOW").upper()

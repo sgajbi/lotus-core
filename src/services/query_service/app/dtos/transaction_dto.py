@@ -1,5 +1,5 @@
 # services/query-service/app/dtos/transaction_dto.py
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
@@ -154,6 +154,126 @@ class TransactionRecord(BaseModel):
         None,
         description="Net-interest amount when provided for reconciliation.",
         examples=[108.2],
+    )
+    parent_transaction_reference: Optional[str] = Field(
+        None,
+        description="Corporate-action parent transaction reference for child linkage.",
+        examples=["CA_PARENT_TXN_001"],
+    )
+    linked_parent_event_id: Optional[str] = Field(
+        None,
+        description="Linked corporate-action parent event identifier.",
+        examples=["CA-EVT-2026-0001"],
+    )
+    parent_event_reference: Optional[str] = Field(
+        None,
+        description="Upstream parent-event reference shared by related CA children.",
+        examples=["UPSTREAM-CA-REF-2026-0001"],
+    )
+    child_role: Optional[str] = Field(
+        None,
+        description="Canonical corporate-action child role.",
+        examples=["SOURCE_POSITION_CLOSE"],
+    )
+    child_sequence_hint: Optional[int] = Field(
+        None,
+        description="Optional upstream child sequence hint.",
+        examples=[10],
+    )
+    dependency_reference_ids: Optional[List[str]] = Field(
+        None,
+        description="Optional dependency references for CA child ordering.",
+        examples=[["CA-CHILD-OUT-001"]],
+    )
+    source_instrument_id: Optional[str] = Field(
+        None,
+        description="Source instrument identifier for transfer-style corporate actions.",
+        examples=["OLD_SEC_001"],
+    )
+    target_instrument_id: Optional[str] = Field(
+        None,
+        description="Target instrument identifier for transfer-style corporate actions.",
+        examples=["NEW_SEC_001"],
+    )
+    source_transaction_reference: Optional[str] = Field(
+        None,
+        description="Reference to source-side corporate-action child transaction.",
+        examples=["CA-CHILD-OUT-001"],
+    )
+    target_transaction_reference: Optional[str] = Field(
+        None,
+        description="Reference to target-side corporate-action child transaction.",
+        examples=["CA-CHILD-IN-001"],
+    )
+    linked_cash_transaction_id: Optional[str] = Field(
+        None,
+        description="Linked cash transaction id for CASH_IN_LIEU settlement.",
+        examples=["CA-CIL-CASH-001"],
+    )
+    has_synthetic_flow: Optional[bool] = Field(
+        None,
+        description="Whether this transaction carries position-level synthetic flow details.",
+        examples=[True],
+    )
+    synthetic_flow_effective_date: Optional[date] = Field(
+        None,
+        description="Synthetic flow effective date used by CA analytics.",
+        examples=["2026-03-15"],
+    )
+    synthetic_flow_amount_local: Optional[Decimal] = Field(
+        None,
+        description="Synthetic flow amount in local flow currency.",
+        examples=[-10000.0],
+    )
+    synthetic_flow_currency: Optional[str] = Field(
+        None,
+        description="Currency of synthetic flow amount.",
+        examples=["USD"],
+    )
+    synthetic_flow_amount_base: Optional[Decimal] = Field(
+        None,
+        description="Synthetic flow amount translated to portfolio base currency.",
+        examples=[-10000.0],
+    )
+    synthetic_flow_fx_rate_to_base: Optional[Decimal] = Field(
+        None,
+        description="FX rate used to translate synthetic flow local amount to base.",
+        examples=[1.0],
+    )
+    synthetic_flow_price_used: Optional[Decimal] = Field(
+        None,
+        description="Price input used for synthetic MVT valuation.",
+        examples=[200.0],
+    )
+    synthetic_flow_quantity_used: Optional[Decimal] = Field(
+        None,
+        description="Quantity input used for synthetic MVT valuation.",
+        examples=[50.0],
+    )
+    synthetic_flow_valuation_method: Optional[str] = Field(
+        None,
+        description="Synthetic flow valuation method.",
+        examples=["MVT_PRICE_X_QTY"],
+    )
+    synthetic_flow_classification: Optional[str] = Field(
+        None,
+        description="Synthetic flow classification for position-level analytics.",
+        examples=["POSITION_TRANSFER_OUT"],
+    )
+    synthetic_flow_price_source: Optional[str] = Field(
+        None,
+        description="Synthetic flow price source.",
+        examples=["UPSTREAM"],
+    )
+    synthetic_flow_fx_source: Optional[str] = Field(
+        None,
+        description="Synthetic flow FX source.",
+        examples=["FX_SERVICE"],
+    )
+    synthetic_flow_source: Optional[str] = Field(
+        None,
+        description="Synthetic flow origin descriptor for audit and lineage.",
+        examples=["UPSTREAM_PROVIDED"],
     )
     cashflow: Optional[CashflowRecord] = Field(
         None, description="Linked cashflow details when available."

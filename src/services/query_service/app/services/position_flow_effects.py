@@ -2,8 +2,25 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-POSITION_INCREASE_TRANSACTION_TYPES = {"BUY", "TRANSFER_IN"}
-POSITION_DECREASE_TRANSACTION_TYPES = {"SELL", "TRANSFER_OUT"}
+POSITION_INCREASE_TRANSACTION_TYPES = {
+    "BUY",
+    "TRANSFER_IN",
+    "MERGER_IN",
+    "EXCHANGE_IN",
+    "REPLACEMENT_IN",
+    "SPIN_IN",
+    "DEMERGER_IN",
+}
+POSITION_DECREASE_TRANSACTION_TYPES = {
+    "SELL",
+    "CASH_IN_LIEU",
+    "TRANSFER_OUT",
+    "MERGER_OUT",
+    "EXCHANGE_OUT",
+    "REPLACEMENT_OUT",
+    "SPIN_OFF",
+    "DEMERGER_OUT",
+}
 
 
 def transaction_quantity_effect_decimal(transaction_type: str | None, quantity) -> Decimal:
@@ -14,7 +31,3 @@ def transaction_quantity_effect_decimal(transaction_type: str | None, quantity) 
     if normalized_type in POSITION_DECREASE_TRANSACTION_TYPES:
         return -magnitude
     return Decimal(0)
-
-
-def transaction_quantity_effect_float(transaction_type: str | None, quantity) -> float:
-    return float(transaction_quantity_effect_decimal(transaction_type, quantity))

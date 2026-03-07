@@ -52,9 +52,10 @@ class CashflowLogic:
         elif rule.classification in positive_classifications:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.TRANSFER:
-            if transaction.transaction_type == "TRANSFER_IN":
+            tx_type = transaction.transaction_type.upper()
+            if tx_type.endswith("_IN") or tx_type == "TRANSFER_IN":
                 amount = abs(amount)
-            else:  # TRANSFER_OUT
+            else:
                 amount = -abs(amount)
         else:
             # All other classifications are outflows (INVESTMENT_OUTFLOW, EXPENSE, CASHFLOW_OUT)

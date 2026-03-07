@@ -5,6 +5,11 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .ca_bundle_a_ordering import (
+    ca_bundle_a_dependency_rank,
+    ca_bundle_a_target_order_key,
+)
+
 
 class BusinessDateEvent(BaseModel):
     """Event model for a raw business date."""
@@ -136,25 +141,56 @@ class TransactionEvent(BaseModel):
     withholding_tax_amount: Optional[Decimal] = None
     other_interest_deductions_amount: Optional[Decimal] = None
     net_interest_amount: Optional[Decimal] = None
+    parent_transaction_reference: Optional[str] = None
+    linked_parent_event_id: Optional[str] = None
+    parent_event_reference: Optional[str] = None
+    child_role: Optional[str] = None
+    child_sequence_hint: Optional[int] = None
+    dependency_reference_ids: Optional[list[str]] = None
+    source_instrument_id: Optional[str] = None
+    target_instrument_id: Optional[str] = None
+    source_transaction_reference: Optional[str] = None
+    target_transaction_reference: Optional[str] = None
+    linked_cash_transaction_id: Optional[str] = None
+    has_synthetic_flow: Optional[bool] = None
+    synthetic_flow_effective_date: Optional[date] = None
+    synthetic_flow_amount_local: Optional[Decimal] = None
+    synthetic_flow_currency: Optional[str] = None
+    synthetic_flow_amount_base: Optional[Decimal] = None
+    synthetic_flow_fx_rate_to_base: Optional[Decimal] = None
+    synthetic_flow_price_used: Optional[Decimal] = None
+    synthetic_flow_quantity_used: Optional[Decimal] = None
+    synthetic_flow_valuation_method: Optional[str] = None
+    synthetic_flow_classification: Optional[str] = None
+    synthetic_flow_price_source: Optional[str] = None
+    synthetic_flow_fx_source: Optional[str] = None
+    synthetic_flow_source: Optional[str] = None
     created_at: Optional[datetime] = None
     epoch: Optional[int] = None
 
 
 def transaction_event_ordering_key(
     event: "TransactionEvent",
-) -> tuple[date, datetime, datetime, str]:
+) -> tuple[date, datetime, int, int, str, datetime, str]:
     """
     Deterministic intra-partition ordering for transaction processing.
     Priority:
     1) effective business date (derived from transaction_date)
     2) transaction timestamp
-    3) ingestion timestamp (created_at when present)
-    4) stable event identity (transaction_id)
+    3) Bundle A dependency rank (source-out, target-in, cash-consideration, other)
+    4) Bundle A target leg sequence (child_sequence_hint fallback)
+    5) Bundle A target instrument fallback
+    6) ingestion timestamp (created_at when present)
+    7) stable event identity (transaction_id)
     """
     ingestion_ts = event.created_at or datetime.fromtimestamp(0, tz=timezone.utc)
+    target_sequence, target_instrument = ca_bundle_a_target_order_key(event)
     return (
         event.transaction_date.date(),
         event.transaction_date,
+        ca_bundle_a_dependency_rank(event),
+        target_sequence,
+        target_instrument,
         ingestion_ts,
         event.transaction_id,
     )

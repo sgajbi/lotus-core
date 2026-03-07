@@ -1,5 +1,5 @@
 # services/ingestion_service/app/DTOs/transaction_dto.py
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
@@ -173,6 +173,126 @@ class Transaction(BaseModel):
             "Optional net-interest amount supplied upstream for reconciliation "
             "against gross and deduction fields."
         ),
+    )
+    parent_transaction_reference: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CA_PARENT_TXN_001"},
+        description="Corporate-action parent transaction reference for child linkage.",
+    )
+    linked_parent_event_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CA-EVT-2026-0001"},
+        description="Linked corporate-action parent event identifier.",
+    )
+    parent_event_reference: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "UPSTREAM-CA-REF-2026-0001"},
+        description="Upstream parent-event reference shared by all related CA children.",
+    )
+    child_role: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "SOURCE_POSITION_CLOSE"},
+        description="Canonical corporate-action child role for dependency-aware processing.",
+    )
+    child_sequence_hint: Optional[int] = Field(
+        default=None,
+        json_schema_extra={"example": 10},
+        description="Optional upstream child sequencing hint for deterministic orchestration.",
+    )
+    dependency_reference_ids: Optional[list[str]] = Field(
+        default=None,
+        json_schema_extra={"example": ["CA-CHILD-OUT-001"]},
+        description="Optional upstream dependency reference ids for child ordering.",
+    )
+    source_instrument_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "OLD_SEC_001"},
+        description="Source instrument identifier for transfer-style corporate actions.",
+    )
+    target_instrument_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "NEW_SEC_001"},
+        description="Target instrument identifier for transfer-style corporate actions.",
+    )
+    source_transaction_reference: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CA-CHILD-OUT-001"},
+        description="Reference to source-side corporate-action child transaction.",
+    )
+    target_transaction_reference: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CA-CHILD-IN-001"},
+        description="Reference to target-side corporate-action child transaction.",
+    )
+    linked_cash_transaction_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CA-CIL-CASH-001"},
+        description="Linked cash transaction id for CASH_IN_LIEU and related settlement.",
+    )
+    has_synthetic_flow: Optional[bool] = Field(
+        default=None,
+        json_schema_extra={"example": True},
+        description="Whether this transaction carries a position-level synthetic flow payload.",
+    )
+    synthetic_flow_effective_date: Optional[date] = Field(
+        default=None,
+        json_schema_extra={"example": "2026-03-15"},
+        description="Synthetic flow effective date for corporate-action analytics.",
+    )
+    synthetic_flow_amount_local: Optional[condecimal()] = Field(
+        default=None,
+        json_schema_extra={"example": "-10000.00"},
+        description="Synthetic flow amount in local flow currency.",
+    )
+    synthetic_flow_currency: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "USD"},
+        description="Currency of synthetic flow amount.",
+    )
+    synthetic_flow_amount_base: Optional[condecimal()] = Field(
+        default=None,
+        json_schema_extra={"example": "-10000.00"},
+        description="Synthetic flow amount translated into portfolio base currency.",
+    )
+    synthetic_flow_fx_rate_to_base: Optional[condecimal(gt=Decimal(0))] = Field(
+        default=None,
+        json_schema_extra={"example": "1.000000"},
+        description="FX rate used to derive synthetic_flow_amount_base from local amount.",
+    )
+    synthetic_flow_price_used: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        json_schema_extra={"example": "200.00"},
+        description="Price input used for MVT synthetic flow valuation.",
+    )
+    synthetic_flow_quantity_used: Optional[condecimal(ge=Decimal(0))] = Field(
+        default=None,
+        json_schema_extra={"example": "50.00"},
+        description="Quantity input used for MVT synthetic flow valuation.",
+    )
+    synthetic_flow_valuation_method: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "MVT_PRICE_X_QTY"},
+        description="Synthetic flow valuation method classification.",
+    )
+    synthetic_flow_classification: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "POSITION_TRANSFER_OUT"},
+        description="Synthetic flow classification for position-level analytics.",
+    )
+    synthetic_flow_price_source: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "UPSTREAM"},
+        description="Synthetic flow price source classification.",
+    )
+    synthetic_flow_fx_source: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "FX_SERVICE"},
+        description="Synthetic flow FX source classification.",
+    )
+    synthetic_flow_source: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "UPSTREAM_PROVIDED"},
+        description="Synthetic flow origin descriptor for audit and lineage.",
     )
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

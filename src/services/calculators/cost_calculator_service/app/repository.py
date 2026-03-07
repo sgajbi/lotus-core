@@ -88,6 +88,23 @@ class CostCalculatorRepository:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
+    async def get_bundle_a_group_transactions(
+        self, *, portfolio_id: str, linked_transaction_group_id: str, parent_event_reference: str
+    ) -> List[DBTransaction]:
+        stmt = (
+            select(DBTransaction)
+            .where(DBTransaction.portfolio_id == portfolio_id)
+            .where(DBTransaction.linked_transaction_group_id == linked_transaction_group_id)
+            .where(DBTransaction.parent_event_reference == parent_event_reference)
+            .where(
+                DBTransaction.transaction_type.in_(
+                    ("SPIN_OFF", "SPIN_IN", "DEMERGER_OUT", "DEMERGER_IN", "CASH_CONSIDERATION")
+                )
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def create_or_update_transaction_event(self, event: TransactionEvent) -> DBTransaction:
         event_dict = event.model_dump(
             exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},

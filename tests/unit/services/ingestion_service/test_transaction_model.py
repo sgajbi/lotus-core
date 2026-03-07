@@ -223,3 +223,45 @@ def test_transaction_model_accepts_interest_semantic_fields() -> None:
     assert model.withholding_tax_amount == Decimal("10.0")
     assert model.other_interest_deductions_amount == Decimal("5.0")
     assert model.net_interest_amount == Decimal("110.0")
+
+
+def test_transaction_model_accepts_corporate_action_synthetic_flow_fields() -> None:
+    payload = {
+        "transaction_id": "CA_FIELDS_001",
+        "portfolio_id": "PORT_META_001",
+        "instrument_id": "OLD_SEC_001",
+        "security_id": "OLD_SEC_001",
+        "transaction_date": "2026-03-15T10:00:00Z",
+        "transaction_type": "MERGER_OUT",
+        "quantity": "100.0",
+        "price": "0",
+        "gross_transaction_amount": "10000.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "parent_event_reference": "UPSTREAM-CA-REF-2026-0001",
+        "child_role": "SOURCE_POSITION_CLOSE",
+        "source_instrument_id": "OLD_SEC_001",
+        "target_instrument_id": "NEW_SEC_001",
+        "linked_cash_transaction_id": "CA-CIL-CASH-001",
+        "has_synthetic_flow": True,
+        "synthetic_flow_effective_date": "2026-03-15",
+        "synthetic_flow_amount_local": "-10000.0",
+        "synthetic_flow_currency": "USD",
+        "synthetic_flow_amount_base": "-10000.0",
+        "synthetic_flow_fx_rate_to_base": "1.0",
+        "synthetic_flow_price_used": "100.0",
+        "synthetic_flow_quantity_used": "100.0",
+        "synthetic_flow_valuation_method": "MVT_PRICE_X_QTY",
+        "synthetic_flow_classification": "POSITION_TRANSFER_OUT",
+        "synthetic_flow_price_source": "UPSTREAM",
+        "synthetic_flow_fx_source": "FX_SERVICE",
+        "synthetic_flow_source": "UPSTREAM_PROVIDED",
+    }
+    model = Transaction(**payload)
+    assert model.parent_event_reference == "UPSTREAM-CA-REF-2026-0001"
+    assert model.child_role == "SOURCE_POSITION_CLOSE"
+    assert model.source_instrument_id == "OLD_SEC_001"
+    assert model.target_instrument_id == "NEW_SEC_001"
+    assert model.linked_cash_transaction_id == "CA-CIL-CASH-001"
+    assert model.has_synthetic_flow is True
+    assert model.synthetic_flow_classification == "POSITION_TRANSFER_OUT"

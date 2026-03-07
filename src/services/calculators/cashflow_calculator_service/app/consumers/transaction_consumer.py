@@ -19,7 +19,9 @@ from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
 from portfolio_common.transaction_domain import (
+    assert_ca_bundle_a_transaction_valid,
     assert_portfolio_flow_cash_entry_mode_allowed,
+    is_ca_bundle_a_transaction_type,
     normalize_cash_entry_mode,
 )
 from pydantic import ValidationError
@@ -76,6 +78,7 @@ class LinkedCashLegError(ValueError):
 
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
+LINKED_CASHFLOW_SKIP_TRANSACTION_TYPES = {"BUY", "SELL", "DIVIDEND", "INTEREST"}
 
 
 class CashflowCalculatorConsumer(BaseConsumer):
@@ -153,6 +156,8 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         return
 
                     event_transaction_type = event.transaction_type.upper()
+                    if is_ca_bundle_a_transaction_type(event_transaction_type):
+                        assert_ca_bundle_a_transaction_valid(event)
                     assert_portfolio_flow_cash_entry_mode_allowed(event)
                     normalized_mode = (
                         normalize_cash_entry_mode(event.cash_entry_mode)
@@ -165,7 +170,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
                             "UPSTREAM_PROVIDED product leg requires external_cash_transaction_id."
                         )
                     if (
-                        event_transaction_type != ADJUSTMENT_TRANSACTION_TYPE
+                        event_transaction_type in LINKED_CASHFLOW_SKIP_TRANSACTION_TYPES
                         and has_linked_cash_leg
                     ):
                         logger.info(

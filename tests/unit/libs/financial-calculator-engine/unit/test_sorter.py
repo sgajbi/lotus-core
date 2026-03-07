@@ -90,3 +90,57 @@ def test_sort_by_quantity_on_same_day(sorter):
     # Assert
     # The final order should be large then small
     assert [t.transaction_id for t in sorted_list] == ["t_large", "t_small"]
+
+
+def test_sort_bundle_a_dependency_and_target_ordering(sorter):
+    """
+    Bundle A ordering should process source-out before target-in legs,
+    and target-in legs should follow child_sequence_hint.
+    """
+    same_day = datetime(2026, 1, 10)
+    target_2 = Transaction(
+        transaction_id="t_target_2",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        portfolio_id="P1",
+        instrument_id="A",
+        security_id="S1",
+        transaction_type="DEMERGER_IN",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        child_sequence_hint=2,
+        target_instrument_id="TGT2",
+    )
+    source = Transaction(
+        transaction_id="t_source",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        portfolio_id="P1",
+        instrument_id="A",
+        security_id="S1",
+        transaction_type="DEMERGER_OUT",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    target_1 = Transaction(
+        transaction_id="t_target_1",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        portfolio_id="P1",
+        instrument_id="A",
+        security_id="S1",
+        transaction_type="DEMERGER_IN",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        child_sequence_hint=1,
+        target_instrument_id="TGT1",
+    )
+
+    sorted_list = sorter.sort_transactions([], [target_2, source, target_1])
+    assert [t.transaction_id for t in sorted_list] == ["t_source", "t_target_1", "t_target_2"]

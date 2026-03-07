@@ -259,6 +259,35 @@ class SecurityOutflowStrategy:
             transaction.realized_gain_loss_local = None
 
 
+class PartialTransferOutStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        """
+        Handles source-retained CA basis transfer-out legs.
+
+        Quantity may be zero for basis-only reallocation flows. In that case we
+        apply explicit basis reduction without consuming lots through SELL logic.
+        """
+        if transaction.quantity > Decimal(0):
+            SecurityOutflowStrategy().calculate_costs(
+                transaction, disposition_engine, error_reporter
+            )
+            return
+
+        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        basis_out_local = transaction.gross_transaction_amount
+        basis_out_base = basis_out_local * fx_rate
+        transaction.net_cost_local = -basis_out_local
+        transaction.net_cost = -basis_out_base
+        transaction.gross_cost = -basis_out_base
+        transaction.realized_gain_loss = None
+        transaction.realized_gain_loss_local = None
+
+
 class IncomeStrategy:
     def calculate_costs(
         self,
@@ -423,6 +452,18 @@ class CostCalculator:
             TransactionType.DEPOSIT: CashInflowStrategy(),
             TransactionType.TRANSFER_IN: SecurityInflowStrategy(),
             TransactionType.TRANSFER_OUT: SecurityOutflowStrategy(),
+            TransactionType.MERGER_IN: SecurityInflowStrategy(),
+            TransactionType.EXCHANGE_IN: SecurityInflowStrategy(),
+            TransactionType.REPLACEMENT_IN: SecurityInflowStrategy(),
+            TransactionType.MERGER_OUT: SecurityOutflowStrategy(),
+            TransactionType.EXCHANGE_OUT: SecurityOutflowStrategy(),
+            TransactionType.REPLACEMENT_OUT: SecurityOutflowStrategy(),
+            TransactionType.SPIN_IN: SecurityInflowStrategy(),
+            TransactionType.DEMERGER_IN: SecurityInflowStrategy(),
+            TransactionType.SPIN_OFF: PartialTransferOutStrategy(),
+            TransactionType.DEMERGER_OUT: PartialTransferOutStrategy(),
+            TransactionType.CASH_CONSIDERATION: IncomeStrategy(),
+            TransactionType.CASH_IN_LIEU: SellStrategy(),
             TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
             TransactionType.ADJUSTMENT: DefaultStrategy(),
             TransactionType.FEE: DefaultStrategy(),
