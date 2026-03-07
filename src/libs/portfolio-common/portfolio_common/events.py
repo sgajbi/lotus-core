@@ -323,3 +323,32 @@ class ValuationDayCompletedEvent(BaseModel):
     epoch: int = 0
     valuation_status: Optional[str] = None
     correlation_id: Optional[str] = None
+
+
+class PositionTimeseriesDayCompletedEvent(BaseModel):
+    """
+    Completion event emitted once position-timeseries persistence is complete
+    for a portfolio-security business day.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    portfolio_id: str
+    security_id: str
+    timeseries_date: date
+    epoch: int = 0
+    correlation_id: Optional[str] = None
+
+
+class PortfolioAggregationDayCompletedEvent(BaseModel):
+    """
+    Completion event emitted when portfolio aggregation is complete for a
+    portfolio business day.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    portfolio_id: str
+    aggregation_date: date
+    epoch: int = 0
+    correlation_id: Optional[str] = None

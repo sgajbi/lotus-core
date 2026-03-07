@@ -369,6 +369,10 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   - valuation service emits `valuation_day_completed` after valuation snapshot persistence
   - timeseries service consumes `valuation_day_completed` as canonical trigger while
     retaining `daily_position_snapshot_persisted` compatibility.
+- Added timeseries completion gate path:
+  - timeseries service emits `position_timeseries_day_completed` after position-timeseries persistence
+  - timeseries service emits `portfolio_aggregation_day_completed` after portfolio aggregation completion
+  - outbox dispatcher is now active in timeseries runtime for durable gate publication.
 
 ### 15.4 Race-condition safeguards applied in this slice
 
@@ -389,9 +393,11 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   - cashflow signal present.
   - `portfolio_day_ready_for_valuation` for security-scoped stage completions.
 - `valuation_day_completed` from valuation to timeseries is now implemented.
-- Timeseries-day and aggregation-day completion gates remain in planned follow-on slices.
+- `position_timeseries_day_completed` and `portfolio_aggregation_day_completed`
+  are now implemented.
 
 ### 15.3 Remaining roadmap alignment
 
-- Keep `position_timeseries_day_completed` and `portfolio_aggregation_day_completed`
-  as next-stage gates for subsequent RFC-081 slices.
+- Next slices should focus on service decomposition work (valuation orchestration split,
+  timeseries split, and query control-plane extraction) while preserving the now-explicit
+  end-to-end gate chain.

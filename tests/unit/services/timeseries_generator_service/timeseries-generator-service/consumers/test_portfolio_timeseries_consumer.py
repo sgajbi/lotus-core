@@ -8,6 +8,7 @@ from portfolio_common.database_models import (
     Portfolio,
 )
 from portfolio_common.events import PortfolioAggregationRequiredEvent
+from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.timeseries_generator_service.app.consumers.portfolio_timeseries_consumer import (
@@ -56,6 +57,7 @@ def mock_kafka_message(mock_event: PortfolioAggregationRequiredEvent) -> MagicMo
 def mock_dependencies():
     """A fixture to patch all external dependencies for the consumer test."""
     mock_repo = AsyncMock(spec=TimeseriesRepository)
+    mock_outbox_repo = AsyncMock(spec=OutboxRepository)
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_transaction = AsyncMock()
@@ -76,10 +78,19 @@ def mock_dependencies():
             new=mock_repo_class,
         ),
         patch(
+            "services.timeseries_generator_service.app.consumers.portfolio_timeseries_consumer.OutboxRepository",
+            return_value=mock_outbox_repo,
+        ),
+        patch(
             "services.timeseries_generator_service.app.consumers.portfolio_timeseries_consumer.PortfolioTimeseriesLogic.calculate_daily_record"
         ) as mock_logic,
     ):
-        yield {"repo": mock_repo, "db_session": mock_db_session, "logic": mock_logic}
+        yield {
+            "repo": mock_repo,
+            "db_session": mock_db_session,
+            "logic": mock_logic,
+            "outbox_repo": mock_outbox_repo,
+        }
 
 
 async def test_process_message_success(
@@ -96,6 +107,7 @@ async def test_process_message_success(
     # ARRANGE
     mock_repo = mock_dependencies["repo"]
     mock_logic = mock_dependencies["logic"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
 
     mock_repo.get_portfolio.return_value = Portfolio(
         portfolio_id=mock_event.portfolio_id, base_currency="USD"
@@ -120,3 +132,4 @@ async def test_process_message_success(
         mock_update_status.assert_called_once_with(
             mock_event.portfolio_id, mock_event.aggregation_date, "COMPLETE", db_session=ANY
         )
+        mock_outbox_repo.create_outbox_event.assert_awaited_once()
