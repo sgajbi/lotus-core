@@ -13,7 +13,8 @@ Source authority: RFC 081
 | `cashflow_calculator_service` | Cashflow rule/classification authority | `cashflows`, `cashflow_rules` | `raw_transactions_completed` | `cashflow_calculated` | Event |
 | `pipeline_orchestrator_service` | Stage-gate orchestrator for deterministic downstream readiness | `pipeline_stage_state` | `processed_transactions_completed`, `cashflow_calculated` | `transaction_processing_completed`, `portfolio_day_ready_for_valuation` | Event |
 | `position_calculator_service` | Position history and snapshot materialization | `position_history`, `daily_position_snapshots`, `position_state` | `transaction_processing_completed`, `processed_transactions_completed` (replay path) | `daily_position_snapshot_persisted`, `transactions_reprocessing_requested` | Event |
-| `position_valuation_calculator` | Valuation scheduling and valuation computation | `portfolio_valuation_jobs`, `instrument_reprocessing_state`, `reprocessing_jobs` | `daily_position_snapshot_persisted`, `market_price_persisted`, `valuation_required`, `portfolio_day_ready_for_valuation` | `daily_position_snapshot_persisted`, `valuation_day_completed`, `valuation_required` | Event + scheduler |
+| `valuation_orchestrator_service` | Valuation orchestration (job creation, scheduling, and reprocessing) | `portfolio_valuation_jobs`, `instrument_reprocessing_state`, `reprocessing_jobs` | `portfolio_day_ready_for_valuation`, `market_price_persisted` | `valuation_required` | Event + scheduler |
+| `position_valuation_calculator` | Valuation compute worker and completion publication | `daily_position_snapshots` (valuation fields) | `valuation_required` | `daily_position_snapshot_persisted`, `valuation_day_completed` | Event |
 | `timeseries_generator_service` | Position and portfolio timeseries generation | `position_timeseries`, `portfolio_timeseries`, `portfolio_aggregation_jobs` | `daily_position_snapshot_persisted`, `valuation_day_completed`, `portfolio_aggregation_required` | `position_timeseries_day_completed`, `portfolio_aggregation_day_completed`, `portfolio_aggregation_required` | Event + scheduler |
 | `query_service` | Read-plane APIs and operational diagnostics | Read-only over canonical/calculator tables | HTTP API | N/A | API |
 
@@ -24,8 +25,9 @@ Source authority: RFC 081
 3. `cashflow_calculator_service` emits `cashflow_calculated`.
 4. `pipeline_orchestrator_service` waits until both signals are observed for `(stage_name, transaction_id, epoch)` and emits `transaction_processing_completed`.
 5. For security-scoped transactions, orchestrator also emits `portfolio_day_ready_for_valuation` to stage valuation jobs deterministically.
-6. `position_valuation_calculator` emits `valuation_day_completed` after persisting valuation snapshots, and `timeseries_generator_service` consumes it as the canonical valuation-to-timeseries trigger (while retaining `daily_position_snapshot_persisted` compatibility).
-7. `timeseries_generator_service` emits `position_timeseries_day_completed` after position timeseries persistence and emits `portfolio_aggregation_day_completed` after portfolio aggregation completion.
+6. `valuation_orchestrator_service` creates and dispatches `valuation_required` jobs; `position_valuation_calculator` consumes those jobs and emits `valuation_day_completed` after persisting valuation snapshots.
+7. `timeseries_generator_service` consumes `valuation_day_completed` as the canonical valuation-to-timeseries trigger (while retaining `daily_position_snapshot_persisted` compatibility).
+8. `timeseries_generator_service` emits `position_timeseries_day_completed` after position timeseries persistence and emits `portfolio_aggregation_day_completed` after portfolio aggregation completion.
 
 ## Stage Gate Sequence (Planned in RFC 081)
 

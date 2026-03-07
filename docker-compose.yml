@@ -300,6 +300,36 @@ services:
     networks:
       - app_network
 
+  valuation_orchestrator_service:
+    build:
+      context: .
+      dockerfile: ./src/services/valuation_orchestrator_service/Dockerfile
+    hostname: valuation_orchestrator_service
+    ports:
+      - "${LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT:-8087}:8087"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+      VALUATION_SCHEDULER_POLL_INTERVAL: 2
+    depends_on:
+      kafka-topic-creator:
+        condition: service_completed_successfully
+      migration-runner:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    volumes:
+      - ./src/services/valuation_orchestrator_service/app:/app/app
+      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
+    command: ["python", "-m", "app.main"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8087/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
   position_valuation_calculator:
     build:
       context: .
@@ -310,7 +340,6 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
-      VALUATION_SCHEDULER_POLL_INTERVAL: 2
     depends_on:
       kafka-topic-creator:
         condition: service_completed_successfully
@@ -375,6 +404,8 @@ services:
         condition: service_healthy
       position_calculator_service:
         condition: service_healthy
+      valuation_orchestrator_service:
+        condition: service_healthy
       position_valuation_calculator:
         condition: service_healthy
       timeseries_generator_service:
@@ -414,6 +445,7 @@ services:
       - cashflow_calculator_service
       - position_calculator_service
       - pipeline_orchestrator_service
+      - valuation_orchestrator_service
       - position_valuation_calculator
       - timeseries_generator_service
 
