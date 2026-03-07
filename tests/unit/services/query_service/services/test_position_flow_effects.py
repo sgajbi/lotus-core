@@ -4,7 +4,6 @@ import pytest
 
 from src.services.query_service.app.services.position_flow_effects import (
     transaction_quantity_effect_decimal,
-    transaction_quantity_effect_float,
 )
 
 
@@ -36,8 +35,3 @@ from src.services.query_service.app.services.position_flow_effects import (
 def test_transaction_quantity_effect_decimal(transaction_type, quantity, expected):
     assert transaction_quantity_effect_decimal(transaction_type, quantity) == expected
 
-
-def test_transaction_quantity_effect_float() -> None:
-    assert transaction_quantity_effect_float("BUY", 2) == 2.0
-    assert transaction_quantity_effect_float("SELL", 2) == -2.0
-    assert transaction_quantity_effect_float("DEPOSIT", 2) == 0.0

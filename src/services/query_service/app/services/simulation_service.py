@@ -18,7 +18,7 @@ from ..dtos.simulation_dto import (
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.simulation_repository import SimulationRepository
-from .position_flow_effects import transaction_quantity_effect_float
+from .position_flow_effects import transaction_quantity_effect_decimal
 
 
 class SimulationService:
@@ -139,7 +139,7 @@ class SimulationService:
         for change in changes:
             record = baseline_map[change.security_id]
             qty = self._change_quantity_effect(change)
-            record["proposed_quantity"] += qty
+            record["proposed_quantity"] += float(qty)
 
         response_rows: list[ProjectedPositionRecord] = []
         for row in baseline_map.values():
@@ -180,8 +180,8 @@ class SimulationService:
         )
 
     @staticmethod
-    def _change_quantity_effect(change) -> float:
-        return transaction_quantity_effect_float(
+    def _change_quantity_effect(change):
+        return transaction_quantity_effect_decimal(
             transaction_type=getattr(change, "transaction_type", None),
             quantity=getattr(change, "quantity", None),
         )

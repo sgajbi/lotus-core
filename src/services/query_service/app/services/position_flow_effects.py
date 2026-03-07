@@ -31,7 +31,3 @@ def transaction_quantity_effect_decimal(transaction_type: str | None, quantity) 
     if normalized_type in POSITION_DECREASE_TRANSACTION_TYPES:
         return -magnitude
     return Decimal(0)
-
-
-def transaction_quantity_effect_float(transaction_type: str | None, quantity) -> float:
-    return float(transaction_quantity_effect_decimal(transaction_type, quantity))
