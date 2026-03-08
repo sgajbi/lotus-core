@@ -1,7 +1,7 @@
 # RFC 081 - Lotus Core Microservice Boundary Optimization and Event-Orchestration Hardening
 
 **Status**: In Progress  
-**Date**: 2026-03-07  
+**Date**: 2026-03-08  
 **Owner**: lotus-core Architecture  
 **Reviewers**: Platform Architecture, Data Engineering, QA, SRE  
 **Approvers**: *TBD*
@@ -18,6 +18,20 @@ Current decomposition is directionally correct, but there are boundary and trigg
 - Replay/remediation and RFC-065 operational diagnostics remain coupled to write ingress.
 
 This RFC introduces a phased architecture update that preserves existing throughput strengths while improving deterministic sequencing, auditability, and operational safety.
+
+## 0.1 Implementation status snapshot
+
+Implemented under RFC 081 as of 2026-03-08:
+
+- `valuation_orchestrator_service` split from valuation compute runtime
+- `portfolio_aggregation_service` split from position-timeseries worker runtime
+- `query_control_plane_service` split from core query read-plane
+- `event_replay_service` split from ingestion write ingress
+- `financial_reconciliation_service` added as the independent controls plane
+- automatic post-aggregation reconciliation trigger path:
+  `portfolio_aggregation_day_completed -> pipeline_orchestrator_service -> financial_reconciliation_requested -> financial_reconciliation_service`
+
+Remaining RFC 081 work is now hardening-oriented rather than primary boundary decomposition.
 
 ## 1. Purpose and Goals
 
@@ -162,6 +176,8 @@ Add `financial_reconciliation_service` for independent controls:
 - day-level timeseries integrity
 - durable run/finding audit tables with rerunnable scoped checks
 - RFC-065 grade health, metrics, and operational contract surfaces
+- event-driven automatic control invocation after portfolio aggregation completes
+- deterministic run dedupe for replay-safe automatic controls
 
 ## 4. Event-Driven Trigger Hardening
 
@@ -184,6 +200,7 @@ Introduce explicit gate events:
 - `valuation_day_completed`
 - `position_timeseries_day_completed`
 - `portfolio_aggregation_day_completed`
+- `financial_reconciliation_requested`
 
 Orchestrator enforces prerequisites before emitting next-stage events.
 
@@ -199,6 +216,9 @@ Create durable pipeline stage table (or equivalent state stream) keyed by:
 Track status:
 
 - `PENDING`, `READY`, `RUNNING`, `COMPLETED`, `FAILED`, `REQUIRES_REPLAY`
+
+Automatic reconciliation requests are emitted only after the portfolio aggregation stage reaches `COMPLETED`
+for the relevant `(portfolio_id, business_date, epoch)` key.
 
 ## 5. Banking-Grade Reliability Controls
 
@@ -270,6 +290,18 @@ Exit criteria:
 Exit criteria:
 
 - Core query latencies stable under control-plane load.
+
+## Phase 5 - Split replay and controls planes
+
+- Extract replay/remediation operations out of `ingestion_service` into `event_replay_service`.
+- Add `financial_reconciliation_service` for independent controls and integrity checks.
+- Route post-aggregation control execution through orchestrator-issued events rather than manual-only invocation.
+
+Exit criteria:
+
+- Ingestion runtime remains focused on canonical write ingress.
+- Replay/remediation and controls operate as independent control planes with RFC-065 runtime standards.
+- Automatic post-aggregation reconciliation is replay-safe and idempotent.
 
 ## 7. API and Event Contract Changes
 
@@ -398,6 +430,57 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   to prevent concurrent duplicate database loads under burst traffic.
 - Cashflow runtime now fails fast when any critical task exits unexpectedly
   (consumer, outbox dispatcher, or web server), preventing silent partial-outage mode.
+
+### 15.5 Delivered in subsequent RFC 081 slices (2026-03-08)
+
+- Split valuation orchestration from compute execution:
+  - `valuation_orchestrator_service` owns scheduling and orchestration concerns.
+  - `position_valuation_calculator` remains the compute/runtime worker.
+- Split portfolio aggregation from the position-timeseries worker:
+  - `timeseries_generator_service` now owns position-timeseries computation only.
+  - `portfolio_aggregation_service` owns portfolio aggregation scheduling and computation.
+- Split query control-plane from the core read-plane:
+  - `query_service` remains focused on authoritative read APIs.
+  - `query_control_plane_service` owns integration, simulation, and operations-facing support APIs.
+- Split replay/remediation from ingestion write ingress:
+  - `event_replay_service` now owns replay, DLQ recovery, and RFC-065 diagnostics.
+- Added independent controls plane:
+  - `financial_reconciliation_service` owns durable reconciliation runs/findings,
+    control APIs, and automatic event-driven bundle execution.
+
+### 15.6 Automatic reconciliation trigger path (implemented)
+
+Implemented trigger chain:
+
+1. `portfolio_aggregation_service` emits `portfolio_aggregation_day_completed`.
+2. `pipeline_orchestrator_service` consumes that event and publishes
+   `financial_reconciliation_requested` through the outbox.
+3. `financial_reconciliation_service` consumes the request and runs:
+   - `transaction_cashflow`
+   - `position_valuation`
+   - `timeseries_integrity`
+4. Automatic runs use deterministic dedupe keys:
+   `auto:{reconciliation_type}:{portfolio_id}:{business_date}:{epoch}`
+5. Duplicate event delivery or replay reuses the existing reconciliation run
+   instead of creating duplicate control records.
+
+Design rationale:
+
+- The orchestrator owns stage progression, so it owns post-stage control triggering.
+- The reconciliation service stays blind to source-delivery mode and only applies
+  durable idempotency plus control computation.
+- Persisted dedupe keys remove dependence on process-local memory and protect
+  against race conditions under replay or concurrent duplicate delivery.
+
+Validation completed for this slice:
+
+- unit tests for orchestrator emission, automatic bundle execution,
+  dedupe-key generation, and reconciliation event consumption
+- static validation via `ruff` and `py_compile`
+
+Validation currently environment-blocked:
+
+- docker-backed integration tests require Docker Desktop / engine to be running locally
 - Cashflow service startup now enforces a single outbox-dispatcher owner
   (`ConsumerManager`) to prevent duplicate dispatch loops on the same outbox table.
 - Pipeline orchestrator runtime now applies the same fail-fast supervision model,

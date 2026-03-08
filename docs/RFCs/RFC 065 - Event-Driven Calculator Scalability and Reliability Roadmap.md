@@ -56,7 +56,8 @@ RFC 065 is implemented and serves as the operational backbone for RFC 066 readin
 1. Keep RFC 065 as implemented roadmap record.
 2. Use RFC 066 and subsequent runbooks for ongoing readiness enforcement/tuning.
 3. Any new control-plane microservice introduced under later RFCs must inherit the same runtime standard:
-   dedicated health/readiness, Prometheus exposure, durable audit state, and explicit operational contracts.
+   dedicated health/readiness, Prometheus exposure, durable audit state, explicit operational contracts,
+   and replay-safe idempotent execution for any event-driven control path.
 
 ## Test and Validation Evidence
 1. `src/services/event_replay_service/app/routers/ingestion_operations.py`

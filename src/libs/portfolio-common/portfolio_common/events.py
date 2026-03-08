@@ -352,3 +352,26 @@ class PortfolioAggregationDayCompletedEvent(BaseModel):
     aggregation_date: date
     epoch: int = 0
     correlation_id: Optional[str] = None
+
+
+class FinancialReconciliationRequestedEvent(BaseModel):
+    """
+    Control-plane event emitted when a portfolio-day is ready for automated
+    reconciliation execution.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    portfolio_id: str
+    business_date: date
+    epoch: int = 0
+    reconciliation_types: list[str] = Field(
+        default_factory=lambda: [
+            "transaction_cashflow",
+            "position_valuation",
+            "timeseries_integrity",
+        ]
+    )
+    requested_by: str = "system_pipeline"
+    trigger_stage: str = "portfolio_aggregation_day_completed"
+    correlation_id: Optional[str] = None

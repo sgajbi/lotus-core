@@ -4,7 +4,11 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.events import CashflowCalculatedEvent, TransactionEvent
+from portfolio_common.events import (
+    CashflowCalculatedEvent,
+    PortfolioAggregationDayCompletedEvent,
+    TransactionEvent,
+)
 
 from src.services.pipeline_orchestrator_service.app.services.pipeline_orchestrator_service import (
     PipelineOrchestratorService,
@@ -133,3 +137,30 @@ async def test_no_emit_when_stage_claim_lost_to_competing_worker():
     await service.register_cashflow_calculated(_cashflow_event(), correlation_id="corr-3")
 
     outbox_repo.create_outbox_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_portfolio_aggregation_completion_emits_reconciliation_request():
+    repo = _RepoStub()
+    outbox_repo = AsyncMock()
+    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
+
+    await service.register_portfolio_aggregation_completed(
+        PortfolioAggregationDayCompletedEvent(
+            portfolio_id="PORT-1",
+            aggregation_date=date(2026, 3, 7),
+            epoch=2,
+            correlation_id="corr-4",
+        ),
+        correlation_id="corr-4",
+    )
+
+    outbox_repo.create_outbox_event.assert_awaited_once()
+    call = outbox_repo.create_outbox_event.await_args
+    assert call.kwargs["event_type"] == "FinancialReconciliationRequested"
+    assert call.kwargs["aggregate_id"] == "PORT-1:2026-03-07:2"
+    assert call.kwargs["payload"]["reconciliation_types"] == [
+        "transaction_cashflow",
+        "position_valuation",
+        "timeseries_integrity",
+    ]

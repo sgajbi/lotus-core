@@ -30,7 +30,7 @@ async def test_run_transaction_cashflow_records_missing_cashflow_finding():
         is_portfolio_flow=False,
     )
     repository = AsyncMock()
-    repository.create_run.return_value = run
+    repository.create_run.return_value = (run, True)
     repository.fetch_transaction_cashflow_rows.return_value = [(transaction, rule, None)]
 
     service = ReconciliationService(repository)
@@ -62,7 +62,7 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
         unrealized_gain_loss_local=Decimal("5"),
     )
     repository = AsyncMock()
-    repository.create_run.return_value = run
+    repository.create_run.return_value = (run, True)
     repository.fetch_position_valuation_rows.return_value = [snapshot]
 
     service = ReconciliationService(repository)
@@ -78,3 +78,48 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
     }
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
     assert summary["finding_count"] == 2
+
+
+async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
+    transaction_run = SimpleNamespace(run_id="recon-tx")
+    valuation_run = SimpleNamespace(run_id="recon-val")
+    timeseries_run = SimpleNamespace(run_id="recon-ts")
+    repository = AsyncMock()
+    repository.create_run.side_effect = [
+        (transaction_run, True),
+        (valuation_run, True),
+        (timeseries_run, True),
+    ]
+    repository.fetch_transaction_cashflow_rows.return_value = []
+    repository.fetch_position_valuation_rows.return_value = []
+    repository.fetch_portfolio_timeseries_rows.return_value = []
+    repository.fetch_position_timeseries_aggregates.return_value = []
+    repository.fetch_snapshot_counts.return_value = []
+
+    service = ReconciliationService(repository)
+    result = await service.run_automatic_bundle(
+        request=ReconciliationRunRequest(
+            portfolio_id="PORT-AUTO",
+            business_date=date(2026, 3, 8),
+            epoch=4,
+            requested_by="system_pipeline",
+        ),
+        correlation_id="corr-auto",
+        reconciliation_types=[
+            "transaction_cashflow",
+            "position_valuation",
+            "timeseries_integrity",
+        ],
+    )
+
+    assert result == {
+        "transaction_cashflow": transaction_run,
+        "position_valuation": valuation_run,
+        "timeseries_integrity": timeseries_run,
+    }
+    dedupe_keys = [call.kwargs["dedupe_key"] for call in repository.create_run.await_args_list]
+    assert dedupe_keys == [
+        "auto:transaction_cashflow:PORT-AUTO:2026-03-08:4",
+        "auto:position_valuation:PORT-AUTO:2026-03-08:4",
+        "auto:timeseries_integrity:PORT-AUTO:2026-03-08:4",
+    ]

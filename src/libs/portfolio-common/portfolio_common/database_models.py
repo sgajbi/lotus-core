@@ -1079,6 +1079,7 @@ class FinancialReconciliationRun(Base):
     epoch = Column(Integer, nullable=True, index=True)
     status = Column(String, nullable=False, default="RUNNING", server_default="RUNNING", index=True)
     requested_by = Column(String, nullable=True)
+    dedupe_key = Column(String, nullable=True, unique=True, index=True)
     correlation_id = Column(String, nullable=True)
     tolerance = Column(Numeric(18, 10), nullable=True)
     summary = Column(JSON, nullable=True)

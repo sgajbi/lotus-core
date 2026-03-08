@@ -25,21 +25,44 @@ class ReconciliationService:
     def __init__(self, repository: ReconciliationRepository):
         self.repository = repository
 
+    @staticmethod
+    def _automatic_dedupe_key(
+        *,
+        reconciliation_type: str,
+        request: ReconciliationRunRequest,
+    ) -> str | None:
+        if request.requested_by != "system_pipeline":
+            return None
+        if request.portfolio_id is None or request.business_date is None:
+            return None
+        epoch = request.epoch if request.epoch is not None else 0
+        return (
+            f"auto:{reconciliation_type}:{request.portfolio_id}:"
+            f"{request.business_date.isoformat()}:{epoch}"
+        )
+
     async def run_transaction_cashflow(
         self,
         *,
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
-        run = await self.repository.create_run(
+        dedupe_key = self._automatic_dedupe_key(
+            reconciliation_type="transaction_cashflow",
+            request=request,
+        )
+        run, created = await self.repository.create_run(
             reconciliation_type="transaction_cashflow",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
             requested_by=request.requested_by,
+            dedupe_key=dedupe_key,
             correlation_id=correlation_id,
             tolerance=request.tolerance,
         )
+        if not created:
+            return run
         rows = await self.repository.fetch_transaction_cashflow_rows(
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
@@ -117,15 +140,22 @@ class ReconciliationService:
         correlation_id: str | None,
     ):
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
-        run = await self.repository.create_run(
+        dedupe_key = self._automatic_dedupe_key(
+            reconciliation_type="position_valuation",
+            request=request,
+        )
+        run, created = await self.repository.create_run(
             reconciliation_type="position_valuation",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
             requested_by=request.requested_by,
+            dedupe_key=dedupe_key,
             correlation_id=correlation_id,
             tolerance=tolerance,
         )
+        if not created:
+            return run
         rows = await self.repository.fetch_position_valuation_rows(
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
@@ -203,15 +233,22 @@ class ReconciliationService:
         correlation_id: str | None,
     ):
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
-        run = await self.repository.create_run(
+        dedupe_key = self._automatic_dedupe_key(
+            reconciliation_type="timeseries_integrity",
+            request=request,
+        )
+        run, created = await self.repository.create_run(
             reconciliation_type="timeseries_integrity",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
             requested_by=request.requested_by,
+            dedupe_key=dedupe_key,
             correlation_id=correlation_id,
             tolerance=tolerance,
         )
+        if not created:
+            return run
         portfolio_rows = await self.repository.fetch_portfolio_timeseries_rows(
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
@@ -367,6 +404,36 @@ class ReconciliationService:
         summary = self._summary(examined=examined, findings=findings)
         await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
         return run
+
+    async def run_automatic_bundle(
+        self,
+        *,
+        request: ReconciliationRunRequest,
+        correlation_id: str | None,
+        reconciliation_types: list[str],
+    ) -> dict[str, object]:
+        results: dict[str, object] = {}
+        for reconciliation_type in reconciliation_types:
+            if reconciliation_type == "transaction_cashflow":
+                results[reconciliation_type] = await self.run_transaction_cashflow(
+                    request=request,
+                    correlation_id=correlation_id,
+                )
+                continue
+            if reconciliation_type == "position_valuation":
+                results[reconciliation_type] = await self.run_position_valuation(
+                    request=request,
+                    correlation_id=correlation_id,
+                )
+                continue
+            if reconciliation_type == "timeseries_integrity":
+                results[reconciliation_type] = await self.run_timeseries_integrity(
+                    request=request,
+                    correlation_id=correlation_id,
+                )
+                continue
+            raise ValueError(f"Unsupported reconciliation type '{reconciliation_type}'.")
+        return results
 
     def _summary(self, *, examined: int, findings: list[FinancialReconciliationFinding]) -> dict:
         error_count = sum(1 for finding in findings if finding.severity == "ERROR")

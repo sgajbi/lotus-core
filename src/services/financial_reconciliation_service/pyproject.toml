@@ -12,6 +12,8 @@ dependencies = [
     "uvicorn[standard]==0.35.0",
     "sqlalchemy==2.0.30",
     "asyncpg==0.29.0",
+    "confluent-kafka==2.4.0",
+    "tenacity==8.2.3",
     "pydantic==2.11.9",
     "python-dotenv==1.0.1",
     "prometheus-fastapi-instrumentator==7.1.0",
