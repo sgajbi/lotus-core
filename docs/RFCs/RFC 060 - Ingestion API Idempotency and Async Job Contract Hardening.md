@@ -35,9 +35,9 @@ The RFC document was stale; this revision aligns it with current implementation 
 | Canonical acceptance DTOs | Implemented | `src/services/ingestion_service/app/DTOs/ingestion_ack_dto.py`; `src/services/ingestion_service/app/ack_response.py` |
 | Idempotency header acceptance/propagation | Implemented | `src/services/ingestion_service/app/request_metadata.py`; `src/services/ingestion_service/app/services/ingestion_service.py`; `tests/unit/services/ingestion_service/services/test_ingestion_service.py` |
 | Batch `job_id` contract | Implemented | ingestion routers (`portfolios.py`, `transactions.py`, `instruments.py`, `business_dates.py`, etc.) |
-| Job status/query API | Implemented (beyond original early slices) | `src/services/ingestion_service/app/routers/ingestion_jobs.py`; `src/services/ingestion_service/app/services/ingestion_job_service.py` |
+| Job status/query API | Implemented (beyond original early slices) | `src/services/event_replay_service/app/routers/ingestion_operations.py`; `src/services/ingestion_service/app/services/ingestion_job_service.py` |
 | Persistent job/idempotency storage | Implemented | `src/libs/portfolio-common/portfolio_common/database_models.py` (`ingestion_jobs`, related entities) |
-| Idempotency diagnostics and replay governance | Implemented | `src/services/ingestion_service/app/routers/ingestion_jobs.py` (`/ingestion/idempotency/diagnostics`, replay endpoints) |
+| Idempotency diagnostics and replay governance | Implemented | `src/services/event_replay_service/app/routers/ingestion_operations.py` (`/ingestion/idempotency/diagnostics`, replay endpoints) |
 
 ## Design Reasoning and Trade-offs
 1. Early contract normalization improved external integration safety without waiting for full ops stack.
@@ -71,7 +71,7 @@ The RFC document was stale; this revision aligns it with current implementation 
 1. `tests/integration/services/ingestion_service/test_ingestion_routers.py`
 2. `tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py`
 3. `tests/unit/services/ingestion_service/services/test_ingestion_service.py`
-4. `src/services/ingestion_service/app/routers/ingestion_jobs.py`
+4. `src/services/event_replay_service/app/routers/ingestion_operations.py`
 5. `src/services/ingestion_service/app/services/ingestion_job_service.py`
 
 ## Original Acceptance Criteria Alignment

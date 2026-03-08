@@ -1,18 +1,21 @@
-from datetime import datetime
-from decimal import Decimal
 import hashlib
 import json
+from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
-from app.DTOs.business_date_dto import BusinessDateIngestionRequest
-from app.DTOs.fx_rate_dto import FxRateIngestionRequest
-from app.DTOs.ingestion_job_dto import (
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+
+from src.services.ingestion_service.app.DTOs.business_date_dto import BusinessDateIngestionRequest
+from src.services.ingestion_service.app.DTOs.fx_rate_dto import FxRateIngestionRequest
+from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
+    ConsumerDlqEventListResponse,
     ConsumerDlqReplayRequest,
     ConsumerDlqReplayResponse,
-    ConsumerDlqEventListResponse,
     IngestionBacklogBreakdownResponse,
-    IngestionConsumerLagResponse,
     IngestionCapacityStatusResponse,
+    IngestionConsumerLagResponse,
     IngestionErrorBudgetStatusResponse,
     IngestionHealthSummaryResponse,
     IngestionIdempotencyDiagnosticsResponse,
@@ -20,30 +23,36 @@ from app.DTOs.ingestion_job_dto import (
     IngestionJobListResponse,
     IngestionJobRecordStatusResponse,
     IngestionJobResponse,
+    IngestionOperatingBandResponse,
     IngestionOpsModeResponse,
     IngestionOpsModeUpdateRequest,
     IngestionOpsPolicyResponse,
-    IngestionOperatingBandResponse,
-    IngestionReprocessingQueueHealthResponse,
     IngestionReplayAuditListResponse,
     IngestionReplayAuditResponse,
+    IngestionReprocessingQueueHealthResponse,
     IngestionRetryRequest,
     IngestionSloStatusResponse,
     IngestionStalledJobListResponse,
 )
-from app.DTOs.instrument_dto import InstrumentIngestionRequest
-from app.DTOs.market_price_dto import MarketPriceIngestionRequest
-from app.DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
-from app.DTOs.portfolio_dto import PortfolioIngestionRequest
-from app.DTOs.reprocessing_dto import ReprocessingRequest
-from app.DTOs.transaction_dto import TransactionIngestionRequest
-from app.request_metadata import get_request_lineage
-from app.ops_controls import require_ops_token
-from app.routers.reprocessing import REPROCESSING_REQUESTED_TOPIC
-from app.services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from app.services.ingestion_service import IngestionService, get_ingestion_service
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+from src.services.ingestion_service.app.DTOs.instrument_dto import InstrumentIngestionRequest
+from src.services.ingestion_service.app.DTOs.market_price_dto import MarketPriceIngestionRequest
+from src.services.ingestion_service.app.DTOs.portfolio_bundle_dto import (
+    PortfolioBundleIngestionRequest,
+)
+from src.services.ingestion_service.app.DTOs.portfolio_dto import PortfolioIngestionRequest
+from src.services.ingestion_service.app.DTOs.reprocessing_dto import ReprocessingRequest
+from src.services.ingestion_service.app.DTOs.transaction_dto import TransactionIngestionRequest
+from src.services.ingestion_service.app.ops_controls import require_ops_token
+from src.services.ingestion_service.app.request_metadata import get_request_lineage
+from src.services.ingestion_service.app.routers.reprocessing import REPROCESSING_REQUESTED_TOPIC
+from src.services.ingestion_service.app.services.ingestion_job_service import (
+    IngestionJobService,
+    get_ingestion_job_service,
+)
+from src.services.ingestion_service.app.services.ingestion_service import (
+    IngestionService,
+    get_ingestion_service,
+)
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])
 
@@ -308,8 +317,10 @@ async def get_ingestion_job_records(
     summary="Retry a failed ingestion job",
     description=(
         "What: Retry a failed ingestion job using full or partial payload replay.\n"
-        "How: Rehydrate stored request payload, apply optional record-key filtering, and republish asynchronously.\n"
-        "When: Use after root cause remediation to recover failed ingestion without direct DB operations."
+        "How: Rehydrate stored request payload, apply optional record-key filtering, "
+        "and republish asynchronously.\n"
+        "When: Use after root cause remediation to recover failed ingestion "
+        "without direct DB operations."
     ),
 )
 async def retry_ingestion_job(
@@ -427,7 +438,10 @@ async def retry_ingestion_job(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
-                "message": "Retry blocked because an equivalent deterministic replay already succeeded.",
+                "message": (
+                    "Retry blocked because an equivalent deterministic replay "
+                    "already succeeded."
+                ),
                 "replay_fingerprint": replay_fingerprint,
             },
         )
@@ -606,8 +620,10 @@ async def get_ingestion_error_budget_status(
     summary="Get ingestion operating band",
     description=(
         "What: Return canonical ingestion operating band (green/yellow/orange/red).\n"
-        "How: Combine backlog-age, DLQ pressure, and SLO breach signals into one runbook-ready severity.\n"
-        "When: Use for autoscaling decisions, replay safety gating, and incident triage automation."
+        "How: Combine backlog-age, DLQ pressure, and SLO breach signals into one "
+        "runbook-ready severity.\n"
+        "When: Use for autoscaling decisions, replay safety gating, and incident "
+        "triage automation."
     ),
 )
 async def get_ingestion_operating_band(
@@ -634,7 +650,8 @@ async def get_ingestion_operating_band(
     description=(
         "What: Return active ingestion policy thresholds and replay/DLQ guardrails.\n"
         "How: Expose configured defaults used by SLO, operating-band, and replay gating flows.\n"
-        "When: Use to prevent config drift and keep runbooks/automation aligned with runtime policy."
+        "When: Use to prevent config drift and keep runbooks/automation aligned "
+        "with runtime policy."
     ),
 )
 async def get_ingestion_operating_policy(
@@ -668,8 +685,10 @@ async def get_reprocessing_queue_health(
     tags=["Ingestion Operations"],
     summary="Get ingestion capacity and saturation diagnostics",
     description=(
-        "What: Return per endpoint/entity ingestion capacity diagnostics using RFC-065 throughput signals.\n"
-        "How: Aggregate accepted, processed, and backlog records and derive lambda_in, mu_msg, rho, headroom, and drain time.\n"
+        "What: Return per endpoint/entity ingestion capacity diagnostics using "
+        "RFC-065 throughput signals.\n"
+        "How: Aggregate accepted, processed, and backlog records and derive "
+        "lambda_in, mu_msg, rho, headroom, and drain time.\n"
         "When: Use to detect overload, prioritize scaling, and estimate backlog recovery time."
     ),
 )
@@ -694,7 +713,8 @@ async def get_ingestion_capacity_status(
     summary="Get ingestion backlog breakdown by endpoint and entity",
     description=(
         "What: Return grouped backlog/failure-rate metrics by endpoint and entity type.\n"
-        "How: Aggregate canonical ingestion jobs into endpoint/entity groups with oldest backlog age.\n"
+        "How: Aggregate canonical ingestion jobs into endpoint/entity groups "
+        "with oldest backlog age.\n"
         "When: Use to isolate the highest-impact ingestion pipeline segment during incidents."
     ),
 )
@@ -764,7 +784,8 @@ async def list_consumer_dlq_events(
     summary="Replay ingestion payload for correlated consumer DLQ event",
     description=(
         "What: Replay canonical ingestion payload correlated to a consumer DLQ event.\n"
-        "How: Resolve DLQ event -> correlation_id -> ingestion job with durable payload, then republish.\n"
+        "How: Resolve DLQ event -> correlation_id -> ingestion job with durable "
+        "payload, then republish.\n"
         "When: Use after fixing downstream consumer defects to recover rejected events safely."
     ),
 )
@@ -803,7 +824,10 @@ async def replay_consumer_dlq_event(
             endpoint=None,
             replay_status="not_replayable",
             dry_run=replay_request.dry_run,
-            replay_reason="DLQ event has no correlation id and cannot be mapped to ingestion payload.",
+            replay_reason=(
+                "DLQ event has no correlation id and cannot be mapped to "
+                "ingestion payload."
+            ),
             requested_by=ops_actor,
         )
         return ConsumerDlqReplayResponse(
@@ -1014,7 +1038,8 @@ async def replay_consumer_dlq_event(
     summary="List ingestion replay audit records",
     description=(
         "What: Return replay audit records across ingestion recovery paths.\n"
-        "How: Query durable replay audit rows with filters for recovery path, status, fingerprint, and job.\n"
+        "How: Query durable replay audit rows with filters for recovery path, "
+        "status, fingerprint, and job.\n"
         "When: Use for incident forensics and replay governance review."
     ),
 )

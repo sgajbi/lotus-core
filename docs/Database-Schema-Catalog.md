@@ -13,7 +13,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: System business calendar boundary used by valuation, aggregation, and booked-state views.
 - **Description**: Represents valid processing dates per calendar, not trade/event timestamps.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/ingestion_service/app/routers/business_dates.py`, `src/services/ingestion_service/app/services/ingestion_service.py`, `src/services/persistence_service/app/repositories/business_date_repository.py`, `src/services/persistence_service/app/consumers/business_date_consumer.py`, `src/services/ingestion_service/app/routers/ingestion_jobs.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`
+- **Usage (modules/features)**: `src/services/ingestion_service/app/routers/business_dates.py`, `src/services/ingestion_service/app/services/ingestion_service.py`, `src/services/persistence_service/app/repositories/business_date_repository.py`, `src/services/persistence_service/app/consumers/business_date_consumer.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `calendar_code` (String): Controlled code value from a domain taxonomy/configuration.
@@ -680,7 +680,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Ingestion job tracking and ops visibility.
 - **Description**: Batch/API submission lifecycle records with status and correlation.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/ingestion_service/app/routers/ingestion_jobs.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`, `src/services/ingestion_service/app/main.py`
+- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`, `src/services/ingestion_service/app/main.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -705,7 +705,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Ingestion failure detail records.
 - **Description**: Failure rows tied to ingestion jobs for remediation/replay.
 - **Relationships**: `job_id` -> `ingestion_jobs.job_id`
-- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/ingestion_service/app/routers/ingestion_jobs.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`
+- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -721,7 +721,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Operational control plane for ingestion mode.
 - **Description**: Stores pause/drain/replay window controls.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/ingestion_service/app/routers/ingestion_jobs.py`
+- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -736,7 +736,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Dead-letter event archive.
 - **Description**: Captured failed-consumer events with reason and context.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/ingestion_service/app/routers/ingestion_jobs.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/kafka_consumer.py`
+- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/kafka_consumer.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -755,7 +755,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Replay audit trail for DLQ remediation.
 - **Description**: Records replay requests/outcomes for governance and incident forensics.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/ingestion_service/app/routers/ingestion_jobs.py`
+- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

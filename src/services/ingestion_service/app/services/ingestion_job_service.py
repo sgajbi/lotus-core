@@ -8,7 +8,7 @@ import json
 from typing import Any, Literal
 from uuid import uuid4
 
-from app.DTOs.ingestion_job_dto import (
+from ..DTOs.ingestion_job_dto import (
     IngestionBacklogBreakdownItemResponse,
     IngestionBacklogBreakdownResponse,
     ConsumerDlqEventResponse,

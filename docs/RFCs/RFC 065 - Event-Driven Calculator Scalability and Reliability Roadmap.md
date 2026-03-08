@@ -33,7 +33,7 @@ RFC 065 is implemented and serves as the operational backbone for RFC 066 readin
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
 | Deterministic ordering/partition hardening | Implemented | `src/services/ingestion_service/app/services/ingestion_service.py`; replay/order logic and related tests |
-| Idempotency/replay safety and blast-radius guardrails | Implemented | `src/services/ingestion_service/app/routers/ingestion_jobs.py`; replay guardrail tests |
+| Idempotency/replay safety and blast-radius guardrails | Implemented | `src/services/event_replay_service/app/routers/ingestion_operations.py`; replay guardrail tests |
 | DLQ reason-code taxonomy and diagnostics | Implemented | base consumer + ingestion ops DTO/service/router updates |
 | Capacity/backlog/operating-band policy APIs | Implemented | ingestion ops endpoints (`/ingestion/health/*`) and service logic |
 | Operational policy introspection | Implemented | `/ingestion/health/policy` endpoint and tests |
@@ -57,7 +57,7 @@ RFC 065 is implemented and serves as the operational backbone for RFC 066 readin
 2. Use RFC 066 and subsequent runbooks for ongoing readiness enforcement/tuning.
 
 ## Test and Validation Evidence
-1. `src/services/ingestion_service/app/routers/ingestion_jobs.py`
+1. `src/services/event_replay_service/app/routers/ingestion_operations.py`
 2. `src/services/ingestion_service/app/services/ingestion_job_service.py`
 3. `tests/integration/services/ingestion_service/test_ingestion_routers.py`
 4. `tests/unit/services/ingestion_service/services/test_ingestion_job_service_*`

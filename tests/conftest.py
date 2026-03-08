@@ -34,6 +34,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_KAFKA_INTERNAL_PORT": "9093",
         "LOTUS_POSTGRES_HOST_PORT": "55432",
         "LOTUS_INGESTION_HOST_PORT": "8200",
+        "LOTUS_EVENT_REPLAY_HOST_PORT": "8209",
         "LOTUS_QUERY_HOST_PORT": "8201",
         "LOTUS_PERSISTENCE_HOST_PORT": "8080",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8081",
@@ -49,6 +50,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_KAFKA_INTERNAL_PORT": "9193",
         "LOTUS_POSTGRES_HOST_PORT": "56432",
         "LOTUS_INGESTION_HOST_PORT": "8300",
+        "LOTUS_EVENT_REPLAY_HOST_PORT": "8309",
         "LOTUS_QUERY_HOST_PORT": "8301",
         "LOTUS_PERSISTENCE_HOST_PORT": "8180",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8181",
@@ -64,6 +66,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_KAFKA_INTERNAL_PORT": "9293",
         "LOTUS_POSTGRES_HOST_PORT": "57432",
         "LOTUS_INGESTION_HOST_PORT": "8400",
+        "LOTUS_EVENT_REPLAY_HOST_PORT": "8409",
         "LOTUS_QUERY_HOST_PORT": "8401",
         "LOTUS_PERSISTENCE_HOST_PORT": "8280",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8281",
@@ -89,6 +92,7 @@ _apply_test_env_profile_defaults()
 host_db_port = os.environ["LOTUS_POSTGRES_HOST_PORT"]
 ingestion_port = os.environ["LOTUS_INGESTION_HOST_PORT"]
 query_port = os.environ["LOTUS_QUERY_HOST_PORT"]
+event_replay_port = os.environ["LOTUS_EVENT_REPLAY_HOST_PORT"]
 kafka_port = os.environ["LOTUS_KAFKA_EXTERNAL_PORT"]
 os.environ.setdefault(
     "HOST_DATABASE_URL",
@@ -99,6 +103,7 @@ os.environ.setdefault(
     f"postgresql://user:password@localhost:{host_db_port}/portfolio_db",
 )
 os.environ.setdefault("E2E_INGESTION_URL", f"http://localhost:{ingestion_port}")
+os.environ.setdefault("E2E_EVENT_REPLAY_URL", f"http://localhost:{event_replay_port}")
 os.environ.setdefault("E2E_QUERY_URL", f"http://localhost:{query_port}")
 os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", f"localhost:{kafka_port}")
 # Keep demo ingestion sidecar disabled for deterministic integration/e2e tests.
@@ -143,6 +148,7 @@ def docker_services(request):  # noqa: ARG001
             "postgres",
             "migration-runner",
             "ingestion_service",
+            "event_replay_service",
             "query_service",
             "persistence_service",
             "cost_calculator_service",
@@ -174,6 +180,11 @@ def docker_services(request):  # noqa: ARG001
         query_base_url = os.getenv("E2E_QUERY_URL", "http://localhost:8201").rstrip("/")
         services_to_check = {
             "ingestion_service": f"{ingestion_base_url}/health/ready",
+            "event_replay_service": os.getenv(
+                "E2E_EVENT_REPLAY_URL",
+                "http://localhost:8209",
+            ).rstrip("/")
+            + "/health/ready",
             "query_service": f"{query_base_url}/health/ready",
         }
 

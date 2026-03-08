@@ -7,7 +7,8 @@ Source authority: RFC 081
 
 | Service | Primary Role | Owns State | Consumes | Emits | Trigger Type |
 | --- | --- | --- | --- | --- | --- |
-| `ingestion_service` | Canonical write-ingress and contract validation | `ingestion_jobs`, `ingestion_job_failures`, `ingestion_ops_control`, `consumer_dlq_*` | HTTP API | Raw domain topics (`raw_transactions`, `instruments`, `market_prices`, `fx_rates`) | API |
+| `ingestion_service` | Canonical write-ingress and contract validation | Canonical ingress submission state and request payload persistence | HTTP API | Raw domain topics (`raw_transactions`, `instruments`, `market_prices`, `fx_rates`) | API |
+| `event_replay_service` | Replay/remediation control plane for ingestion jobs, DLQ recovery, and RFC-065 diagnostics | `ingestion_jobs`, `ingestion_job_failures`, `ingestion_ops_control`, `consumer_dlq_*` | HTTP API | Republished raw domain topics via controlled replay | API |
 | `persistence_service` | Canonical persistence and completion publication | `portfolios`, `transactions`, `instruments`, `market_prices`, `fx_rates`, `business_dates` | Raw domain topics | `raw_transactions_completed`, `market_price_persisted` | Event |
 | `cost_calculator_service` | Cost basis and lot-state authority | `transaction_costs`, `position_lot_state`, `accrued_income_offset_state`, `position_state` | `raw_transactions_completed`, `transactions_reprocessing_requested` | `processed_transactions_completed` | Event |
 | `cashflow_calculator_service` | Cashflow rule/classification authority | `cashflows`, `cashflow_rules` | `raw_transactions_completed` | `cashflow_calculated` | Event |
@@ -43,3 +44,6 @@ Source authority: RFC 081
 - Event publication must use outbox pattern (`outbox_events`) for exactly-once effect semantics.
 - Stage transitions must be deterministic and epoch-aware; no implicit downstream trigger assumptions.
 - Any replay path must preserve transaction epoch and stage-gate invariants.
+- Control-plane replay/remediation services must preserve RFC-065 guardrails:
+  durable audit trails, deterministic replay fingerprints, capacity/policy introspection,
+  and protected operational endpoints.

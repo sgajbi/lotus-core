@@ -1,13 +1,13 @@
 # services/ingestion_service/app/services/ingestion_service.py
 from typing import List
 
-from app.DTOs.business_date_dto import BusinessDate
-from app.DTOs.fx_rate_dto import FxRate
-from app.DTOs.instrument_dto import Instrument
-from app.DTOs.market_price_dto import MarketPrice
-from app.DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
-from app.DTOs.portfolio_dto import Portfolio
-from app.DTOs.transaction_dto import Transaction
+from ..DTOs.business_date_dto import BusinessDate
+from ..DTOs.fx_rate_dto import FxRate
+from ..DTOs.instrument_dto import Instrument
+from ..DTOs.market_price_dto import MarketPrice
+from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
+from ..DTOs.portfolio_dto import Portfolio
+from ..DTOs.transaction_dto import Transaction
 from fastapi import Depends
 from portfolio_common.config import (
     KAFKA_FX_RATES_TOPIC,
