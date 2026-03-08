@@ -1,8 +1,10 @@
 # services/calculators/cost_calculator_service/app/web.py
 from fastapi import FastAPI
 from portfolio_common.health import create_health_router
+from portfolio_common.openapi_enrichment import attach_enriched_openapi
 
 app = FastAPI(title="Cost Calculator - Health")
+attach_enriched_openapi(app, service_name="cost_calculator_service_web")
 
 # Create and include the standardized health router.
 # This service depends on the database.

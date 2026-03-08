@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,74 @@ from ..repositories import ReconciliationRepository
 from ..services import ReconciliationService
 
 router = APIRouter(tags=["financial-reconciliation"])
+
+RECONCILIATION_RUN_REQUEST_EXAMPLES = {
+    "portfolio_day_scope": {
+        "summary": "Portfolio-day scoped control run",
+        "description": (
+            "Run a deterministic control for one portfolio, one business date, and one epoch."
+        ),
+        "value": {
+            "portfolio_id": "PORT-OPS-001",
+            "business_date": "2026-03-06",
+            "epoch": 0,
+            "requested_by": "ops_control_plane",
+            "tolerance": "0.01",
+        },
+    },
+    "all_portfolios_day_scope": {
+        "summary": "Estate-wide day scan",
+        "description": "Run the control across all portfolios for one business date.",
+        "value": {
+            "business_date": "2026-03-06",
+            "requested_by": "daily_control_scheduler",
+            "tolerance": "0.05",
+        },
+    },
+}
+
+RECONCILIATION_RUN_RESPONSE_EXAMPLE = {
+    "run_id": "FRR-20260306-0001",
+    "reconciliation_type": "transaction_cashflow",
+    "portfolio_id": "PORT-OPS-001",
+    "business_date": "2026-03-06",
+    "epoch": 0,
+    "status": "completed",
+    "requested_by": "ops_control_plane",
+    "correlation_id": "CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700",
+    "tolerance": "0.01",
+    "summary": {"checked_transactions": 142, "finding_count": 1, "passed": False},
+    "failure_reason": None,
+    "started_at": "2026-03-06T14:03:10Z",
+    "completed_at": "2026-03-06T14:03:11Z",
+    "created_at": "2026-03-06T14:03:10Z",
+    "updated_at": "2026-03-06T14:03:11Z",
+}
+
+RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE = {
+    "findings": [
+        {
+            "finding_id": "FRF-20260306-0001",
+            "run_id": "FRR-20260306-0001",
+            "reconciliation_type": "transaction_cashflow",
+            "finding_type": "missing_cashflow",
+            "severity": "high",
+            "portfolio_id": "PORT-OPS-001",
+            "security_id": "SEC-US-IBM",
+            "transaction_id": "TXN-20260306-0142",
+            "business_date": "2026-03-06",
+            "epoch": 0,
+            "expected_value": {"cashflow_count": 1},
+            "observed_value": {"cashflow_count": 0},
+            "detail": {
+                "rule_transaction_type": "BUY",
+                "reason": "Transaction has a cashflow rule but no persisted cashflow row.",
+            },
+            "created_at": "2026-03-06T14:03:11Z",
+        }
+    ],
+    "total": 1,
+}
 
 
 def _service(db_session: AsyncSession) -> ReconciliationService:
@@ -32,9 +100,15 @@ def _service(db_session: AsyncSession) -> ReconciliationService:
         "Why: Prevent silent ledger-to-cashflow drift before downstream analytics "
         "consume corrupted flows."
     ),
+    responses={
+        200: {
+            "description": "Completed reconciliation run.",
+            "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def run_transaction_cashflow_reconciliation(
-    request: ReconciliationRunRequest,
+    request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     db_session: AsyncSession = Depends(get_async_db_session),
     x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
 ):
@@ -54,9 +128,15 @@ async def run_transaction_cashflow_reconciliation(
         "price, and cost basis.\n"
         "Why: Detect valuation drift without relying on calculator-internal assumptions."
     ),
+    responses={
+        200: {
+            "description": "Completed reconciliation run.",
+            "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def run_position_valuation_reconciliation(
-    request: ReconciliationRunRequest,
+    request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     db_session: AsyncSession = Depends(get_async_db_session),
     x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
 ):
@@ -78,9 +158,15 @@ async def run_position_valuation_reconciliation(
         "Why: Catch partial aggregation or drift before consumers treat portfolio "
         "analytics as authoritative."
     ),
+    responses={
+        200: {
+            "description": "Completed reconciliation run.",
+            "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def run_timeseries_integrity_reconciliation(
-    request: ReconciliationRunRequest,
+    request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     db_session: AsyncSession = Depends(get_async_db_session),
     x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
 ):
@@ -94,10 +180,26 @@ async def run_timeseries_integrity_reconciliation(
     "/reconciliation/runs",
     response_model=ReconciliationRunListResponse,
     summary="List reconciliation control runs",
+    responses={
+        200: {
+            "description": "Reconciliation runs matching the requested filters.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "runs": [RECONCILIATION_RUN_RESPONSE_EXAMPLE],
+                        "total": 1,
+                    }
+                }
+            },
+        }
+    },
 )
 async def list_reconciliation_runs(
-    reconciliation_type: str | None = Query(default=None),
-    portfolio_id: str | None = Query(default=None),
+    reconciliation_type: str | None = Query(
+        default=None,
+        examples=["transaction_cashflow"],
+    ),
+    portfolio_id: str | None = Query(default=None, examples=["PORT-OPS-001"]),
     limit: int = Query(default=50, ge=1, le=200),
     db_session: AsyncSession = Depends(get_async_db_session),
 ):
@@ -114,9 +216,18 @@ async def list_reconciliation_runs(
     "/reconciliation/runs/{run_id}",
     response_model=ReconciliationRunResponse,
     summary="Get one reconciliation control run",
+    responses={
+        200: {
+            "description": "One reconciliation run.",
+            "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_reconciliation_run(
-    run_id: str,
+    run_id: str = Path(
+        description="Reconciliation run identifier.",
+        examples=["FRR-20260306-0001"],
+    ),
     db_session: AsyncSession = Depends(get_async_db_session),
 ):
     repository = ReconciliationRepository(db_session)
@@ -133,9 +244,20 @@ async def get_reconciliation_run(
     "/reconciliation/runs/{run_id}/findings",
     response_model=ReconciliationFindingListResponse,
     summary="List findings for one reconciliation control run",
+    responses={
+        200: {
+            "description": "Findings captured for the requested reconciliation run.",
+            "content": {
+                "application/json": {"example": RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def list_reconciliation_findings(
-    run_id: str,
+    run_id: str = Path(
+        description="Reconciliation run identifier.",
+        examples=["FRR-20260306-0001"],
+    ),
     db_session: AsyncSession = Depends(get_async_db_session),
 ):
     repository = ReconciliationRepository(db_session)

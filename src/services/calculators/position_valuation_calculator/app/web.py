@@ -1,8 +1,10 @@
 # services/calculators/position_valuation_calculator/app/web.py
 from fastapi import FastAPI
 from portfolio_common.health import create_health_router
+from portfolio_common.openapi_enrichment import attach_enriched_openapi
 
 app = FastAPI(title="Position Valuation Calculator - Health")
+attach_enriched_openapi(app, service_name="position_valuation_calculator_service_web")
 
 # Create and include the standardized health router.
 # This service depends on the database.

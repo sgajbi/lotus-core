@@ -40,3 +40,69 @@ def test_enrich_openapi_schema_populates_schema_field_description_and_example() 
     assert props["portfolioId"]["example"] == "DEMO_DPM_EUR_001"
     assert props["asOfDate"]["example"] == "2026-02-27"
     assert isinstance(props["marketValue"]["example"], float)
+
+
+def test_enrich_openapi_schema_populates_request_response_and_parameter_examples() -> None:
+    schema = {
+        "paths": {
+            "/api/v1/reconcile/{portfolio_id}": {
+                "post": {
+                    "parameters": [
+                        {"name": "portfolio_id", "in": "path", "schema": {"type": "string"}}
+                    ],
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/ReconciliationRequest"}
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "ok",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/ReconciliationResponse"
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "ReconciliationRequest": {
+                    "type": "object",
+                    "properties": {
+                        "portfolio_id": {"type": "string", "example": "PORT-1"},
+                        "business_date": {"type": "string", "format": "date"},
+                    },
+                    "required": ["portfolio_id", "business_date"],
+                },
+                "ReconciliationResponse": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string", "example": "completed"},
+                        "finding_count": {"type": "integer", "example": 0},
+                    },
+                    "required": ["status", "finding_count"],
+                },
+            }
+        },
+    }
+
+    enriched = enrich_openapi_schema(schema, service_name="financial_reconciliation_service")
+    operation = enriched["paths"]["/api/v1/reconcile/{portfolio_id}"]["post"]
+
+    assert operation["parameters"][0]["example"] == "DEMO_DPM_EUR_001"
+    assert operation["requestBody"]["content"]["application/json"]["example"] == {
+        "portfolio_id": "PORT-1",
+        "business_date": "2026-02-27",
+    }
+    assert operation["responses"]["200"]["content"]["application/json"]["example"] == {
+        "status": "completed",
+        "finding_count": 0,
+    }
