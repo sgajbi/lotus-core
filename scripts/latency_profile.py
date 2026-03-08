@@ -40,14 +40,20 @@ def _percentile_ms(samples: list[float], percentile: int) -> float:
     return statistics.quantiles(samples, n=100)[index]
 
 
-def _wait_ready(base_ingestion_url: str, base_query_url: str, timeout_seconds: int) -> None:
+def _wait_ready(
+    base_ingestion_url: str,
+    base_query_url: str,
+    base_query_control_plane_url: str,
+    timeout_seconds: int,
+) -> None:
     deadline = time.time() + timeout_seconds
     session = requests.Session()
     while time.time() < deadline:
         try:
             ing = session.get(f"{base_ingestion_url}/health/ready", timeout=5)
             qry = session.get(f"{base_query_url}/health/ready", timeout=5)
-            if ing.status_code == 200 and qry.status_code == 200:
+            ctrl = session.get(f"{base_query_control_plane_url}/health/ready", timeout=5)
+            if ing.status_code == 200 and qry.status_code == 200 and ctrl.status_code == 200:
                 return
         except requests.RequestException:
             pass
@@ -84,6 +90,7 @@ def _resolve_runtime_ids(
     session: requests.Session,
     *,
     query_base_url: str,
+    query_control_plane_base_url: str,
     portfolio_id: str,
     benchmark_id: str,
 ) -> tuple[str, str]:
@@ -94,11 +101,11 @@ def _resolve_runtime_ids(
         get_urls = [
             f"{query_base_url}/portfolios/{candidate_id}/positions",
             f"{query_base_url}/portfolios/{candidate_id}/transactions?limit=1",
-            f"{query_base_url}/support/portfolios/{candidate_id}/overview",
+            f"{query_control_plane_base_url}/support/portfolios/{candidate_id}/overview",
         ]
         post_checks = [
             (
-                f"{query_base_url}/integration/portfolios/{candidate_id}/analytics/portfolio-timeseries",
+                f"{query_control_plane_base_url}/integration/portfolios/{candidate_id}/analytics/portfolio-timeseries",
                 {
                     "as_of_date": "2026-03-01",
                     "period": "three_months",
@@ -108,7 +115,7 @@ def _resolve_runtime_ids(
                 },
             ),
             (
-                f"{query_base_url}/integration/portfolios/{candidate_id}/analytics/position-timeseries",
+                f"{query_control_plane_base_url}/integration/portfolios/{candidate_id}/analytics/position-timeseries",
                 {
                     "as_of_date": "2026-03-01",
                     "period": "three_months",
@@ -180,7 +187,7 @@ def _resolve_runtime_ids(
 
     try:
         response = session.post(
-            f"{query_base_url}/integration/benchmarks/catalog",
+            f"{query_control_plane_base_url}/integration/benchmarks/catalog",
             json={"as_of_date": "2026-03-01"},
             timeout=15,
         )
@@ -201,6 +208,7 @@ def _resolve_runtime_ids(
 def _cases(
     ingestion_base_url: str,
     query_base_url: str,
+    query_control_plane_base_url: str,
     portfolio_id: str,
     benchmark_id: str,
     include_protected_ops: bool,
@@ -232,28 +240,28 @@ def _cases(
         EndpointCase(
             "support_overview",
             "GET",
-            f"{query_base_url}/support/portfolios/{portfolio_id}/overview",
+            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/overview",
             None,
             240,
         ),
         EndpointCase(
             "benchmark_catalog",
             "POST",
-            f"{query_base_url}/integration/benchmarks/catalog",
+            f"{query_control_plane_base_url}/integration/benchmarks/catalog",
             {"as_of_date": "2026-03-01"},
             320,
         ),
         EndpointCase(
             "index_catalog",
             "POST",
-            f"{query_base_url}/integration/indices/catalog",
+            f"{query_control_plane_base_url}/integration/indices/catalog",
             {"as_of_date": "2026-03-01"},
             320,
         ),
         EndpointCase(
             "benchmark_market_series",
             "POST",
-            f"{query_base_url}/integration/benchmarks/{benchmark_id}/market-series",
+            f"{query_control_plane_base_url}/integration/benchmarks/{benchmark_id}/market-series",
             {
                 "as_of_date": "2026-03-01",
                 "window": {"start_date": "2025-12-01", "end_date": "2026-03-01"},
@@ -272,7 +280,7 @@ def _cases(
         EndpointCase(
             "analytics_portfolio_timeseries",
             "POST",
-            f"{query_base_url}/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
+            f"{query_control_plane_base_url}/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
             {
                 "as_of_date": "2026-03-01",
                 "period": "one_year",
@@ -286,7 +294,7 @@ def _cases(
         EndpointCase(
             "analytics_position_timeseries",
             "POST",
-            f"{query_base_url}/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+            f"{query_control_plane_base_url}/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
             {
                 "as_of_date": "2026-03-01",
                 "period": "three_months",
@@ -330,6 +338,7 @@ def run_profile(
     *,
     ingestion_base_url: str,
     query_base_url: str,
+    query_control_plane_base_url: str,
     portfolio_id: str,
     benchmark_id: str,
     include_protected_ops: bool,
@@ -342,6 +351,7 @@ def run_profile(
     for case in _cases(
         ingestion_base_url,
         query_base_url,
+        query_control_plane_base_url,
         portfolio_id,
         benchmark_id,
         include_protected_ops,
@@ -461,6 +471,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
     )
+    parser.add_argument(
+        "--query-control-plane-base-url",
+        default=os.getenv("E2E_QUERY_CONTROL_PLANE_URL", "http://localhost:8202"),
+    )
     parser.add_argument("--portfolio-id", default="DEMO_DPM_EUR_001")
     parser.add_argument("--benchmark-id", default="BMK_GLOBAL_BALANCED_60_40")
     parser.add_argument("--warmup-runs", type=int, default=3)
@@ -488,6 +502,7 @@ def main() -> int:
     _wait_ready(
         base_ingestion_url=args.ingestion_base_url,
         base_query_url=args.query_base_url,
+        base_query_control_plane_url=args.query_control_plane_base_url,
         timeout_seconds=args.ready_timeout_seconds,
     )
 
@@ -495,6 +510,7 @@ def main() -> int:
     resolved_portfolio_id, resolved_benchmark_id = _resolve_runtime_ids(
         session,
         query_base_url=args.query_base_url,
+        query_control_plane_base_url=args.query_control_plane_base_url,
         portfolio_id=args.portfolio_id,
         benchmark_id=args.benchmark_id,
     )
@@ -502,6 +518,7 @@ def main() -> int:
     results = run_profile(
         ingestion_base_url=args.ingestion_base_url,
         query_base_url=args.query_base_url,
+        query_control_plane_base_url=args.query_control_plane_base_url,
         portfolio_id=resolved_portfolio_id,
         benchmark_id=resolved_benchmark_id,
         include_protected_ops=args.include_protected_ops,
