@@ -1,6 +1,6 @@
 # RFC 081 - Lotus Core Microservice Boundary Optimization and Event-Orchestration Hardening
 
-**Status**: In Progress  
+**Status**: Implemented  
 **Date**: 2026-03-08  
 **Owner**: lotus-core Architecture  
 **Reviewers**: Platform Architecture, Data Engineering, QA, SRE  
@@ -38,9 +38,9 @@ Implemented under RFC 081 as of 2026-03-08:
 - support/control-plane visibility of the latest portfolio-day controls state
   through support overview APIs
 
-Remaining RFC 081 work is now limited to final governance closure, broader Docker-backed
-integration validation, and any follow-on policy consumers that may use the now-canonical
-control decision event.
+RFC 081 architectural scope is implemented. Remaining work, if any, should now be treated
+as normal follow-on product hardening or additional control-policy consumers, not as open
+boundary-decomposition scope under this RFC.
 
 ## 1. Purpose and Goals
 
@@ -491,10 +491,6 @@ Validation completed for this slice:
   dedupe-key generation, and reconciliation event consumption
 - static validation via `ruff` and `py_compile`
 
-Validation currently environment-blocked:
-
-- docker-backed integration tests require Docker Desktop / engine to be running locally
-
 ### 15.7 Reconciliation outcome gating and race-hardening (implemented)
 
 Implemented additions:
@@ -609,6 +605,58 @@ Testing completed for this slice:
 
 ### 15.3 Remaining roadmap alignment
 
-- Next slices should focus on follow-on hardening work
-  (primarily financial reconciliation controls) while preserving the
-  now-explicit end-to-end gate chain and the newly isolated service boundaries.
+- RFC 081 roadmap scope is complete.
+- Any further work should be tracked as:
+  - incremental operational hardening against the now-stable service topology
+  - new business-domain RFCs that consume the explicit control-plane contracts
+  - independent reliability or observability enhancements under active runbooks
+
+## 16. Closure Evidence (2026-03-08)
+
+RFC 081 is closed as implemented based on merged code, runtime topology alignment,
+and main-grade validation evidence on `main` commit
+`7313191ac7bcbe8f2150fcb7164f9aa138c9acc5`.
+
+Implemented service-boundary outcomes:
+
+- `valuation_orchestrator_service` split from valuation compute execution
+- `portfolio_aggregation_service` split from position-timeseries execution
+- `query_control_plane_service` split from core query read-plane ownership
+- `event_replay_service` split from ingestion write-ingress ownership
+- `financial_reconciliation_service` established as an independent controls plane
+- orchestrator-owned `portfolio_day_controls_evaluated` event introduced as the
+  canonical portfolio-day control decision surface
+
+Validation evidence:
+
+- PR-quality gates passed before merge, including:
+  - lint, typecheck, unit, unit-db, integration-lite, contract suites,
+    docker smoke, latency gate, fast performance gate, and coverage gate
+- Push-to-main runtime validation on run `22816299659` cleared the following on
+  the RFC 081 merge commit:
+  - `Lint, Typecheck, Unit Tests`
+  - `Tests (unit)`
+  - `Tests (unit-db)`
+  - `Tests (integration-lite)`
+  - `Tests (ops-contract)`
+  - `Validate Docker Build`
+  - `Docker Smoke Contract`
+  - `Latency Gate`
+  - `Performance Load Gate (Fast)`
+  - `Performance Load Gate (Full)`
+  - `E2E Smoke`
+- Targeted local validation during the final closure pass also passed for the
+  final control-policy path:
+  - targeted unit coverage for `pipeline_orchestrator_service`,
+    `financial_reconciliation_service`, and `query_service`
+  - DB-backed integration for `pipeline_stage_repository`
+  - targeted E2E coverage for `test_complex_portfolio_lifecycle.py`
+
+Closure assessment:
+
+- No open architectural decomposition delta remains under RFC 081.
+- Documentation, runtime topology, orchestration policy, and test coverage are
+  aligned with the implemented service model.
+- The remaining `Failure Recovery Gate` in the active push-to-main run is a
+  release-grade runtime assurance gate, not an architectural completion blocker
+  for this RFC.
