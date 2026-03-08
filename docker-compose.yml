@@ -154,6 +154,33 @@ services:
     networks:
       - app_network
 
+  query_control_plane_service:
+    build:
+      context: .
+      dockerfile: ./src/services/query_control_plane_service/Dockerfile
+    hostname: query_control_plane_service
+    ports:
+      - "${LOTUS_QUERY_CONTROL_PLANE_HOST_PORT:-8202}:8002"
+    environment:
+      DATABASE_URL: ${QUERY_DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+    depends_on:
+      migration-runner:
+        condition: service_completed_successfully
+    volumes:
+      - ./src/services/query_control_plane_service/app:/app/app
+      - ./src/services/query_service/app:/app/src/services/query_service/app
+      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --no-access-log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
   persistence_service:
     build:
       context: .
@@ -429,6 +456,8 @@ services:
         condition: service_healthy
       query_service:
         condition: service_healthy
+      query_control_plane_service:
+        condition: service_healthy
       persistence_service:
         condition: service_healthy
       position_calculator_service:
@@ -471,6 +500,7 @@ services:
     depends_on:
       - ingestion_service
       - query_service
+      - query_control_plane_service
       - persistence_service
       - cost_calculator_service
       - cashflow_calculator_service

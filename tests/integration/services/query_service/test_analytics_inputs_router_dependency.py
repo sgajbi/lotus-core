@@ -5,7 +5,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from src.services.query_service.app.main import app
+from src.services.query_control_plane_service.app.main import app
 from src.services.query_service.app.routers.analytics_inputs import (
     get_analytics_timeseries_service,
 )

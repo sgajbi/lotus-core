@@ -17,7 +17,8 @@ Source authority: RFC 081
 | `position_valuation_calculator` | Valuation compute worker and completion publication | `daily_position_snapshots` (valuation fields) | `valuation_required` | `daily_position_snapshot_persisted`, `valuation_day_completed` | Event |
 | `timeseries_generator_service` | Position-timeseries compute worker and completion publication | `position_timeseries`, `portfolio_aggregation_jobs` | `daily_position_snapshot_persisted`, `valuation_day_completed` | `position_timeseries_day_completed` | Event |
 | `portfolio_aggregation_service` | Portfolio aggregation orchestration and portfolio-timeseries compute | `portfolio_timeseries`, `portfolio_aggregation_jobs` | `portfolio_aggregation_required` | `portfolio_aggregation_required`, `portfolio_aggregation_day_completed` | Event + scheduler |
-| `query_service` | Read-plane APIs and operational diagnostics | Read-only over canonical/calculator tables | HTTP API | N/A | API |
+| `query_service` | Core read-plane APIs for canonical portfolio, position, transaction, market-data, and lookup reads | Read-only over canonical/calculator tables | HTTP API | N/A | API |
+| `query_control_plane_service` | Control-plane APIs for integration contracts, operational diagnostics, and simulation workflows | Read-only over canonical/calculator tables plus export/control metadata | HTTP API | N/A | API |
 
 ## Stage Gate Sequence (Current)
 
