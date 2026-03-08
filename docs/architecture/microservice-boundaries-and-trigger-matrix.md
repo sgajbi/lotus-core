@@ -15,7 +15,8 @@ Source authority: RFC 081
 | `position_calculator_service` | Position history and snapshot materialization | `position_history`, `daily_position_snapshots`, `position_state` | `transaction_processing_completed`, `processed_transactions_completed` (replay path) | `daily_position_snapshot_persisted`, `transactions_reprocessing_requested` | Event |
 | `valuation_orchestrator_service` | Valuation orchestration (job creation, scheduling, and reprocessing) | `portfolio_valuation_jobs`, `instrument_reprocessing_state`, `reprocessing_jobs` | `portfolio_day_ready_for_valuation`, `market_price_persisted` | `valuation_required` | Event + scheduler |
 | `position_valuation_calculator` | Valuation compute worker and completion publication | `daily_position_snapshots` (valuation fields) | `valuation_required` | `daily_position_snapshot_persisted`, `valuation_day_completed` | Event |
-| `timeseries_generator_service` | Position and portfolio timeseries generation | `position_timeseries`, `portfolio_timeseries`, `portfolio_aggregation_jobs` | `daily_position_snapshot_persisted`, `valuation_day_completed`, `portfolio_aggregation_required` | `position_timeseries_day_completed`, `portfolio_aggregation_day_completed`, `portfolio_aggregation_required` | Event + scheduler |
+| `timeseries_generator_service` | Position-timeseries compute worker and completion publication | `position_timeseries`, `portfolio_aggregation_jobs` | `daily_position_snapshot_persisted`, `valuation_day_completed` | `position_timeseries_day_completed` | Event |
+| `portfolio_aggregation_service` | Portfolio aggregation orchestration and portfolio-timeseries compute | `portfolio_timeseries`, `portfolio_aggregation_jobs` | `portfolio_aggregation_required` | `portfolio_aggregation_required`, `portfolio_aggregation_day_completed` | Event + scheduler |
 | `query_service` | Read-plane APIs and operational diagnostics | Read-only over canonical/calculator tables | HTTP API | N/A | API |
 
 ## Stage Gate Sequence (Current)
@@ -27,7 +28,8 @@ Source authority: RFC 081
 5. For security-scoped transactions, orchestrator also emits `portfolio_day_ready_for_valuation` to stage valuation jobs deterministically.
 6. `valuation_orchestrator_service` creates and dispatches `valuation_required` jobs; `position_valuation_calculator` consumes those jobs and emits `valuation_day_completed` after persisting valuation snapshots.
 7. `timeseries_generator_service` consumes `valuation_day_completed` as the canonical valuation-to-timeseries trigger (while retaining `daily_position_snapshot_persisted` compatibility).
-8. `timeseries_generator_service` emits `position_timeseries_day_completed` after position timeseries persistence and emits `portfolio_aggregation_day_completed` after portfolio aggregation completion.
+8. `timeseries_generator_service` emits `position_timeseries_day_completed` after position-timeseries persistence and stages aggregation jobs.
+9. `portfolio_aggregation_service` claims eligible aggregation jobs, emits `portfolio_aggregation_required`, computes portfolio timeseries, and emits `portfolio_aggregation_day_completed`.
 
 ## Stage Gate Sequence (Planned in RFC 081)
 

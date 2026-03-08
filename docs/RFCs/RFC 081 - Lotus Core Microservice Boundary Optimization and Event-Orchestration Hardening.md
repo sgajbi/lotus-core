@@ -416,6 +416,16 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   - narrowed `position_valuation_calculator` to worker-only valuation compute
     (`valuation_required` consumer + outbox publication).
   - updated container topology and observability wiring for the new service.
+- Phase 3 timeseries split delivered:
+  - narrowed `timeseries_generator_service` to position-timeseries worker-only
+    processing (`daily_position_snapshot_persisted` and `valuation_day_completed`
+    consumers + position completion publication).
+  - added `portfolio_aggregation_service` for aggregation job scheduling,
+    `portfolio_aggregation_required` consumption, portfolio-timeseries persistence,
+    and completion publication.
+  - removed duplicate in-process scheduler/dispatcher startup from
+    `timeseries_generator_service/app/main.py`, ensuring a single runtime owner
+    for background loops.
 
 ### 15.2 Current scope boundary
 
@@ -431,5 +441,5 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 ### 15.3 Remaining roadmap alignment
 
 - Next slices should focus on remaining service decomposition work
-  (timeseries split and query control-plane extraction) while preserving the
+  (query control-plane extraction) while preserving the
   now-explicit end-to-end gate chain.
