@@ -1,9 +1,13 @@
 import json
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import FinancialReconciliationRequestedEvent
+from portfolio_common.events import (
+    FinancialReconciliationCompletedEvent,
+    FinancialReconciliationRequestedEvent,
+)
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,6 +71,7 @@ def mock_dependencies():
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
     mock_service = AsyncMock()
     mock_db_session = AsyncMock(spec=AsyncSession)
+    mock_outbox_repo = AsyncMock()
 
     with (
         patch(
@@ -84,11 +89,16 @@ def mock_dependencies():
         patch(
             "src.services.financial_reconciliation_service.app.consumers.reconciliation_requested_consumer.ReconciliationRepository",
         ),
+        patch(
+            "src.services.financial_reconciliation_service.app.consumers.reconciliation_requested_consumer.OutboxRepository",
+            return_value=mock_outbox_repo,
+        ),
     ):
         yield {
             "idempotency_repo": mock_idempotency_repo,
             "service": mock_service,
             "db_session": mock_db_session,
+            "outbox_repo": mock_outbox_repo,
         }
 
 
@@ -101,7 +111,32 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_service = mock_dependencies["service"]
     mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_idempotency_repo.is_event_processed.return_value = False
+    mock_service.run_automatic_bundle.return_value = {
+        "transaction_cashflow": MagicMock(
+            run_id="recon-tx",
+            status="COMPLETED",
+            summary={"error_count": 1, "warning_count": 0},
+        ),
+        "position_valuation": MagicMock(
+            run_id="recon-val",
+            status="COMPLETED",
+            summary={"error_count": 0, "warning_count": 1},
+        ),
+    }
+    mock_service.determine_automatic_bundle_outcome = MagicMock(
+        return_value=SimpleNamespace(
+            outcome_status="REQUIRES_REPLAY",
+            blocking_reconciliation_types=["transaction_cashflow"],
+            run_ids={
+                "transaction_cashflow": "recon-tx",
+                "position_valuation": "recon-val",
+            },
+            error_count=1,
+            warning_count=1,
+        )
+    )
 
     await consumer.process_message(mock_kafka_message)
 
@@ -113,6 +148,16 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     assert request.epoch == mock_event.epoch
     assert request.requested_by == mock_event.requested_by
     assert call.kwargs["reconciliation_types"] == mock_event.reconciliation_types
+    mock_service.determine_automatic_bundle_outcome.assert_called_once()
+    outbox_call = mock_outbox_repo.create_outbox_event.await_args
+    assert outbox_call.kwargs["event_type"] == "FinancialReconciliationCompleted"
+    payload = FinancialReconciliationCompletedEvent.model_validate(outbox_call.kwargs["payload"])
+    assert payload.outcome_status == "REQUIRES_REPLAY"
+    assert payload.blocking_reconciliation_types == ["transaction_cashflow"]
+    assert payload.run_ids == {
+        "transaction_cashflow": "recon-tx",
+        "position_valuation": "recon-val",
+    }
 
     mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
         "financial_reconciliation_requested-0-7",

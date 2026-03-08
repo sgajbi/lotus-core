@@ -30,6 +30,8 @@ Implemented under RFC 081 as of 2026-03-08:
 - `financial_reconciliation_service` added as the independent controls plane
 - automatic post-aggregation reconciliation trigger path:
   `portfolio_aggregation_day_completed -> pipeline_orchestrator_service -> financial_reconciliation_requested -> financial_reconciliation_service`
+- automatic reconciliation outcome hardening path:
+  `financial_reconciliation_completed -> pipeline_orchestrator_service -> portfolio_day_controls_evaluated`
 
 Remaining RFC 081 work is now hardening-oriented rather than primary boundary decomposition.
 
@@ -201,6 +203,8 @@ Introduce explicit gate events:
 - `position_timeseries_day_completed`
 - `portfolio_aggregation_day_completed`
 - `financial_reconciliation_requested`
+- `financial_reconciliation_completed`
+- `portfolio_day_controls_evaluated`
 
 Orchestrator enforces prerequisites before emitting next-stage events.
 
@@ -219,6 +223,8 @@ Track status:
 
 Automatic reconciliation requests are emitted only after the portfolio aggregation stage reaches `COMPLETED`
 for the relevant `(portfolio_id, business_date, epoch)` key.
+Automatic reconciliation outcomes are then recorded as a portfolio-day control stage with monotonic status semantics:
+`COMPLETED`, `REQUIRES_REPLAY`, or `FAILED`.
 
 ## 5. Banking-Grade Reliability Controls
 
@@ -481,6 +487,41 @@ Validation completed for this slice:
 Validation currently environment-blocked:
 
 - docker-backed integration tests require Docker Desktop / engine to be running locally
+
+### 15.7 Reconciliation outcome gating and race-hardening (implemented)
+
+Implemented additions:
+
+1. `financial_reconciliation_service` now emits `financial_reconciliation_completed`
+   after the automatic bundle finishes.
+2. Bundle outcome is deterministic:
+   - `FAILED` if any reconciliation run fails terminally
+   - `REQUIRES_REPLAY` if runs complete but any `ERROR` findings remain
+   - `COMPLETED` if all runs complete without blocking findings
+3. `pipeline_orchestrator_service` consumes that completion event, upserts the
+   `FINANCIAL_RECONCILIATION` portfolio-day control stage, and emits
+   `portfolio_day_controls_evaluated`.
+4. Portfolio-day control stage status merges monotonically:
+   a duplicate or late event may preserve or worsen the current status but never
+   downgrade `REQUIRES_REPLAY` or `FAILED` back to `COMPLETED`.
+
+Race-condition and replay safeguards:
+
+- reconciliation bundle runs remain deduped per
+  `auto:{reconciliation_type}:{portfolio_id}:{business_date}:{epoch}`
+- completion publication is written through the outbox in the same DB transaction
+  as event-consumer idempotency
+- orchestrator control-stage updates use a deterministic synthetic stage key
+  per portfolio-day scope
+- status merge is severity-aware, preventing stale replay from erasing a blocking state
+
+Testing completed for this slice:
+
+- reconciliation outcome classification unit coverage
+- reconciliation completion consumer unit coverage
+- financial reconciliation runtime supervision coverage
+- pipeline orchestrator runtime supervision coverage updated for the new consumer
+- full `unit` manifest passed locally
 - Cashflow service startup now enforces a single outbox-dispatcher owner
   (`ConsumerManager`) to prevent duplicate dispatch loops on the same outbox table.
 - Pipeline orchestrator runtime now applies the same fail-fast supervision model,

@@ -375,3 +375,45 @@ class FinancialReconciliationRequestedEvent(BaseModel):
     requested_by: str = "system_pipeline"
     trigger_stage: str = "portfolio_aggregation_day_completed"
     correlation_id: Optional[str] = None
+
+
+class FinancialReconciliationCompletedEvent(BaseModel):
+    """
+    Outcome event emitted after an automatic portfolio-day reconciliation bundle
+    finishes. The outcome is deterministic and replay-safe for a given
+    `(portfolio_id, business_date, epoch)` scope.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    portfolio_id: str
+    business_date: date
+    epoch: int = 0
+    outcome_status: str
+    reconciliation_types: list[str]
+    blocking_reconciliation_types: list[str] = Field(default_factory=list)
+    run_ids: dict[str, str] = Field(default_factory=dict)
+    error_count: int = 0
+    warning_count: int = 0
+    requested_by: str = "system_pipeline"
+    trigger_stage: str = "portfolio_aggregation_day_completed"
+    correlation_id: Optional[str] = None
+
+
+class PortfolioDayControlsEvaluatedEvent(BaseModel):
+    """
+    Canonical orchestrator-owned control-stage outcome for a portfolio business day.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    portfolio_id: str
+    business_date: date
+    epoch: int = 0
+    stage_name: str = "FINANCIAL_RECONCILIATION"
+    status: str
+    blocking_reconciliation_types: list[str] = Field(default_factory=list)
+    error_count: int = 0
+    warning_count: int = 0
+    source_event_type: str = "financial_reconciliation_completed"
+    correlation_id: Optional[str] = None
