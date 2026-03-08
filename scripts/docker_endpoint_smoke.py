@@ -231,6 +231,10 @@ def main() -> int:
     parser.add_argument(
         "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
     )
+    parser.add_argument(
+        "--query-control-plane-base-url",
+        default=os.getenv("E2E_QUERY_CONTROL_PLANE_URL", "http://localhost:8202"),
+    )
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument(
         "--reset-volumes", action="store_true", help="Run docker compose down -v first."
@@ -253,6 +257,7 @@ def main() -> int:
 
     _wait_ready(args.ingestion_base_url, args.ready_timeout_seconds)
     _wait_ready(args.query_base_url, args.ready_timeout_seconds)
+    _wait_ready(args.query_control_plane_base_url, args.ready_timeout_seconds)
 
     run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     portfolio_id = f"PORT_SMOKE_{run_id}"
@@ -304,6 +309,7 @@ def main() -> int:
     results: list[CheckResult] = []
     ingest = args.ingestion_base_url
     query = args.query_base_url
+    query_control = args.query_control_plane_base_url
     ops_headers = {"X-Lotus-Ops-Token": "lotus-core-ops-local"}
 
     _call(results, name="ing live", method="GET", url=f"{ingest}/health/live", expected={200})
@@ -885,35 +891,35 @@ def main() -> int:
         results,
         name="support overview",
         method="GET",
-        url=f"{query}/support/portfolios/{portfolio_id}/overview",
+        url=f"{query_control}/support/portfolios/{portfolio_id}/overview",
         expected={200},
     )
     _call(
         results,
         name="support valuation jobs",
         method="GET",
-        url=f"{query}/support/portfolios/{portfolio_id}/valuation-jobs",
+        url=f"{query_control}/support/portfolios/{portfolio_id}/valuation-jobs",
         expected={200},
     )
     _call(
         results,
         name="support aggregation jobs",
         method="GET",
-        url=f"{query}/support/portfolios/{portfolio_id}/aggregation-jobs",
+        url=f"{query_control}/support/portfolios/{portfolio_id}/aggregation-jobs",
         expected={200},
     )
     _call(
         results,
         name="lineage keys",
         method="GET",
-        url=f"{query}/lineage/portfolios/{portfolio_id}/keys",
+        url=f"{query_control}/lineage/portfolios/{portfolio_id}/keys",
         expected={200},
     )
     _call(
         results,
         name="lineage security",
         method="GET",
-        url=f"{query}/lineage/portfolios/{portfolio_id}/securities/{security_id}",
+        url=f"{query_control}/lineage/portfolios/{portfolio_id}/securities/{security_id}",
         expected={200, 404},
     )
     _call(
@@ -962,21 +968,21 @@ def main() -> int:
         results,
         name="integration capabilities",
         method="GET",
-        url=f"{query}/integration/capabilities",
+        url=f"{query_control}/integration/capabilities",
         expected={200},
     )
     _call(
         results,
         name="integration policy",
         method="GET",
-        url=f"{query}/integration/policy/effective",
+        url=f"{query_control}/integration/policy/effective",
         expected={200},
     )
     _call(
         results,
         name="enrichment bulk",
         method="POST",
-        url=f"{query}/integration/instruments/enrichment-bulk",
+        url=f"{query_control}/integration/instruments/enrichment-bulk",
         expected={200},
         json={"security_ids": [security_id]},
     )
@@ -984,7 +990,7 @@ def main() -> int:
         results,
         name="core snapshot",
         method="POST",
-        url=f"{query}/integration/portfolios/{portfolio_id}/core-snapshot",
+        url=f"{query_control}/integration/portfolios/{portfolio_id}/core-snapshot",
         expected={200},
         json={
             "as_of_date": trade_date,
@@ -997,7 +1003,7 @@ def main() -> int:
         results,
         name="simulation create",
         method="POST",
-        url=f"{query}/simulation-sessions",
+        url=f"{query_control}/simulation-sessions",
         expected={200, 201},
         json={"portfolio_id": portfolio_id, "created_by": "deterministic_smoke", "ttl_hours": 1},
     )
@@ -1010,14 +1016,14 @@ def main() -> int:
             results,
             name="simulation get",
             method="GET",
-            url=f"{query}/simulation-sessions/{session_id}",
+            url=f"{query_control}/simulation-sessions/{session_id}",
             expected={200},
         )
         _call(
             results,
             name="simulation changes upsert",
             method="POST",
-            url=f"{query}/simulation-sessions/{session_id}/changes",
+            url=f"{query_control}/simulation-sessions/{session_id}/changes",
             expected={200, 201},
             json={
                 "changes": [
@@ -1044,21 +1050,21 @@ def main() -> int:
             results,
             name="simulation projected positions",
             method="GET",
-            url=f"{query}/simulation-sessions/{session_id}/projected-positions",
+            url=f"{query_control}/simulation-sessions/{session_id}/projected-positions",
             expected={200},
         )
         _call(
             results,
             name="simulation projected summary",
             method="GET",
-            url=f"{query}/simulation-sessions/{session_id}/projected-summary",
+            url=f"{query_control}/simulation-sessions/{session_id}/projected-summary",
             expected={200},
         )
         _call(
             results,
             name="simulation delete",
             method="DELETE",
-            url=f"{query}/simulation-sessions/{session_id}",
+            url=f"{query_control}/simulation-sessions/{session_id}",
             expected={200, 204},
         )
 

@@ -9,6 +9,9 @@ scrape_configs:
   - job_name: 'query_service'
     static_configs:
       - targets: ['query_service:8001']
+  - job_name: 'query_control_plane_service'
+    static_configs:
+      - targets: ['query_control_plane_service:8002']
   - job_name: 'persistence_service'
     static_configs:
       - targets: ['persistence_service:8080']
@@ -33,3 +36,6 @@ scrape_configs:
   - job_name: 'timeseries_generator_service'
     static_configs:
       - targets: ['timeseries_generator_service:8085']
+  - job_name: 'portfolio_aggregation_service'
+    static_configs:
+      - targets: ['portfolio_aggregation_service:8088']

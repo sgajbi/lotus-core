@@ -87,22 +87,16 @@ async def test_metrics_include_http_series_samples(async_test_client):
     assert "http_request_latency_seconds_count{" in metrics_text
 
 
-async def test_openapi_declares_simulation_error_contracts(async_test_client):
+async def test_openapi_excludes_control_plane_contracts(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     paths = response.json()["paths"]
 
-    assert "404" in paths["/simulation-sessions/{session_id}"]["get"]["responses"]
-    assert "404" in paths["/simulation-sessions/{session_id}"]["delete"]["responses"]
-    assert "400" in paths["/simulation-sessions/{session_id}/changes"]["post"]["responses"]
-    assert (
-        "400"
-        in paths["/simulation-sessions/{session_id}/changes/{change_id}"]["delete"]["responses"]
-    )
-    assert (
-        "404" in paths["/simulation-sessions/{session_id}/projected-positions"]["get"]["responses"]
-    )
-    assert "404" in paths["/simulation-sessions/{session_id}/projected-summary"]["get"]["responses"]
+    assert "/simulation-sessions/{session_id}" not in paths
+    assert "/integration/capabilities" not in paths
+    assert "/integration/portfolios/{portfolio_id}/core-snapshot" not in paths
+    assert "/support/portfolios/{portfolio_id}/overview" not in paths
+    assert "/lineage/portfolios/{portfolio_id}/keys" not in paths
 
 
 async def test_openapi_declares_portfolio_not_found_contracts(async_test_client):
@@ -115,10 +109,6 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cashflow-projection"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
-    assert "404" in paths["/support/portfolios/{portfolio_id}/overview"]["get"]["responses"]
-    assert "404" in paths["/support/portfolios/{portfolio_id}/aggregation-jobs"]["get"]["responses"]
-    assert "404" in paths["/support/portfolios/{portfolio_id}/valuation-jobs"]["get"]["responses"]
-    assert "404" in paths["/lineage/portfolios/{portfolio_id}/keys"]["get"]["responses"]
 
 
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
@@ -135,16 +125,3 @@ async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     assert "/portfolios/{portfolio_id}/positions-analytics" not in paths
 
 
-async def test_openapi_declares_core_snapshot_contract(async_test_client):
-    response = await async_test_client.get("/openapi.json")
-    assert response.status_code == 200
-    paths = response.json()["paths"]
-
-    endpoint = "/integration/portfolios/{portfolio_id}/core-snapshot"
-    assert endpoint in paths
-    responses = paths[endpoint]["post"]["responses"]
-    assert "400" in responses
-    assert "403" in responses
-    assert "404" in responses
-    assert "409" in responses
-    assert "422" in responses

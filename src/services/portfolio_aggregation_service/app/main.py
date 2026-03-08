@@ -1,37 +1,29 @@
-import logging
 import asyncio
+import logging
 
-from .consumer_manager import ConsumerManager
 from portfolio_common.logging_utils import setup_logging
 from prometheus_fastapi_instrumentator import Instrumentator
-from .web import app as web_app
 
+from .consumer_manager import ConsumerManager
+from .web import app as web_app
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 
 async def main():
-    """
-    Run the position timeseries worker service.
-    """
-    logger.info("Position Timeseries Worker Service starting up...")
-
+    logger.info("Portfolio Aggregation Service starting up...")
     Instrumentator().instrument(web_app).expose(web_app)
     logger.info("Prometheus metrics exposed at /metrics")
 
     manager = ConsumerManager()
-
     try:
         await manager.run()
     except Exception:
-        logger.critical(
-            "Position Timeseries Worker Service encountered a critical error",
-            exc_info=True,
-        )
+        logger.critical("Portfolio Aggregation Service encountered a critical error", exc_info=True)
         raise
     finally:
-        logger.info("Position Timeseries Worker Service has shut down.")
+        logger.info("Portfolio Aggregation Service has shut down.")
 
 
 if __name__ == "__main__":

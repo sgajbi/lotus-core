@@ -154,6 +154,33 @@ services:
     networks:
       - app_network
 
+  query_control_plane_service:
+    build:
+      context: .
+      dockerfile: ./src/services/query_control_plane_service/Dockerfile
+    hostname: query_control_plane_service
+    ports:
+      - "${LOTUS_QUERY_CONTROL_PLANE_HOST_PORT:-8202}:8002"
+    environment:
+      DATABASE_URL: ${QUERY_DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+    depends_on:
+      migration-runner:
+        condition: service_completed_successfully
+    volumes:
+      - ./src/services/query_control_plane_service/app:/app/app
+      - ./src/services/query_service/app:/app/src/services/query_service/app
+      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --no-access-log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
   persistence_service:
     build:
       context: .
@@ -388,6 +415,35 @@ services:
     networks:
       - app_network
 
+  portfolio_aggregation_service:
+    build:
+      context: .
+      dockerfile: ./src/services/portfolio_aggregation_service/Dockerfile
+    hostname: portfolio_aggregation_service
+    ports:
+      - "${LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT:-8088}:8088"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+    depends_on:
+      kafka-topic-creator:
+        condition: service_completed_successfully
+      migration-runner:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    volumes:
+      - ./src/services/portfolio_aggregation_service/app:/app/app
+      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
+    command: ["python", "-m", "app.main"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
   demo_data_loader:
     build:
       context: .
@@ -400,6 +456,8 @@ services:
         condition: service_healthy
       query_service:
         condition: service_healthy
+      query_control_plane_service:
+        condition: service_healthy
       persistence_service:
         condition: service_healthy
       position_calculator_service:
@@ -409,6 +467,8 @@ services:
       position_valuation_calculator:
         condition: service_healthy
       timeseries_generator_service:
+        condition: service_healthy
+      portfolio_aggregation_service:
         condition: service_healthy
     command: >
       sh -c "
@@ -440,6 +500,7 @@ services:
     depends_on:
       - ingestion_service
       - query_service
+      - query_control_plane_service
       - persistence_service
       - cost_calculator_service
       - cashflow_calculator_service
@@ -448,6 +509,7 @@ services:
       - valuation_orchestrator_service
       - position_valuation_calculator
       - timeseries_generator_service
+      - portfolio_aggregation_service
 
   grafana:
     image: grafana/grafana:10.1.5

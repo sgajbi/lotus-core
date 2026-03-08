@@ -1,4 +1,3 @@
-# services/query-service/app/main.py
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -19,25 +18,20 @@ from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUE
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from .enterprise_readiness import (
+from src.services.query_service.app.enterprise_readiness import (
     build_enterprise_audit_middleware,
     validate_enterprise_runtime_config,
 )
-from .routers import (
-    buy_state,
-    cashflow_projection,
-    fx_rates,
-    instruments,
-    lookups,
-    portfolios,
-    positions,
-    prices,
-    sell_state,
-    transactions,
+from src.services.query_service.app.routers import (
+    analytics_inputs,
+    capabilities,
+    integration,
+    operations,
+    simulation,
 )
 
-SERVICE_PREFIX = "QRY"
-SERVICE_NAME = "query_service"
+SERVICE_PREFIX = "QCP"
+SERVICE_NAME = "query_control_plane_service"
 setup_logging()
 logger = logging.getLogger(__name__)
 validate_enterprise_runtime_config()
@@ -45,29 +39,25 @@ validate_enterprise_runtime_config()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Manages application startup and shutdown events.
-    """
-    logger.info("Query Service starting up...")
+    logger.info("Query Control Plane Service starting up...")
     yield
-    logger.info("Query Service shutting down. Waiting for in-flight requests to complete...")
-    logger.info("Query Service has shut down gracefully.")
+    logger.info(
+        "Query Control Plane Service shutting down. Waiting for in-flight requests to complete..."
+    )
+    logger.info("Query Control Plane Service has shut down gracefully.")
 
 
 app = FastAPI(
-    title="Lotus Core Query API",
+    title="Lotus Core Query Control Plane API",
     description=(
-        "Lotus Core Query API for portfolio and position data access. "
-        "Provides Lotus-standard, API-first read models for portfolios, positions, "
-        "transactions, prices, instruments, and lookup workflows."
+        "Lotus Core control-plane APIs for integration contracts, operational support, "
+        "and simulation workflows. Core read-plane endpoints remain in query_service."
     ),
     version="0.2.0",
     contact={"name": "Lotus Platform Engineering"},
     lifespan=lifespan,
 )
 app.middleware("http")(build_enterprise_audit_middleware())
-
-# --- Prometheus Metrics Instrumentation ---
 Instrumentator().instrument(app).expose(app)
 logger.info("Prometheus metrics exposed at /metrics")
 
@@ -145,7 +135,6 @@ async def emit_http_observability(request: Request, call_next):
     return response
 
 
-# Global Exception Handler
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     correlation_id = (
@@ -170,19 +159,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Create and include the standardized health router.
-# This service depends on the database.
 health_router = create_health_router("db")
 app.include_router(health_router)
-
-# Register the API routers
-app.include_router(portfolios.router)
-app.include_router(positions.router)
-app.include_router(buy_state.router)
-app.include_router(sell_state.router)
-app.include_router(transactions.router)
-app.include_router(cashflow_projection.router)
-app.include_router(instruments.router)
-app.include_router(prices.router)
-app.include_router(fx_rates.router)
-app.include_router(lookups.router)
+app.include_router(operations.router)
+app.include_router(integration.router)
+app.include_router(analytics_inputs.router)
+app.include_router(capabilities.router)
+app.include_router(simulation.router)
