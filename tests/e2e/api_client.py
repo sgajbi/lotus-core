@@ -11,9 +11,10 @@ from requests.exceptions import RequestException
 class E2EApiClient:
     """A client for interacting with the system's APIs in E2E tests."""
 
-    def __init__(self, ingestion_url: str, query_url: str):
+    def __init__(self, ingestion_url: str, query_url: str, query_control_plane_url: str):
         self.ingestion_url = ingestion_url
         self.query_url = query_url
+        self.query_control_plane_url = query_control_plane_url
         self.session = requests.Session()
 
     @staticmethod
@@ -56,6 +57,13 @@ class E2EApiClient:
     def query(self, endpoint: str) -> requests.Response:
         """Retrieves data from a specified query endpoint."""
         url = f"{self.query_url}{endpoint}"
+        response = self.session.get(url, timeout=10)
+        response.raise_for_status()
+        return response
+
+    def query_control(self, endpoint: str) -> requests.Response:
+        """Retrieves data from a specified control-plane query endpoint."""
+        url = f"{self.query_control_plane_url}{endpoint}"
         response = self.session.get(url, timeout=10)
         response.raise_for_status()
         return response
