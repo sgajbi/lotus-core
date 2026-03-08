@@ -210,9 +210,7 @@ def _build_schema_example(
                 if merged:
                     return merged
             for variant in variants:
-                value = _build_schema_example(
-                    variant, root_schema=root_schema, seen_refs=seen_refs
-                )
+                value = _build_schema_example(variant, root_schema=root_schema, seen_refs=seen_refs)
                 if value is not None:
                     return value
 
@@ -224,9 +222,7 @@ def _build_schema_example(
         example: dict[str, Any] = {}
         required = set(schema_node.get("required", []))
         for prop_name, prop_schema in properties.items():
-            value = _build_schema_example(
-                prop_schema, root_schema=root_schema, seen_refs=seen_refs
-            )
+            value = _build_schema_example(prop_schema, root_schema=root_schema, seen_refs=seen_refs)
             if value is None and prop_name not in required:
                 continue
             if value is None and isinstance(prop_schema, dict):
