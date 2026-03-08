@@ -4,10 +4,9 @@ import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from app.routers import (
+from .routers import (
     business_dates,
     fx_rates,
-    ingestion_jobs,
     instruments,
     market_prices,
     portfolio_bundle,
@@ -72,7 +71,9 @@ app = FastAPI(
     description=(
         "Lotus Core Ingestion API for onboarding canonical financial data into Lotus Core. "
         "Supports Lotus-standard ingestion contracts for portfolios, instruments, transactions, "
-        "market prices, FX rates, business dates, and controlled reprocessing workflows."
+        "market prices, FX rates, business dates, and controlled reprocessing workflows. "
+        "Replay, DLQ remediation, and ingestion operations diagnostics are hosted by "
+        "event_replay_service."
     ),
     version="0.5.0",
     contact={"name": "Lotus Platform Engineering"},
@@ -204,5 +205,4 @@ app.include_router(business_dates.router)
 app.include_router(reprocessing.router)
 app.include_router(portfolio_bundle.router)
 app.include_router(uploads.router)
-app.include_router(ingestion_jobs.router)
 app.include_router(reference_data.router)

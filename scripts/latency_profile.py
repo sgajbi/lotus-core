@@ -42,6 +42,7 @@ def _percentile_ms(samples: list[float], percentile: int) -> float:
 
 def _wait_ready(
     base_ingestion_url: str,
+    base_event_replay_url: str,
     base_query_url: str,
     base_query_control_plane_url: str,
     timeout_seconds: int,
@@ -51,9 +52,15 @@ def _wait_ready(
     while time.time() < deadline:
         try:
             ing = session.get(f"{base_ingestion_url}/health/ready", timeout=5)
+            replay = session.get(f"{base_event_replay_url}/health/ready", timeout=5)
             qry = session.get(f"{base_query_url}/health/ready", timeout=5)
             ctrl = session.get(f"{base_query_control_plane_url}/health/ready", timeout=5)
-            if ing.status_code == 200 and qry.status_code == 200 and ctrl.status_code == 200:
+            if (
+                ing.status_code == 200
+                and replay.status_code == 200
+                and qry.status_code == 200
+                and ctrl.status_code == 200
+            ):
                 return
         except requests.RequestException:
             pass
@@ -207,6 +214,7 @@ def _resolve_runtime_ids(
 
 def _cases(
     ingestion_base_url: str,
+    event_replay_base_url: str,
     query_base_url: str,
     query_control_plane_base_url: str,
     portfolio_id: str,
@@ -312,14 +320,14 @@ def _cases(
                 EndpointCase(
                     "ingestion_health_summary",
                     "GET",
-                    f"{ingestion_base_url}/ingestion/health/summary",
+                    f"{event_replay_base_url}/ingestion/health/summary",
                     None,
                     300,
                 ),
                 EndpointCase(
                     "ingestion_jobs_list",
                     "GET",
-                    f"{ingestion_base_url}/ingestion/jobs?limit=20",
+                    f"{event_replay_base_url}/ingestion/jobs?limit=20",
                     None,
                     300,
                 ),
@@ -337,6 +345,7 @@ def _call_case(session: requests.Session, case: EndpointCase) -> requests.Respon
 def run_profile(
     *,
     ingestion_base_url: str,
+    event_replay_base_url: str,
     query_base_url: str,
     query_control_plane_base_url: str,
     portfolio_id: str,
@@ -350,6 +359,7 @@ def run_profile(
 
     for case in _cases(
         ingestion_base_url,
+        event_replay_base_url,
         query_base_url,
         query_control_plane_base_url,
         portfolio_id,
@@ -472,6 +482,10 @@ def parse_args() -> argparse.Namespace:
         "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
     )
     parser.add_argument(
+        "--event-replay-base-url",
+        default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
+    )
+    parser.add_argument(
         "--query-control-plane-base-url",
         default=os.getenv("E2E_QUERY_CONTROL_PLANE_URL", "http://localhost:8202"),
     )
@@ -501,6 +515,7 @@ def main() -> int:
 
     _wait_ready(
         base_ingestion_url=args.ingestion_base_url,
+        base_event_replay_url=args.event_replay_base_url,
         base_query_url=args.query_base_url,
         base_query_control_plane_url=args.query_control_plane_base_url,
         timeout_seconds=args.ready_timeout_seconds,
@@ -517,6 +532,7 @@ def main() -> int:
 
     results = run_profile(
         ingestion_base_url=args.ingestion_base_url,
+        event_replay_base_url=args.event_replay_base_url,
         query_base_url=args.query_base_url,
         query_control_plane_base_url=args.query_control_plane_base_url,
         portfolio_id=resolved_portfolio_id,

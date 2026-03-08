@@ -15,6 +15,7 @@ Current decomposition is directionally correct, but there are boundary and trigg
 - Stage readiness is sometimes inferred from eventual DB state rather than explicit orchestration events.
 - Some services combine orchestration and execution responsibilities.
 - Query service mixes core read APIs with control-plane and integration endpoints.
+- Replay/remediation and RFC-065 operational diagnostics remain coupled to write ingress.
 
 This RFC introduces a phased architecture update that preserves existing throughput strengths while improving deterministic sequencing, auditability, and operational safety.
 
@@ -44,6 +45,12 @@ This RFC introduces a phased architecture update that preserves existing through
 - `position_calculator`
 - `position_valuation_calculator`
 - `timeseries_generator_service`
+- `portfolio_aggregation_service`
+- `pipeline_orchestrator_service`
+- `valuation_orchestrator_service`
+- `query_control_plane_service`
+- `event_replay_service`
+- `financial_reconciliation_service`
 - `query_service`
 
 ### 2.2 Strengths
@@ -57,6 +64,7 @@ This RFC introduces a phased architecture update that preserves existing through
 - Pipeline stage dependencies are not uniformly represented as explicit gating events.
 - Mixed orchestration/execution concerns in valuation and timeseries services.
 - Query service has mixed runtime responsibilities (core read-plane + control-plane + integration shape APIs).
+- Ingestion write ingress and replay/remediation controls can scale and fail differently.
 
 ## 3. Domain Boundary Evaluation
 
@@ -152,6 +160,8 @@ Add `financial_reconciliation_service` for independent controls:
 - transaction-to-cashflow completeness
 - position-to-valuation consistency
 - day-level timeseries integrity
+- durable run/finding audit tables with rerunnable scoped checks
+- RFC-065 grade health, metrics, and operational contract surfaces
 
 ## 4. Event-Driven Trigger Hardening
 
@@ -433,6 +443,20 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
     analytics export/input APIs, operational diagnostics, and simulation workflows.
   - updated container topology and observability wiring to run the control plane
     independently from the core read plane.
+- Replay control-plane split delivered:
+  - narrowed `ingestion_service` to canonical write ingress, upload adapters,
+    and reprocessing request submission.
+  - added `event_replay_service` for ingestion job inspection, retry control,
+    consumer DLQ replay, replay audit access, operations mode control, and
+    RFC-065 operational diagnostics (`/ingestion/health/*`, policy, capacity,
+    backlog, and idempotency endpoints).
+  - preserved durable replay audit, deterministic replay fingerprinting, and
+    control-plane guardrails while moving the runtime to its own independently
+    scalable service boundary.
+  - aligned the new service with RFC 065 operational standards:
+    dedicated health/readiness probes, Prometheus exposure, Docker/runtime
+    topology, smoke/load/recovery automation coverage, and protected ops-token
+    contracts.
 
 ### 15.2 Current scope boundary
 
@@ -448,5 +472,5 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 ### 15.3 Remaining roadmap alignment
 
 - Next slices should focus on follow-on hardening work
-  (for example replay/remediation and reconciliation controls) while preserving the
+  (primarily financial reconciliation controls) while preserving the
   now-explicit end-to-end gate chain and the newly isolated service boundaries.

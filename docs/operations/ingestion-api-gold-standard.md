@@ -13,6 +13,8 @@ This runbook summarizes the ingestion operations controls expected for productio
 ## Operations authorization
 
 - Privileged operations APIs under `/ingestion/*` require `X-Lotus-Ops-Token` by default.
+- After RFC 081, these protected control-plane endpoints are hosted by `event_replay_service`;
+  canonical write-ingress endpoints remain on `ingestion_service`.
 - Controls:
   - `LOTUS_CORE_INGEST_OPS_TOKEN_REQUIRED` (default: `true`)
   - `LOTUS_CORE_INGEST_OPS_TOKEN` (default: `lotus-core-ops-local`)

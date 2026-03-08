@@ -232,6 +232,10 @@ def main() -> int:
         "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
     )
     parser.add_argument(
+        "--event-replay-base-url",
+        default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
+    )
+    parser.add_argument(
         "--query-control-plane-base-url",
         default=os.getenv("E2E_QUERY_CONTROL_PLANE_URL", "http://localhost:8202"),
     )
@@ -256,6 +260,7 @@ def main() -> int:
         _compose_up_with_retry(compose_file=compose_file, repo_root=repo_root, build=args.build)
 
     _wait_ready(args.ingestion_base_url, args.ready_timeout_seconds)
+    _wait_ready(args.event_replay_base_url, args.ready_timeout_seconds)
     _wait_ready(args.query_base_url, args.ready_timeout_seconds)
     _wait_ready(args.query_control_plane_base_url, args.ready_timeout_seconds)
 
@@ -309,6 +314,7 @@ def main() -> int:
     results: list[CheckResult] = []
     ingest = args.ingestion_base_url
     query = args.query_base_url
+    event_replay = args.event_replay_base_url
     query_control = args.query_control_plane_base_url
     ops_headers = {"X-Lotus-Ops-Token": "lotus-core-ops-local"}
 
@@ -319,7 +325,7 @@ def main() -> int:
         results,
         name="ops set normal",
         method="PUT",
-        url=f"{ingest}/ingestion/ops/control",
+        url=f"{event_replay}/ingestion/ops/control",
         expected={200},
         headers=ops_headers,
         json={"mode": "normal", "updated_by": "deterministic_smoke"},
@@ -544,7 +550,7 @@ def main() -> int:
         results,
         name="jobs list",
         method="GET",
-        url=f"{ingest}/ingestion/jobs?limit=10",
+        url=f"{event_replay}/ingestion/jobs?limit=10",
         expected={200},
         headers=ops_headers,
     )
@@ -559,7 +565,7 @@ def main() -> int:
             results,
             name="job get",
             method="GET",
-            url=f"{ingest}/ingestion/jobs/{job_id}",
+            url=f"{event_replay}/ingestion/jobs/{job_id}",
             expected={200},
             headers=ops_headers,
         )
@@ -567,7 +573,7 @@ def main() -> int:
             results,
             name="job failures",
             method="GET",
-            url=f"{ingest}/ingestion/jobs/{job_id}/failures",
+            url=f"{event_replay}/ingestion/jobs/{job_id}/failures",
             expected={200},
             headers=ops_headers,
         )
@@ -575,7 +581,7 @@ def main() -> int:
             results,
             name="job record status",
             method="GET",
-            url=f"{ingest}/ingestion/jobs/{job_id}/records",
+            url=f"{event_replay}/ingestion/jobs/{job_id}/records",
             expected={200},
             headers=ops_headers,
         )
@@ -583,7 +589,7 @@ def main() -> int:
             results,
             name="job retry dry run",
             method="POST",
-            url=f"{ingest}/ingestion/jobs/{job_id}/retry",
+            url=f"{event_replay}/ingestion/jobs/{job_id}/retry",
             expected={200},
             headers=ops_headers,
             json={"dry_run": True, "record_keys": []},
@@ -593,7 +599,7 @@ def main() -> int:
             CheckResult(
                 name="job get",
                 method="GET",
-                url=f"{ingest}/ingestion/jobs/{{job_id}}",
+                url=f"{event_replay}/ingestion/jobs/{{job_id}}",
                 status=0,
                 ok=False,
                 note="job_id not discovered from list response",
@@ -605,7 +611,7 @@ def main() -> int:
         results,
         name="health summary",
         method="GET",
-        url=f"{ingest}/ingestion/health/summary",
+        url=f"{event_replay}/ingestion/health/summary",
         expected={200},
         headers=ops_headers,
     )
@@ -613,7 +619,7 @@ def main() -> int:
         results,
         name="health lag",
         method="GET",
-        url=f"{ingest}/ingestion/health/lag",
+        url=f"{event_replay}/ingestion/health/lag",
         expected={200},
         headers=ops_headers,
     )
@@ -621,7 +627,7 @@ def main() -> int:
         results,
         name="health slo",
         method="GET",
-        url=f"{ingest}/ingestion/health/slo",
+        url=f"{event_replay}/ingestion/health/slo",
         expected={200},
         headers=ops_headers,
     )
@@ -629,7 +635,7 @@ def main() -> int:
         results,
         name="health consumer lag",
         method="GET",
-        url=f"{ingest}/ingestion/health/consumer-lag",
+        url=f"{event_replay}/ingestion/health/consumer-lag",
         expected={200},
         headers=ops_headers,
     )
@@ -637,7 +643,7 @@ def main() -> int:
         results,
         name="health error budget",
         method="GET",
-        url=f"{ingest}/ingestion/health/error-budget",
+        url=f"{event_replay}/ingestion/health/error-budget",
         expected={200},
         headers=ops_headers,
     )
@@ -645,7 +651,7 @@ def main() -> int:
         results,
         name="health operating band",
         method="GET",
-        url=f"{ingest}/ingestion/health/operating-band",
+        url=f"{event_replay}/ingestion/health/operating-band",
         expected={200},
         headers=ops_headers,
     )
@@ -653,7 +659,7 @@ def main() -> int:
         results,
         name="health policy",
         method="GET",
-        url=f"{ingest}/ingestion/health/policy",
+        url=f"{event_replay}/ingestion/health/policy",
         expected={200},
         headers=ops_headers,
     )
@@ -661,7 +667,7 @@ def main() -> int:
         results,
         name="health reprocessing queue",
         method="GET",
-        url=f"{ingest}/ingestion/health/reprocessing-queue",
+        url=f"{event_replay}/ingestion/health/reprocessing-queue",
         expected={200},
         headers=ops_headers,
     )
@@ -669,7 +675,7 @@ def main() -> int:
         results,
         name="health backlog breakdown",
         method="GET",
-        url=f"{ingest}/ingestion/health/backlog-breakdown",
+        url=f"{event_replay}/ingestion/health/backlog-breakdown",
         expected={200},
         headers=ops_headers,
     )
@@ -677,7 +683,7 @@ def main() -> int:
         results,
         name="health stalled jobs",
         method="GET",
-        url=f"{ingest}/ingestion/health/stalled-jobs",
+        url=f"{event_replay}/ingestion/health/stalled-jobs",
         expected={200},
         headers=ops_headers,
     )
@@ -685,7 +691,7 @@ def main() -> int:
         results,
         name="health capacity",
         method="GET",
-        url=f"{ingest}/ingestion/health/capacity",
+        url=f"{event_replay}/ingestion/health/capacity",
         expected={200},
         headers=ops_headers,
     )
@@ -703,7 +709,7 @@ def main() -> int:
         _record_contract_check(
             results,
             name="health policy contract",
-            url=f"{ingest}/ingestion/health/policy",
+            url=f"{event_replay}/ingestion/health/policy",
             ok=not missing_policy_keys,
             note=(
                 "all required policy keys present"
@@ -746,7 +752,7 @@ def main() -> int:
         _record_contract_check(
             results,
             name="health capacity contract",
-            url=f"{ingest}/ingestion/health/capacity",
+            url=f"{event_replay}/ingestion/health/capacity",
             ok=(not missing_capacity_keys) and group_contract_ok,
             note=(
                 group_contract_note
@@ -761,7 +767,7 @@ def main() -> int:
         _record_contract_check(
             results,
             name="health operating band contract",
-            url=f"{ingest}/ingestion/health/operating-band",
+            url=f"{event_replay}/ingestion/health/operating-band",
             ok=isinstance(operating_band_payload, dict),
             note="operating band payload captured",
             response=operating_band_payload,
@@ -771,7 +777,7 @@ def main() -> int:
         _record_contract_check(
             results,
             name="health reprocessing queue contract",
-            url=f"{ingest}/ingestion/health/reprocessing-queue",
+            url=f"{event_replay}/ingestion/health/reprocessing-queue",
             ok=isinstance(reprocessing_queue_payload, dict),
             note="reprocessing queue payload captured",
             response=reprocessing_queue_payload,
@@ -781,7 +787,7 @@ def main() -> int:
         _record_contract_check(
             results,
             name="health backlog breakdown contract",
-            url=f"{ingest}/ingestion/health/backlog-breakdown",
+            url=f"{event_replay}/ingestion/health/backlog-breakdown",
             ok=isinstance(backlog_breakdown_payload, dict),
             note="backlog breakdown payload captured",
             response=backlog_breakdown_payload,
@@ -791,7 +797,7 @@ def main() -> int:
         _record_contract_check(
             results,
             name="health stalled jobs contract",
-            url=f"{ingest}/ingestion/health/stalled-jobs",
+            url=f"{event_replay}/ingestion/health/stalled-jobs",
             ok=isinstance(stalled_jobs_payload, dict),
             note="stalled jobs payload captured",
             response=stalled_jobs_payload,
@@ -801,7 +807,7 @@ def main() -> int:
         results,
         name="dlq list",
         method="GET",
-        url=f"{ingest}/ingestion/dlq/consumer-events?limit=10",
+        url=f"{event_replay}/ingestion/dlq/consumer-events?limit=10",
         expected={200},
         headers=ops_headers,
     )
@@ -809,7 +815,7 @@ def main() -> int:
         results,
         name="idempotency diagnostics",
         method="GET",
-        url=f"{ingest}/ingestion/idempotency/diagnostics?limit=10",
+        url=f"{event_replay}/ingestion/idempotency/diagnostics?limit=10",
         expected={200},
         headers=ops_headers,
     )

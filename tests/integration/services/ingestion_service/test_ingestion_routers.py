@@ -15,6 +15,7 @@ import pytest_asyncio
 from openpyxl import Workbook
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
+from src.services.event_replay_service.app.main import app as event_replay_app
 from src.services.ingestion_service.app import ops_controls
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
@@ -23,14 +24,14 @@ try:
     from app import ops_controls as app_ops_controls
 except ModuleNotFoundError:  # pragma: no cover - only needed in certain test path setups.
     app_ops_controls = ops_controls
+from src.services.event_replay_service.app.routers import (
+    ingestion_operations as ingestion_operations_router,
+)
 from src.services.ingestion_service.app.routers import (
     business_dates as business_dates_router,
 )
 from src.services.ingestion_service.app.routers import (
     fx_rates as fx_rates_router,
-)
-from src.services.ingestion_service.app.routers import (
-    ingestion_jobs as ingestion_jobs_router,
 )
 from src.services.ingestion_service.app.routers import (
     instruments as instruments_router,
@@ -67,7 +68,7 @@ def mock_kafka_producer() -> MagicMock:
 
 
 @pytest_asyncio.fixture
-async def async_test_client(mock_kafka_producer: MagicMock):
+async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     """
     Provides an httpx.AsyncClient with the KafkaProducer dependency replaced by a MagicMock.
     """
@@ -654,47 +655,43 @@ async def async_test_client(mock_kafka_producer: MagicMock):
             return None
 
     fake_job_service = FakeIngestionJobService()
-    app.dependency_overrides[get_ingestion_job_service] = lambda: fake_job_service
-    app.dependency_overrides[transactions_router.get_ingestion_job_service] = lambda: (
-        fake_job_service
+    target_apps = (app, event_replay_app)
+
+    for target_app in target_apps:
+        target_app.dependency_overrides[get_ingestion_job_service] = lambda: fake_job_service
+        target_app.dependency_overrides[get_kafka_producer] = override_get_kafka_producer
+
+    app.dependency_overrides[transactions_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
     )
-    app.dependency_overrides[portfolios_router.get_ingestion_job_service] = lambda: fake_job_service
-    app.dependency_overrides[instruments_router.get_ingestion_job_service] = lambda: (
-        fake_job_service
+    app.dependency_overrides[portfolios_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
     )
-    app.dependency_overrides[market_prices_router.get_ingestion_job_service] = lambda: (
-        fake_job_service
+    app.dependency_overrides[instruments_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
+    )
+    app.dependency_overrides[market_prices_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
     )
     app.dependency_overrides[fx_rates_router.get_ingestion_job_service] = lambda: fake_job_service
-    app.dependency_overrides[business_dates_router.get_ingestion_job_service] = lambda: (
-        fake_job_service
+    app.dependency_overrides[business_dates_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
     )
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
-    app.dependency_overrides[reprocessing_router.get_ingestion_job_service] = lambda: (
-        fake_job_service
+    app.dependency_overrides[reprocessing_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
     )
-    app.dependency_overrides[ingestion_jobs_router.get_ingestion_job_service] = lambda: (
-        fake_job_service
-    )
+    event_replay_app.dependency_overrides[
+        ingestion_operations_router.get_ingestion_job_service
+    ] = lambda: fake_job_service
 
-    app.dependency_overrides[get_kafka_producer] = override_get_kafka_producer
+    yield {"fake_job_service": fake_job_service}
 
-    # --- THIS IS THE FIX ---
-    # Use ASGITransport for in-process testing instead of making real network calls.
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://test",
-        headers={"X-Lotus-Ops-Token": "lotus-core-ops-local"},
-    ) as client:
-        # --- END FIX ---
-        yield client
-
-    # Clean up the override after the test
-    app.dependency_overrides.pop(get_kafka_producer, None)
-    app.dependency_overrides.pop(get_ingestion_job_service, None)
+    for target_app in target_apps:
+        target_app.dependency_overrides.pop(get_kafka_producer, None)
+        target_app.dependency_overrides.pop(get_ingestion_job_service, None)
     app.dependency_overrides.pop(transactions_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(portfolios_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(instruments_router.get_ingestion_job_service, None)
@@ -703,7 +700,32 @@ async def async_test_client(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(business_dates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
-    app.dependency_overrides.pop(ingestion_jobs_router.get_ingestion_job_service, None)
+    event_replay_app.dependency_overrides.pop(
+        ingestion_operations_router.get_ingestion_job_service,
+        None,
+    )
+
+
+@pytest_asyncio.fixture
+async def async_test_client(ingestion_test_harness):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Lotus-Ops-Token": "lotus-core-ops-local"},
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def event_replay_test_client(ingestion_test_harness):
+    transport = httpx.ASGITransport(app=event_replay_app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Lotus-Ops-Token": "lotus-core-ops-local"},
+    ) as client:
+        yield client
 
 
 async def test_ingest_portfolios_endpoint(
@@ -767,7 +789,9 @@ async def test_ingest_transactions_endpoint(
 
 
 async def test_ingestion_jobs_status_endpoint(
-    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.reset_mock()
     payload = {
@@ -792,7 +816,7 @@ async def test_ingestion_jobs_status_endpoint(
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
 
-    job_response = await async_test_client.get(f"/ingestion/jobs/{job_id}")
+    job_response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}")
     assert job_response.status_code == 200
     job_body = job_response.json()
     assert job_body["job_id"] == job_id
@@ -800,8 +824,8 @@ async def test_ingestion_jobs_status_endpoint(
     assert job_body["entity_type"] == "transaction"
 
 
-async def test_ingestion_jobs_list_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/jobs", params={"limit": 5})
+async def test_ingestion_jobs_list_endpoint(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/jobs", params={"limit": 5})
     assert response.status_code == 200
     body = response.json()
     assert "jobs" in body
@@ -809,8 +833,8 @@ async def test_ingestion_jobs_list_endpoint(async_test_client: httpx.AsyncClient
     assert "next_cursor" in body
 
 
-async def test_ingestion_job_not_found(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/jobs/job_missing_001")
+async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/jobs/job_missing_001")
     assert response.status_code == 404
     body = response.json()
     assert body["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
@@ -847,7 +871,9 @@ async def test_ingestion_jobs_idempotency_replays_existing_job(
 
 
 async def test_ingestion_job_failure_history_and_retry(
-    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
     payload = {
@@ -871,23 +897,32 @@ async def test_ingestion_job_failure_history_and_retry(
     with pytest.raises(Exception, match="Failed to publish transaction"):
         await async_test_client.post("/ingest/transactions", json=payload)
 
-    jobs_response = await async_test_client.get("/ingestion/jobs", params={"status": "failed"})
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed"},
+    )
     assert jobs_response.status_code == 200
     failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
 
-    failure_history = await async_test_client.get(f"/ingestion/jobs/{failed_job_id}/failures")
+    failure_history = await event_replay_test_client.get(
+        f"/ingestion/jobs/{failed_job_id}/failures"
+    )
     assert failure_history.status_code == 200
     assert failure_history.json()["total"] >= 1
 
     mock_kafka_producer.publish_message.side_effect = None
-    retry_response = await async_test_client.post(f"/ingestion/jobs/{failed_job_id}/retry")
+    retry_response = await event_replay_test_client.post(
+        f"/ingestion/jobs/{failed_job_id}/retry"
+    )
     assert retry_response.status_code == 200
     assert retry_response.json()["status"] == "queued"
     assert retry_response.json()["retry_count"] == 1
 
 
 async def test_ingestion_job_partial_retry_dry_run(
-    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
 ):
     payload = {
         "transactions": [
@@ -923,7 +958,7 @@ async def test_ingestion_job_partial_retry_dry_run(
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
 
-    dry_run = await async_test_client.post(
+    dry_run = await event_replay_test_client.post(
         f"/ingestion/jobs/{job_id}/retry",
         json={"record_keys": ["TX_PARTIAL_002"], "dry_run": True},
     )
@@ -932,6 +967,7 @@ async def test_ingestion_job_partial_retry_dry_run(
 
 async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
     async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
 ):
     payload = {
         "transactions": [
@@ -953,12 +989,12 @@ async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
     ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
-    first = await async_test_client.post(
+    first = await event_replay_test_client.post(
         f"/ingestion/jobs/{job_id}/retry",
         json={"dry_run": False},
     )
     assert first.status_code == 200
-    second = await async_test_client.post(
+    second = await event_replay_test_client.post(
         f"/ingestion/jobs/{job_id}/retry",
         json={"dry_run": False},
     )
@@ -966,24 +1002,24 @@ async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
     assert second.json()["detail"]["code"] == "INGESTION_RETRY_DUPLICATE_BLOCKED"
 
 
-async def test_ingestion_health_summary(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/summary")
+async def test_ingestion_health_summary(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/summary")
     assert response.status_code == 200
     body = response.json()
     assert "total_jobs" in body
     assert "backlog_jobs" in body
 
 
-async def test_ingestion_slo_status(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/slo")
+async def test_ingestion_slo_status(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/slo")
     assert response.status_code == 200
     body = response.json()
     assert "failure_rate" in body
     assert "p95_queue_latency_seconds" in body
 
 
-async def test_ingestion_backlog_breakdown(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/backlog-breakdown")
+async def test_ingestion_backlog_breakdown(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/backlog-breakdown")
     assert response.status_code == 200
     body = response.json()
     assert "groups" in body
@@ -993,8 +1029,8 @@ async def test_ingestion_backlog_breakdown(async_test_client: httpx.AsyncClient)
     assert body["groups"][0]["endpoint"] == "/ingest/transactions"
 
 
-async def test_ingestion_stalled_jobs(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/stalled-jobs")
+async def test_ingestion_stalled_jobs(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/stalled-jobs")
     assert response.status_code == 200
     body = response.json()
     assert "jobs" in body
@@ -1004,8 +1040,9 @@ async def test_ingestion_stalled_jobs(async_test_client: httpx.AsyncClient):
 
 async def test_ingestion_ops_control_mode_blocks_writes(
     async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
 ):
-    update_response = await async_test_client.put(
+    update_response = await event_replay_test_client.put(
         "/ingestion/ops/control",
         json={"mode": "paused", "updated_by": "test"},
     )
@@ -1031,31 +1068,31 @@ async def test_ingestion_ops_control_mode_blocks_writes(
     blocked = await async_test_client.post("/ingest/transactions", json=payload)
     assert blocked.status_code == 503
 
-    restore_response = await async_test_client.put(
+    restore_response = await event_replay_test_client.put(
         "/ingestion/ops/control",
         json={"mode": "normal", "updated_by": "test"},
     )
     assert restore_response.status_code == 200
 
 
-async def test_ingestion_consumer_dlq_events_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/dlq/consumer-events")
+async def test_ingestion_consumer_dlq_events_endpoint(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/dlq/consumer-events")
     assert response.status_code == 200
     body = response.json()
     assert "events" in body
     assert "total" in body
 
 
-async def test_ingestion_consumer_lag_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/consumer-lag")
+async def test_ingestion_consumer_lag_endpoint(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/consumer-lag")
     assert response.status_code == 200
     body = response.json()
     assert "groups" in body
     assert "backlog_jobs" in body
 
 
-async def test_ingestion_error_budget_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/error-budget")
+async def test_ingestion_error_budget_endpoint(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/error-budget")
     assert response.status_code == 200
     body = response.json()
     assert "failure_rate" in body
@@ -1066,8 +1103,8 @@ async def test_ingestion_error_budget_endpoint(async_test_client: httpx.AsyncCli
     assert "dlq_pressure_ratio" in body
 
 
-async def test_ingestion_operating_band_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/operating-band")
+async def test_ingestion_operating_band_endpoint(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/operating-band")
     assert response.status_code == 200
     body = response.json()
     assert body["operating_band"] in {"green", "yellow", "orange", "red"}
@@ -1075,8 +1112,8 @@ async def test_ingestion_operating_band_endpoint(async_test_client: httpx.AsyncC
     assert "triggered_signals" in body
 
 
-async def test_ingestion_operating_policy_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/policy")
+async def test_ingestion_operating_policy_endpoint(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get("/ingestion/health/policy")
     assert response.status_code == 200
     body = response.json()
     assert body["policy_version"] == "v1"
@@ -1094,8 +1131,10 @@ async def test_ingestion_operating_policy_endpoint(async_test_client: httpx.Asyn
     }
 
 
-async def test_ingestion_reprocessing_queue_health_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/health/reprocessing-queue")
+async def test_ingestion_reprocessing_queue_health_endpoint(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get("/ingestion/health/reprocessing-queue")
     assert response.status_code == 200
     body = response.json()
     assert "as_of" in body
@@ -1104,8 +1143,8 @@ async def test_ingestion_reprocessing_queue_health_endpoint(async_test_client: h
     assert "oldest_pending_age_seconds" in body["queues"][0]
 
 
-async def test_ingestion_capacity_status_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get(
+async def test_ingestion_capacity_status_endpoint(event_replay_test_client: httpx.AsyncClient):
+    response = await event_replay_test_client.get(
         "/ingestion/health/capacity",
         params={"lookback_minutes": 60, "assumed_replicas": 2},
     )
@@ -1125,15 +1164,20 @@ async def test_ingestion_capacity_status_endpoint(async_test_client: httpx.Async
     }
 
 
-async def test_ingestion_idempotency_diagnostics_endpoint(async_test_client: httpx.AsyncClient):
-    response = await async_test_client.get("/ingestion/idempotency/diagnostics")
+async def test_ingestion_idempotency_diagnostics_endpoint(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get("/ingestion/idempotency/diagnostics")
     assert response.status_code == 200
     body = response.json()
     assert "keys" in body
     assert "collisions" in body
 
 
-async def test_ingestion_job_records_endpoint(async_test_client: httpx.AsyncClient):
+async def test_ingestion_job_records_endpoint(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+):
     payload = {
         "transactions": [
             {
@@ -1154,14 +1198,17 @@ async def test_ingestion_job_records_endpoint(async_test_client: httpx.AsyncClie
     ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
-    response = await async_test_client.get(f"/ingestion/jobs/{job_id}/records")
+    response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
     assert response.status_code == 200
     body = response.json()
     assert body["job_id"] == job_id
     assert "replayable_record_keys" in body
 
 
-async def test_replay_consumer_dlq_event_endpoint(async_test_client: httpx.AsyncClient):
+async def test_replay_consumer_dlq_event_endpoint(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+):
     payload = {
         "transactions": [
             {
@@ -1184,7 +1231,7 @@ async def test_replay_consumer_dlq_event_endpoint(async_test_client: httpx.Async
         headers={"X-Correlation-Id": "ING:test-correlation-id"},
         json=payload,
     )
-    response = await async_test_client.post(
+    response = await event_replay_test_client.post(
         "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
         json={"dry_run": True},
     )
@@ -1197,6 +1244,7 @@ async def test_replay_consumer_dlq_event_endpoint(async_test_client: httpx.Async
 
 async def test_replay_consumer_dlq_event_blocks_duplicate_replay(
     async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
 ):
     payload = {
         "transactions": [
@@ -1220,12 +1268,12 @@ async def test_replay_consumer_dlq_event_blocks_duplicate_replay(
         headers={"X-Correlation-Id": "ING:test-correlation-id"},
         json=payload,
     )
-    first = await async_test_client.post(
+    first = await event_replay_test_client.post(
         "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
         json={"dry_run": False},
     )
     assert first.status_code == 200
-    second = await async_test_client.post(
+    second = await event_replay_test_client.post(
         "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
         json={"dry_run": False},
     )
@@ -1234,7 +1282,10 @@ async def test_replay_consumer_dlq_event_blocks_duplicate_replay(
     assert body["replay_status"] == "duplicate_blocked"
 
 
-async def test_ingestion_replay_audit_list_and_get(async_test_client: httpx.AsyncClient):
+async def test_ingestion_replay_audit_list_and_get(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+):
     payload = {
         "transactions": [
             {
@@ -1257,14 +1308,14 @@ async def test_ingestion_replay_audit_list_and_get(async_test_client: httpx.Asyn
         headers={"X-Correlation-Id": "ING:test-correlation-id"},
         json=payload,
     )
-    replay_response = await async_test_client.post(
+    replay_response = await event_replay_test_client.post(
         "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
         json={"dry_run": True},
     )
     assert replay_response.status_code == 200
     replay_id = replay_response.json()["replay_audit_id"]
 
-    list_response = await async_test_client.get(
+    list_response = await event_replay_test_client.get(
         "/ingestion/audit/replays",
         params={"recovery_path": "consumer_dlq_replay"},
     )
@@ -1272,7 +1323,9 @@ async def test_ingestion_replay_audit_list_and_get(async_test_client: httpx.Asyn
     audits = list_response.json()["audits"]
     assert any(item["replay_id"] == replay_id for item in audits)
 
-    get_response = await async_test_client.get(f"/ingestion/audit/replays/{replay_id}")
+    get_response = await event_replay_test_client.get(
+        f"/ingestion/audit/replays/{replay_id}"
+    )
     assert get_response.status_code == 200
     assert get_response.json()["replay_id"] == replay_id
 
@@ -1292,7 +1345,10 @@ def _build_hs256_jwt(secret: str, payload: dict) -> str:
     return f"{header_b64}.{payload_b64}.{signature_b64}"
 
 
-async def test_ingestion_ops_supports_bearer_jwt(async_test_client: httpx.AsyncClient, monkeypatch):
+async def test_ingestion_ops_supports_bearer_jwt(
+    event_replay_test_client: httpx.AsyncClient,
+    monkeypatch,
+):
     now_epoch = int(datetime.now(UTC).timestamp())
     secret = "test-hs256-secret"
     for module in {ops_controls, app_ops_controls}:
@@ -1303,7 +1359,7 @@ async def test_ingestion_ops_supports_bearer_jwt(async_test_client: httpx.AsyncC
     payload = {"sub": "ops-jwt-user", "exp": now_epoch + 600}
     token = _build_hs256_jwt(secret, payload)
 
-    response = await async_test_client.get(
+    response = await event_replay_test_client.get(
         "/ingestion/health/summary",
         headers={"Authorization": f"Bearer {token}"},
     )

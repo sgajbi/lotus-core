@@ -3,6 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
 from src.services.ingestion_service.app.services.ingestion_job_service import (
@@ -18,6 +19,21 @@ pytestmark = pytest.mark.asyncio
 @pytest.fixture
 def service() -> IngestionJobService:
     return IngestionJobService()
+
+
+class _SingleSessionAsyncIterable:
+    def __init__(self, session):
+        self._session = session
+        self._yielded = False
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._yielded:
+            raise StopAsyncIteration
+        self._yielded = True
+        return self._session
 
 
 async def test_assert_retry_allowed_for_records_blocks_large_replay(
@@ -130,10 +146,11 @@ async def test_get_error_budget_status_includes_pressure_ratios(
         def begin(self):
             return _FakeBegin()
 
-    async def _mock_get_async_db_session():
-        yield _FakeSession()
-
-    monkeypatch.setattr(service_module, "get_async_db_session", _mock_get_async_db_session)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
     monkeypatch.setattr(service_module, "REPLAY_MAX_BACKLOG_JOBS", 5000)
     monkeypatch.setattr(service_module, "DLQ_BUDGET_EVENTS_PER_WINDOW", 10)
 
@@ -143,6 +160,58 @@ async def test_get_error_budget_status_includes_pressure_ratios(
     assert result.dlq_events_in_window == 4
     assert result.dlq_budget_events_per_window == 10
     assert result.dlq_pressure_ratio == Decimal("0.4")
+
+
+async def test_get_slo_status_returns_safe_default_when_queries_unavailable(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _BrokenSession:
+        async def execute(self, _stmt):
+            raise SQLAlchemyError("relation missing")
+
+        async def scalars(self, _stmt):
+            raise SQLAlchemyError("relation missing")
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_BrokenSession()),
+    )
+
+    result = await service.get_slo_status()
+
+    assert result.total_jobs == 0
+    assert result.failed_jobs == 0
+    assert result.failure_rate == Decimal("0")
+    assert result.breach_failure_rate is False
+    assert result.breach_queue_latency is False
+    assert result.breach_backlog_age is False
+
+
+async def test_get_error_budget_status_returns_safe_default_when_queries_unavailable(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _BrokenSession:
+        async def execute(self, _stmt):
+            raise SQLAlchemyError("relation missing")
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_BrokenSession()),
+    )
+
+    result = await service.get_error_budget_status(failure_rate_threshold=Decimal("0.03"))
+
+    assert result.total_jobs == 0
+    assert result.failed_jobs == 0
+    assert result.failure_rate == Decimal("0")
+    assert result.remaining_error_budget == Decimal("0.03")
+    assert result.dlq_pressure_ratio == Decimal("0")
+    assert result.breach_failure_rate is False
+    assert result.breach_backlog_growth is False
 
 
 async def test_get_operating_band_returns_red_for_high_backlog_or_dlq(

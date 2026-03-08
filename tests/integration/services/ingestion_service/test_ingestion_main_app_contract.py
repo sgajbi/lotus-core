@@ -45,3 +45,13 @@ async def test_openapi_declares_upload_400_contracts(async_test_client):
     assert "410" in paths["/ingest/uploads/preview"]["post"]["responses"]
     assert "410" in paths["/ingest/uploads/commit"]["post"]["responses"]
     assert "410" in paths["/ingest/portfolio-bundle"]["post"]["responses"]
+
+
+async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+    assert "/ingestion/jobs" not in paths
+    assert "/ingestion/dlq/consumer-events" not in paths
+    assert "/ingestion/health/policy" not in paths

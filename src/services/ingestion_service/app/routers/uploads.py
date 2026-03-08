@@ -1,10 +1,10 @@
 import logging
 
-from app.adapter_mode import require_upload_adapter_enabled
-from app.DTOs.upload_dto import UploadCommitResponse, UploadEntityType, UploadPreviewResponse
-from app.ops_controls import enforce_ingestion_write_rate_limit
-from app.services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from app.services.upload_ingestion_service import (
+from ..adapter_mode import require_upload_adapter_enabled
+from ..DTOs.upload_dto import UploadCommitResponse, UploadEntityType, UploadPreviewResponse
+from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
+from ..services.upload_ingestion_service import (
     UploadIngestionService,
     get_upload_ingestion_service,
 )

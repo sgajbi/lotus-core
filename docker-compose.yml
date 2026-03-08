@@ -181,6 +181,62 @@ services:
     networks:
       - app_network
 
+  event_replay_service:
+    build:
+      context: .
+      dockerfile: ./src/services/event_replay_service/Dockerfile
+    hostname: event_replay_service
+    ports:
+      - "${LOTUS_EVENT_REPLAY_HOST_PORT:-8209}:8009"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+    depends_on:
+      migration-runner:
+        condition: service_completed_successfully
+      kafka-topic-creator:
+        condition: service_completed_successfully
+    volumes:
+      - ./src/services/event_replay_service/app:/app/app
+      - ./src/services/ingestion_service/app:/app/src/services/ingestion_service/app
+      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8009 --no-access-log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8009/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
+  financial_reconciliation_service:
+    build:
+      context: .
+      dockerfile: ./src/services/financial_reconciliation_service/Dockerfile
+    hostname: financial_reconciliation_service
+    ports:
+      - "${LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT:-8210}:8010"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+    depends_on:
+      migration-runner:
+        condition: service_completed_successfully
+    volumes:
+      - ./src/services/financial_reconciliation_service/app:/app/app
+      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8010 --no-access-log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8010/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
   persistence_service:
     build:
       context: .
@@ -501,6 +557,7 @@ services:
       - ingestion_service
       - query_service
       - query_control_plane_service
+      - event_replay_service
       - persistence_service
       - cost_calculator_service
       - cashflow_calculator_service

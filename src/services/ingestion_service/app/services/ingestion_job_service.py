@@ -1,39 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import hashlib
-import json
 from typing import Any, Literal
 from uuid import uuid4
 
-from app.DTOs.ingestion_job_dto import (
-    IngestionBacklogBreakdownItemResponse,
-    IngestionBacklogBreakdownResponse,
-    ConsumerDlqEventResponse,
-    IngestionCapacityGroupResponse,
-    IngestionCapacityStatusResponse,
-    IngestionReplayAuditResponse,
-    IngestionConsumerLagGroupResponse,
-    IngestionConsumerLagResponse,
-    IngestionErrorBudgetStatusResponse,
-    IngestionHealthSummaryResponse,
-    IngestionIdempotencyDiagnosticItemResponse,
-    IngestionIdempotencyDiagnosticsResponse,
-    IngestionJobFailureResponse,
-    IngestionJobRecordStatusResponse,
-    IngestionJobResponse,
-    IngestionJobStatus,
-    IngestionOpsModeResponse,
-    IngestionOpsPolicyResponse,
-    IngestionOperatingBandResponse,
-    IngestionReprocessingQueueHealthResponse,
-    IngestionReprocessingQueueItemResponse,
-    IngestionSloStatusResponse,
-    IngestionStalledJobListResponse,
-    IngestionStalledJobResponse,
-)
 from portfolio_common.database_models import ConsumerDlqEvent as DBConsumerDlqEvent
 from portfolio_common.database_models import ConsumerDlqReplayAudit as DBConsumerDlqReplayAudit
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
@@ -53,6 +28,33 @@ from portfolio_common.monitoring import (
 )
 from sqlalchemy import and_, case, desc, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
+
+from ..DTOs.ingestion_job_dto import (
+    ConsumerDlqEventResponse,
+    IngestionBacklogBreakdownItemResponse,
+    IngestionBacklogBreakdownResponse,
+    IngestionCapacityGroupResponse,
+    IngestionCapacityStatusResponse,
+    IngestionConsumerLagGroupResponse,
+    IngestionConsumerLagResponse,
+    IngestionErrorBudgetStatusResponse,
+    IngestionHealthSummaryResponse,
+    IngestionIdempotencyDiagnosticItemResponse,
+    IngestionIdempotencyDiagnosticsResponse,
+    IngestionJobFailureResponse,
+    IngestionJobRecordStatusResponse,
+    IngestionJobResponse,
+    IngestionJobStatus,
+    IngestionOperatingBandResponse,
+    IngestionOpsModeResponse,
+    IngestionOpsPolicyResponse,
+    IngestionReplayAuditResponse,
+    IngestionReprocessingQueueHealthResponse,
+    IngestionReprocessingQueueItemResponse,
+    IngestionSloStatusResponse,
+    IngestionStalledJobListResponse,
+    IngestionStalledJobResponse,
+)
 from ..settings import get_ingestion_service_settings
 
 _SETTINGS = get_ingestion_service_settings()
@@ -67,15 +69,20 @@ DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = (
     _RUNTIME_POLICY.default_queue_latency_threshold_seconds
 )
 DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_backlog_age_threshold_seconds
-REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = _RUNTIME_POLICY.reprocessing_worker_poll_interval_seconds
+REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = (
+    _RUNTIME_POLICY.reprocessing_worker_poll_interval_seconds
+)
 REPROCESSING_WORKER_BATCH_SIZE = _RUNTIME_POLICY.reprocessing_worker_batch_size
-VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = _RUNTIME_POLICY.valuation_scheduler_poll_interval_seconds
+VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = (
+    _RUNTIME_POLICY.valuation_scheduler_poll_interval_seconds
+)
 VALUATION_SCHEDULER_BATCH_SIZE = _RUNTIME_POLICY.valuation_scheduler_batch_size
 VALUATION_SCHEDULER_DISPATCH_ROUNDS = _RUNTIME_POLICY.valuation_scheduler_dispatch_rounds
 CAPACITY_ASSUMED_REPLICAS = _RUNTIME_POLICY.capacity_assumed_replicas
 REPLAY_ISOLATION_MODE = _RUNTIME_POLICY.replay_isolation_mode
 PARTITION_GROWTH_STRATEGY = _RUNTIME_POLICY.partition_growth_strategy
 CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_RUNTIME_POLICY.calculator_peak_lag_age_seconds)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -338,6 +345,47 @@ class IngestionJobService:
     Persists ingestion lifecycle and operational controls for ingestion runbooks.
     """
 
+    @staticmethod
+    def _default_slo_status(
+        *,
+        lookback_minutes: int,
+    ) -> IngestionSloStatusResponse:
+        return IngestionSloStatusResponse(
+            lookback_minutes=lookback_minutes,
+            total_jobs=0,
+            failed_jobs=0,
+            failure_rate=Decimal("0"),
+            p95_queue_latency_seconds=0.0,
+            backlog_age_seconds=0.0,
+            breach_failure_rate=False,
+            breach_queue_latency=False,
+            breach_backlog_age=False,
+        )
+
+    @staticmethod
+    def _default_error_budget_status(
+        *,
+        lookback_minutes: int,
+        failure_rate_threshold: Decimal,
+    ) -> IngestionErrorBudgetStatusResponse:
+        return IngestionErrorBudgetStatusResponse(
+            lookback_minutes=lookback_minutes,
+            previous_lookback_minutes=lookback_minutes,
+            total_jobs=0,
+            failed_jobs=0,
+            failure_rate=Decimal("0"),
+            remaining_error_budget=failure_rate_threshold,
+            backlog_jobs=0,
+            previous_backlog_jobs=0,
+            backlog_growth=0,
+            replay_backlog_pressure_ratio=Decimal("0"),
+            dlq_events_in_window=0,
+            dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
+            dlq_pressure_ratio=Decimal("0"),
+            breach_failure_rate=False,
+            breach_backlog_growth=False,
+        )
+
     async def create_or_get_job(
         self,
         *,
@@ -588,9 +636,15 @@ class IngestionJobService:
             failed_jobs = 0
             backlog_age_seconds = 0.0
             try:
-                latency_seconds = func.extract(
-                    "epoch",
-                    DBIngestionJob.completed_at - DBIngestionJob.submitted_at,
+                latency_seconds = case(
+                    (
+                        DBIngestionJob.completed_at.is_not(None),
+                        func.extract(
+                            "epoch",
+                            DBIngestionJob.completed_at - DBIngestionJob.submitted_at,
+                        ),
+                    ),
+                    else_=None,
                 )
                 row = (
                     await db.execute(
@@ -610,7 +664,6 @@ class IngestionJobService:
                             ).label("oldest_backlog_submitted_at"),
                             func.percentile_cont(0.95)
                             .within_group(latency_seconds)
-                            .filter(DBIngestionJob.completed_at.is_not(None))
                             .label("p95_latency"),
                         ).where(DBIngestionJob.submitted_at >= since)
                     )
@@ -625,30 +678,41 @@ class IngestionJobService:
                     )
             except SQLAlchemyError:
                 # Fallback path for dialects/environments without percentile_cont support.
-                jobs = (
-                    await db.scalars(
-                        select(DBIngestionJob).where(DBIngestionJob.submitted_at >= since)
-                    )
-                ).all()
-                total_jobs = len(jobs)
-                failed_jobs = len([j for j in jobs if j.status == "failed"])
+                try:
+                    jobs = (
+                        await db.scalars(
+                            select(DBIngestionJob).where(DBIngestionJob.submitted_at >= since)
+                        )
+                    ).all()
+                    total_jobs = len(jobs)
+                    failed_jobs = len([j for j in jobs if j.status == "failed"])
 
-                latencies = [
-                    (j.completed_at - j.submitted_at).total_seconds()
-                    for j in jobs
-                    if j.completed_at is not None
-                ]
-                latencies.sort()
-                if latencies:
-                    p95_index = max(0, min(len(latencies) - 1, int(len(latencies) * 0.95) - 1))
-                    p95_latency = float(latencies[p95_index])
+                    latencies = [
+                        (j.completed_at - j.submitted_at).total_seconds()
+                        for j in jobs
+                        if j.completed_at is not None
+                    ]
+                    latencies.sort()
+                    if latencies:
+                        p95_index = max(
+                            0,
+                            min(len(latencies) - 1, int(len(latencies) * 0.95) - 1),
+                        )
+                        p95_latency = float(latencies[p95_index])
 
-                non_terminal = [j for j in jobs if j.status in {"accepted", "queued"}]
-                if non_terminal:
-                    oldest = min(non_terminal, key=lambda item: item.submitted_at)
-                    backlog_age_seconds = float(
-                        (datetime.now(UTC) - oldest.submitted_at).total_seconds()
+                    non_terminal = [j for j in jobs if j.status in {"accepted", "queued"}]
+                    if non_terminal:
+                        oldest = min(non_terminal, key=lambda item: item.submitted_at)
+                        backlog_age_seconds = float(
+                            (datetime.now(UTC) - oldest.submitted_at).total_seconds()
+                        )
+                except SQLAlchemyError as exc:
+                    logger.warning(
+                        "ingestion_slo_status_fallback_unavailable",
+                        extra={"lookback_minutes": lookback_minutes},
+                        exc_info=exc,
                     )
+                    return self._default_slo_status(lookback_minutes=lookback_minutes)
             INGESTION_BACKLOG_AGE_SECONDS.set(backlog_age_seconds)
 
             failure_rate = (
@@ -665,17 +729,7 @@ class IngestionJobService:
                 breach_queue_latency=p95_latency > queue_latency_threshold_seconds,
                 breach_backlog_age=backlog_age_seconds > backlog_age_threshold_seconds,
             )
-        return IngestionSloStatusResponse(
-            lookback_minutes=lookback_minutes,
-            total_jobs=0,
-            failed_jobs=0,
-            failure_rate=Decimal("0"),
-            p95_queue_latency_seconds=0.0,
-            backlog_age_seconds=0.0,
-            breach_failure_rate=False,
-            breach_queue_latency=False,
-            breach_backlog_age=False,
-        )
+        return self._default_slo_status(lookback_minutes=lookback_minutes)
 
     async def get_operating_band(
         self,
@@ -751,12 +805,22 @@ class IngestionJobService:
             "valuation_scheduler_batch_size": max(1, VALUATION_SCHEDULER_BATCH_SIZE),
             "valuation_scheduler_dispatch_rounds": max(1, VALUATION_SCHEDULER_DISPATCH_ROUNDS),
             "dlq_budget_events_per_window": max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
-            "operating_band_yellow_backlog_age_seconds": OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
-            "operating_band_orange_backlog_age_seconds": OPERATING_BAND_POLICY.orange_backlog_age_seconds,
+            "operating_band_yellow_backlog_age_seconds": (
+                OPERATING_BAND_POLICY.yellow_backlog_age_seconds
+            ),
+            "operating_band_orange_backlog_age_seconds": (
+                OPERATING_BAND_POLICY.orange_backlog_age_seconds
+            ),
             "operating_band_red_backlog_age_seconds": OPERATING_BAND_POLICY.red_backlog_age_seconds,
-            "operating_band_yellow_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio),
-            "operating_band_orange_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.orange_dlq_pressure_ratio),
-            "operating_band_red_dlq_pressure_ratio": str(OPERATING_BAND_POLICY.red_dlq_pressure_ratio),
+            "operating_band_yellow_dlq_pressure_ratio": str(
+                OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio
+            ),
+            "operating_band_orange_dlq_pressure_ratio": str(
+                OPERATING_BAND_POLICY.orange_dlq_pressure_ratio
+            ),
+            "operating_band_red_dlq_pressure_ratio": str(
+                OPERATING_BAND_POLICY.red_dlq_pressure_ratio
+            ),
             "calculator_peak_lag_age_seconds": calculator_peak_lag_age_seconds,
             "replay_isolation_mode": replay_isolation_mode,
             "partition_growth_strategy": partition_growth_strategy,
@@ -1101,7 +1165,10 @@ class IngestionJobService:
                 suggested_action = (
                     "Investigate consumer lag and retry this job once root cause is resolved."
                     if row.status == "accepted"
-                    else "Inspect downstream processing bottlenecks and verify queued job drain progress."
+                    else (
+                        "Inspect downstream processing bottlenecks and verify queued "
+                        "job drain progress."
+                    )
                 )
                 jobs.append(
                     IngestionStalledJobResponse(
@@ -1444,103 +1511,101 @@ class IngestionJobService:
         backlog_growth_threshold: int = 5,
     ) -> IngestionErrorBudgetStatusResponse:
         async for db in get_async_db_session():
-            now_utc = datetime.now(UTC)
-            current_since = now_utc - timedelta(minutes=lookback_minutes)
-            previous_since = now_utc - timedelta(minutes=lookback_minutes * 2)
-            current_row = (
-                await db.execute(
-                    select(
-                        func.count(DBIngestionJob.id).label("total_jobs"),
-                        func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
-                            "failed_jobs"
-                        ),
-                        func.sum(
-                            case(
-                                (DBIngestionJob.status.in_(["accepted", "queued"]), 1),
-                                else_=0,
-                            )
-                        ).label("backlog_jobs"),
-                    ).where(DBIngestionJob.submitted_at >= current_since)
-                )
-            ).one()
-            previous_row = (
-                await db.execute(
-                    select(
-                        func.sum(
-                            case(
-                                (DBIngestionJob.status.in_(["accepted", "queued"]), 1),
-                                else_=0,
-                            )
-                        ).label("previous_backlog_jobs"),
-                    ).where(
-                        and_(
-                            DBIngestionJob.submitted_at >= previous_since,
-                            DBIngestionJob.submitted_at < current_since,
-                        )
-                    )
-                )
-            ).one()
-            dlq_events_in_window = int(
-                (
+            try:
+                now_utc = datetime.now(UTC)
+                current_since = now_utc - timedelta(minutes=lookback_minutes)
+                previous_since = now_utc - timedelta(minutes=lookback_minutes * 2)
+                current_row = (
                     await db.execute(
-                        select(func.count(DBConsumerDlqEvent.id)).where(
-                            DBConsumerDlqEvent.observed_at >= current_since
+                        select(
+                            func.count(DBIngestionJob.id).label("total_jobs"),
+                            func.sum(
+                                case((DBIngestionJob.status == "failed", 1), else_=0)
+                            ).label("failed_jobs"),
+                            func.sum(
+                                case(
+                                    (DBIngestionJob.status.in_(["accepted", "queued"]), 1),
+                                    else_=0,
+                                )
+                            ).label("backlog_jobs"),
+                        ).where(DBIngestionJob.submitted_at >= current_since)
+                    )
+                ).one()
+                previous_row = (
+                    await db.execute(
+                        select(
+                            func.sum(
+                                case(
+                                    (DBIngestionJob.status.in_(["accepted", "queued"]), 1),
+                                    else_=0,
+                                )
+                            ).label("previous_backlog_jobs"),
+                        ).where(
+                            and_(
+                                DBIngestionJob.submitted_at >= previous_since,
+                                DBIngestionJob.submitted_at < current_since,
+                            )
                         )
                     )
-                ).scalar_one()
-                or 0
-            )
+                ).one()
+                dlq_events_in_window = int(
+                    (
+                        await db.execute(
+                            select(func.count(DBConsumerDlqEvent.id)).where(
+                                DBConsumerDlqEvent.observed_at >= current_since
+                            )
+                        )
+                    ).scalar_one()
+                    or 0
+                )
 
-            total_jobs = int(current_row[0] or 0)
-            failed_jobs = int(current_row[1] or 0)
-            failure_rate = (
-                Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
-            )
-            remaining_budget = max(Decimal("0"), failure_rate_threshold - failure_rate)
-            backlog_jobs = int(current_row[2] or 0)
-            previous_backlog_jobs = int(previous_row[0] or 0)
-            backlog_growth = backlog_jobs - previous_backlog_jobs
-            replay_backlog_pressure_ratio = Decimal(backlog_jobs) / Decimal(
-                max(1, REPLAY_MAX_BACKLOG_JOBS)
-            )
-            dlq_budget_events_per_window = max(1, DLQ_BUDGET_EVENTS_PER_WINDOW)
-            dlq_pressure_ratio = Decimal(dlq_events_in_window) / Decimal(
-                dlq_budget_events_per_window
-            )
+                total_jobs = int(current_row[0] or 0)
+                failed_jobs = int(current_row[1] or 0)
+                failure_rate = (
+                    Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
+                )
+                remaining_budget = max(Decimal("0"), failure_rate_threshold - failure_rate)
+                backlog_jobs = int(current_row[2] or 0)
+                previous_backlog_jobs = int(previous_row[0] or 0)
+                backlog_growth = backlog_jobs - previous_backlog_jobs
+                replay_backlog_pressure_ratio = Decimal(backlog_jobs) / Decimal(
+                    max(1, REPLAY_MAX_BACKLOG_JOBS)
+                )
+                dlq_budget_events_per_window = max(1, DLQ_BUDGET_EVENTS_PER_WINDOW)
+                dlq_pressure_ratio = Decimal(dlq_events_in_window) / Decimal(
+                    dlq_budget_events_per_window
+                )
 
-            return IngestionErrorBudgetStatusResponse(
-                lookback_minutes=lookback_minutes,
-                previous_lookback_minutes=lookback_minutes,
-                total_jobs=total_jobs,
-                failed_jobs=failed_jobs,
-                failure_rate=failure_rate,
-                remaining_error_budget=remaining_budget,
-                backlog_jobs=backlog_jobs,
-                previous_backlog_jobs=previous_backlog_jobs,
-                backlog_growth=backlog_growth,
-                replay_backlog_pressure_ratio=replay_backlog_pressure_ratio,
-                dlq_events_in_window=dlq_events_in_window,
-                dlq_budget_events_per_window=dlq_budget_events_per_window,
-                dlq_pressure_ratio=dlq_pressure_ratio,
-                breach_failure_rate=failure_rate > failure_rate_threshold,
-                breach_backlog_growth=backlog_growth > backlog_growth_threshold,
-            )
-        return IngestionErrorBudgetStatusResponse(
+                return IngestionErrorBudgetStatusResponse(
+                    lookback_minutes=lookback_minutes,
+                    previous_lookback_minutes=lookback_minutes,
+                    total_jobs=total_jobs,
+                    failed_jobs=failed_jobs,
+                    failure_rate=failure_rate,
+                    remaining_error_budget=remaining_budget,
+                    backlog_jobs=backlog_jobs,
+                    previous_backlog_jobs=previous_backlog_jobs,
+                    backlog_growth=backlog_growth,
+                    replay_backlog_pressure_ratio=replay_backlog_pressure_ratio,
+                    dlq_events_in_window=dlq_events_in_window,
+                    dlq_budget_events_per_window=dlq_budget_events_per_window,
+                    dlq_pressure_ratio=dlq_pressure_ratio,
+                    breach_failure_rate=failure_rate > failure_rate_threshold,
+                    breach_backlog_growth=backlog_growth > backlog_growth_threshold,
+                )
+            except SQLAlchemyError as exc:
+                logger.warning(
+                    "ingestion_error_budget_status_unavailable",
+                    extra={"lookback_minutes": lookback_minutes},
+                    exc_info=exc,
+                )
+                return self._default_error_budget_status(
+                    lookback_minutes=lookback_minutes,
+                    failure_rate_threshold=failure_rate_threshold,
+                )
+        return self._default_error_budget_status(
             lookback_minutes=lookback_minutes,
-            previous_lookback_minutes=lookback_minutes,
-            total_jobs=0,
-            failed_jobs=0,
-            failure_rate=Decimal("0"),
-            remaining_error_budget=failure_rate_threshold,
-            backlog_jobs=0,
-            previous_backlog_jobs=0,
-            backlog_growth=0,
-            replay_backlog_pressure_ratio=Decimal("0"),
-            dlq_events_in_window=0,
-            dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
-            dlq_pressure_ratio=Decimal("0"),
-            breach_failure_rate=False,
-            breach_backlog_growth=False,
+            failure_rate_threshold=failure_rate_threshold,
         )
 
     async def get_ops_mode(self) -> IngestionOpsModeResponse:
@@ -1608,7 +1673,10 @@ class IngestionJobService:
             )
 
     async def assert_retry_allowed(self, submitted_at: datetime) -> None:
-        await self.assert_retry_allowed_for_records(submitted_at=submitted_at, replay_record_count=1)
+        await self.assert_retry_allowed_for_records(
+            submitted_at=submitted_at,
+            replay_record_count=1,
+        )
 
     async def _count_backlog_jobs(self) -> int:
         async for db in get_async_db_session():

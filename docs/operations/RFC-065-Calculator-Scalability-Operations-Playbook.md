@@ -33,6 +33,8 @@ Use these bands consistently for all calculator groups.
 | Red | `rho >= 0.95` or `T_lag >= 180s` | Incident mode, block replay except emergency paths |
 
 ## Required Operational APIs
+These endpoints are hosted by `event_replay_service` after the RFC 081 control-plane split.
+
 - `GET /ingestion/health/summary`
 - `GET /ingestion/health/consumer-lag`
 - `GET /ingestion/health/slo`

@@ -1,0 +1,412 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+from uuid import uuid4
+
+from portfolio_common.database_models import FinancialReconciliationFinding
+
+from ..dtos import ReconciliationRunRequest
+from ..repositories import ReconciliationRepository
+
+DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
+ZERO = Decimal("0")
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeKey:
+    portfolio_id: str
+    business_date: date
+    epoch: int
+
+
+class ReconciliationService:
+    def __init__(self, repository: ReconciliationRepository):
+        self.repository = repository
+
+    async def run_transaction_cashflow(
+        self,
+        *,
+        request: ReconciliationRunRequest,
+        correlation_id: str | None,
+    ):
+        run = await self.repository.create_run(
+            reconciliation_type="transaction_cashflow",
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+            requested_by=request.requested_by,
+            correlation_id=correlation_id,
+            tolerance=request.tolerance,
+        )
+        rows = await self.repository.fetch_transaction_cashflow_rows(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+        )
+        findings: list[FinancialReconciliationFinding] = []
+        examined = 0
+        for transaction, rule, cashflow in rows:
+            examined += 1
+            if cashflow is None:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="transaction_cashflow",
+                        finding_type="missing_cashflow",
+                        severity="ERROR",
+                        portfolio_id=transaction.portfolio_id,
+                        security_id=transaction.security_id,
+                        transaction_id=transaction.transaction_id,
+                        business_date=transaction.transaction_date.date(),
+                        epoch=request.epoch,
+                        expected_value={
+                            "classification": rule.classification,
+                            "timing": rule.timing,
+                            "is_position_flow": rule.is_position_flow,
+                            "is_portfolio_flow": rule.is_portfolio_flow,
+                        },
+                        observed_value=None,
+                        detail={
+                            "transaction_type": transaction.transaction_type,
+                            "cash_entry_mode": transaction.cash_entry_mode,
+                        },
+                    )
+                )
+                continue
+
+            mismatches: dict[str, tuple[object, object]] = {}
+            if cashflow.classification != rule.classification:
+                mismatches["classification"] = (rule.classification, cashflow.classification)
+            if cashflow.timing != rule.timing:
+                mismatches["timing"] = (rule.timing, cashflow.timing)
+            if bool(cashflow.is_position_flow) != bool(rule.is_position_flow):
+                mismatches["is_position_flow"] = (rule.is_position_flow, cashflow.is_position_flow)
+            if bool(cashflow.is_portfolio_flow) != bool(rule.is_portfolio_flow):
+                mismatches["is_portfolio_flow"] = (
+                    rule.is_portfolio_flow,
+                    cashflow.is_portfolio_flow,
+                )
+            if mismatches:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="transaction_cashflow",
+                        finding_type="cashflow_rule_mismatch",
+                        severity="ERROR",
+                        portfolio_id=transaction.portfolio_id,
+                        security_id=transaction.security_id,
+                        transaction_id=transaction.transaction_id,
+                        business_date=cashflow.cashflow_date,
+                        epoch=cashflow.epoch,
+                        expected_value={key: expected for key, (expected, _) in mismatches.items()},
+                        observed_value={key: observed for key, (_, observed) in mismatches.items()},
+                        detail={"transaction_type": transaction.transaction_type},
+                    )
+                )
+
+        await self.repository.add_findings(findings)
+        summary = self._summary(examined=examined, findings=findings)
+        await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        return run
+
+    async def run_position_valuation(
+        self,
+        *,
+        request: ReconciliationRunRequest,
+        correlation_id: str | None,
+    ):
+        tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
+        run = await self.repository.create_run(
+            reconciliation_type="position_valuation",
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+            requested_by=request.requested_by,
+            correlation_id=correlation_id,
+            tolerance=tolerance,
+        )
+        rows = await self.repository.fetch_position_valuation_rows(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+        )
+        findings: list[FinancialReconciliationFinding] = []
+        examined = 0
+        for row in rows:
+            examined += 1
+            expected_market_value_local = Decimal(str(row.quantity)) * Decimal(
+                str(row.market_price)
+            )
+            observed_market_value_local = Decimal(str(row.market_value_local))
+            market_delta = observed_market_value_local - expected_market_value_local
+            if abs(market_delta) > tolerance:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="position_valuation",
+                        finding_type="market_value_local_mismatch",
+                        severity="ERROR",
+                        portfolio_id=row.portfolio_id,
+                        security_id=row.security_id,
+                        transaction_id=None,
+                        business_date=row.date,
+                        epoch=row.epoch,
+                        expected_value={"market_value_local": str(expected_market_value_local)},
+                        observed_value={
+                            "market_value_local": str(observed_market_value_local),
+                            "delta": str(market_delta),
+                        },
+                        detail={
+                            "quantity": str(row.quantity),
+                            "market_price": str(row.market_price),
+                        },
+                    )
+                )
+
+            expected_unrealized = observed_market_value_local - Decimal(str(row.cost_basis_local))
+            observed_unrealized = Decimal(str(row.unrealized_gain_loss_local))
+            unrealized_delta = observed_unrealized - expected_unrealized
+            if abs(unrealized_delta) > tolerance:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="position_valuation",
+                        finding_type="unrealized_gain_loss_local_mismatch",
+                        severity="ERROR",
+                        portfolio_id=row.portfolio_id,
+                        security_id=row.security_id,
+                        transaction_id=None,
+                        business_date=row.date,
+                        epoch=row.epoch,
+                        expected_value={"unrealized_gain_loss_local": str(expected_unrealized)},
+                        observed_value={
+                            "unrealized_gain_loss_local": str(observed_unrealized),
+                            "delta": str(unrealized_delta),
+                        },
+                        detail={
+                            "market_value_local": str(observed_market_value_local),
+                            "cost_basis_local": str(row.cost_basis_local),
+                        },
+                    )
+                )
+
+        await self.repository.add_findings(findings)
+        summary = self._summary(examined=examined, findings=findings)
+        await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        return run
+
+    async def run_timeseries_integrity(
+        self,
+        *,
+        request: ReconciliationRunRequest,
+        correlation_id: str | None,
+    ):
+        tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
+        run = await self.repository.create_run(
+            reconciliation_type="timeseries_integrity",
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+            requested_by=request.requested_by,
+            correlation_id=correlation_id,
+            tolerance=tolerance,
+        )
+        portfolio_rows = await self.repository.fetch_portfolio_timeseries_rows(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+        )
+        aggregate_rows = await self.repository.fetch_position_timeseries_aggregates(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+        )
+        snapshot_counts = await self.repository.fetch_snapshot_counts(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+        )
+
+        portfolio_by_key = {
+            ScopeKey(row.portfolio_id, row.date, row.epoch): row for row in portfolio_rows
+        }
+        aggregate_by_key = {
+            ScopeKey(row.portfolio_id, row.date, row.epoch): row for row in aggregate_rows
+        }
+        snapshot_count_by_key = {
+            ScopeKey(row.portfolio_id, row.date, row.epoch): int(row.snapshot_count)
+            for row in snapshot_counts
+        }
+
+        findings: list[FinancialReconciliationFinding] = []
+        examined = 0
+        all_keys = set(portfolio_by_key) | set(aggregate_by_key) | set(snapshot_count_by_key)
+        for key in sorted(
+            all_keys,
+            key=lambda item: (item.portfolio_id, item.business_date, item.epoch),
+        ):
+            examined += 1
+            portfolio_row = portfolio_by_key.get(key)
+            aggregate_row = aggregate_by_key.get(key)
+            snapshot_count = snapshot_count_by_key.get(key, 0)
+
+            if portfolio_row is None and aggregate_row is not None:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="timeseries_integrity",
+                        finding_type="missing_portfolio_timeseries",
+                        severity="ERROR",
+                        portfolio_id=key.portfolio_id,
+                        security_id=None,
+                        transaction_id=None,
+                        business_date=key.business_date,
+                        epoch=key.epoch,
+                        expected_value={"portfolio_timeseries": "present"},
+                        observed_value={"portfolio_timeseries": "missing"},
+                        detail={"position_timeseries_rows": int(aggregate_row.position_row_count)},
+                    )
+                )
+                continue
+
+            if aggregate_row is None and portfolio_row is not None:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="timeseries_integrity",
+                        finding_type="missing_position_timeseries",
+                        severity="ERROR",
+                        portfolio_id=key.portfolio_id,
+                        security_id=None,
+                        transaction_id=None,
+                        business_date=key.business_date,
+                        epoch=key.epoch,
+                        expected_value={"position_timeseries_rows": ">=1"},
+                        observed_value={"position_timeseries_rows": 0},
+                        detail=None,
+                    )
+                )
+                continue
+
+            if portfolio_row is None or aggregate_row is None:
+                continue
+
+            if int(aggregate_row.position_row_count) != snapshot_count:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="timeseries_integrity",
+                        finding_type="position_timeseries_completeness_gap",
+                        severity="ERROR",
+                        portfolio_id=key.portfolio_id,
+                        security_id=None,
+                        transaction_id=None,
+                        business_date=key.business_date,
+                        epoch=key.epoch,
+                        expected_value={"snapshot_count": snapshot_count},
+                        observed_value={
+                            "position_timeseries_count": int(aggregate_row.position_row_count)
+                        },
+                        detail=None,
+                    )
+                )
+
+            metric_pairs = {
+                "bod_market_value": (
+                    Decimal(str(portfolio_row.bod_market_value)),
+                    Decimal(str(aggregate_row.bod_market_value or ZERO)),
+                ),
+                "bod_cashflow": (
+                    Decimal(str(portfolio_row.bod_cashflow)),
+                    Decimal(str(aggregate_row.bod_cashflow or ZERO)),
+                ),
+                "eod_cashflow": (
+                    Decimal(str(portfolio_row.eod_cashflow)),
+                    Decimal(str(aggregate_row.eod_cashflow or ZERO)),
+                ),
+                "eod_market_value": (
+                    Decimal(str(portfolio_row.eod_market_value)),
+                    Decimal(str(aggregate_row.eod_market_value or ZERO)),
+                ),
+                "fees": (
+                    Decimal(str(portfolio_row.fees)),
+                    Decimal(str(aggregate_row.fees or ZERO)),
+                ),
+            }
+            mismatches = {}
+            for metric_name, (portfolio_value, aggregate_value) in metric_pairs.items():
+                delta = portfolio_value - aggregate_value
+                if abs(delta) > tolerance:
+                    mismatches[metric_name] = {
+                        "portfolio_timeseries": str(portfolio_value),
+                        "position_aggregate": str(aggregate_value),
+                        "delta": str(delta),
+                    }
+            if mismatches:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="timeseries_integrity",
+                        finding_type="portfolio_timeseries_aggregate_mismatch",
+                        severity="ERROR",
+                        portfolio_id=key.portfolio_id,
+                        security_id=None,
+                        transaction_id=None,
+                        business_date=key.business_date,
+                        epoch=key.epoch,
+                        expected_value={k: v["position_aggregate"] for k, v in mismatches.items()},
+                        observed_value={
+                            k: v["portfolio_timeseries"] for k, v in mismatches.items()
+                        },
+                        detail=mismatches,
+                    )
+                )
+
+        await self.repository.add_findings(findings)
+        summary = self._summary(examined=examined, findings=findings)
+        await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        return run
+
+    def _summary(self, *, examined: int, findings: list[FinancialReconciliationFinding]) -> dict:
+        error_count = sum(1 for finding in findings if finding.severity == "ERROR")
+        warning_count = sum(1 for finding in findings if finding.severity == "WARNING")
+        return {
+            "examined_count": examined,
+            "finding_count": len(findings),
+            "error_count": error_count,
+            "warning_count": warning_count,
+            "passed": error_count == 0,
+        }
+
+    def _build_finding(
+        self,
+        *,
+        run_id: str,
+        reconciliation_type: str,
+        finding_type: str,
+        severity: str,
+        portfolio_id: str | None,
+        security_id: str | None,
+        transaction_id: str | None,
+        business_date: date | None,
+        epoch: int | None,
+        expected_value: dict | None,
+        observed_value: dict | None,
+        detail: dict | None,
+    ) -> FinancialReconciliationFinding:
+        return FinancialReconciliationFinding(
+            finding_id=f"finding-{uuid4().hex}",
+            run_id=run_id,
+            reconciliation_type=reconciliation_type,
+            finding_type=finding_type,
+            severity=severity,
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            transaction_id=transaction_id,
+            business_date=business_date,
+            epoch=epoch,
+            expected_value=expected_value,
+            observed_value=observed_value,
+            detail=detail,
+        )

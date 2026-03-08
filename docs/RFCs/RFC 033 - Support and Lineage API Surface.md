@@ -60,7 +60,7 @@ Evidence:
 | Lineage API for one key | Implemented | operations router/service/repo |
 | OpenAPI quality on support endpoints | Implemented with explicit summaries/descriptions + tests | routers + integration tests |
 | Correlation trace API | Not implemented | endpoint inventory |
-| DLQ/replay support API | Implemented in ingestion-service operations surface; not exposed as query-service route family | `src/services/ingestion_service/app/routers/ingestion_jobs.py`; `RFC-DELTA-BACKLOG` (`RFC-033-D02`) |
+| DLQ/replay support API | Implemented in ingestion-service operations surface; not exposed as query-service route family | `src/services/event_replay_service/app/routers/ingestion_operations.py`; `RFC-DELTA-BACKLOG` (`RFC-033-D02`) |
 | Role-based policy integration | Pending broader authn/authz RFC stream | governance dependency |
 
 ## Design Reasoning and Trade-offs

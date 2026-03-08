@@ -76,6 +76,8 @@ groups:
 - Replay duplicate-blocked and replay-failure trend by recovery path.
 
 ## Operational API Surfaces
+These protected operational endpoints are served by `event_replay_service`; `ingestion_service`
+retains only canonical write-ingress APIs.
 
 - `GET /ingestion/health/summary`
 - `GET /ingestion/health/lag`

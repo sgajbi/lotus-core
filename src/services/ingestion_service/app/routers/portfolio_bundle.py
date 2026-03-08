@@ -1,16 +1,16 @@
 import logging
 
-from app.ack_response import build_batch_ack
-from app.adapter_mode import require_portfolio_bundle_adapter_enabled
-from app.DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
-from app.DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
-from app.ops_controls import enforce_ingestion_write_rate_limit
-from app.request_metadata import (    create_ingestion_job_id,
+from ..ack_response import build_batch_ack
+from ..adapter_mode import require_portfolio_bundle_adapter_enabled
+from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
+from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
+from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..request_metadata import (    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
-from app.services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from app.services.ingestion_service import (
+from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
+from ..services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
     get_ingestion_service,

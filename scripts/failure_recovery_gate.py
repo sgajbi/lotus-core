@@ -65,13 +65,20 @@ def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
     _run(cmd, cwd=repo_root)
 
 
-def _wait_ready(*, ingestion_base_url: str, query_base_url: str, timeout_seconds: int) -> None:
+def _wait_ready(
+    *,
+    ingestion_base_url: str,
+    event_replay_base_url: str,
+    query_base_url: str,
+    timeout_seconds: int,
+) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
             ing = requests.get(f"{ingestion_base_url}/health/ready", timeout=5)
+            replay = requests.get(f"{event_replay_base_url}/health/ready", timeout=5)
             qry = requests.get(f"{query_base_url}/health/ready", timeout=5)
-            if ing.status_code == 200 and qry.status_code == 200:
+            if ing.status_code == 200 and replay.status_code == 200 and qry.status_code == 200:
                 return
         except requests.RequestException:
             pass
@@ -138,20 +145,20 @@ def _ingest_transactions(
     return total_records
 
 
-def _get_health_snapshot(*, ingestion_base_url: str, ops_token: str) -> dict[str, Any]:
+def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[str, Any]:
     headers = {"X-Lotus-Ops-Token": ops_token}
     summary = requests.get(
-        f"{ingestion_base_url}/ingestion/health/summary",
+        f"{event_replay_base_url}/ingestion/health/summary",
         headers=headers,
         timeout=20,
     )
     slo = requests.get(
-        f"{ingestion_base_url}/ingestion/health/slo?lookback_minutes=60",
+        f"{event_replay_base_url}/ingestion/health/slo?lookback_minutes=60",
         headers=headers,
         timeout=20,
     )
     error_budget = requests.get(
-        f"{ingestion_base_url}/ingestion/health/error-budget?lookback_minutes=60",
+        f"{event_replay_base_url}/ingestion/health/error-budget?lookback_minutes=60",
         headers=headers,
         timeout=20,
     )
@@ -167,10 +174,10 @@ def _get_health_snapshot(*, ingestion_base_url: str, ops_token: str) -> dict[str
     }
 
 
-def _get_backlog_jobs(*, ingestion_base_url: str, ops_token: str) -> int:
+def _get_backlog_jobs(*, event_replay_base_url: str, ops_token: str) -> int:
     headers = {"X-Lotus-Ops-Token": ops_token}
     response = requests.get(
-        f"{ingestion_base_url}/ingestion/health/summary",
+        f"{event_replay_base_url}/ingestion/health/summary",
         headers=headers,
         timeout=20,
     )
@@ -211,7 +218,7 @@ def _unpause_container(container_name: str, repo_root: Path) -> None:
 
 def _wait_drain_to_target_backlog(
     *,
-    ingestion_base_url: str,
+    event_replay_base_url: str,
     ops_token: str,
     target_backlog_jobs: int,
     timeout_seconds: int,
@@ -220,7 +227,7 @@ def _wait_drain_to_target_backlog(
     deadline = started + timeout_seconds
     while time.time() < deadline:
         backlog_jobs = _get_backlog_jobs(
-            ingestion_base_url=ingestion_base_url,
+            event_replay_base_url=event_replay_base_url,
             ops_token=ops_token,
         )
         if backlog_jobs <= target_backlog_jobs:
@@ -286,6 +293,9 @@ def main() -> int:
     parser.add_argument(
         "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
     )
+    parser.add_argument(
+        "--event-replay-base-url", default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209")
+    )
     parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
@@ -304,13 +314,14 @@ def main() -> int:
         _compose_up(repo_root=repo_root, compose_file=args.compose_file, build=args.build)
     _wait_ready(
         ingestion_base_url=args.ingestion_base_url,
+        event_replay_base_url=args.event_replay_base_url,
         query_base_url=args.query_base_url,
         timeout_seconds=args.ready_timeout_seconds,
     )
 
     started = time.time()
     baseline_backlog_jobs = _get_backlog_jobs(
-        ingestion_base_url=args.ingestion_base_url,
+        event_replay_base_url=args.event_replay_base_url,
         ops_token=args.ops_token,
     )
     portfolio_id = f"FAIL_RECOVERY_{run_id}"
@@ -341,7 +352,7 @@ def main() -> int:
                 sleep_seconds_between_batches=0.0,
             )
             current_backlog = _get_backlog_jobs(
-                ingestion_base_url=args.ingestion_base_url,
+                event_replay_base_url=args.event_replay_base_url,
                 ops_token=args.ops_token,
             )
             peak_backlog = max(peak_backlog, current_backlog)
@@ -350,13 +361,13 @@ def main() -> int:
         _unpause_container(interruption_target, repo_root=repo_root)
 
     drain_seconds = _wait_drain_to_target_backlog(
-        ingestion_base_url=args.ingestion_base_url,
+        event_replay_base_url=args.event_replay_base_url,
         ops_token=args.ops_token,
         target_backlog_jobs=max(baseline_backlog_jobs + 1, 0),
         timeout_seconds=args.recovery_timeout_seconds,
     )
     recovery_health = _get_health_snapshot(
-        ingestion_base_url=args.ingestion_base_url,
+        event_replay_base_url=args.event_replay_base_url,
         ops_token=args.ops_token,
     )
     ended = time.time()

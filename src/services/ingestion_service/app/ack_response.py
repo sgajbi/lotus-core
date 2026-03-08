@@ -1,5 +1,5 @@
-from app.DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse, IngestionAcceptedResponse
-from app.request_metadata import get_request_lineage
+from .DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse, IngestionAcceptedResponse
+from .request_metadata import get_request_lineage
 
 
 def build_single_ack(

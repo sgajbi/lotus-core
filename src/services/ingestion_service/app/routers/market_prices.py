@@ -1,16 +1,16 @@
 # services/ingestion_service/app/routers/market_prices.py
 import logging
 
-from app.ack_response import build_batch_ack
-from app.DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
-from app.DTOs.market_price_dto import MarketPriceIngestionRequest
-from app.ops_controls import enforce_ingestion_write_rate_limit
-from app.request_metadata import (    create_ingestion_job_id,
+from ..ack_response import build_batch_ack
+from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
+from ..DTOs.market_price_dto import MarketPriceIngestionRequest
+from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..request_metadata import (    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
-from app.services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from app.services.ingestion_service import (
+from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
+from ..services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
     get_ingestion_service,
