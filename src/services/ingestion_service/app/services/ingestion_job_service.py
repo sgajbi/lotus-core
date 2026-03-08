@@ -636,9 +636,15 @@ class IngestionJobService:
             failed_jobs = 0
             backlog_age_seconds = 0.0
             try:
-                latency_seconds = func.extract(
-                    "epoch",
-                    DBIngestionJob.completed_at - DBIngestionJob.submitted_at,
+                latency_seconds = case(
+                    (
+                        DBIngestionJob.completed_at.is_not(None),
+                        func.extract(
+                            "epoch",
+                            DBIngestionJob.completed_at - DBIngestionJob.submitted_at,
+                        ),
+                    ),
+                    else_=None,
                 )
                 row = (
                     await db.execute(
@@ -658,7 +664,6 @@ class IngestionJobService:
                             ).label("oldest_backlog_submitted_at"),
                             func.percentile_cont(0.95)
                             .within_group(latency_seconds)
-                            .filter(DBIngestionJob.completed_at.is_not(None))
                             .label("p95_latency"),
                         ).where(DBIngestionJob.submitted_at >= since)
                     )
