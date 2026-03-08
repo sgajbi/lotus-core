@@ -82,6 +82,7 @@ def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
     portfolio_id, benchmark_id = _resolve_runtime_ids(
         session,
         query_base_url="http://localhost:8201",
+        query_control_plane_base_url="http://localhost:8202",
         portfolio_id="DEMO_DPM_EUR_001",
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
     )
