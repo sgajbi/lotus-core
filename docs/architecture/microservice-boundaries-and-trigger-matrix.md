@@ -1,6 +1,6 @@
 # Lotus Core Microservice Boundaries and Trigger Matrix
 
-Last updated: 2026-03-07  
+Last updated: 2026-03-08  
 Source authority: RFC 081
 
 ## Service Responsibility Map
@@ -9,11 +9,11 @@ Source authority: RFC 081
 | --- | --- | --- | --- | --- | --- |
 | `ingestion_service` | Canonical write-ingress and contract validation | Canonical ingress submission state and request payload persistence | HTTP API | Raw domain topics (`raw_transactions`, `instruments`, `market_prices`, `fx_rates`) | API |
 | `event_replay_service` | Replay/remediation control plane for ingestion jobs, DLQ recovery, and RFC-065 diagnostics | `ingestion_jobs`, `ingestion_job_failures`, `ingestion_ops_control`, `consumer_dlq_*` | HTTP API | Republished raw domain topics via controlled replay | API |
-| `financial_reconciliation_service` | Independent financial controls plane for cross-domain reconciliation and integrity verification | `financial_reconciliation_runs`, `financial_reconciliation_findings` | HTTP API | N/A | API |
+| `financial_reconciliation_service` | Independent financial controls plane for cross-domain reconciliation and integrity verification | `financial_reconciliation_runs`, `financial_reconciliation_findings` | HTTP API, `financial_reconciliation_requested` | N/A | API + Event |
 | `persistence_service` | Canonical persistence and completion publication | `portfolios`, `transactions`, `instruments`, `market_prices`, `fx_rates`, `business_dates` | Raw domain topics | `raw_transactions_completed`, `market_price_persisted` | Event |
 | `cost_calculator_service` | Cost basis and lot-state authority | `transaction_costs`, `position_lot_state`, `accrued_income_offset_state`, `position_state` | `raw_transactions_completed`, `transactions_reprocessing_requested` | `processed_transactions_completed` | Event |
 | `cashflow_calculator_service` | Cashflow rule/classification authority | `cashflows`, `cashflow_rules` | `raw_transactions_completed` | `cashflow_calculated` | Event |
-| `pipeline_orchestrator_service` | Stage-gate orchestrator for deterministic downstream readiness | `pipeline_stage_state` | `processed_transactions_completed`, `cashflow_calculated` | `transaction_processing_completed`, `portfolio_day_ready_for_valuation` | Event |
+| `pipeline_orchestrator_service` | Stage-gate orchestrator for deterministic downstream readiness | `pipeline_stage_state` | `processed_transactions_completed`, `cashflow_calculated`, `portfolio_aggregation_day_completed` | `transaction_processing_completed`, `portfolio_day_ready_for_valuation`, `financial_reconciliation_requested` | Event |
 | `position_calculator_service` | Position history and snapshot materialization | `position_history`, `daily_position_snapshots`, `position_state` | `transaction_processing_completed`, `processed_transactions_completed` (replay path) | `daily_position_snapshot_persisted`, `transactions_reprocessing_requested` | Event |
 | `valuation_orchestrator_service` | Valuation orchestration (job creation, scheduling, and reprocessing) | `portfolio_valuation_jobs`, `instrument_reprocessing_state`, `reprocessing_jobs` | `portfolio_day_ready_for_valuation`, `market_price_persisted` | `valuation_required` | Event + scheduler |
 | `position_valuation_calculator` | Valuation compute worker and completion publication | `daily_position_snapshots` (valuation fields) | `valuation_required` | `daily_position_snapshot_persisted`, `valuation_day_completed` | Event |
@@ -33,6 +33,8 @@ Source authority: RFC 081
 7. `timeseries_generator_service` consumes `valuation_day_completed` as the canonical valuation-to-timeseries trigger (while retaining `daily_position_snapshot_persisted` compatibility).
 8. `timeseries_generator_service` emits `position_timeseries_day_completed` after position-timeseries persistence and stages aggregation jobs.
 9. `portfolio_aggregation_service` claims eligible aggregation jobs, emits `portfolio_aggregation_required`, computes portfolio timeseries, and emits `portfolio_aggregation_day_completed`.
+10. `pipeline_orchestrator_service` consumes `portfolio_aggregation_day_completed` and emits `financial_reconciliation_requested` for deterministic post-aggregation controls.
+11. `financial_reconciliation_service` consumes `financial_reconciliation_requested` and runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch)`.
 
 ## Stage Gate Sequence (Planned in RFC 081)
 
@@ -51,3 +53,5 @@ Source authority: RFC 081
 - Control-plane reconciliation services must use the same RFC-065 operational standard:
   dedicated health/metrics surfaces, durable audit records, and deterministic rerunnable checks
   that never mutate calculator-owned tables.
+- Automatic controls triggered by orchestrator events must remain idempotent across replay and duplicate delivery,
+  using deterministic run-level dedupe keys rather than best-effort in-memory suppression.

@@ -16,6 +16,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -31,9 +32,15 @@ class ReconciliationRepository:
         business_date: date | None,
         epoch: int | None,
         requested_by: str | None,
+        dedupe_key: str | None,
         correlation_id: str | None,
         tolerance: Decimal | None,
-    ) -> FinancialReconciliationRun:
+    ) -> tuple[FinancialReconciliationRun, bool]:
+        if dedupe_key is not None:
+            existing = await self.get_run_by_dedupe_key(dedupe_key)
+            if existing is not None:
+                return existing, False
+
         run = FinancialReconciliationRun(
             run_id=f"recon-{uuid4().hex}",
             reconciliation_type=reconciliation_type,
@@ -41,14 +48,35 @@ class ReconciliationRepository:
             business_date=business_date,
             epoch=epoch,
             requested_by=requested_by,
+            dedupe_key=dedupe_key,
             correlation_id=correlation_id,
             tolerance=tolerance,
             status="RUNNING",
         )
-        self.db.add(run)
-        await self.db.flush()
+        try:
+            async with self.db.begin_nested():
+                self.db.add(run)
+                await self.db.flush()
+        except IntegrityError:
+            if dedupe_key is None:
+                raise
+            existing = await self.get_run_by_dedupe_key(dedupe_key)
+            if existing is None:
+                raise
+            return existing, False
         await self.db.refresh(run)
-        return run
+        return run, True
+
+    async def get_run_by_dedupe_key(
+        self,
+        dedupe_key: str,
+    ) -> FinancialReconciliationRun | None:
+        result = await self.db.execute(
+            select(FinancialReconciliationRun).where(
+                FinancialReconciliationRun.dedupe_key == dedupe_key
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def add_findings(self, findings: Sequence[FinancialReconciliationFinding]) -> None:
         self.db.add_all(list(findings))

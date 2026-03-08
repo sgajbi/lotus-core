@@ -6,7 +6,9 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_CASHFLOW_CALCULATED_TOPIC,
+    KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
     KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
     KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
@@ -17,6 +19,7 @@ from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.runtime_supervision import wait_for_shutdown_or_task_failure
 
 from .consumers.cashflow_stage_consumer import CashflowStageConsumer
+from .consumers.portfolio_aggregation_stage_consumer import PortfolioAggregationStageConsumer
 from .consumers.processed_transaction_stage_consumer import ProcessedTransactionStageConsumer
 from .web import app as web_app
 
@@ -47,6 +50,15 @@ class ConsumerManager:
                 service_prefix="PIPE",
             )
         )
+        self.consumers.append(
+            PortfolioAggregationStageConsumer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                topic=KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC,
+                group_id="pipeline_orchestrator_portfolio_aggregation_group",
+                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                service_prefix="PIPE",
+            )
+        )
 
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
 
@@ -58,6 +70,7 @@ class ConsumerManager:
         required_topics = [consumer.topic for consumer in self.consumers]
         required_topics.append(KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC)
         required_topics.append(KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC)
+        required_topics.append(KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC)
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)
