@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from portfolio_common.events import (
     CashflowCalculatedEvent,
+    FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
     TransactionEvent,
 )
@@ -31,6 +32,7 @@ class _RepoStub:
     def __init__(self) -> None:
         self._stage: _Stage | None = None
         self.force_claim_result: bool | None = None
+        self.control_stage = None
 
     async def upsert_stage_flags(self, **kwargs):
         if self._stage is None:
@@ -58,6 +60,22 @@ class _RepoStub:
             return False
         stage.status = "COMPLETED"
         return True
+
+    async def upsert_portfolio_control_stage_status(self, **kwargs):
+        if self.control_stage is None:
+            self.control_stage = _Stage(
+                transaction_id=f"portfolio-stage:{kwargs['stage_name']}:{kwargs['portfolio_id']}",
+                portfolio_id=kwargs["portfolio_id"],
+                security_id=None,
+                business_date=kwargs["business_date"],
+                epoch=kwargs["epoch"],
+                status=kwargs["status"],
+            )
+        else:
+            self.control_stage.status = kwargs["status"]
+            self.control_stage.business_date = kwargs["business_date"]
+            self.control_stage.epoch = kwargs["epoch"]
+        return self.control_stage
 
 
 def _txn_event() -> TransactionEvent:
@@ -164,3 +182,43 @@ async def test_portfolio_aggregation_completion_emits_reconciliation_request():
         "position_valuation",
         "timeseries_integrity",
     ]
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_completion_updates_control_stage_and_emits_controls_event():
+    repo = _RepoStub()
+    outbox_repo = AsyncMock()
+    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
+
+    await service.register_financial_reconciliation_completed(
+        FinancialReconciliationCompletedEvent(
+            portfolio_id="PORT-1",
+            business_date=date(2026, 3, 7),
+            epoch=2,
+            outcome_status="REQUIRES_REPLAY",
+            reconciliation_types=[
+                "transaction_cashflow",
+                "position_valuation",
+                "timeseries_integrity",
+            ],
+            blocking_reconciliation_types=["transaction_cashflow"],
+            run_ids={
+                "transaction_cashflow": "recon-tx",
+                "position_valuation": "recon-val",
+                "timeseries_integrity": "recon-ts",
+            },
+            error_count=2,
+            warning_count=1,
+            correlation_id="corr-5",
+        ),
+        correlation_id="corr-5",
+    )
+
+    assert repo.control_stage is not None
+    assert repo.control_stage.status == "REQUIRES_REPLAY"
+    outbox_repo.create_outbox_event.assert_awaited_once()
+    call = outbox_repo.create_outbox_event.await_args
+    assert call.kwargs["event_type"] == "PortfolioDayControlsEvaluated"
+    assert call.kwargs["topic"] == "portfolio_day_controls_evaluated"
+    assert call.kwargs["payload"]["status"] == "REQUIRES_REPLAY"
+    assert call.kwargs["payload"]["blocking_reconciliation_types"] == ["transaction_cashflow"]

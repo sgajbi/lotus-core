@@ -21,6 +21,15 @@ class ScopeKey:
     epoch: int
 
 
+@dataclass(frozen=True, slots=True)
+class AutomaticBundleOutcome:
+    outcome_status: str
+    blocking_reconciliation_types: list[str]
+    run_ids: dict[str, str]
+    error_count: int
+    warning_count: int
+
+
 class ReconciliationService:
     def __init__(self, repository: ReconciliationRepository):
         self.repository = repository
@@ -39,6 +48,47 @@ class ReconciliationService:
         return (
             f"auto:{reconciliation_type}:{request.portfolio_id}:"
             f"{request.business_date.isoformat()}:{epoch}"
+        )
+
+    @staticmethod
+    def determine_automatic_bundle_outcome(
+        runs: dict[str, object],
+    ) -> AutomaticBundleOutcome:
+        blocking_types: list[str] = []
+        run_ids: dict[str, str] = {}
+        error_count = 0
+        warning_count = 0
+        has_failed_run = False
+
+        for reconciliation_type, run in runs.items():
+            run_ids[reconciliation_type] = getattr(run, "run_id")
+            status = getattr(run, "status", None)
+            summary = getattr(run, "summary", None) or {}
+            run_error_count = int(summary.get("error_count", 0) or 0)
+            run_warning_count = int(summary.get("warning_count", 0) or 0)
+            error_count += run_error_count
+            warning_count += run_warning_count
+
+            if status == "FAILED":
+                has_failed_run = True
+                blocking_types.append(reconciliation_type)
+                continue
+            if run_error_count > 0:
+                blocking_types.append(reconciliation_type)
+
+        if has_failed_run:
+            outcome_status = "FAILED"
+        elif blocking_types:
+            outcome_status = "REQUIRES_REPLAY"
+        else:
+            outcome_status = "COMPLETED"
+
+        return AutomaticBundleOutcome(
+            outcome_status=outcome_status,
+            blocking_reconciliation_types=sorted(set(blocking_types)),
+            run_ids=run_ids,
+            error_count=error_count,
+            warning_count=warning_count,
         )
 
     async def run_transaction_cashflow(

@@ -58,6 +58,8 @@ RFC 065 is implemented and serves as the operational backbone for RFC 066 readin
 3. Any new control-plane microservice introduced under later RFCs must inherit the same runtime standard:
    dedicated health/readiness, Prometheus exposure, durable audit state, explicit operational contracts,
    and replay-safe idempotent execution for any event-driven control path.
+4. When a control-plane path participates in stage gating, it must emit a canonical outcome event and
+   the orchestrator must persist a monotonic terminal control status rather than relying on implicit success assumptions.
 
 ## Test and Validation Evidence
 1. `src/services/event_replay_service/app/routers/ingestion_operations.py`

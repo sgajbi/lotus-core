@@ -1,12 +1,15 @@
 from portfolio_common.config import (
     KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
     KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
     KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
 )
 from portfolio_common.events import (
     CashflowCalculatedEvent,
+    FinancialReconciliationCompletedEvent,
     FinancialReconciliationRequestedEvent,
     PortfolioAggregationDayCompletedEvent,
+    PortfolioDayControlsEvaluatedEvent,
     PortfolioDayReadyForValuationEvent,
     TransactionEvent,
     TransactionProcessingCompletedEvent,
@@ -16,6 +19,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from ..repositories.pipeline_stage_repository import PipelineStageRepository
 
 TRANSACTION_PROCESSING_STAGE = "TRANSACTION_PROCESSING"
+FINANCIAL_RECONCILIATION_STAGE = "FINANCIAL_RECONCILIATION"
 
 
 class PipelineOrchestratorService:
@@ -74,6 +78,38 @@ class PipelineOrchestratorService:
             event_type="FinancialReconciliationRequested",
             topic=KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC,
             payload=reconciliation_event.model_dump(mode="json"),
+            correlation_id=correlation_id,
+        )
+
+    async def register_financial_reconciliation_completed(
+        self,
+        event: FinancialReconciliationCompletedEvent,
+        correlation_id: str | None,
+    ) -> None:
+        stage = await self.repo.upsert_portfolio_control_stage_status(
+            stage_name=FINANCIAL_RECONCILIATION_STAGE,
+            portfolio_id=event.portfolio_id,
+            business_date=event.business_date,
+            epoch=event.epoch,
+            status=event.outcome_status,
+            source_event_type="financial_reconciliation_completed",
+        )
+        controls_event = PortfolioDayControlsEvaluatedEvent(
+            portfolio_id=event.portfolio_id,
+            business_date=event.business_date,
+            epoch=event.epoch,
+            status=stage.status,
+            blocking_reconciliation_types=event.blocking_reconciliation_types,
+            error_count=event.error_count,
+            warning_count=event.warning_count,
+            correlation_id=correlation_id,
+        )
+        await self.outbox_repo.create_outbox_event(
+            aggregate_type="PipelineStage",
+            aggregate_id=f"{event.portfolio_id}:{event.business_date}:{event.epoch}",
+            event_type="PortfolioDayControlsEvaluated",
+            topic=KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
+            payload=controls_event.model_dump(mode="json"),
             correlation_id=correlation_id,
         )
 

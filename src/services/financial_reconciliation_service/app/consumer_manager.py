@@ -5,10 +5,13 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC,
     KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
+from portfolio_common.kafka_utils import get_kafka_producer
+from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.runtime_supervision import wait_for_shutdown_or_task_failure
 
 from .consumers.reconciliation_requested_consumer import ReconciliationRequestedConsumer
@@ -28,6 +31,7 @@ class ConsumerManager:
                 service_prefix="FRC",
             )
         ]
+        self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
         self.tasks: list[asyncio.Task] = []
         self._shutdown_event = asyncio.Event()
 
@@ -36,7 +40,9 @@ class ConsumerManager:
         self._shutdown_event.set()
 
     async def run(self):
-        ensure_topics_exist([consumer.topic for consumer in self.consumers])
+        required_topics = [consumer.topic for consumer in self.consumers]
+        required_topics.append(KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC)
+        ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -45,6 +51,7 @@ class ConsumerManager:
         server = uvicorn.Server(uvicorn_config)
 
         self.tasks = [asyncio.create_task(c.run()) for c in self.consumers]
+        self.tasks.append(asyncio.create_task(self.dispatcher.run()))
         self.tasks.append(asyncio.create_task(server.serve()))
 
         runtime_error = await wait_for_shutdown_or_task_failure(
@@ -55,6 +62,7 @@ class ConsumerManager:
 
         for consumer in self.consumers:
             consumer.shutdown()
+        self.dispatcher.stop()
         server.should_exit = True
 
         await asyncio.gather(*self.tasks, return_exceptions=True)

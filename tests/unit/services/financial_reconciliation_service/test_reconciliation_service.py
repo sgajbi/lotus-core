@@ -10,9 +10,8 @@ from src.services.financial_reconciliation_service.app.services.reconciliation_s
     ReconciliationService,
 )
 
-pytestmark = pytest.mark.asyncio
 
-
+@pytest.mark.asyncio
 async def test_run_transaction_cashflow_records_missing_cashflow_finding():
     run = SimpleNamespace(run_id="recon-1")
     transaction = SimpleNamespace(
@@ -48,6 +47,7 @@ async def test_run_transaction_cashflow_records_missing_cashflow_finding():
     assert summary["error_count"] == 1
 
 
+@pytest.mark.asyncio
 async def test_run_position_valuation_records_both_core_arithmetic_failures():
     run = SimpleNamespace(run_id="recon-2")
     snapshot = SimpleNamespace(
@@ -80,6 +80,7 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
     assert summary["finding_count"] == 2
 
 
+@pytest.mark.asyncio
 async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
     transaction_run = SimpleNamespace(run_id="recon-tx")
     valuation_run = SimpleNamespace(run_id="recon-val")
@@ -123,3 +124,52 @@ async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
         "auto:position_valuation:PORT-AUTO:2026-03-08:4",
         "auto:timeseries_integrity:PORT-AUTO:2026-03-08:4",
     ]
+
+
+def test_determine_automatic_bundle_outcome_requires_replay_for_error_findings():
+    runs = {
+        "transaction_cashflow": SimpleNamespace(
+            run_id="recon-tx",
+            status="COMPLETED",
+            summary={"error_count": 2, "warning_count": 1},
+        ),
+        "position_valuation": SimpleNamespace(
+            run_id="recon-val",
+            status="COMPLETED",
+            summary={"error_count": 0, "warning_count": 0},
+        ),
+    }
+
+    outcome = ReconciliationService.determine_automatic_bundle_outcome(runs)
+
+    assert outcome.outcome_status == "REQUIRES_REPLAY"
+    assert outcome.blocking_reconciliation_types == ["transaction_cashflow"]
+    assert outcome.error_count == 2
+    assert outcome.warning_count == 1
+
+
+def test_determine_automatic_bundle_outcome_escalates_failed_runs():
+    runs = {
+        "transaction_cashflow": SimpleNamespace(
+            run_id="recon-tx",
+            status="FAILED",
+            summary={"error_count": 0, "warning_count": 0},
+        ),
+        "timeseries_integrity": SimpleNamespace(
+            run_id="recon-ts",
+            status="COMPLETED",
+            summary={"error_count": 1, "warning_count": 0},
+        ),
+    }
+
+    outcome = ReconciliationService.determine_automatic_bundle_outcome(runs)
+
+    assert outcome.outcome_status == "FAILED"
+    assert outcome.blocking_reconciliation_types == [
+        "timeseries_integrity",
+        "transaction_cashflow",
+    ]
+    assert outcome.run_ids == {
+        "transaction_cashflow": "recon-tx",
+        "timeseries_integrity": "recon-ts",
+    }
