@@ -485,6 +485,22 @@ async def test_portfolio_exists_false(repository: OperationsRepository, mock_db_
     assert exists is False
 
 
+async def test_get_latest_financial_reconciliation_control_stage(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_stage = object()
+    mock_execute_scalar_one_or_none(mock_db_session, mock_stage)
+
+    value = await repository.get_latest_financial_reconciliation_control_stage("P1")
+
+    assert value is mock_stage
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from pipeline_stage_state" in compiled.lower()
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "ORDER BY pipeline_stage_state.business_date DESC" in compiled
+
+
 async def test_get_lineage_keys_query_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

@@ -32,8 +32,15 @@ Implemented under RFC 081 as of 2026-03-08:
   `portfolio_aggregation_day_completed -> pipeline_orchestrator_service -> financial_reconciliation_requested -> financial_reconciliation_service`
 - automatic reconciliation outcome hardening path:
   `financial_reconciliation_completed -> pipeline_orchestrator_service -> portfolio_day_controls_evaluated`
+- explicit control policy decisioning on the orchestrator-owned controls event:
+  blocking outcomes now set `controls_blocking=true` and `publish_allowed=false`
+  for the affected `(portfolio_id, business_date, epoch)` scope
+- support/control-plane visibility of the latest portfolio-day controls state
+  through support overview APIs
 
-Remaining RFC 081 work is now hardening-oriented rather than primary boundary decomposition.
+Remaining RFC 081 work is now limited to final governance closure, broader Docker-backed
+integration validation, and any follow-on policy consumers that may use the now-canonical
+control decision event.
 
 ## 1. Purpose and Goals
 
@@ -504,6 +511,13 @@ Implemented additions:
 4. Portfolio-day control stage status merges monotonically:
    a duplicate or late event may preserve or worsen the current status but never
    downgrade `REQUIRES_REPLAY` or `FAILED` back to `COMPLETED`.
+5. The emitted controls event now carries explicit policy semantics:
+   - `controls_blocking=true` and `publish_allowed=false` for `FAILED` or
+     `REQUIRES_REPLAY`
+   - `controls_blocking=false` and `publish_allowed=true` only for `COMPLETED`
+6. `query_control_plane_service` support overview now surfaces the latest
+   portfolio-day control status, epoch, and publish decision so operational
+   tooling cannot silently treat a blocked day as healthy.
 
 Race-condition and replay safeguards:
 

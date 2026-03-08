@@ -94,6 +94,46 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=[0],
     )
+    controls_business_date: Optional[date] = Field(
+        None,
+        description=(
+            "Business date for the latest portfolio-day financial reconciliation control stage "
+            "tracked by the orchestrator."
+        ),
+        examples=["2025-12-30"],
+    )
+    controls_epoch: Optional[int] = Field(
+        None,
+        description=(
+            "Epoch associated with the latest portfolio-day financial "
+            "reconciliation stage."
+        ),
+        examples=[3],
+    )
+    controls_status: Optional[str] = Field(
+        None,
+        description=(
+            "Latest orchestrator-owned financial reconciliation control status "
+            "(for example COMPLETED, REQUIRES_REPLAY, FAILED)."
+        ),
+        examples=["COMPLETED"],
+    )
+    controls_blocking: bool = Field(
+        ...,
+        description=(
+            "True when the latest portfolio-day controls require replay or have failed, "
+            "and therefore block downstream publication/release decisions."
+        ),
+        examples=[False],
+    )
+    publish_allowed: bool = Field(
+        ...,
+        description=(
+            "True only when the latest portfolio-day financial reconciliation controls "
+            "permit downstream publication/release."
+        ),
+        examples=[True],
+    )
 
 
 class CalculatorSloBucket(BaseModel):

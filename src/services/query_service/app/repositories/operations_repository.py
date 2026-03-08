@@ -5,6 +5,7 @@ from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
     DailyPositionSnapshot,
+    PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
     PortfolioValuationJob,
@@ -279,6 +280,24 @@ class OperationsRepository:
             latest_history.c.latest_history_date.is_not(None),
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_latest_financial_reconciliation_control_stage(
+        self, portfolio_id: str
+    ) -> Optional[PipelineStageState]:
+        stmt = (
+            select(PipelineStageState)
+            .where(
+                PipelineStageState.portfolio_id == portfolio_id,
+                PipelineStageState.stage_name == "FINANCIAL_RECONCILIATION",
+            )
+            .order_by(
+                PipelineStageState.business_date.desc(),
+                PipelineStageState.epoch.desc(),
+                PipelineStageState.id.desc(),
+            )
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_position_state(
         self, portfolio_id: str, security_id: str

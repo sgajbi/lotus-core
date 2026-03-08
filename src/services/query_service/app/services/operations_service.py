@@ -39,6 +39,7 @@ class OperationsService:
             latest_transaction_date,
             latest_position_snapshot_date_unbounded,
             position_snapshot_history_mismatch_count,
+            latest_control_stage,
         ) = await asyncio.gather(
             self.repo.get_latest_business_date(),
             self.repo.get_current_portfolio_epoch(portfolio_id),
@@ -51,6 +52,7 @@ class OperationsService:
             self.repo.get_latest_transaction_date(portfolio_id),
             self.repo.get_latest_snapshot_date_for_current_epoch(portfolio_id),
             self.repo.get_position_snapshot_history_mismatch_count(portfolio_id),
+            self.repo.get_latest_financial_reconciliation_control_stage(portfolio_id),
         )
 
         latest_booked_transaction_date = None
@@ -75,6 +77,9 @@ class OperationsService:
                 0, (reference_date - oldest_pending_valuation_date).days
             )
 
+        controls_status = latest_control_stage.status if latest_control_stage else None
+        controls_blocking = self._is_controls_blocking(controls_status)
+
         return SupportOverviewResponse(
             portfolio_id=portfolio_id,
             business_date=latest_business_date,
@@ -91,7 +96,18 @@ class OperationsService:
             latest_position_snapshot_date=latest_position_snapshot_date_unbounded,
             latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
             position_snapshot_history_mismatch_count=position_snapshot_history_mismatch_count,
+            controls_business_date=(
+                latest_control_stage.business_date if latest_control_stage else None
+            ),
+            controls_epoch=latest_control_stage.epoch if latest_control_stage else None,
+            controls_status=controls_status,
+            controls_blocking=controls_blocking,
+            publish_allowed=not controls_blocking,
         )
+
+    @staticmethod
+    def _is_controls_blocking(status: str | None) -> bool:
+        return status in {"FAILED", "REQUIRES_REPLAY"}
 
     async def get_calculator_slos(
         self, portfolio_id: str, stale_threshold_minutes: int = 15
