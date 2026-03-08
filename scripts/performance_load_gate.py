@@ -378,7 +378,8 @@ def main() -> int:
         "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
     )
     parser.add_argument(
-        "--event-replay-base-url", default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209")
+        "--event-replay-base-url",
+        default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
     )
     parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
