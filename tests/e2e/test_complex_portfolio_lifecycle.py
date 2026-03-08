@@ -266,14 +266,16 @@ def test_complex_lifecycle_cross_api_consistency(
         assert review["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
         assert review["target_service"] == "lotus-report"
 
-    support_response = e2e_api_client.query(f"/support/portfolios/{portfolio_id}/overview")
+    support_response = e2e_api_client.query_control(f"/support/portfolios/{portfolio_id}/overview")
     support_data = support_response.json()
     assert support_response.status_code == 200
     assert support_data["portfolio_id"] == portfolio_id
     assert isinstance(support_data["pending_valuation_jobs"], int)
     assert isinstance(support_data["pending_aggregation_jobs"], int)
+    assert support_data["publish_allowed"] is True
+    assert support_data["controls_blocking"] is False
 
-    lineage_response = e2e_api_client.query(
+    lineage_response = e2e_api_client.query_control(
         f"/lineage/portfolios/{portfolio_id}/securities/{security_id}"
     )
     lineage_data = lineage_response.json()

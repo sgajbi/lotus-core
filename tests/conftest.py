@@ -37,6 +37,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_EVENT_REPLAY_HOST_PORT": "8209",
         "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8210",
         "LOTUS_QUERY_HOST_PORT": "8201",
+        "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT": "8202",
         "LOTUS_PERSISTENCE_HOST_PORT": "8080",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8081",
         "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8082",
@@ -54,6 +55,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_EVENT_REPLAY_HOST_PORT": "8309",
         "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8310",
         "LOTUS_QUERY_HOST_PORT": "8301",
+        "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT": "8302",
         "LOTUS_PERSISTENCE_HOST_PORT": "8180",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8181",
         "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8182",
@@ -71,6 +73,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_EVENT_REPLAY_HOST_PORT": "8409",
         "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8410",
         "LOTUS_QUERY_HOST_PORT": "8401",
+        "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT": "8402",
         "LOTUS_PERSISTENCE_HOST_PORT": "8280",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8281",
         "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8282",
@@ -95,6 +98,7 @@ _apply_test_env_profile_defaults()
 host_db_port = os.environ["LOTUS_POSTGRES_HOST_PORT"]
 ingestion_port = os.environ["LOTUS_INGESTION_HOST_PORT"]
 query_port = os.environ["LOTUS_QUERY_HOST_PORT"]
+query_control_plane_port = os.environ["LOTUS_QUERY_CONTROL_PLANE_HOST_PORT"]
 event_replay_port = os.environ["LOTUS_EVENT_REPLAY_HOST_PORT"]
 kafka_port = os.environ["LOTUS_KAFKA_EXTERNAL_PORT"]
 os.environ.setdefault(
@@ -108,6 +112,9 @@ os.environ.setdefault(
 os.environ.setdefault("E2E_INGESTION_URL", f"http://localhost:{ingestion_port}")
 os.environ.setdefault("E2E_EVENT_REPLAY_URL", f"http://localhost:{event_replay_port}")
 os.environ.setdefault("E2E_QUERY_URL", f"http://localhost:{query_port}")
+os.environ.setdefault(
+    "E2E_QUERY_CONTROL_PLANE_URL", f"http://localhost:{query_control_plane_port}"
+)
 os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", f"localhost:{kafka_port}")
 # Keep demo ingestion sidecar disabled for deterministic integration/e2e tests.
 os.environ.setdefault("DEMO_DATA_PACK_ENABLED", "false")
@@ -154,6 +161,7 @@ def docker_services(request):  # noqa: ARG001
             "event_replay_service",
             "financial_reconciliation_service",
             "query_service",
+            "query_control_plane_service",
             "persistence_service",
             "cost_calculator_service",
             "cashflow_calculator_service",
@@ -182,6 +190,10 @@ def docker_services(request):  # noqa: ARG001
         print("\n--- Waiting for API services to become healthy ---")
         ingestion_base_url = os.getenv("E2E_INGESTION_URL", "http://localhost:8200").rstrip("/")
         query_base_url = os.getenv("E2E_QUERY_URL", "http://localhost:8201").rstrip("/")
+        query_control_plane_base_url = os.getenv(
+            "E2E_QUERY_CONTROL_PLANE_URL",
+            "http://localhost:8202",
+        ).rstrip("/")
         services_to_check = {
             "ingestion_service": f"{ingestion_base_url}/health/ready",
             "event_replay_service": os.getenv(
@@ -194,6 +206,7 @@ def docker_services(request):  # noqa: ARG001
             )
             + "/health/ready",
             "query_service": f"{query_base_url}/health/ready",
+            "query_control_plane_service": f"{query_control_plane_base_url}/health/ready",
         }
 
         for service_name, health_url in services_to_check.items():
@@ -222,6 +235,10 @@ def e2e_api_client(docker_services) -> E2EApiClient:
     return E2EApiClient(
         ingestion_url=os.getenv("E2E_INGESTION_URL", "http://localhost:8200"),
         query_url=os.getenv("E2E_QUERY_URL", "http://localhost:8201"),
+        query_control_plane_url=os.getenv(
+            "E2E_QUERY_CONTROL_PLANE_URL",
+            "http://localhost:8202",
+        ),
     )
 
 

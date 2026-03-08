@@ -412,6 +412,8 @@ class PortfolioDayControlsEvaluatedEvent(BaseModel):
     epoch: int = 0
     stage_name: str = "FINANCIAL_RECONCILIATION"
     status: str
+    controls_blocking: bool = False
+    publish_allowed: bool = True
     blocking_reconciliation_types: list[str] = Field(default_factory=list)
     error_count: int = 0
     warning_count: int = 0

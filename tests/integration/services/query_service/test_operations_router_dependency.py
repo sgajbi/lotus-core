@@ -43,12 +43,18 @@ async def test_support_overview_success(async_test_client):
         "latest_position_snapshot_date": date(2025, 8, 31),
         "latest_booked_position_snapshot_date": date(2025, 8, 31),
         "position_snapshot_history_mismatch_count": 0,
+        "controls_business_date": date(2025, 8, 31),
+        "controls_epoch": 3,
+        "controls_status": "COMPLETED",
+        "controls_blocking": False,
+        "publish_allowed": True,
     }
 
     response = await client.get("/support/portfolios/P1/overview")
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["publish_allowed"] is True
     assert "X-Correlation-ID" in response.headers
 
 

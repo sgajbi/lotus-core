@@ -39,6 +39,11 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
+        "ControlStageStub",
+        (),
+        {"business_date": date(2025, 8, 30), "epoch": 2, "status": "COMPLETED"},
+    )()
 
     response = await service.get_support_overview("P1")
 
@@ -57,6 +62,11 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.latest_position_snapshot_date == date(2025, 8, 30)
     assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)
     assert response.position_snapshot_history_mismatch_count == 0
+    assert response.controls_business_date == date(2025, 8, 30)
+    assert response.controls_epoch == 2
+    assert response.controls_status == "COMPLETED"
+    assert response.controls_blocking is False
+    assert response.publish_allowed is True
 
 
 async def test_get_lineage_raises_when_state_missing(
@@ -181,6 +191,7 @@ async def test_get_support_overview_without_business_date(
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 31)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 31)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
 
     response = await service.get_support_overview("P1")
 
@@ -188,8 +199,42 @@ async def test_get_support_overview_without_business_date(
     assert response.valuation_backlog_age_days is None
     assert response.latest_booked_transaction_date is None
     assert response.latest_booked_position_snapshot_date is None
+    assert response.controls_status is None
+    assert response.controls_blocking is False
+    assert response.publish_allowed is True
     mock_ops_repo.get_latest_transaction_date_as_of.assert_not_awaited()
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.assert_not_awaited()
+
+
+async def test_get_support_overview_marks_publish_blocked_when_controls_require_replay(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 2
+    mock_ops_repo.get_active_reprocessing_keys_count.return_value = 0
+    mock_ops_repo.get_pending_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_oldest_pending_valuation_date.return_value = None
+    mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 0
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
+        2025, 8, 30
+    )
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
+        "ControlStageStub",
+        (),
+        {"business_date": date(2025, 8, 30), "epoch": 2, "status": "REQUIRES_REPLAY"},
+    )()
+
+    response = await service.get_support_overview("P1")
+
+    assert response.controls_status == "REQUIRES_REPLAY"
+    assert response.controls_blocking is True
+    assert response.publish_allowed is False
 
 
 async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):

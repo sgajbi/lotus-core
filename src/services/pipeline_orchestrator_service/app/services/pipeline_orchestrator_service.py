@@ -94,11 +94,14 @@ class PipelineOrchestratorService:
             status=event.outcome_status,
             source_event_type="financial_reconciliation_completed",
         )
+        controls_blocking = self.is_control_stage_blocking(stage.status)
         controls_event = PortfolioDayControlsEvaluatedEvent(
             portfolio_id=event.portfolio_id,
             business_date=event.business_date,
             epoch=event.epoch,
             status=stage.status,
+            controls_blocking=controls_blocking,
+            publish_allowed=not controls_blocking,
             blocking_reconciliation_types=event.blocking_reconciliation_types,
             error_count=event.error_count,
             warning_count=event.warning_count,
@@ -112,6 +115,10 @@ class PipelineOrchestratorService:
             payload=controls_event.model_dump(mode="json"),
             correlation_id=correlation_id,
         )
+
+    @staticmethod
+    def is_control_stage_blocking(status: str) -> bool:
+        return status in {"FAILED", "REQUIRES_REPLAY"}
 
     async def _emit_if_ready(self, stage, correlation_id: str | None) -> None:
         if stage.status == "COMPLETED":

@@ -107,3 +107,60 @@ async def test_upsert_stage_flags_rejects_cross_portfolio_collision(
         )
     await async_db_session.commit()
     assert first.id is not None
+
+
+async def test_upsert_portfolio_control_stage_status_is_monotonic(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = PipelineStageRepository(async_db_session)
+
+    first = await repo.upsert_portfolio_control_stage_status(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="PORT-CTRL-1",
+        business_date=date(2026, 3, 7),
+        epoch=2,
+        status="REQUIRES_REPLAY",
+        source_event_type="financial_reconciliation_completed",
+    )
+    second = await repo.upsert_portfolio_control_stage_status(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="PORT-CTRL-1",
+        business_date=date(2026, 3, 7),
+        epoch=2,
+        status="COMPLETED",
+        source_event_type="financial_reconciliation_completed",
+    )
+    await async_db_session.commit()
+
+    persisted = await async_db_session.scalar(
+        select(PipelineStageState).where(PipelineStageState.id == first.id)
+    )
+    assert first.id == second.id
+    assert persisted is not None
+    assert persisted.status == "REQUIRES_REPLAY"
+
+
+async def test_upsert_portfolio_control_stage_status_escalates_to_failed(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = PipelineStageRepository(async_db_session)
+
+    await repo.upsert_portfolio_control_stage_status(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="PORT-CTRL-2",
+        business_date=date(2026, 3, 7),
+        epoch=2,
+        status="COMPLETED",
+        source_event_type="financial_reconciliation_completed",
+    )
+    stage = await repo.upsert_portfolio_control_stage_status(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="PORT-CTRL-2",
+        business_date=date(2026, 3, 7),
+        epoch=2,
+        status="FAILED",
+        source_event_type="financial_reconciliation_completed",
+    )
+    await async_db_session.commit()
+
+    assert stage.status == "FAILED"

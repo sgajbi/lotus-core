@@ -36,6 +36,9 @@ Source authority: RFC 081
 10. `pipeline_orchestrator_service` consumes `portfolio_aggregation_day_completed` and emits `financial_reconciliation_requested` for deterministic post-aggregation controls.
 11. `financial_reconciliation_service` consumes `financial_reconciliation_requested`, runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch)`, and emits `financial_reconciliation_completed`.
 12. `pipeline_orchestrator_service` consumes `financial_reconciliation_completed`, upserts the `FINANCIAL_RECONCILIATION` portfolio-day control stage using monotonic status merge, and emits `portfolio_day_controls_evaluated`.
+13. `portfolio_day_controls_evaluated` is the canonical portfolio-day controls decision:
+    `controls_blocking=true` and `publish_allowed=false` for `FAILED` / `REQUIRES_REPLAY`,
+    otherwise `controls_blocking=false` and `publish_allowed=true`.
 
 ## Stage Gate Sequence (Planned in RFC 081)
 
@@ -59,3 +62,5 @@ Source authority: RFC 081
 - Control-stage status must be monotonic for a given `(portfolio_id, business_date, epoch, stage_name)` scope:
   duplicate or late events may preserve or worsen status (`COMPLETED -> REQUIRES_REPLAY -> FAILED`)
   but must never silently downgrade a blocking outcome back to `COMPLETED`.
+- Support/control-plane APIs must surface the latest portfolio-day control decision so downstream
+  operators and consumers cannot infer publishability from partial calculator progress alone.
