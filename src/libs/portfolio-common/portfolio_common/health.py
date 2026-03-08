@@ -5,6 +5,7 @@ from typing import Awaitable, Callable
 
 from confluent_kafka.admin import AdminClient
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
@@ -13,6 +14,32 @@ from .db import AsyncSessionLocal
 logger = logging.getLogger(__name__)
 
 DependencyCheck = Callable[[], Awaitable[bool]]
+
+
+class LiveHealthResponse(BaseModel):
+    status: str = Field(description="Liveness state for the service process.", examples=["alive"])
+
+
+class ReadyHealthResponse(BaseModel):
+    status: str = Field(
+        description="Readiness state for the service and its critical dependencies.",
+        examples=["ready"],
+    )
+    dependencies: dict[str, str] = Field(
+        description="Dependency-level readiness results keyed by dependency name.",
+        examples=[{"database": "ok", "kafka": "ok"}],
+    )
+
+
+class NotReadyHealthDetail(BaseModel):
+    status: str = Field(
+        description="Readiness state when at least one dependency is unavailable.",
+        examples=["not_ready"],
+    )
+    dependencies: dict[str, str] = Field(
+        description="Dependency-level readiness results keyed by dependency name.",
+        examples=[{"database": "ok", "kafka": "unavailable"}],
+    )
 
 
 async def check_db_health() -> bool:
@@ -53,11 +80,52 @@ def create_health_router(*dependencies: str) -> APIRouter:
 
     dep_map = {"db": ("database", check_db_health), "kafka": ("kafka", check_kafka_health)}
 
-    @router.get("/health/live", status_code=status.HTTP_200_OK)
+    @router.get(
+        "/health/live",
+        status_code=status.HTTP_200_OK,
+        response_model=LiveHealthResponse,
+        summary="Liveness probe",
+        description="Return process liveness for the service runtime.",
+        responses={
+            200: {
+                "description": "Service process is alive.",
+                "content": {"application/json": {"example": {"status": "alive"}}},
+            }
+        },
+    )
     async def liveness_probe():
         return {"status": "alive"}
 
-    @router.get("/health/ready", status_code=status.HTTP_200_OK)
+    @router.get(
+        "/health/ready",
+        status_code=status.HTTP_200_OK,
+        response_model=ReadyHealthResponse,
+        summary="Readiness probe",
+        description="Return dependency-aware readiness for the service runtime.",
+        responses={
+            200: {
+                "description": "Service and required dependencies are ready.",
+                "content": {
+                    "application/json": {
+                        "example": {"status": "ready", "dependencies": {"database": "ok"}}
+                    }
+                },
+            },
+            503: {
+                "description": "One or more required dependencies are unavailable.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "detail": {
+                                "status": "not_ready",
+                                "dependencies": {"database": "ok", "kafka": "unavailable"},
+                            }
+                        }
+                    }
+                },
+            },
+        },
+    )
     async def readiness_probe():
         checks_to_run = [dep_map[dep][1] for dep in dependencies if dep in dep_map]
 

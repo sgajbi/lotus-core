@@ -102,6 +102,27 @@ async def test_openapi_contains_reconciliation_endpoints(async_test_client: http
     assert "/reconciliation/runs/{run_id}/findings" in paths
 
 
+async def test_openapi_includes_reconciliation_examples(async_test_client: httpx.AsyncClient):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    post_operation = schema["paths"]["/reconciliation/runs/transaction-cashflow"]["post"]
+    request_examples = post_operation["requestBody"]["content"]["application/json"]["examples"]
+    response_example = post_operation["responses"]["200"]["content"]["application/json"]["example"]
+
+    assert "portfolio_day_scope" in request_examples
+    assert request_examples["portfolio_day_scope"]["value"]["portfolio_id"] == "PORT-OPS-001"
+    assert response_example["run_id"] == "FRR-20260306-0001"
+
+    finding_example = (
+        schema["paths"]["/reconciliation/runs/{run_id}/findings"]["get"]["responses"]["200"][
+            "content"
+        ]["application/json"]["example"]
+    )
+    assert finding_example["findings"][0]["finding_type"] == "missing_cashflow"
+
+
 async def test_transaction_cashflow_run_persists_missing_cashflow_finding(
     async_test_client: httpx.AsyncClient,
     async_db_session: AsyncSession,

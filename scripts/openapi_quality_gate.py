@@ -43,6 +43,58 @@ def _is_ref_only(prop_schema: dict) -> bool:
     return set(prop_schema.keys()) == {"$ref"}
 
 
+def _has_request_example(operation: dict) -> bool:
+    request_body = operation.get("requestBody", {})
+    if not isinstance(request_body, dict):
+        return True
+    content = request_body.get("content", {})
+    if not isinstance(content, dict) or not content:
+        return True
+    json_media = [media for media_type, media in content.items() if "json" in media_type]
+    if not json_media:
+        return True
+    return all(
+        isinstance(media, dict) and ("example" in media or "examples" in media)
+        for media in json_media
+    )
+
+
+def _has_parameter_examples(operation: dict) -> bool:
+    parameters = operation.get("parameters", [])
+    if not isinstance(parameters, list):
+        return True
+    for parameter in parameters:
+        if not isinstance(parameter, dict):
+            continue
+        if "example" in parameter or "examples" in parameter:
+            continue
+        return False
+    return True
+
+
+def _missing_success_response_examples(operation: dict) -> list[str]:
+    responses = operation.get("responses", {})
+    if not isinstance(responses, dict):
+        return []
+    missing: list[str] = []
+    for code, response in responses.items():
+        if not str(code).startswith("2"):
+            continue
+        if not isinstance(response, dict):
+            continue
+        content = response.get("content", {})
+        if not isinstance(content, dict):
+            continue
+        for media_type, media in content.items():
+            if "json" not in media_type:
+                continue
+            if not isinstance(media, dict):
+                continue
+            if "example" not in media and "examples" not in media:
+                missing.append(str(code))
+    return missing
+
+
 def evaluate_schema(schema: dict, service_name: str) -> list[str]:
     errors: list[str] = []
     missing_docs: list[tuple[str, str, str]] = []
@@ -73,6 +125,20 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
                     missing_docs.append((method_upper, path, "2xx response"))
                 if not _has_error_response(operation):
                     missing_docs.append((method_upper, path, "error response (4xx/5xx/default)"))
+                missing_response_examples = _missing_success_response_examples(operation)
+                if missing_response_examples:
+                    missing_docs.append(
+                        (
+                            method_upper,
+                            path,
+                            f"success response example ({', '.join(missing_response_examples)})",
+                        )
+                    )
+
+            if not _has_request_example(operation):
+                missing_docs.append((method_upper, path, "request example"))
+            if not _has_parameter_examples(operation):
+                missing_docs.append((method_upper, path, "parameter example"))
 
     schemas = schema.get("components", {}).get("schemas", {})
     for model_name, model_schema in schemas.items():
@@ -116,12 +182,56 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
 
 
 def main() -> int:
+    from src.services.calculators.cashflow_calculator_service.app.web import (
+        app as cashflow_calculator_web_app,
+    )
+    from src.services.calculators.cost_calculator_service.app.web import (
+        app as cost_calculator_web_app,
+    )
+    from src.services.calculators.position_calculator.app.web import (
+        app as position_calculator_web_app,
+    )
+    from src.services.calculators.position_valuation_calculator.app.web import (
+        app as position_valuation_calculator_web_app,
+    )
+    from src.services.event_replay_service.app.main import app as event_replay_app
+    from src.services.financial_reconciliation_service.app.main import (
+        app as financial_reconciliation_app,
+    )
     from src.services.ingestion_service.app.main import app as ingestion_app
+    from src.services.persistence_service.app.web import app as persistence_web_app
+    from src.services.pipeline_orchestrator_service.app.web import (
+        app as pipeline_orchestrator_web_app,
+    )
+    from src.services.portfolio_aggregation_service.app.web import (
+        app as portfolio_aggregation_web_app,
+    )
+    from src.services.query_control_plane_service.app.main import app as query_control_plane_app
     from src.services.query_service.app.main import app as query_app
+    from src.services.timeseries_generator_service.app.web import (
+        app as timeseries_generator_web_app,
+    )
+    from src.services.valuation_orchestrator_service.app.web import (
+        app as valuation_orchestrator_web_app,
+    )
 
     service_schemas = {
         "query_service": query_app.openapi(),
+        "query_control_plane_service": query_control_plane_app.openapi(),
         "ingestion_service": ingestion_app.openapi(),
+        "event_replay_service": event_replay_app.openapi(),
+        "financial_reconciliation_service": financial_reconciliation_app.openapi(),
+        "pipeline_orchestrator_service_web": pipeline_orchestrator_web_app.openapi(),
+        "persistence_service_web": persistence_web_app.openapi(),
+        "valuation_orchestrator_service_web": valuation_orchestrator_web_app.openapi(),
+        "portfolio_aggregation_service_web": portfolio_aggregation_web_app.openapi(),
+        "timeseries_generator_service_web": timeseries_generator_web_app.openapi(),
+        "position_calculator_service_web": position_calculator_web_app.openapi(),
+        "cost_calculator_service_web": cost_calculator_web_app.openapi(),
+        "cashflow_calculator_service_web": cashflow_calculator_web_app.openapi(),
+        "position_valuation_calculator_service_web": (
+            position_valuation_calculator_web_app.openapi()
+        ),
     }
     errors: list[str] = []
     for service_name, schema in service_schemas.items():
@@ -131,7 +241,7 @@ def main() -> int:
         print("\n".join(errors))
         return 1
 
-    print("OpenAPI quality gate passed for query_service and ingestion_service.")
+    print("OpenAPI quality gate passed for API services.")
     return 0
 
 

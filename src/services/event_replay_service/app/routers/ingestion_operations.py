@@ -56,6 +56,79 @@ from src.services.ingestion_service.app.services.ingestion_service import (
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])
 
+INGESTION_JOB_RESPONSE_EXAMPLE = {
+    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    "endpoint": "/ingest/transactions",
+    "entity_type": "transaction",
+    "status": "queued",
+    "accepted_count": 125,
+    "idempotency_key": "ingestion-transactions-batch-20260306-001",
+    "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+    "request_id": "REQ:3a63936e-bf29-41e2-9f16-faf4e561d845",
+    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "submitted_at": "2026-03-06T13:22:24.201Z",
+    "completed_at": "2026-03-06T13:22:24.994Z",
+    "failure_reason": None,
+    "retry_count": 1,
+    "last_retried_at": "2026-03-06T13:24:10.512Z",
+}
+
+INGESTION_RETRY_REQUEST_EXAMPLES = {
+    "full_retry": {
+        "summary": "Replay the full stored payload",
+        "value": {"record_keys": [], "dry_run": False},
+    },
+    "partial_dry_run": {
+        "summary": "Validate a partial replay without publishing",
+        "value": {"record_keys": ["TXN-2026-000145", "TXN-2026-000146"], "dry_run": True},
+    },
+}
+
+CONSUMER_DLQ_REPLAY_REQUEST_EXAMPLES = {
+    "replay_now": {
+        "summary": "Replay correlated payload now",
+        "value": {"dry_run": False},
+    },
+    "dry_run": {
+        "summary": "Validate replayability only",
+        "value": {"dry_run": True},
+    },
+}
+
+CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE = {
+    "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+    "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    "replay_status": "replayed",
+    "replay_audit_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
+    "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+    "message": "Replayed ingestion job from correlated consumer DLQ event.",
+}
+
+INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE = {
+    "replay_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
+    "recovery_path": "consumer_dlq_replay",
+    "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+    "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+    "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    "endpoint": "/ingest/transactions",
+    "replay_status": "replayed",
+    "dry_run": False,
+    "replay_reason": "Replayed ingestion job from correlated consumer DLQ event.",
+    "requested_by": "ops-token",
+    "requested_at": "2026-03-06T10:12:01.019Z",
+    "completed_at": "2026-03-06T10:12:02.039Z",
+}
+
+INGESTION_OPS_MODE_EXAMPLE = {
+    "mode": "paused",
+    "replay_window_start": "2026-03-06T00:00:00Z",
+    "replay_window_end": "2026-03-06T06:00:00Z",
+    "updated_by": "ops_automation",
+    "updated_at": "2026-03-06T02:15:07.234Z",
+}
+
 
 def _filter_payload_by_record_keys(
     *,
@@ -201,6 +274,12 @@ def _payload_record_count(payload: dict[str, Any] | None) -> int:
         "How: Read canonical ingestion-job state by job_id.\n"
         "When: Use to track asynchronous ingestion completion or failure for a submitted request."
     ),
+    responses={
+        200: {
+            "description": "One ingestion job.",
+            "content": {"application/json": {"example": INGESTION_JOB_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_job(
     job_id: str,
@@ -229,6 +308,20 @@ async def get_ingestion_job(
         "How: Query canonical job records using status/entity/date filters and cursor pagination.\n"
         "When: Use for runbook dashboards, triage, and service-operations monitoring."
     ),
+    responses={
+        200: {
+            "description": "Filtered ingestion jobs.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "jobs": [INGESTION_JOB_RESPONSE_EXAMPLE],
+                        "total": 1,
+                        "next_cursor": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+                    }
+                }
+            },
+        }
+    },
 )
 async def list_ingestion_jobs(
     status: str | None = Query(default=None),
@@ -322,10 +415,19 @@ async def get_ingestion_job_records(
         "When: Use after root cause remediation to recover failed ingestion "
         "without direct DB operations."
     ),
+    responses={
+        200: {
+            "description": "Ingestion job accepted for replay or replay dry-run completed.",
+            "content": {"application/json": {"example": INGESTION_JOB_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def retry_ingestion_job(
     job_id: str,
-    retry_request: IngestionRetryRequest = Body(default_factory=IngestionRetryRequest),
+    retry_request: IngestionRetryRequest = Body(
+        default_factory=IngestionRetryRequest,
+        openapi_examples=INGESTION_RETRY_REQUEST_EXAMPLES,
+    ),
     ops_actor: str = Depends(require_ops_token),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
     ingestion_service: IngestionService = Depends(get_ingestion_service),
@@ -763,6 +865,32 @@ async def list_ingestion_stalled_jobs(
         "How: Query persisted consumer DLQ audit records with optional topic/group filters.\n"
         "When: Use to investigate consumer-side validation/processing failures without DB access."
     ),
+    responses={
+        200: {
+            "description": "Consumer DLQ events matching the requested filters.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "events": [
+                            {
+                                "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+                                "original_topic": "raw_transactions",
+                                "consumer_group": "persistence-service-group",
+                                "dlq_topic": "persistence_service.dlq",
+                                "original_key": "TXN-2026-000145",
+                                "error_reason_code": "VALIDATION_ERROR",
+                                "error_reason": "ValidationError: portfolio_id is required",
+                                "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+                                "payload_excerpt": "{\"transaction_id\":\"TXN-2026-000145\"}",
+                                "observed_at": "2026-03-06T09:11:05.812Z",
+                            }
+                        ],
+                        "total": 1,
+                    }
+                }
+            },
+        }
+    },
 )
 async def list_consumer_dlq_events(
     limit: int = Query(default=100, ge=1, le=500),
@@ -788,10 +916,21 @@ async def list_consumer_dlq_events(
         "payload, then republish.\n"
         "When: Use after fixing downstream consumer defects to recover rejected events safely."
     ),
+    responses={
+        200: {
+            "description": "Replay outcome for the correlated DLQ event.",
+            "content": {
+                "application/json": {"example": CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def replay_consumer_dlq_event(
     event_id: str,
-    replay_request: ConsumerDlqReplayRequest = Body(default_factory=ConsumerDlqReplayRequest),
+    replay_request: ConsumerDlqReplayRequest = Body(
+        default_factory=ConsumerDlqReplayRequest,
+        openapi_examples=CONSUMER_DLQ_REPLAY_REQUEST_EXAMPLES,
+    ),
     ops_actor: str = Depends(require_ops_token),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
     ingestion_service: IngestionService = Depends(get_ingestion_service),
@@ -1042,6 +1181,16 @@ async def replay_consumer_dlq_event(
         "status, fingerprint, and job.\n"
         "When: Use for incident forensics and replay governance review."
     ),
+    responses={
+        200: {
+            "description": "Replay audit rows matching the requested filters.",
+            "content": {
+                "application/json": {
+                    "example": {"audits": [INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE], "total": 1}
+                }
+            },
+        }
+    },
 )
 async def list_ingestion_replay_audits(
     limit: int = Query(default=100, ge=1, le=500),
@@ -1072,6 +1221,12 @@ async def list_ingestion_replay_audits(
         "How: Read durable replay audit event from canonical operations store.\n"
         "When: Use to inspect a specific replay action referenced in incident timelines."
     ),
+    responses={
+        200: {
+            "description": "One replay audit row.",
+            "content": {"application/json": {"example": INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_replay_audit(
     replay_id: str,
@@ -1100,6 +1255,12 @@ async def get_ingestion_replay_audit(
         "How: Read canonical ingestion operations control state.\n"
         "When: Use before maintenance, pause/drain actions, or controlled replay operations."
     ),
+    responses={
+        200: {
+            "description": "Current ingestion operations mode.",
+            "content": {"application/json": {"example": INGESTION_OPS_MODE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_ops_control(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
@@ -1118,9 +1279,27 @@ async def get_ingestion_ops_control(
         "How: Persist operational mode transition with validation on replay window boundaries.\n"
         "When: Use for planned maintenance, controlled drain, or replay governance actions."
     ),
+    responses={
+        200: {
+            "description": "Updated ingestion operations mode.",
+            "content": {"application/json": {"example": INGESTION_OPS_MODE_EXAMPLE}},
+        }
+    },
 )
 async def update_ingestion_ops_control(
-    update_request: IngestionOpsModeUpdateRequest,
+    update_request: IngestionOpsModeUpdateRequest = Body(
+        openapi_examples={
+            "pause_with_window": {
+                "summary": "Pause ingestion with bounded replay window",
+                "value": {
+                    "mode": "paused",
+                    "replay_window_start": "2026-03-06T00:00:00Z",
+                    "replay_window_end": "2026-03-06T06:00:00Z",
+                    "updated_by": "ops_automation",
+                },
+            }
+        }
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     if (

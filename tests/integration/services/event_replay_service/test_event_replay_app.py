@@ -59,6 +59,34 @@ async def test_openapi_contains_replay_control_plane_endpoints(async_test_client
     assert "/ingestion/audit/replays" in paths
 
 
+async def test_openapi_includes_replay_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    retry_operation = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
+    retry_examples = retry_operation["requestBody"]["content"]["application/json"]["examples"]
+    retry_response_example = retry_operation["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert "partial_dry_run" in retry_examples
+    assert retry_examples["partial_dry_run"]["value"]["dry_run"] is True
+    assert retry_response_example["job_id"] == "job_01J5S0J6D3BAVMK2E1V0WQ7MCC"
+
+    replay_operation = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
+    replay_examples = replay_operation["requestBody"]["content"]["application/json"]["examples"]
+    replay_response_example = replay_operation["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert "replay_now" in replay_examples
+    assert replay_response_example["replay_status"] == "replayed"
+
+    ops_control_example = schema["paths"]["/ingestion/ops/control"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["example"]
+    assert ops_control_example["mode"] == "paused"
+
+
 async def test_openapi_excludes_write_ingress_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200

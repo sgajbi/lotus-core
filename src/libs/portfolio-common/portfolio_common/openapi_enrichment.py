@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from typing import Any
+
+from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 
 _EXAMPLE_BY_KEY = {
     "portfolio_id": "DEMO_DPM_EUR_001",
@@ -149,6 +153,169 @@ def _infer_description(model_name: str, prop_name: str, prop_schema: dict[str, A
     return f"{_humanize(model_name)} field: {text}."
 
 
+def _resolve_ref_schema(root_schema: dict[str, Any], ref: str) -> dict[str, Any]:
+    if not ref.startswith("#/"):
+        return {}
+    current: Any = root_schema
+    for segment in ref.removeprefix("#/").split("/"):
+        if not isinstance(current, dict):
+            return {}
+        current = current.get(segment)
+    return current if isinstance(current, dict) else {}
+
+
+def _build_schema_example(
+    schema_node: dict[str, Any] | None,
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None = None,
+) -> Any:
+    if not isinstance(schema_node, dict):
+        return None
+
+    if "example" in schema_node:
+        return deepcopy(schema_node["example"])
+    if (
+        "examples" in schema_node
+        and isinstance(schema_node["examples"], list)
+        and schema_node["examples"]
+    ):
+        return deepcopy(schema_node["examples"][0])
+
+    ref = schema_node.get("$ref")
+    if isinstance(ref, str):
+        if seen_refs is None:
+            seen_refs = set()
+        if ref in seen_refs:
+            return None
+        seen_refs = set(seen_refs)
+        seen_refs.add(ref)
+        return _build_schema_example(
+            _resolve_ref_schema(root_schema, ref),
+            root_schema=root_schema,
+            seen_refs=seen_refs,
+        )
+
+    for union_key in ("allOf", "oneOf", "anyOf"):
+        variants = schema_node.get(union_key)
+        if isinstance(variants, list) and variants:
+            if union_key == "allOf":
+                merged: dict[str, Any] = {}
+                for variant in variants:
+                    value = _build_schema_example(
+                        variant, root_schema=root_schema, seen_refs=seen_refs
+                    )
+                    if isinstance(value, dict):
+                        merged.update(value)
+                if merged:
+                    return merged
+            for variant in variants:
+                value = _build_schema_example(variant, root_schema=root_schema, seen_refs=seen_refs)
+                if value is not None:
+                    return value
+
+    schema_type = schema_node.get("type")
+    if schema_type == "object" or "properties" in schema_node:
+        properties = schema_node.get("properties", {})
+        if not isinstance(properties, dict):
+            return {}
+        example: dict[str, Any] = {}
+        required = set(schema_node.get("required", []))
+        for prop_name, prop_schema in properties.items():
+            value = _build_schema_example(prop_schema, root_schema=root_schema, seen_refs=seen_refs)
+            if value is None and prop_name not in required:
+                continue
+            if value is None and isinstance(prop_schema, dict):
+                value = _infer_example(prop_name, prop_schema)
+            example[prop_name] = value
+        return example
+
+    if schema_type == "array":
+        item_schema = schema_node.get("items", {})
+        value = _build_schema_example(item_schema, root_schema=root_schema, seen_refs=seen_refs)
+        return [] if value is None else [value]
+
+    title = schema_node.get("title")
+    prop_name = title if isinstance(title, str) and title else "value"
+    return _infer_example(prop_name, schema_node)
+
+
+def _ensure_parameter_examples(schema: dict[str, Any]) -> None:
+    paths = schema.get("paths", {})
+    for methods in paths.values():
+        if not isinstance(methods, dict):
+            continue
+        for method, operation in methods.items():
+            if method.lower() not in {"get", "post", "put", "patch", "delete"}:
+                continue
+            if not isinstance(operation, dict):
+                continue
+            for parameter in operation.get("parameters", []):
+                if not isinstance(parameter, dict):
+                    continue
+                param_schema = parameter.get("schema")
+                if not isinstance(param_schema, dict):
+                    continue
+                if "example" in parameter or "examples" in parameter:
+                    continue
+                if "example" in param_schema:
+                    parameter["example"] = deepcopy(param_schema["example"])
+                    continue
+                if "examples" in param_schema and isinstance(param_schema["examples"], list):
+                    if param_schema["examples"]:
+                        parameter["example"] = deepcopy(param_schema["examples"][0])
+                        continue
+                name = parameter.get("name")
+                if isinstance(name, str):
+                    parameter["example"] = _infer_example(name, param_schema)
+
+
+def _ensure_operation_examples(schema: dict[str, Any]) -> None:
+    paths = schema.get("paths", {})
+    for methods in paths.values():
+        if not isinstance(methods, dict):
+            continue
+        for method, operation in methods.items():
+            if method.lower() not in {"get", "post", "put", "patch", "delete"}:
+                continue
+            if not isinstance(operation, dict):
+                continue
+
+            request_body = operation.get("requestBody")
+            if isinstance(request_body, dict):
+                for media_type, media_content in request_body.get("content", {}).items():
+                    if not isinstance(media_content, dict):
+                        continue
+                    if "json" not in media_type:
+                        continue
+                    if "example" in media_content or "examples" in media_content:
+                        continue
+                    request_schema = media_content.get("schema")
+                    example = _build_schema_example(request_schema, root_schema=schema)
+                    if example is not None:
+                        media_content["example"] = example
+
+            responses = operation.get("responses", {})
+            if not isinstance(responses, dict):
+                continue
+            for status_code, response in responses.items():
+                if not str(status_code).startswith("2"):
+                    continue
+                if not isinstance(response, dict):
+                    continue
+                for media_type, media_content in response.get("content", {}).items():
+                    if not isinstance(media_content, dict):
+                        continue
+                    if "json" not in media_type:
+                        continue
+                    if "example" in media_content or "examples" in media_content:
+                        continue
+                    response_schema = media_content.get("schema")
+                    example = _build_schema_example(response_schema, root_schema=schema)
+                    if example is not None:
+                        media_content["example"] = example
+
+
 def _ensure_operation_documentation(schema: dict[str, Any], service_name: str) -> None:
     paths = schema.get("paths", {})
     for path, methods in paths.items():
@@ -214,4 +381,33 @@ def enrich_openapi_schema(schema: dict[str, Any], service_name: str) -> dict[str
 
     _ensure_operation_documentation(schema, service_name=service_name)
     _ensure_schema_documentation(schema)
+    _ensure_parameter_examples(schema)
+    _ensure_operation_examples(schema)
     return schema
+
+
+def attach_enriched_openapi(app: FastAPI, *, service_name: str) -> FastAPI:
+    def custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+        )
+        metrics_response = (
+            schema.get("paths", {})
+            .get("/metrics", {})
+            .get("get", {})
+            .get("responses", {})
+            .get("200")
+        )
+        if isinstance(metrics_response, dict):
+            metrics_response["content"] = {"text/plain": {"schema": {"type": "string"}}}
+        schema = enrich_openapi_schema(schema, service_name=service_name)
+        app.openapi_schema = schema
+        return app.openapi_schema
+
+    app.openapi = custom_openapi
+    return app
