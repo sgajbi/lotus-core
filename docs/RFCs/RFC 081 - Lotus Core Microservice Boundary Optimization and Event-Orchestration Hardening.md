@@ -50,6 +50,7 @@ This RFC introduces a phased architecture update that preserves existing through
 - `valuation_orchestrator_service`
 - `query_control_plane_service`
 - `event_replay_service`
+- `financial_reconciliation_service`
 - `query_service`
 
 ### 2.2 Strengths
@@ -159,6 +160,8 @@ Add `financial_reconciliation_service` for independent controls:
 - transaction-to-cashflow completeness
 - position-to-valuation consistency
 - day-level timeseries integrity
+- durable run/finding audit tables with rerunnable scoped checks
+- RFC-065 grade health, metrics, and operational contract surfaces
 
 ## 4. Event-Driven Trigger Hardening
 

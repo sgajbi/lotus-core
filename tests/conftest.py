@@ -35,6 +35,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_POSTGRES_HOST_PORT": "55432",
         "LOTUS_INGESTION_HOST_PORT": "8200",
         "LOTUS_EVENT_REPLAY_HOST_PORT": "8209",
+        "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8210",
         "LOTUS_QUERY_HOST_PORT": "8201",
         "LOTUS_PERSISTENCE_HOST_PORT": "8080",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8081",
@@ -51,6 +52,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_POSTGRES_HOST_PORT": "56432",
         "LOTUS_INGESTION_HOST_PORT": "8300",
         "LOTUS_EVENT_REPLAY_HOST_PORT": "8309",
+        "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8310",
         "LOTUS_QUERY_HOST_PORT": "8301",
         "LOTUS_PERSISTENCE_HOST_PORT": "8180",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8181",
@@ -67,6 +69,7 @@ _TEST_ENV_PROFILES = {
         "LOTUS_POSTGRES_HOST_PORT": "57432",
         "LOTUS_INGESTION_HOST_PORT": "8400",
         "LOTUS_EVENT_REPLAY_HOST_PORT": "8409",
+        "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8410",
         "LOTUS_QUERY_HOST_PORT": "8401",
         "LOTUS_PERSISTENCE_HOST_PORT": "8280",
         "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8281",
@@ -149,6 +152,7 @@ def docker_services(request):  # noqa: ARG001
             "migration-runner",
             "ingestion_service",
             "event_replay_service",
+            "financial_reconciliation_service",
             "query_service",
             "persistence_service",
             "cost_calculator_service",
@@ -184,6 +188,10 @@ def docker_services(request):  # noqa: ARG001
                 "E2E_EVENT_REPLAY_URL",
                 "http://localhost:8209",
             ).rstrip("/")
+            + "/health/ready",
+            "financial_reconciliation_service": (
+                f"http://localhost:{os.environ['LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT']}"
+            )
             + "/health/ready",
             "query_service": f"{query_base_url}/health/ready",
         }
@@ -271,6 +279,8 @@ TABLES_TO_TRUNCATE = [
     "processed_events",
     "outbox_events",
     "pipeline_stage_state",
+    "financial_reconciliation_findings",
+    "financial_reconciliation_runs",
 ]
 TERMINATE_ACTIVE_SESSIONS_SQL = """
 SELECT pg_terminate_backend(pid)

@@ -1064,6 +1064,80 @@ class PipelineStageState(Base):
     )
 
 
+class FinancialReconciliationRun(Base):
+    """
+    Durable execution record for independent financial controls.
+    """
+
+    __tablename__ = "financial_reconciliation_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String, unique=True, index=True, nullable=False)
+    reconciliation_type = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, nullable=True, index=True)
+    business_date = Column(Date, nullable=True, index=True)
+    epoch = Column(Integer, nullable=True, index=True)
+    status = Column(String, nullable=False, default="RUNNING", server_default="RUNNING", index=True)
+    requested_by = Column(String, nullable=True)
+    correlation_id = Column(String, nullable=True)
+    tolerance = Column(Numeric(18, 10), nullable=True)
+    summary = Column(JSON, nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_financial_reconciliation_runs_type_status_started_at",
+            "reconciliation_type",
+            "status",
+            started_at.desc(),
+        ),
+    )
+
+
+class FinancialReconciliationFinding(Base):
+    """
+    Durable finding rows emitted by financial reconciliation runs.
+    """
+
+    __tablename__ = "financial_reconciliation_findings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    finding_id = Column(String, unique=True, index=True, nullable=False)
+    run_id = Column(
+        String,
+        ForeignKey("financial_reconciliation_runs.run_id"),
+        nullable=False,
+        index=True,
+    )
+    reconciliation_type = Column(String, nullable=False, index=True)
+    finding_type = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, nullable=True, index=True)
+    security_id = Column(String, nullable=True, index=True)
+    transaction_id = Column(String, nullable=True, index=True)
+    business_date = Column(Date, nullable=True, index=True)
+    epoch = Column(Integer, nullable=True, index=True)
+    expected_value = Column(JSON, nullable=True)
+    observed_value = Column(JSON, nullable=True)
+    detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_financial_reconciliation_findings_run_type_severity",
+            "run_id",
+            "finding_type",
+            "severity",
+        ),
+    )
+
+
 class CashflowRule(Base):
     """
     Defines the business rules for generating a cashflow from a transaction type.
