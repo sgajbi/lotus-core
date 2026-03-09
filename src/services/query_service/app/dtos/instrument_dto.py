@@ -1,5 +1,8 @@
-from pydantic import BaseModel, Field, ConfigDict
+from datetime import date
+from decimal import Decimal
 from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class InstrumentRecord(BaseModel):
@@ -13,6 +16,15 @@ class InstrumentRecord(BaseModel):
     currency: str
     product_type: str
     asset_class: Optional[str] = None
+    portfolio_id: Optional[str] = None
+    trade_date: Optional[date] = None
+    pair_base_currency: Optional[str] = None
+    pair_quote_currency: Optional[str] = None
+    buy_currency: Optional[str] = None
+    sell_currency: Optional[str] = None
+    buy_amount: Optional[Decimal] = None
+    sell_amount: Optional[Decimal] = None
+    contract_rate: Optional[Decimal] = None
 
     model_config = ConfigDict(from_attributes=True)
 

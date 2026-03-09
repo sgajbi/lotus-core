@@ -48,6 +48,8 @@ def test_cashflow_rule_contract_for_core_business_flows(db_engine):
         "DIVIDEND": "INCOME",
         "INTEREST": "INCOME",
         "ADJUSTMENT": "TRANSFER",
+        "FX_CASH_SETTLEMENT_BUY": "FX_BUY",
+        "FX_CASH_SETTLEMENT_SELL": "FX_SELL",
     }
     for tx_type, expected_classification in position_level_expectations.items():
         assert tx_type in rules, f"Missing cashflow rule for {tx_type}"

@@ -11,6 +11,7 @@ from portfolio_common.monitoring import REPROCESSING_EPOCH_BUMPED_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing import EpochFencer
+from portfolio_common.transaction_domain import resolve_effective_processing_transaction_type
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.position_models import PositionState as PositionStateDTO
@@ -51,8 +52,12 @@ class PositionCalculator:
         latest_snapshot_date = await repo.get_latest_completed_snapshot_date(
             portfolio_id, security_id, current_state.epoch
         )
+        latest_position_history_date = await repo.get_latest_position_history_date(
+            portfolio_id, security_id, current_state.epoch
+        )
         effective_completed_date = max(
             current_state.watermark_date,
+            latest_position_history_date if latest_position_history_date else date(1970, 1, 1),
             latest_snapshot_date if latest_snapshot_date else date(1970, 1, 1),
         )
 
@@ -67,6 +72,9 @@ class PositionCalculator:
                     "transaction_date": transaction_date.isoformat(),
                     "effective_completed_date": effective_completed_date.isoformat(),
                     "watermark_date": current_state.watermark_date.isoformat(),
+                    "latest_position_history_date": latest_position_history_date.isoformat()
+                    if latest_position_history_date
+                    else None,
                     "current_epoch": current_state.epoch,
                 },
             )
@@ -171,7 +179,7 @@ class PositionCalculator:
         quantity = current_state.quantity
         cost_basis = current_state.cost_basis
         cost_basis_local = current_state.cost_basis_local
-        txn_type = transaction.transaction_type.upper()
+        txn_type = resolve_effective_processing_transaction_type(transaction)
 
         if txn_type == "BUY":
             quantity += transaction.quantity
@@ -280,6 +288,24 @@ class PositionCalculator:
             quantity += signed
             cost_basis += signed
             cost_basis_local += signed
+
+        elif txn_type == "FX_CASH_SETTLEMENT_BUY":
+            signed = abs(transaction.gross_transaction_amount)
+            quantity += signed
+            cost_basis += signed
+            cost_basis_local += signed
+
+        elif txn_type == "FX_CASH_SETTLEMENT_SELL":
+            signed = -abs(transaction.gross_transaction_amount)
+            quantity += signed
+            cost_basis += signed
+            cost_basis_local += signed
+
+        elif txn_type == "FX_CONTRACT_OPEN":
+            quantity += Decimal(1)
+
+        elif txn_type == "FX_CONTRACT_CLOSE":
+            quantity -= Decimal(1)
 
         else:
             logger.debug(

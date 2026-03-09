@@ -258,8 +258,121 @@ async def test_consumer_integration_with_engine(
     assert payload["linked_transaction_group_id"] == "LTG-SELL-PORT_COST_01-SELL01"
     mock_repo.upsert_buy_lot_state.assert_not_called()
     mock_repo.upsert_accrued_income_offset_state.assert_not_called()
+
+
+async def test_consumer_processes_fx_contract_event_without_generic_engine(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    fx_event = TransactionEvent(
+        transaction_id="FX-OPEN-001",
+        portfolio_id="PORT_COST_01",
+        instrument_id="LEG-INST",
+        security_id="LEG-SEC",
+        transaction_date=datetime(2026, 4, 1, 9, 0, 0),
+        settlement_date=datetime(2026, 7, 1, 0, 0, 0),
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
+        pair_base_currency="EUR",
+        pair_quote_currency="USD",
+        fx_rate_quote_convention="QUOTE_PER_BASE",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095000"),
+        sell_amount=Decimal("1000000"),
+        contract_rate=Decimal("1.095"),
+        fx_contract_id="FXC-2026-0001",
+    )
+    mock_msg = MagicMock()
+    mock_msg.value.return_value = fx_event.model_dump_json().encode("utf-8")
+    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.partition.return_value = 0
+    mock_msg.offset.return_value = 99
+    mock_msg.headers.return_value = []
+
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.create_or_update_transaction_event.side_effect = (
+        lambda event: DBTransaction(
+            **event.model_dump(
+                exclude_none=True,
+                exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
+            )
+        )
+    )
+    mock_idempotency_repo.is_event_processed.return_value = False
+
+    with patch.object(
+        cost_calculator_consumer, "_get_transaction_processor"
+    ) as mock_processor_factory:
+        await cost_calculator_consumer.process_message(mock_msg)
+
+    mock_processor_factory.assert_not_called()
+    persisted_event = mock_repo.create_or_update_transaction_event.call_args.args[0]
+    assert persisted_event.instrument_id == "FXC-2026-0001"
+    assert persisted_event.security_id == "FXC-2026-0001"
+    assert persisted_event.realized_total_pnl_local == Decimal("0")
+    assert mock_outbox_repo.create_outbox_event.call_count == 2
     mock_idempotency_repo.mark_event_processed.assert_called_once()
-    mock_outbox_repo.create_outbox_event.assert_called_once()
+
+
+async def test_consumer_rejects_invalid_fx_event(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+
+    fx_event = TransactionEvent(
+        transaction_id="FX-BAD-001",
+        portfolio_id="PORT_COST_01",
+        instrument_id="LEG-INST",
+        security_id="LEG-SEC",
+        transaction_date=datetime(2026, 4, 1, 9, 0, 0),
+        settlement_date=datetime(2026, 7, 1, 0, 0, 0),
+        transaction_type="FX_SWAP",
+        component_type="FX_CASH_SETTLEMENT_BUY",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("1095000"),
+        trade_currency="USD",
+        currency="USD",
+        pair_base_currency="EUR",
+        pair_quote_currency="USD",
+        fx_rate_quote_convention="QUOTE_PER_BASE",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095000"),
+        sell_amount=Decimal("1000000"),
+        contract_rate=Decimal("1.095"),
+        linked_fx_cash_leg_id=None,
+    )
+    mock_msg = MagicMock()
+    mock_msg.value.return_value = fx_event.model_dump_json().encode("utf-8")
+    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.partition.return_value = 0
+    mock_msg.offset.return_value = 100
+    mock_msg.headers.return_value = []
+
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_idempotency_repo.is_event_processed.return_value = False
+
+    await cost_calculator_consumer.process_message(mock_msg)
+
+    mock_repo.create_or_update_transaction_event.assert_not_called()
+    cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
 
 
 async def test_consumer_uses_trade_fee_in_calculation(

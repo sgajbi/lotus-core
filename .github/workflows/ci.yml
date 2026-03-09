@@ -94,6 +94,7 @@ jobs:
           - suite: transaction-sell-contract
           - suite: transaction-dividend-contract
           - suite: transaction-interest-contract
+          - suite: transaction-fx-contract
           - suite: transaction-portfolio-flow-bundle-contract
     steps:
       - name: Checkout Repository
@@ -121,6 +122,46 @@ jobs:
           path: .coverage.${{ matrix.suite }}
           include-hidden-files: true
           if-no-files-found: error
+
+  integration-all:
+    name: Integration Full
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Tooling and Project Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          make install
+
+      - name: Run full integration suite
+        run: make test-integration-all
+
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > integration-all-logs.txt
+
+      - name: Upload integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-all-artifacts
+          path: integration-all-logs.txt
+          if-no-files-found: warn
+          retention-days: 14
 
   coverage-gate:
     name: Coverage Gate (Combined)
@@ -338,13 +379,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  e2e-smoke:
-    name: E2E Smoke
+  e2e-all:
+    name: E2E Full
     if: >
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    needs: [quality, coverage-gate, performance-load-gate-full]
+    needs: [quality, coverage-gate, integration-all, performance-load-gate-full]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -362,13 +403,13 @@ jobs:
           python -m pip install --upgrade pip
           make install
 
-      - name: Run E2E smoke suite
+      - name: Run full E2E suite
         env:
           LOTUS_TEST_ENV_PROFILE: e2e
           E2E_INGESTION_URL: http://localhost:8400
           E2E_QUERY_URL: http://localhost:8401
           HOST_DATABASE_URL: postgresql://user:password@localhost:57432/portfolio_db
-        run: make test-e2e-smoke
+        run: make test-e2e-all
 
       - name: Capture docker compose logs on failure
         if: failure()

@@ -42,6 +42,24 @@ class PositionRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    @async_timed(repository="PositionRepository", method="get_latest_position_history_date")
+    async def get_latest_position_history_date(
+        self, portfolio_id: str, security_id: str, epoch: int
+    ) -> Optional[date]:
+        """
+        Returns the latest position_history date already materialized for the
+        key in the target epoch. This is the position calculator's own strongest
+        signal that later-dated state already exists, independent of snapshot
+        backfill progress.
+        """
+        stmt = select(func.max(PositionHistory.position_date)).where(
+            PositionHistory.portfolio_id == portfolio_id,
+            PositionHistory.security_id == security_id,
+            PositionHistory.epoch == epoch,
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     # --- EXISTING METHOD ---
     @async_timed(repository="PositionRepository", method="find_open_security_ids_as_of")
     async def find_open_security_ids_as_of(self, portfolio_id: str, as_of_date: date) -> List[str]:

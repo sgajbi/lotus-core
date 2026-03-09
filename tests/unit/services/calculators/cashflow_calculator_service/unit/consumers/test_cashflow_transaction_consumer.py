@@ -12,6 +12,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer import (  # noqa: E501
+    CachedCashflowRule,
     CashflowCalculatorConsumer,
     LinkedCashLegError,
     NoCashflowRuleError,
@@ -372,7 +373,8 @@ async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
     ):
         rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "DIVIDEND")
         assert rule is not None
-        assert rule.transaction_type == "DIVIDEND"
+        assert rule.classification == "INCOME"
+        assert isinstance(rule, CachedCashflowRule)
         assert rules_repo.get_all_rules.await_count == 2
 
 
@@ -425,6 +427,87 @@ async def test_invalidate_cashflow_rule_cache_forces_reload(
         assert reloaded_rule is not None
         assert reloaded_rule.timing == "EOD"
         assert rules_repo.get_all_rules.await_count == 2
+
+
+async def test_load_cashflow_rules_cache_returns_session_safe_rule_snapshots(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.return_value = [
+        CashflowRule(
+            transaction_type="FX_CASH_SETTLEMENT_BUY",
+            classification="FX_BUY",
+            timing="EOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    ]
+
+    with patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+        return_value=rules_repo,
+    ):
+        cache_state = await cashflow_consumer._load_cashflow_rules_cache(mock_db_session)
+
+    rule = cache_state.rules_by_transaction_type["FX_CASH_SETTLEMENT_BUY"]
+    assert isinstance(rule, CachedCashflowRule)
+    assert rule.classification == "FX_BUY"
+    assert rule.timing == "EOD"
+
+
+async def test_process_message_skips_non_cash_fx_contract_lifecycle_components(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_cashflow_repo = mock_dependencies["cashflow_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_rules_repo = mock_dependencies["rules_repo"]
+
+    event = TransactionEvent(
+        transaction_id="TXN_CASHFLOW_FX_CONTRACT_01",
+        portfolio_id="PORT_CFC_01",
+        instrument_id="FXC-2026-0001",
+        security_id="FXC-2026-0001",
+        transaction_date=datetime(2026, 1, 2, 10, 0, 0),
+        settlement_date=datetime(2026, 7, 1, 10, 0, 0),
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("1095000"),
+        trade_currency="USD",
+        currency="USD",
+        pair_base_currency="EUR",
+        pair_quote_currency="USD",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095000"),
+        sell_amount=Decimal("1000000"),
+        contract_rate=Decimal("1.095"),
+        fx_contract_id="FXC-2026-0001",
+        fx_contract_open_transaction_id="TXN_CASHFLOW_FX_CONTRACT_01",
+        epoch=1,
+    )
+    mock_kafka_message.value.return_value = event.model_dump_json().encode("utf-8")
+    mock_idempotency_repo.is_event_processed.return_value = False
+
+    with patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = True
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await cashflow_consumer.process_message(mock_kafka_message)
+
+    mock_rules_repo.get_all_rules.assert_not_awaited()
+    mock_cashflow_repo.create_cashflow.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
 async def test_process_message_dividend_external_mode_skips_auto_cashflow_creation(

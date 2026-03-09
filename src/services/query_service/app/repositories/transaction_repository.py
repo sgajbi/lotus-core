@@ -38,6 +38,13 @@ class TransactionRepository:
         self,
         portfolio_id: str,
         security_id: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        component_type: Optional[str] = None,
+        linked_transaction_group_id: Optional[str] = None,
+        fx_contract_id: Optional[str] = None,
+        swap_event_id: Optional[str] = None,
+        near_leg_group_id: Optional[str] = None,
+        far_leg_group_id: Optional[str] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         as_of_date: Optional[date] = None,
@@ -54,6 +61,20 @@ class TransactionRepository:
 
         if security_id:
             stmt = stmt.filter_by(security_id=security_id)
+        if transaction_type:
+            stmt = stmt.filter_by(transaction_type=transaction_type)
+        if component_type:
+            stmt = stmt.filter_by(component_type=component_type)
+        if linked_transaction_group_id:
+            stmt = stmt.filter_by(linked_transaction_group_id=linked_transaction_group_id)
+        if fx_contract_id:
+            stmt = stmt.filter_by(fx_contract_id=fx_contract_id)
+        if swap_event_id:
+            stmt = stmt.filter_by(swap_event_id=swap_event_id)
+        if near_leg_group_id:
+            stmt = stmt.filter_by(near_leg_group_id=near_leg_group_id)
+        if far_leg_group_id:
+            stmt = stmt.filter_by(far_leg_group_id=far_leg_group_id)
         if start_date:
             stmt = stmt.filter(func.date(Transaction.transaction_date) >= start_date)
         if end_date:
@@ -71,6 +92,13 @@ class TransactionRepository:
         sort_by: Optional[str] = None,
         sort_order: Optional[str] = "desc",
         security_id: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        component_type: Optional[str] = None,
+        linked_transaction_group_id: Optional[str] = None,
+        fx_contract_id: Optional[str] = None,
+        swap_event_id: Optional[str] = None,
+        near_leg_group_id: Optional[str] = None,
+        far_leg_group_id: Optional[str] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         as_of_date: Optional[date] = None,
@@ -81,6 +109,13 @@ class TransactionRepository:
         stmt = self._get_base_query(
             portfolio_id=portfolio_id,
             security_id=security_id,
+            transaction_type=transaction_type,
+            component_type=component_type,
+            linked_transaction_group_id=linked_transaction_group_id,
+            fx_contract_id=fx_contract_id,
+            swap_event_id=swap_event_id,
+            near_leg_group_id=near_leg_group_id,
+            far_leg_group_id=far_leg_group_id,
             start_date=start_date,
             end_date=end_date,
             as_of_date=as_of_date,
@@ -110,6 +145,13 @@ class TransactionRepository:
         self,
         portfolio_id: str,
         security_id: Optional[str] = None,
+        transaction_type: Optional[str] = None,
+        component_type: Optional[str] = None,
+        linked_transaction_group_id: Optional[str] = None,
+        fx_contract_id: Optional[str] = None,
+        swap_event_id: Optional[str] = None,
+        near_leg_group_id: Optional[str] = None,
+        far_leg_group_id: Optional[str] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         as_of_date: Optional[date] = None,
@@ -120,6 +162,20 @@ class TransactionRepository:
         stmt = select(func.count(Transaction.id)).filter_by(portfolio_id=portfolio_id)
         if security_id:
             stmt = stmt.filter_by(security_id=security_id)
+        if transaction_type:
+            stmt = stmt.filter_by(transaction_type=transaction_type)
+        if component_type:
+            stmt = stmt.filter_by(component_type=component_type)
+        if linked_transaction_group_id:
+            stmt = stmt.filter_by(linked_transaction_group_id=linked_transaction_group_id)
+        if fx_contract_id:
+            stmt = stmt.filter_by(fx_contract_id=fx_contract_id)
+        if swap_event_id:
+            stmt = stmt.filter_by(swap_event_id=swap_event_id)
+        if near_leg_group_id:
+            stmt = stmt.filter_by(near_leg_group_id=near_leg_group_id)
+        if far_leg_group_id:
+            stmt = stmt.filter_by(far_leg_group_id=far_leg_group_id)
         if start_date:
             stmt = stmt.filter(func.date(Transaction.transaction_date) >= start_date)
         if end_date:

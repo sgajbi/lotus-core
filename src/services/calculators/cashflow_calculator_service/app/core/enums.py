@@ -20,6 +20,8 @@ class CashflowCalculationType(str, Enum):
 class CashflowClassification(str, Enum):
     """Standardized classification of the cashflow's purpose."""
 
+    FX_BUY = "FX_BUY"
+    FX_SELL = "FX_SELL"
     INVESTMENT_OUTFLOW = "INVESTMENT_OUTFLOW"
     INVESTMENT_INFLOW = "INVESTMENT_INFLOW"
     INCOME = "INCOME"

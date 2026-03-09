@@ -9,8 +9,10 @@ import requests
 from tests.test_support.docker_stack import (
     DockerStackError,
     compose_up,
+    ensure_docker_engine_available,
     should_build_images,
     wait_for_http_health,
+    wait_for_kafka_metadata,
     wait_for_migration_runner,
 )
 
@@ -23,6 +25,14 @@ def test_should_build_images_default_false(monkeypatch: pytest.MonkeyPatch) -> N
 def test_should_build_images_true_values(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LOTUS_TESTS_DOCKER_BUILD", "true")
     assert should_build_images() is True
+
+
+def test_ensure_docker_engine_available_raises_clear_error() -> None:
+    def runner(args, **kwargs):  # noqa: ANN001, ARG001
+        raise FileNotFoundError("docker not found")
+
+    with pytest.raises(DockerStackError, match="Docker engine is not available"):
+        ensure_docker_engine_available(runner)
 
 
 def test_compose_up_retries_on_existing_image_conflict() -> None:
@@ -46,11 +56,12 @@ def test_compose_up_retries_on_existing_image_conflict() -> None:
         runner=runner,
     )
 
-    assert calls[0][0:4] == ["docker", "ps", "-aq", "--filter"]
-    assert calls[1][-2:] == ["down", "--remove-orphans"]
-    assert calls[2][-2:] == ["up", "-d"]
-    assert calls[3][-2:] == ["down", "--remove-orphans"]
-    assert calls[4][-2:] == ["up", "-d"]
+    assert calls[0][0:2] == ["docker", "info"]
+    assert calls[1][0:4] == ["docker", "ps", "-aq", "--filter"]
+    assert calls[2][-2:] == ["down", "--remove-orphans"]
+    assert calls[3][-2:] == ["up", "-d"]
+    assert calls[4][-2:] == ["down", "--remove-orphans"]
+    assert calls[5][-2:] == ["up", "-d"]
 
 
 def test_compose_up_retries_on_migration_runner_exit() -> None:
@@ -74,16 +85,18 @@ def test_compose_up_retries_on_migration_runner_exit() -> None:
         runner=runner,
     )
 
-    assert calls[0][0:4] == ["docker", "ps", "-aq", "--filter"]
-    assert calls[1][-2:] == ["down", "--remove-orphans"]
-    assert calls[2][-2:] == ["up", "-d"]
-    assert calls[3][-2:] == ["down", "--remove-orphans"]
-    assert calls[4][-2:] == ["up", "-d"]
+    assert calls[0][0:2] == ["docker", "info"]
+    assert calls[1][0:4] == ["docker", "ps", "-aq", "--filter"]
+    assert calls[2][-2:] == ["down", "--remove-orphans"]
+    assert calls[3][-2:] == ["up", "-d"]
+    assert calls[4][-2:] == ["down", "--remove-orphans"]
+    assert calls[5][-2:] == ["up", "-d"]
 
 
 def test_wait_for_migration_runner_success() -> None:
     responses = iter(
         [
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
             SimpleNamespace(stdout="container123\n"),
             SimpleNamespace(stdout="0\n"),
         ]
@@ -112,3 +125,17 @@ def test_wait_for_http_health_raises_after_timeout() -> None:
             poll_seconds=0,
             get=always_fail,
         )
+
+
+def test_wait_for_kafka_metadata_raises_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _AlwaysFailAdminClient:
+        def __init__(self, conf):  # noqa: ANN001, ARG002
+            pass
+
+        def list_topics(self, timeout: int):  # noqa: ARG002
+            raise Exception("not ready")
+
+    monkeypatch.setattr("tests.test_support.docker_stack.AdminClient", _AlwaysFailAdminClient)
+
+    with pytest.raises(DockerStackError, match="did not become metadata-ready"):
+        wait_for_kafka_metadata("localhost:9092", timeout_seconds=0, poll_seconds=0)

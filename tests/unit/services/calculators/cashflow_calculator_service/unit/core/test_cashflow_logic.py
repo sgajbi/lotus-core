@@ -465,3 +465,63 @@ def test_calculate_adjustment_outflow_uses_movement_direction(
     assert cashflow.amount == Decimal("-250")
     assert cashflow.amount < 0
     mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_fx_cash_settlement_buy_is_positive(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "FX_CASH_SETTLEMENT_BUY",
+            "gross_transaction_amount": Decimal("13450"),
+            "trade_fee": Decimal("0"),
+            "currency": "SGD",
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.FX_BUY,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+    assert cashflow.amount == Decimal("13450")
+    assert cashflow.classification == "FX_BUY"
+    assert cashflow.is_position_flow is True
+    assert cashflow.is_portfolio_flow is False
+    mock_metric.labels.assert_called_once_with(classification="FX_BUY", timing="EOD")
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_fx_cash_settlement_sell_is_negative(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "FX_CASH_SETTLEMENT_SELL",
+            "gross_transaction_amount": Decimal("10000"),
+            "trade_fee": Decimal("0"),
+            "currency": "USD",
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.FX_SELL,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+    assert cashflow.amount == Decimal("-10000")
+    assert cashflow.classification == "FX_SELL"
+    assert cashflow.is_position_flow is True
+    assert cashflow.is_portfolio_flow is False
+    mock_metric.labels.assert_called_once_with(classification="FX_SELL", timing="EOD")
+    mock_metric.labels.return_value.inc.assert_called_once()

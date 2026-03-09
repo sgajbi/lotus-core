@@ -26,9 +26,27 @@ def test_unit_db_suite_tracks_db_dependent_tests() -> None:
     )
 
 
+def test_integration_all_suite_tracks_full_integration_tree() -> None:
+    assert get_suite("integration-all") == ["tests/integration"]
+
+
 def test_sell_rfc_suite_includes_sell_query_contract_tests() -> None:
     sell_suite = get_suite("sell-rfc")
     assert "tests/integration/services/query_service/test_sell_state_router.py" in sell_suite
+
+
+def test_fx_rfc_suite_includes_fx_contract_surfaces() -> None:
+    fx_suite = get_suite("fx-rfc")
+    assert "tests/unit/libs/portfolio_common/test_fx_validation.py" in fx_suite
+    assert "tests/integration/services/query_service/test_transactions_router.py" in fx_suite
+    assert (
+        "tests/integration/services/persistence_service/repositories/test_repositories.py"
+        in fx_suite
+    )
+
+
+def test_e2e_all_suite_tracks_full_end_to_end_tree() -> None:
+    assert get_suite("e2e-all") == ["tests/e2e"]
 
 
 def test_manifest_paths_exist_for_all_suites() -> None:

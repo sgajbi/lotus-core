@@ -1,4 +1,5 @@
 # tests/integration/tools/test_kafka_setup.py
+import os
 
 import pytest
 from confluent_kafka.admin import AdminClient
@@ -15,8 +16,7 @@ pytestmark = pytest.mark.asyncio
 @pytest.fixture(scope="module")
 def kafka_admin_client(docker_services):
     """Provides a Kafka AdminClient connected to the test container."""
-    # The test runs on the host, so we connect to localhost
-    bootstrap_servers = "localhost:9092"
+    bootstrap_servers = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
     client = AdminClient({"bootstrap.servers": bootstrap_servers})
     return client
 

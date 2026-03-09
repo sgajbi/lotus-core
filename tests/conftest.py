@@ -20,104 +20,21 @@ from tests.test_support.docker_stack import (
     resolve_compose_file,
     should_build_images,
     wait_for_http_health,
+    wait_for_kafka_metadata,
     wait_for_migration_runner,
 )
+from tests.test_support.runtime_env import build_test_runtime_env, infer_test_profile
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-_TEST_ENV_PROFILES = {
-    "unit": {
-        "LOTUS_ZOOKEEPER_PORT": "2181",
-        "LOTUS_KAFKA_EXTERNAL_PORT": "9092",
-        "LOTUS_KAFKA_INTERNAL_PORT": "9093",
-        "LOTUS_POSTGRES_HOST_PORT": "55432",
-        "LOTUS_INGESTION_HOST_PORT": "8200",
-        "LOTUS_EVENT_REPLAY_HOST_PORT": "8209",
-        "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8210",
-        "LOTUS_QUERY_HOST_PORT": "8201",
-        "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT": "8202",
-        "LOTUS_PERSISTENCE_HOST_PORT": "8080",
-        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8081",
-        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8082",
-        "LOTUS_COST_CALCULATOR_HOST_PORT": "8083",
-        "LOTUS_POSITION_VALUATION_HOST_PORT": "8084",
-        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8085",
-        "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT": "8086",
-    },
-    "integration": {
-        "LOTUS_ZOOKEEPER_PORT": "2281",
-        "LOTUS_KAFKA_EXTERNAL_PORT": "9192",
-        "LOTUS_KAFKA_INTERNAL_PORT": "9193",
-        "LOTUS_POSTGRES_HOST_PORT": "56432",
-        "LOTUS_INGESTION_HOST_PORT": "8300",
-        "LOTUS_EVENT_REPLAY_HOST_PORT": "8309",
-        "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8310",
-        "LOTUS_QUERY_HOST_PORT": "8301",
-        "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT": "8302",
-        "LOTUS_PERSISTENCE_HOST_PORT": "8180",
-        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8181",
-        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8182",
-        "LOTUS_COST_CALCULATOR_HOST_PORT": "8183",
-        "LOTUS_POSITION_VALUATION_HOST_PORT": "8184",
-        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8185",
-        "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT": "8186",
-    },
-    "e2e": {
-        "LOTUS_ZOOKEEPER_PORT": "2381",
-        "LOTUS_KAFKA_EXTERNAL_PORT": "9292",
-        "LOTUS_KAFKA_INTERNAL_PORT": "9293",
-        "LOTUS_POSTGRES_HOST_PORT": "57432",
-        "LOTUS_INGESTION_HOST_PORT": "8400",
-        "LOTUS_EVENT_REPLAY_HOST_PORT": "8409",
-        "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT": "8410",
-        "LOTUS_QUERY_HOST_PORT": "8401",
-        "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT": "8402",
-        "LOTUS_PERSISTENCE_HOST_PORT": "8280",
-        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8281",
-        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8282",
-        "LOTUS_COST_CALCULATOR_HOST_PORT": "8283",
-        "LOTUS_POSITION_VALUATION_HOST_PORT": "8284",
-        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8285",
-        "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT": "8286",
-    },
-}
-
-
-def _apply_test_env_profile_defaults() -> None:
-    profile_name = os.getenv("LOTUS_TEST_ENV_PROFILE", "unit").strip().lower()
-    profile = _TEST_ENV_PROFILES.get(profile_name, _TEST_ENV_PROFILES["unit"])
-    for key, value in profile.items():
-        os.environ.setdefault(key, value)
-
-
-_apply_test_env_profile_defaults()
-
-# Ensure host-routable defaults for any modules initialized during test import.
-host_db_port = os.environ["LOTUS_POSTGRES_HOST_PORT"]
-ingestion_port = os.environ["LOTUS_INGESTION_HOST_PORT"]
-query_port = os.environ["LOTUS_QUERY_HOST_PORT"]
-query_control_plane_port = os.environ["LOTUS_QUERY_CONTROL_PLANE_HOST_PORT"]
-event_replay_port = os.environ["LOTUS_EVENT_REPLAY_HOST_PORT"]
-kafka_port = os.environ["LOTUS_KAFKA_EXTERNAL_PORT"]
-os.environ.setdefault(
-    "HOST_DATABASE_URL",
-    f"postgresql://user:password@localhost:{host_db_port}/portfolio_db",
+_runtime_env, _runtime_endpoints = build_test_runtime_env(
+    profile=os.getenv("LOTUS_TEST_ENV_PROFILE", infer_test_profile()),
+    scope=os.getenv("LOTUS_TEST_SCOPE", "pytest"),
+    preserve_existing=True,
 )
-os.environ.setdefault(
-    "HOST_QUERY_DATABASE_URL",
-    f"postgresql://user:password@localhost:{host_db_port}/portfolio_db",
-)
-os.environ.setdefault("E2E_INGESTION_URL", f"http://localhost:{ingestion_port}")
-os.environ.setdefault("E2E_EVENT_REPLAY_URL", f"http://localhost:{event_replay_port}")
-os.environ.setdefault("E2E_QUERY_URL", f"http://localhost:{query_port}")
-os.environ.setdefault(
-    "E2E_QUERY_CONTROL_PLANE_URL", f"http://localhost:{query_control_plane_port}"
-)
-os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", f"localhost:{kafka_port}")
-# Keep demo ingestion sidecar disabled for deterministic integration/e2e tests.
-os.environ.setdefault("DEMO_DATA_PACK_ENABLED", "false")
+os.environ.update(_runtime_env)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -151,6 +68,16 @@ def docker_services(request):  # noqa: ARG001
     health_timeout = _env_int("LOTUS_TESTS_HEALTH_TIMEOUT_SECONDS", 180)
 
     try:
+        print(
+            "\n--- Test runtime ---\n"
+            f"project={os.environ['COMPOSE_PROJECT_NAME']}\n"
+            f"profile={os.environ['LOTUS_TEST_ENV_PROFILE']}\n"
+            f"db={os.environ['HOST_DATABASE_URL']}\n"
+            f"ingestion={os.environ['E2E_INGESTION_URL']}\n"
+            f"query={os.environ['E2E_QUERY_URL']}\n"
+            f"query_control={os.environ['E2E_QUERY_CONTROL_PLANE_URL']}\n"
+            f"event_replay={os.environ['E2E_EVENT_REPLAY_URL']}"
+        )
         test_services = [
             "zookeeper",
             "kafka",
@@ -169,6 +96,8 @@ def docker_services(request):  # noqa: ARG001
             "pipeline_orchestrator_service",
             "position_valuation_calculator",
             "timeseries_generator_service",
+            "valuation_orchestrator_service",
+            "portfolio_aggregation_service",
         ]
         compose_up(
             compose_file,
@@ -185,28 +114,37 @@ def docker_services(request):  # noqa: ARG001
             poll_seconds=2,
         )
         print("--- Database migrations completed successfully ---")
+        wait_for_kafka_metadata(
+            os.environ["KAFKA_BOOTSTRAP_SERVERS"],
+            timeout_seconds=health_timeout,
+            poll_seconds=2,
+        )
+        print(f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---")
 
         # Manual polling for service health
         print("\n--- Waiting for API services to become healthy ---")
-        ingestion_base_url = os.getenv("E2E_INGESTION_URL", "http://localhost:8200").rstrip("/")
-        query_base_url = os.getenv("E2E_QUERY_URL", "http://localhost:8201").rstrip("/")
-        query_control_plane_base_url = os.getenv(
-            "E2E_QUERY_CONTROL_PLANE_URL",
-            "http://localhost:8202",
-        ).rstrip("/")
+        ingestion_base_url = os.environ["E2E_INGESTION_URL"].rstrip("/")
+        query_base_url = os.environ["E2E_QUERY_URL"].rstrip("/")
+        query_control_plane_base_url = os.environ["E2E_QUERY_CONTROL_PLANE_URL"].rstrip("/")
         services_to_check = {
             "ingestion_service": f"{ingestion_base_url}/health/ready",
-            "event_replay_service": os.getenv(
-                "E2E_EVENT_REPLAY_URL",
-                "http://localhost:8209",
-            ).rstrip("/")
-            + "/health/ready",
+            "event_replay_service": (
+                os.environ["E2E_EVENT_REPLAY_URL"].rstrip("/") + "/health/ready"
+            ),
             "financial_reconciliation_service": (
                 f"http://localhost:{os.environ['LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT']}"
             )
             + "/health/ready",
             "query_service": f"{query_base_url}/health/ready",
             "query_control_plane_service": f"{query_control_plane_base_url}/health/ready",
+            "valuation_orchestrator_service": (
+                f"http://localhost:{os.environ['LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT']}"
+            )
+            + "/health/ready",
+            "portfolio_aggregation_service": (
+                f"http://localhost:{os.environ['LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT']}"
+            )
+            + "/health/ready",
         }
 
         for service_name, health_url in services_to_check.items():
@@ -233,12 +171,9 @@ def docker_services(request):  # noqa: ARG001
 def e2e_api_client(docker_services) -> E2EApiClient:
     """Provides an instance of the E2EApiClient for E2E tests."""
     return E2EApiClient(
-        ingestion_url=os.getenv("E2E_INGESTION_URL", "http://localhost:8200"),
-        query_url=os.getenv("E2E_QUERY_URL", "http://localhost:8201"),
-        query_control_plane_url=os.getenv(
-            "E2E_QUERY_CONTROL_PLANE_URL",
-            "http://localhost:8202",
-        ),
+        ingestion_url=os.environ["E2E_INGESTION_URL"],
+        query_url=os.environ["E2E_QUERY_URL"],
+        query_control_plane_url=os.environ["E2E_QUERY_CONTROL_PLANE_URL"],
     )
 
 
@@ -252,7 +187,7 @@ def db_engine(docker_services):
     """
     db_url = os.getenv(
         "HOST_DATABASE_URL",
-        "postgresql://user:password@localhost:55432/portfolio_db",
+        _runtime_endpoints.host_database_url,
     )
 
     # Wait for the database to be connectable

@@ -13,9 +13,12 @@ from logic.disposition_engine import DispositionEngine
 from logic.error_reporter import ErrorReporter
 from logic.parser import TransactionParser
 from logic.sorter import TransactionSorter
-from portfolio_common.config import KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC
+from portfolio_common.config import (
+    KAFKA_INSTRUMENTS_TOPIC,
+    KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+)
 from portfolio_common.db import get_async_db_session
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -26,10 +29,14 @@ from portfolio_common.transaction_domain import (
     DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
     UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
     assert_ca_bundle_a_transaction_valid,
+    assert_fx_processed_event_valid,
     assert_portfolio_flow_cash_entry_mode_allowed,
     assert_upstream_cash_leg_pairing,
     build_auto_generated_adjustment_cash_leg,
+    build_fx_contract_instrument_event,
+    build_fx_processed_event,
     enrich_dividend_transaction_metadata,
+    enrich_fx_transaction_metadata,
     enrich_interest_transaction_metadata,
     enrich_sell_transaction_metadata,
     evaluate_ca_bundle_a_reconciliation,
@@ -211,6 +218,7 @@ class CostCalculatorConsumer(BaseConsumer):
                     event = enrich_sell_transaction_metadata(
                         event, cost_basis_method=cost_basis_method
                     )
+                    event = enrich_fx_transaction_metadata(event)
                     event = enrich_dividend_transaction_metadata(event)
                     event = enrich_interest_transaction_metadata(event)
                     if is_ca_bundle_a_transaction_type(event.transaction_type):
@@ -218,9 +226,18 @@ class CostCalculatorConsumer(BaseConsumer):
 
                     event_transaction_type = event.transaction_type.upper()
                     events_to_publish: list[TransactionEvent] = []
+                    instrument_events_to_publish: list[InstrumentEvent] = []
 
                     if event_transaction_type == ADJUSTMENT_TRANSACTION_TYPE:
                         events_to_publish.append(event)
+                    elif event_transaction_type in {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}:
+                        processed_event = build_fx_processed_event(event)
+                        assert_fx_processed_event_valid(processed_event)
+                        await repo.create_or_update_transaction_event(processed_event)
+                        events_to_publish.append(processed_event)
+                        contract_instrument = build_fx_contract_instrument_event(processed_event)
+                        if contract_instrument is not None:
+                            instrument_events_to_publish.append(contract_instrument)
                     else:
                         history_db = await repo.get_transaction_history(
                             portfolio_id=event.portfolio_id,
@@ -473,6 +490,16 @@ class CostCalculatorConsumer(BaseConsumer):
                         )
                         self._record_lifecycle_stage(
                             publish_event.transaction_type, "emit_outbox", "success"
+                        )
+
+                    for instrument_event in instrument_events_to_publish:
+                        await outbox_repo.create_outbox_event(
+                            aggregate_type="Instrument",
+                            aggregate_id=str(instrument_event.security_id),
+                            event_type="InstrumentUpserted",
+                            topic=KAFKA_INSTRUMENTS_TOPIC,
+                            payload=instrument_event.model_dump(mode="json"),
+                            correlation_id=correlation_id,
                         )
 
                     await idempotency_repo.mark_event_processed(

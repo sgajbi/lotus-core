@@ -8,6 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tests.test_support.runtime_env import build_test_runtime_env  # noqa: E402
+
 
 def _discover_integration_lite() -> list[str]:
     query_integration_root = Path("tests/integration/services/query_service")
@@ -24,12 +30,17 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/calculators/position_valuation_calculator/repositories/test_unit_valuation_repo.py",
     ],
     "integration-lite": _discover_integration_lite(),
+    "integration-all": ["tests/integration"],
     "ops-contract": [
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
     ],
     "e2e-smoke": [
         "tests/e2e/test_query_service_observability.py",
         "tests/e2e/test_complex_portfolio_lifecycle.py",
+        "tests/e2e/test_fx_lifecycle.py",
+    ],
+    "e2e-all": [
+        "tests/e2e",
     ],
     "transaction-buy-contract": [
         "tests/unit/transaction_specs/test_buy_slice0_characterization.py",
@@ -82,6 +93,24 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/query_service/test_transactions_router.py",
         "tests/integration/services/persistence_service/repositories/test_repositories.py",
     ],
+    "transaction-fx-contract": [
+        "tests/unit/transaction_specs/test_fx_slice0_characterization.py",
+        "tests/unit/libs/portfolio_common/test_fx_validation.py",
+        "tests/unit/libs/portfolio_common/test_fx_linkage.py",
+        "tests/unit/libs/portfolio_common/test_fx_contract_instrument.py",
+        "tests/unit/libs/portfolio_common/test_effective_processing_type.py",
+        "tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py",
+        "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py",
+        "tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py",
+        "tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py",
+        "tests/unit/services/calculators/position_calculator/core/test_position_logic.py",
+        "tests/unit/services/ingestion_service/test_transaction_model.py",
+        "tests/unit/services/query_service/repositories/test_transaction_repository.py",
+        "tests/unit/services/query_service/services/test_transaction_service.py",
+        "tests/integration/services/calculators/cashflow_calculator_service/test_cashflow_rule_contract.py",
+        "tests/integration/services/query_service/test_transactions_router.py",
+        "tests/integration/services/persistence_service/repositories/test_repositories.py",
+    ],
     "transaction-portfolio-flow-bundle-contract": [
         "tests/unit/libs/portfolio_common/test_portfolio_flow_guardrails.py",
         "tests/unit/services/calculators/portfolio_flow_bundle/test_portfolio_flow_bundle_slice0_characterization.py",
@@ -101,6 +130,7 @@ SUITES["buy-rfc"] = SUITES["transaction-buy-contract"]
 SUITES["sell-rfc"] = SUITES["transaction-sell-contract"]
 SUITES["dividend-rfc"] = SUITES["transaction-dividend-contract"]
 SUITES["interest-rfc"] = SUITES["transaction-interest-contract"]
+SUITES["fx-rfc"] = SUITES["transaction-fx-contract"]
 SUITES["portfolio-flow-bundle-rfc"] = SUITES["transaction-portfolio-flow-bundle-contract"]
 
 SOURCE = "src/services/query_service/app"
@@ -112,63 +142,22 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "unit": "unit",
     "unit-db": "unit",
     "integration-lite": "integration",
+    "integration-all": "integration",
     "ops-contract": "integration",
     "transaction-buy-contract": "integration",
     "transaction-sell-contract": "integration",
     "transaction-dividend-contract": "integration",
     "transaction-interest-contract": "integration",
+    "transaction-fx-contract": "integration",
     "transaction-portfolio-flow-bundle-contract": "integration",
     "buy-rfc": "integration",
     "sell-rfc": "integration",
     "dividend-rfc": "integration",
     "interest-rfc": "integration",
+    "fx-rfc": "integration",
     "portfolio-flow-bundle-rfc": "integration",
     "e2e-smoke": "e2e",
-}
-
-PROFILE_ENV_DEFAULTS: dict[str, dict[str, str]] = {
-    "unit": {
-        "LOTUS_ZOOKEEPER_PORT": "2181",
-        "LOTUS_KAFKA_EXTERNAL_PORT": "9092",
-        "LOTUS_KAFKA_INTERNAL_PORT": "9093",
-        "LOTUS_POSTGRES_HOST_PORT": "55432",
-        "LOTUS_INGESTION_HOST_PORT": "8200",
-        "LOTUS_QUERY_HOST_PORT": "8201",
-        "LOTUS_PERSISTENCE_HOST_PORT": "8080",
-        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8081",
-        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8082",
-        "LOTUS_COST_CALCULATOR_HOST_PORT": "8083",
-        "LOTUS_POSITION_VALUATION_HOST_PORT": "8084",
-        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8085",
-    },
-    "integration": {
-        "LOTUS_ZOOKEEPER_PORT": "2281",
-        "LOTUS_KAFKA_EXTERNAL_PORT": "9192",
-        "LOTUS_KAFKA_INTERNAL_PORT": "9193",
-        "LOTUS_POSTGRES_HOST_PORT": "56432",
-        "LOTUS_INGESTION_HOST_PORT": "8300",
-        "LOTUS_QUERY_HOST_PORT": "8301",
-        "LOTUS_PERSISTENCE_HOST_PORT": "8180",
-        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8181",
-        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8182",
-        "LOTUS_COST_CALCULATOR_HOST_PORT": "8183",
-        "LOTUS_POSITION_VALUATION_HOST_PORT": "8184",
-        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8185",
-    },
-    "e2e": {
-        "LOTUS_ZOOKEEPER_PORT": "2381",
-        "LOTUS_KAFKA_EXTERNAL_PORT": "9292",
-        "LOTUS_KAFKA_INTERNAL_PORT": "9293",
-        "LOTUS_POSTGRES_HOST_PORT": "57432",
-        "LOTUS_INGESTION_HOST_PORT": "8400",
-        "LOTUS_QUERY_HOST_PORT": "8401",
-        "LOTUS_PERSISTENCE_HOST_PORT": "8280",
-        "LOTUS_POSITION_CALCULATOR_HOST_PORT": "8281",
-        "LOTUS_CASHFLOW_CALCULATOR_HOST_PORT": "8282",
-        "LOTUS_COST_CALCULATOR_HOST_PORT": "8283",
-        "LOTUS_POSITION_VALUATION_HOST_PORT": "8284",
-        "LOTUS_TIMESERIES_GENERATOR_HOST_PORT": "8285",
-    },
+    "e2e-all": "e2e",
 }
 
 
@@ -207,12 +196,11 @@ def run_suite(
 
     env = os.environ.copy()
     env_profile = SUITE_ENV_PROFILE.get(name, "unit")
-    env.setdefault("LOTUS_TEST_ENV_PROFILE", env_profile)
-    for key, value in PROFILE_ENV_DEFAULTS[env_profile].items():
-        env.setdefault(key, value)
-    env.setdefault(
-        "COMPOSE_PROJECT_NAME",
-        f"lotus-{env_profile}-{name}".replace("_", "-"),
+    env, _ = build_test_runtime_env(
+        profile=env_profile,
+        scope=name,
+        env=env,
+        preserve_existing=True,
     )
     if coverage_file:
         env["COVERAGE_FILE"] = coverage_file

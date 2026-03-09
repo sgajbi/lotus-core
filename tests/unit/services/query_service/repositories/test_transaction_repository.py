@@ -127,6 +127,34 @@ async def test_get_transactions_with_all_filters(
     assert "date(transactions.transaction_date) <= '2025-01-31'" in compiled_query
 
 
+async def test_get_transactions_with_fx_filters(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    await repository.get_transactions(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        transaction_type="FX_SWAP",
+        component_type="FX_CONTRACT_OPEN",
+        linked_transaction_group_id="LTG-FX-001",
+        fx_contract_id="FXC-001",
+        swap_event_id="FXSWAP-001",
+        near_leg_group_id="FXSWAP-001-NEAR",
+        far_leg_group_id="FXSWAP-001-FAR",
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "transactions.transaction_type = 'FX_SWAP'" in compiled_query
+    assert "transactions.component_type = 'FX_CONTRACT_OPEN'" in compiled_query
+    assert "transactions.linked_transaction_group_id = 'LTG-FX-001'" in compiled_query
+    assert "transactions.fx_contract_id = 'FXC-001'" in compiled_query
+    assert "transactions.swap_event_id = 'FXSWAP-001'" in compiled_query
+    assert "transactions.near_leg_group_id = 'FXSWAP-001-NEAR'" in compiled_query
+    assert "transactions.far_leg_group_id = 'FXSWAP-001-FAR'" in compiled_query
+
+
 async def test_get_transactions_with_as_of_date_filter(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
@@ -231,6 +259,30 @@ async def test_get_transactions_count_with_as_of_date(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "date(transactions.transaction_date) <= '2025-01-15'" in compiled_query
+
+
+async def test_get_transactions_count_with_fx_filters(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalar.return_value = 4
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    count = await repository.get_transactions_count(
+        portfolio_id="P1",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CASH_SETTLEMENT_BUY",
+        fx_contract_id="FXC-001",
+        swap_event_id="FXSWAP-001",
+    )
+
+    assert count == 4
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.transaction_type = 'FX_FORWARD'" in compiled_query
+    assert "transactions.component_type = 'FX_CASH_SETTLEMENT_BUY'" in compiled_query
+    assert "transactions.fx_contract_id = 'FXC-001'" in compiled_query
+    assert "transactions.swap_event_id = 'FXSWAP-001'" in compiled_query
 
 
 async def test_get_latest_business_date(

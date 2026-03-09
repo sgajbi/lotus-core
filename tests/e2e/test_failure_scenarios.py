@@ -12,25 +12,23 @@ from sqlalchemy import exc, text
 
 from .api_client import E2EApiClient
 
-PERSISTENCE_HOST_PORT = os.getenv("LOTUS_PERSISTENCE_HOST_PORT", "8080")
-POSITION_CALCULATOR_HOST_PORT = os.getenv("LOTUS_POSITION_CALCULATOR_HOST_PORT", "8081")
-CASHFLOW_CALCULATOR_HOST_PORT = os.getenv("LOTUS_CASHFLOW_CALCULATOR_HOST_PORT", "8082")
-COST_CALCULATOR_HOST_PORT = os.getenv("LOTUS_COST_CALCULATOR_HOST_PORT", "8083")
-POSITION_VALUATION_HOST_PORT = os.getenv("LOTUS_POSITION_VALUATION_HOST_PORT", "8084")
-TIMESERIES_GENERATOR_HOST_PORT = os.getenv("LOTUS_TIMESERIES_GENERATOR_HOST_PORT", "8085")
-INGESTION_HOST_PORT = os.getenv("LOTUS_INGESTION_HOST_PORT", "8200")
-QUERY_HOST_PORT = os.getenv("LOTUS_QUERY_HOST_PORT", "8201")
 
-CORE_SERVICE_HEALTH_URLS = [
-    f"http://localhost:{PERSISTENCE_HOST_PORT}/health/ready",  # persistence_service
-    f"http://localhost:{POSITION_CALCULATOR_HOST_PORT}/health/ready",  # position_calculator_service
-    f"http://localhost:{CASHFLOW_CALCULATOR_HOST_PORT}/health/ready",  # cashflow_calculator_service
-    f"http://localhost:{COST_CALCULATOR_HOST_PORT}/health/ready",  # cost_calculator_service
-    f"http://localhost:{POSITION_VALUATION_HOST_PORT}/health/ready",  # position_valuation_calculator  # noqa: E501
-    f"http://localhost:{TIMESERIES_GENERATOR_HOST_PORT}/health/ready",  # timeseries_generator_service  # noqa: E501
-    f"http://localhost:{INGESTION_HOST_PORT}/health/ready",  # ingestion_service
-    f"http://localhost:{QUERY_HOST_PORT}/health/ready",  # query_service
-]
+def _compose_args(*compose_args: str) -> list[str]:
+    project_name = os.environ["COMPOSE_PROJECT_NAME"]
+    return ["docker", "compose", "-p", project_name, *compose_args]
+
+
+def _core_service_health_urls() -> list[str]:
+    return [
+        f"http://localhost:{os.environ['LOTUS_PERSISTENCE_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ['LOTUS_POSITION_CALCULATOR_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ['LOTUS_CASHFLOW_CALCULATOR_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ['LOTUS_COST_CALCULATOR_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ['LOTUS_POSITION_VALUATION_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ['LOTUS_TIMESERIES_GENERATOR_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ['LOTUS_INGESTION_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ['LOTUS_QUERY_HOST_PORT']}/health/ready",
+    ]
 
 
 def wait_for_postgres_ready(db_engine, timeout=30):
@@ -131,22 +129,22 @@ def test_db_outage_recovery(
 
     # 5. ACT: Simulate database outage.
     print("\n--- Stopping PostgreSQL container ---")
-    subprocess.run(["docker", "compose", "stop", "postgres"], check=True, capture_output=True)
+    subprocess.run(_compose_args("stop", "postgres"), check=True, capture_output=True)
 
     # Give a moment for persistence-service to observe the outage.
     time.sleep(5)
 
     print("\n--- Starting PostgreSQL container ---")
-    subprocess.run(["docker", "compose", "start", "postgres"], check=True, capture_output=True)
+    subprocess.run(_compose_args("start", "postgres"), check=True, capture_output=True)
     wait_for_postgres_ready(db_engine)
 
     print("\n--- Restarting persistence_service to ensure DB reconnection ---")
     subprocess.run(
-        ["docker", "compose", "restart", "persistence_service"], check=True, capture_output=True
+        _compose_args("restart", "persistence_service"), check=True, capture_output=True
     )
 
     # 6. ACT: Wait for the persistence service to become healthy again
-    wait_for_service_ready(f"http://localhost:{PERSISTENCE_HOST_PORT}/health/ready")
+    wait_for_service_ready(f"http://localhost:{os.environ['LOTUS_PERSISTENCE_HOST_PORT']}/health/ready")
 
     # 7. ACT/ASSERT: Ingest and persist a new transaction after recovery.
     transaction_payload_after = {
@@ -189,9 +187,7 @@ def test_db_outage_recovery(
     # 9. RECOVERY BARRIER: restart all core services and wait for end-to-end readiness
     print("\n--- Restarting all core services after DB outage scenario ---")
     subprocess.run(
-        [
-            "docker",
-            "compose",
+        _compose_args(
             "restart",
             "ingestion_service",
             "query_service",
@@ -201,10 +197,10 @@ def test_db_outage_recovery(
             "cost_calculator_service",
             "position_valuation_calculator",
             "timeseries_generator_service",
-        ],
+        ),
         check=True,
         capture_output=True,
     )
-    for health_url in CORE_SERVICE_HEALTH_URLS:
+    for health_url in _core_service_health_urls():
         wait_for_service_ready(health_url, timeout=120)
     print("\n--- Core services fully recovered after outage test ---")
