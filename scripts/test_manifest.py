@@ -160,6 +160,7 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "e2e-all": "e2e",
 }
 
+
 def get_suite(name: str) -> list[str]:
     try:
         return SUITES[name]
