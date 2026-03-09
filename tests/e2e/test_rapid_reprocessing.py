@@ -176,23 +176,33 @@ def test_rapid_back_to_back_reprocessing(
     e2e_api_client.ingest("/ingest/transactions", back_dated_payload_2)
 
     # ASSERT 2: Final state must converge with both back-dated events applied.
-    # Depending on scheduler timing, engine may remain on epoch 1 while still converging correctly.
+    # Status can flip to CURRENT before all downstream views have converged, so
+    # poll the business outcome directly.
     poll_db_until(
         query="SELECT epoch, status FROM position_state WHERE portfolio_id = :pid AND security_id = :sid",  # noqa: E501
         params={"pid": portfolio_id, "sid": security_id},
         validation_func=lambda r: r is not None and r.epoch >= 1 and r.status == "CURRENT",
         timeout=180,
-        fail_message="Reprocessing did not converge to CURRENT state.",
+        fail_message="Reprocessing did not converge to a CURRENT state.",
     )
 
-    # ASSERT 3: The final position must be correct, reflecting the impact of ALL transactions.
-    # Expected Qty = 100 (Day1) - 20 (Day2) - 30 (Day3) + 50 (Day4) = 100
-    # Expected Cost = (50 shares from Day1 buy @ $10) + (50 shares from Day4 buy @ $12) = 500 + 600 = 1100  # noqa: E501
-    response = e2e_api_client.query(f"/portfolios/{portfolio_id}/positions")
-    data = response.json()
+    def _has_expected_position(data: dict) -> bool:
+        positions = data.get("positions", [])
+        if len(positions) != 1:
+            return False
 
-    assert len(data["positions"]) == 1
+        position = positions[0]
+        quantity = Decimal(str(position["quantity"])).quantize(Decimal("0.01"))
+        cost_basis = Decimal(str(position["cost_basis"])).quantize(Decimal("0.01"))
+        return quantity == Decimal("100.00") and cost_basis == Decimal("1100.00")
+
+    data = e2e_api_client.poll_for_data(
+        f"/portfolios/{portfolio_id}/positions",
+        _has_expected_position,
+        timeout=180,
+        fail_message="Reprocessing did not converge to the expected final position.",
+    )
+
     position = data["positions"][0]
-
-    assert Decimal(position["quantity"]).quantize(Decimal("0.01")) == Decimal("100.00")
-    assert Decimal(position["cost_basis"]).quantize(Decimal("0.01")) == Decimal("1100.00")
+    assert Decimal(str(position["quantity"])).quantize(Decimal("0.01")) == Decimal("100.00")
+    assert Decimal(str(position["cost_basis"])).quantize(Decimal("0.01")) == Decimal("1100.00")

@@ -28,6 +28,7 @@ def mock_repo() -> AsyncMock:
     repo.get_transactions_on_or_after.return_value = []
     repo.get_last_position_before.return_value = None
     repo.get_latest_completed_snapshot_date.return_value = None
+    repo.get_latest_position_history_date.return_value = None
     return repo
 
 
@@ -203,6 +204,45 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
 
 @pytest.mark.asyncio
 @patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_treats_existing_position_history_as_backdated_boundary(
+    mock_fencer_class: MagicMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_outbox_repo: AsyncMock,
+    sample_event: TransactionEvent,
+):
+    """
+    GIVEN valuation snapshots have not advanced but position_history already
+    exists past the incoming transaction date
+    WHEN an original event arrives
+    THEN reprocessing is still triggered because the position calculator has
+    already materialized later-dated state in the current epoch.
+    """
+    mock_fencer_instance = mock_fencer_class.return_value
+    mock_fencer_instance.check = AsyncMock(return_value=True)
+    sample_event.epoch = None
+    sample_event.transaction_date = datetime(2025, 8, 20, 10, 0, 0)
+
+    mock_state_repo.get_or_create_state.return_value = PositionState(
+        watermark_date=date(1970, 1, 1), epoch=0
+    )
+    mock_repo.get_latest_completed_snapshot_date.return_value = None
+    mock_repo.get_latest_position_history_date.return_value = date(2025, 8, 21)
+    mock_state_repo.increment_epoch_and_reset_watermark.return_value = PositionState(epoch=1)
+    mock_repo.get_all_transactions_for_security.return_value = []
+
+    await PositionCalculator.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
+    )
+
+    mock_state_repo.increment_epoch_and_reset_watermark.assert_awaited_once_with(
+        "P1", "S1", date(2025, 8, 19)
+    )
+    assert mock_outbox_repo.create_outbox_event.await_count == 1
+
+
+@pytest.mark.asyncio
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
 async def test_calculate_backdated_replay_has_deterministic_tie_break_order(
     mock_fencer_class: MagicMock,
     mock_repo: AsyncMock,
@@ -340,6 +380,70 @@ def test_calculate_next_position_for_adjustment_uses_movement_direction():
     assert mid_state.cost_basis == Decimal("1050")
     assert final_state.quantity == Decimal("1030")
     assert final_state.cost_basis == Decimal("1030")
+
+
+def test_calculate_next_position_for_fx_cash_settlement_buy_updates_cash_position() -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("1000"),
+        cost_basis=Decimal("1000"),
+        cost_basis_local=Decimal("1000"),
+    )
+    event = TransactionEvent(
+        transaction_id="FX-CASH-BUY-01",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CASH_SETTLEMENT_BUY",
+        quantity=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("1095"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+
+    assert next_state.quantity == Decimal("2095")
+    assert next_state.cost_basis == Decimal("2095")
+    assert next_state.cost_basis_local == Decimal("2095")
+
+
+def test_calculate_next_position_for_fx_contract_lifecycle_tracks_open_state() -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("0"),
+        cost_basis=Decimal("0"),
+        cost_basis_local=Decimal("0"),
+    )
+    open_event = TransactionEvent(
+        transaction_id="FX-OPEN-01",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        quantity=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="FXC-2026-0001",
+        security_id="FXC-2026-0001",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    close_event = open_event.model_copy(
+        update={
+            "transaction_id": "FX-CLOSE-01",
+            "component_type": "FX_CONTRACT_CLOSE",
+        }
+    )
+
+    open_state = PositionCalculator.calculate_next_position(initial_state, open_event)
+    closed_state = PositionCalculator.calculate_next_position(open_state, close_event)
+
+    assert open_state.quantity == Decimal("1")
+    assert open_state.cost_basis == Decimal("0")
+    assert closed_state.quantity == Decimal("0")
+    assert closed_state.cost_basis == Decimal("0")
 
 
 @pytest.mark.parametrize(

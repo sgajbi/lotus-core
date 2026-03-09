@@ -85,8 +85,7 @@ class TransactionRecord(BaseModel):
     external_cash_transaction_id: Optional[str] = Field(
         None,
         description=(
-            "Linked upstream cash transaction id when cash_entry_mode is "
-            "UPSTREAM_PROVIDED."
+            "Linked upstream cash transaction id when cash_entry_mode is " "UPSTREAM_PROVIDED."
         ),
         examples=["CASH-ENTRY-2026-0001"],
     )
@@ -100,9 +99,7 @@ class TransactionRecord(BaseModel):
     )
     settlement_cash_instrument_id: Optional[str] = Field(
         None,
-        description=(
-            "Cash instrument identifier used for generated ADJUSTMENT cash legs."
-        ),
+        description=("Cash instrument identifier used for generated ADJUSTMENT cash legs."),
         examples=["CASH-USD"],
     )
     movement_direction: Optional[str] = Field(
@@ -154,6 +151,119 @@ class TransactionRecord(BaseModel):
         None,
         description="Net-interest amount when provided for reconciliation.",
         examples=[108.2],
+    )
+    component_type: Optional[str] = Field(
+        None,
+        description="Canonical FX component type when transaction_type is an FX business type.",
+        examples=["FX_CASH_SETTLEMENT_BUY"],
+    )
+    component_id: Optional[str] = Field(
+        None,
+        description="Unique FX component identifier within the linked transaction group.",
+        examples=["FX-COMP-0001"],
+    )
+    linked_component_ids: Optional[List[str]] = Field(
+        None,
+        description="Related FX component identifiers within the same economic event.",
+        examples=[["FX-COMP-0002", "FX-COMP-0003"]],
+    )
+    fx_cash_leg_role: Optional[str] = Field(
+        None, description="FX cash-leg role when applicable.", examples=["BUY"]
+    )
+    linked_fx_cash_leg_id: Optional[str] = Field(
+        None,
+        description="Opposite FX cash settlement transaction identifier.",
+        examples=["FX-SETTLE-SELL-0001"],
+    )
+    settlement_status: Optional[str] = Field(
+        None,
+        description="Settlement status for FX cash settlement components.",
+        examples=["PENDING"],
+    )
+    pair_base_currency: Optional[str] = Field(
+        None, description="Base currency of the quoted FX pair.", examples=["EUR"]
+    )
+    pair_quote_currency: Optional[str] = Field(
+        None, description="Quote currency of the quoted FX pair.", examples=["USD"]
+    )
+    fx_rate_quote_convention: Optional[str] = Field(
+        None,
+        description="Explicit FX quote convention.",
+        examples=["QUOTE_PER_BASE"],
+    )
+    buy_currency: Optional[str] = Field(
+        None, description="Currency bought/received by the FX transaction.", examples=["USD"]
+    )
+    sell_currency: Optional[str] = Field(
+        None, description="Currency sold/delivered by the FX transaction.", examples=["EUR"]
+    )
+    buy_amount: Optional[Decimal] = Field(
+        None, description="Positive magnitude of currency bought.", examples=[1095000.0]
+    )
+    sell_amount: Optional[Decimal] = Field(
+        None, description="Positive magnitude of currency sold.", examples=[1000000.0]
+    )
+    contract_rate: Optional[Decimal] = Field(
+        None, description="Contractual FX rate.", examples=[1.095]
+    )
+    fx_contract_id: Optional[str] = Field(
+        None, description="Stable FX contract identifier.", examples=["FXC-2026-0001"]
+    )
+    fx_contract_open_transaction_id: Optional[str] = Field(
+        None,
+        description="Linked FX contract-open transaction identifier.",
+        examples=["FX-OPEN-0001"],
+    )
+    fx_contract_close_transaction_id: Optional[str] = Field(
+        None,
+        description="Linked FX contract-close transaction identifier.",
+        examples=["FX-CLOSE-0001"],
+    )
+    settlement_of_fx_contract_id: Optional[str] = Field(
+        None,
+        description="FX contract identifier settled by this cash component.",
+        examples=["FXC-2026-0001"],
+    )
+    swap_event_id: Optional[str] = Field(
+        None, description="Stable FX swap event identifier.", examples=["FXSWAP-2026-0001"]
+    )
+    near_leg_group_id: Optional[str] = Field(
+        None,
+        description="Near-leg group identifier for FX swaps.",
+        examples=["FXSWAP-2026-0001-NEAR"],
+    )
+    far_leg_group_id: Optional[str] = Field(
+        None,
+        description="Far-leg group identifier for FX swaps.",
+        examples=["FXSWAP-2026-0001-FAR"],
+    )
+    spot_exposure_model: Optional[str] = Field(
+        None, description="Policy-driven spot exposure model.", examples=["NONE"]
+    )
+    fx_realized_pnl_mode: Optional[str] = Field(
+        None, description="Policy-driven realized FX P&L mode.", examples=["UPSTREAM_PROVIDED"]
+    )
+    realized_capital_pnl_local: Optional[Decimal] = Field(
+        None,
+        description="Realized capital P&L in local currency. Must be zero for FX.",
+        examples=[0.0],
+    )
+    realized_fx_pnl_local: Optional[Decimal] = Field(
+        None, description="Realized FX P&L in local currency.", examples=[1250.0]
+    )
+    realized_total_pnl_local: Optional[Decimal] = Field(
+        None, description="Total realized P&L in local currency.", examples=[1250.0]
+    )
+    realized_capital_pnl_base: Optional[Decimal] = Field(
+        None,
+        description="Realized capital P&L in base currency. Must be zero for FX.",
+        examples=[0.0],
+    )
+    realized_fx_pnl_base: Optional[Decimal] = Field(
+        None, description="Realized FX P&L in base currency.", examples=[1250.0]
+    )
+    realized_total_pnl_base: Optional[Decimal] = Field(
+        None, description="Total realized P&L in base currency.", examples=[1250.0]
     )
     parent_transaction_reference: Optional[str] = Field(
         None,

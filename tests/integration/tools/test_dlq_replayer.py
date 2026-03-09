@@ -1,6 +1,7 @@
 # libs/portfolio-common/tests/integration/test_dlq_replayer.py
 import asyncio
 import json
+import os
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,10 @@ from portfolio_common.kafka_utils import KafkaProducer
 from tools.dlq_replayer import DLQReplayConsumer
 
 pytestmark = pytest.mark.asyncio
+
+
+def _kafka_bootstrap_host() -> str:
+    return os.environ["KAFKA_BOOTSTRAP_SERVERS"]
 
 
 @pytest.fixture
@@ -31,7 +36,7 @@ async def unique_dlq_topic(docker_services) -> str:
     Deletes the topic after the test is complete.
     """
     topic_name = f"test-dlq-{uuid.uuid4()}"
-    kafka_bootstrap_host = "localhost:9092"
+    kafka_bootstrap_host = _kafka_bootstrap_host()
     admin_client = AdminClient({"bootstrap.servers": kafka_bootstrap_host})
 
     # Create the topic
@@ -66,7 +71,7 @@ async def test_dlq_replayer_consumes_and_republishes(
     THEN it should parse the message and republish it to the original topic.
     """
     # ARRANGE
-    kafka_bootstrap_host = "localhost:9092"
+    kafka_bootstrap_host = _kafka_bootstrap_host()
     dlq_topic = unique_dlq_topic  # Use the isolated topic for this test
 
     original_topic = "raw_transactions"
@@ -121,7 +126,7 @@ async def test_dlq_replayer_skips_malformed_message(
     THEN it should skip the malformed message and successfully republish the valid one.
     """
     # ARRANGE
-    kafka_bootstrap_host = "localhost:9092"
+    kafka_bootstrap_host = _kafka_bootstrap_host()
     dlq_topic = unique_dlq_topic  # Use the isolated topic for this test
 
     # 1. Publish a malformed message (not valid JSON)

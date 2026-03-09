@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from portfolio_common.database_models import Instrument as DBInstrument
 from portfolio_common.database_models import Portfolio
+from portfolio_common.database_models import Portfolio as DBPortfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import InstrumentEvent, PortfolioEvent, TransactionEvent
 from sqlalchemy import func, select, text
@@ -486,3 +487,165 @@ async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
     assert persisted.adjustment_reason == "DIVIDEND_SETTLEMENT"
     assert persisted.link_type == "DIVIDEND_TO_CASH"
     assert persisted.reconciliation_key == "REC-ADJ-001"
+
+
+async def test_transaction_repository_persists_fx_metadata(
+    clean_db, async_db_session: AsyncSession
+):
+    if not await _transactions_table_has_column(async_db_session, "component_type"):
+        pytest.skip("transactions table is missing FX metadata columns in this DB schema.")
+
+    repo = TransactionDBRepository(async_db_session)
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_META_FX_01",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="High",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_META_FX_01",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+
+    event = TransactionEvent(
+        transaction_id="META_FX_TEST_01",
+        portfolio_id="PORT_META_FX_01",
+        instrument_id="FXC-EURUSD-001",
+        security_id="FXC-EURUSD-001",
+        transaction_date=datetime(2026, 4, 1, 10, 0, 0),
+        settlement_date=datetime(2026, 7, 1, 10, 0, 0),
+        transaction_type="FX_FORWARD",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("1095000"),
+        trade_currency="USD",
+        currency="USD",
+        economic_event_id="EVT-FX-2026-1001",
+        linked_transaction_group_id="LTG-FX-2026-2001",
+        calculation_policy_id="FX_DEFAULT_POLICY",
+        calculation_policy_version="1.0.0",
+        component_type="FX_CONTRACT_OPEN",
+        component_id="FX-COMP-OPEN-001",
+        linked_component_ids=["FX-COMP-BUY-001", "FX-COMP-SELL-001"],
+        pair_base_currency="EUR",
+        pair_quote_currency="USD",
+        fx_rate_quote_convention="QUOTE_PER_BASE",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095000"),
+        sell_amount=Decimal("1000000"),
+        contract_rate=Decimal("1.095"),
+        fx_contract_id="FXC-2026-0001",
+        settlement_of_fx_contract_id="FXC-2026-0001",
+        swap_event_id="FXSWAP-2026-0001",
+        near_leg_group_id="FXSWAP-2026-0001-NEAR",
+        far_leg_group_id="FXSWAP-2026-0001-FAR",
+        spot_exposure_model="NONE",
+        fx_realized_pnl_mode="UPSTREAM_PROVIDED",
+        realized_capital_pnl_local=Decimal("0"),
+        realized_fx_pnl_local=Decimal("1250"),
+        realized_total_pnl_local=Decimal("1250"),
+        realized_capital_pnl_base=Decimal("0"),
+        realized_fx_pnl_base=Decimal("1250"),
+        realized_total_pnl_base=Decimal("1250"),
+    )
+
+    await repo.create_or_update_transaction(event)
+    await async_db_session.commit()
+
+    stmt = select(DBTransaction).where(DBTransaction.transaction_id == "META_FX_TEST_01")
+    persisted = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted.component_type == "FX_CONTRACT_OPEN"
+    assert persisted.component_id == "FX-COMP-OPEN-001"
+    assert persisted.linked_component_ids == ["FX-COMP-BUY-001", "FX-COMP-SELL-001"]
+    assert persisted.pair_base_currency == "EUR"
+    assert persisted.pair_quote_currency == "USD"
+    assert persisted.fx_rate_quote_convention == "QUOTE_PER_BASE"
+    assert persisted.buy_currency == "USD"
+    assert persisted.sell_currency == "EUR"
+    assert persisted.buy_amount == Decimal("1095000")
+    assert persisted.sell_amount == Decimal("1000000")
+    assert persisted.contract_rate == Decimal("1.095")
+    assert persisted.fx_contract_id == "FXC-2026-0001"
+    assert persisted.swap_event_id == "FXSWAP-2026-0001"
+    assert persisted.near_leg_group_id == "FXSWAP-2026-0001-NEAR"
+    assert persisted.far_leg_group_id == "FXSWAP-2026-0001-FAR"
+    assert persisted.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
+    assert persisted.realized_capital_pnl_local == Decimal("0")
+    assert persisted.realized_fx_pnl_local == Decimal("1250")
+    assert persisted.realized_total_pnl_local == Decimal("1250")
+
+    updated = event.model_copy(
+        update={
+            "component_type": "FX_CONTRACT_CLOSE",
+            "linked_component_ids": ["FX-COMP-BUY-002", "FX-COMP-SELL-002"],
+            "fx_contract_close_transaction_id": "FX-CLOSE-0001",
+            "settlement_status": "SETTLED",
+            "realized_fx_pnl_local": Decimal("1400"),
+            "realized_total_pnl_local": Decimal("1400"),
+        }
+    )
+    await repo.create_or_update_transaction(updated)
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted_after_upsert.component_type == "FX_CONTRACT_CLOSE"
+    assert persisted_after_upsert.linked_component_ids == ["FX-COMP-BUY-002", "FX-COMP-SELL-002"]
+    assert persisted_after_upsert.fx_contract_close_transaction_id == "FX-CLOSE-0001"
+    assert persisted_after_upsert.settlement_status == "SETTLED"
+    assert persisted_after_upsert.realized_fx_pnl_local == Decimal("1400")
+    assert persisted_after_upsert.realized_total_pnl_local == Decimal("1400")
+
+
+@pytest.mark.asyncio
+async def test_instrument_repository_persists_fx_contract_fields(async_db_session):
+    repo = InstrumentRepository(async_db_session)
+    async_db_session.add(
+        DBPortfolio(
+            portfolio_id="P1",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="Moderate",
+            investment_time_horizon="Medium",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_P1",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+    event = InstrumentEvent(
+        security_id="FXC-2026-0001",
+        name="FX CONTRACT EUR/USD 2026-07-01",
+        isin="SYN-FX-FXC-2026-0001",
+        currency="USD",
+        product_type="FX_CONTRACT",
+        asset_class="FX",
+        portfolio_id="P1",
+        trade_date=date(2026, 4, 1),
+        maturity_date=date(2026, 7, 1),
+        pair_base_currency="EUR",
+        pair_quote_currency="USD",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095000"),
+        sell_amount=Decimal("1000000"),
+        contract_rate=Decimal("1.095"),
+    )
+
+    await repo.create_or_update_instrument(event)
+    await async_db_session.commit()
+
+    stmt = select(DBInstrument).where(DBInstrument.security_id == "FXC-2026-0001")
+    persisted = (await async_db_session.execute(stmt)).scalar_one()
+
+    assert persisted.product_type == "FX_CONTRACT"
+    assert persisted.portfolio_id == "P1"
+    assert persisted.trade_date.isoformat() == "2026-04-01"
+    assert persisted.contract_rate == Decimal("1.095")

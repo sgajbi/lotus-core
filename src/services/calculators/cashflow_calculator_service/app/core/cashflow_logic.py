@@ -1,8 +1,8 @@
 import logging
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Protocol
 
-from portfolio_common.database_models import Cashflow, CashflowRule
+from portfolio_common.database_models import Cashflow
 from portfolio_common.events import TransactionEvent
 from portfolio_common.monitoring import CASHFLOWS_CREATED_TOTAL
 
@@ -48,7 +48,7 @@ class CashflowLogic:
 
     @staticmethod
     def calculate(
-        transaction: TransactionEvent, rule: CashflowRule, epoch: Optional[int] = 0
+        transaction: TransactionEvent, rule: "CashflowRuleView", epoch: Optional[int] = 0
     ) -> Cashflow:
         """
         Applies the calculation rule to a transaction to generate a cashflow.
@@ -63,6 +63,7 @@ class CashflowLogic:
 
         # Convention: Inflows to the portfolio are positive, outflows are negative.
         positive_classifications = [
+            CashflowClassification.FX_BUY,
             CashflowClassification.INVESTMENT_INFLOW,  # From a SELL
             CashflowClassification.INCOME,  # From DIVIDEND, INTEREST
             CashflowClassification.CASHFLOW_IN,  # From DEPOSIT
@@ -75,6 +76,10 @@ class CashflowLogic:
                 amount = -abs(amount)
             else:
                 amount = abs(amount)
+        elif rule.classification == CashflowClassification.FX_BUY:
+            amount = abs(amount)
+        elif rule.classification == CashflowClassification.FX_SELL:
+            amount = -abs(amount)
         elif transaction.transaction_type == "ADJUSTMENT":
             movement_direction = str(getattr(transaction, "movement_direction", "INFLOW")).upper()
             amount = abs(amount) if movement_direction == "INFLOW" else -abs(amount)
@@ -119,3 +124,10 @@ class CashflowLogic:
             f"Class='{rule.classification}'"
         )
         return cashflow
+
+
+class CashflowRuleView(Protocol):
+    classification: str
+    timing: str
+    is_position_flow: bool
+    is_portfolio_flow: bool

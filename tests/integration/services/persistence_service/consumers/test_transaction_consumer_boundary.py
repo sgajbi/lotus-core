@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import UTC, date, datetime
 
 import pytest
@@ -80,7 +81,7 @@ async def test_transaction_consumer_boundary_persists_transaction_outbox_and_ide
 ) -> None:
     await _seed_portfolio(async_db_session)
     consumer = TransactionPersistenceConsumer(
-        bootstrap_servers="localhost:9092",
+        bootstrap_servers=os.environ["KAFKA_BOOTSTRAP_SERVERS"],
         topic="raw-transactions",
         group_id="persistence-boundary-tests",
         dlq_topic=None,

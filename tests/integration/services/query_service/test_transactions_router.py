@@ -89,6 +89,13 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
         security_id="SEC_1",
+        transaction_type=None,
+        component_type=None,
+        linked_transaction_group_id=None,
+        fx_contract_id=None,
+        swap_event_id=None,
+        near_leg_group_id=None,
+        far_leg_group_id=None,
         start_date=datetime(2025, 8, 1, 0, 0).date(),
         end_date=datetime(2025, 8, 31, 0, 0).date(),
         as_of_date=None,
@@ -133,6 +140,13 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
         security_id=None,
+        transaction_type=None,
+        component_type=None,
+        linked_transaction_group_id=None,
+        fx_contract_id=None,
+        swap_event_id=None,
+        near_leg_group_id=None,
+        far_leg_group_id=None,
         start_date=None,
         end_date=None,
         as_of_date=datetime(2026, 2, 28, 0, 0).date(),
@@ -141,4 +155,42 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
         limit=100,
         sort_by=None,
         sort_order="desc",
+    )
+
+
+async def test_get_transactions_forwards_fx_filters(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/portfolios/P1/transactions",
+        params={
+            "transaction_type": "FX_FORWARD",
+            "component_type": "FX_CONTRACT_OPEN",
+            "linked_transaction_group_id": "LTG-FX-2026-0001",
+            "fx_contract_id": "FXC-LTG-FX-2026-0001",
+            "swap_event_id": "FXSWAP-LTG-FX-2026-0001",
+            "near_leg_group_id": "FXSWAP-LTG-FX-2026-0001-NEAR",
+            "far_leg_group_id": "FXSWAP-LTG-FX-2026-0001-FAR",
+        },
+    )
+
+    assert response.status_code == 200
+    mock_service.get_transactions.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id=None,
+        start_date=None,
+        end_date=None,
+        as_of_date=None,
+        include_projected=False,
+        skip=0,
+        limit=100,
+        sort_by=None,
+        sort_order="desc",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        linked_transaction_group_id="LTG-FX-2026-0001",
+        fx_contract_id="FXC-LTG-FX-2026-0001",
+        swap_event_id="FXSWAP-LTG-FX-2026-0001",
+        near_leg_group_id="FXSWAP-LTG-FX-2026-0001-NEAR",
+        far_leg_group_id="FXSWAP-LTG-FX-2026-0001-FAR",
     )

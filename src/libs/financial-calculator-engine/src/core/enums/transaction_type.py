@@ -12,6 +12,9 @@ class TransactionType(str, Enum):
 
     BUY = "BUY"
     SELL = "SELL"
+    FX_SPOT = "FX_SPOT"
+    FX_FORWARD = "FX_FORWARD"
+    FX_SWAP = "FX_SWAP"
     INTEREST = "INTEREST"
     DIVIDEND = "DIVIDEND"
     DEPOSIT = "DEPOSIT"

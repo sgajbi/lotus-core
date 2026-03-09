@@ -1,4 +1,6 @@
 # tests/e2e/test_performance_pipeline.py
+import uuid
+
 import pytest
 
 from tests.e2e.api_client import E2EApiClient
@@ -12,7 +14,9 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     including a BOD cashflow, and waits for the pipeline to generate the necessary
     time-series data.
     """
-    portfolio_id = "E2E_ADV_PERF_01"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_ADV_PERF_{suffix}"
+    cash_security_id = f"CASH_USD_{suffix}"
     day1, day2 = "2025-03-10", "2025-03-11"
 
     # Ingest prerequisite data
@@ -39,9 +43,9 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
         {
             "instruments": [
                 {
-                    "securityId": "CASH_USD",
+                    "securityId": cash_security_id,
                     "name": "US Dollar",
-                    "isin": "CASH_USD_ISIN",
+                    "isin": f"CASH_USD_ISIN_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Cash",
                 }
@@ -53,18 +57,19 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
         {"business_dates": [{"businessDate": day1}, {"businessDate": day2}]},
     )
 
-    # Ingest transactions and prices
+    # Seed a canonical cash position so valuation/timeseries materialize under
+    # the current position-level modeling rules.
     e2e_api_client.ingest(
         "/ingest/transactions",
         {
             "transactions": [
                 {
-                    "transaction_id": "PERF_DEPOSIT_01",
+                    "transaction_id": f"PERF_CASH_BUY_{suffix}",
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "CASH",
-                    "security_id": "CASH_USD",
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
                     "transaction_date": f"{day1}T08:00:00Z",
-                    "transaction_type": "DEPOSIT",
+                    "transaction_type": "BUY",
                     "quantity": 10000,
                     "price": 1,
                     "gross_transaction_amount": 10000,
@@ -79,13 +84,13 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
         {
             "market_prices": [
                 {
-                    "securityId": "CASH_USD",
+                    "securityId": cash_security_id,
                     "priceDate": day1,
                     "price": 1.02,
                     "currency": "USD",
                 },  # End of Day 1
                 {
-                    "securityId": "CASH_USD",
+                    "securityId": cash_security_id,
                     "priceDate": day2,
                     "price": 1.05,
                     "currency": "USD",

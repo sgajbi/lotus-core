@@ -93,7 +93,7 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
 
                     await idempotency_repo.mark_event_processed(
                         event_id=idempotency_key,
-                        portfolio_id=getattr(event, "portfolio_id", "N/A"),
+                        portfolio_id=getattr(event, "portfolio_id", None) or "N/A",
                         service_name=self.service_name,
                         correlation_id=correlation_id,
                     )

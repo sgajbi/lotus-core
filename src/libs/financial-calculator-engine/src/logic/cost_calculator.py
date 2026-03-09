@@ -458,6 +458,22 @@ class DefaultStrategy:
         transaction.net_cost = transaction.net_cost_local * fx_rate
 
 
+class FxPendingStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        error_reporter.add_error(
+            transaction.transaction_id,
+            (
+                "Canonical FX transaction processing is not implemented yet for "
+                f"transaction_type '{transaction.transaction_type}'."
+            ),
+        )
+
+
 class CostCalculator:
     def __init__(self, disposition_engine: DispositionEngine, error_reporter: ErrorReporter):
         self._disposition_engine = disposition_engine
@@ -465,6 +481,9 @@ class CostCalculator:
         self._strategies: dict[TransactionType, TransactionCostStrategy] = {
             TransactionType.BUY: BuyStrategy(),
             TransactionType.SELL: SellStrategy(),
+            TransactionType.FX_SPOT: FxPendingStrategy(),
+            TransactionType.FX_FORWARD: FxPendingStrategy(),
+            TransactionType.FX_SWAP: FxPendingStrategy(),
             TransactionType.INTEREST: InterestStrategy(),
             TransactionType.DIVIDEND: DividendStrategy(),
             TransactionType.DEPOSIT: CashInflowStrategy(),

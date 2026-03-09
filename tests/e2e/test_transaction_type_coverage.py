@@ -3,15 +3,15 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
 from core.enums.transaction_type import TransactionType
 from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
     CA_BUNDLE_A_SOURCE_OUT_TYPES,
     CA_BUNDLE_A_TARGET_IN_TYPES,
 )
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from .api_client import E2EApiClient
 
 
@@ -52,7 +52,7 @@ TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
 }
 
 CASH_INSTRUMENT_TYPES = {"DEPOSIT", "WITHDRAWAL", "FEE"}
-TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE = {"OTHER"}
+TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE = {"OTHER", "FX_SPOT", "FX_FORWARD", "FX_SWAP"}
 BUNDLE_A_OUT_TYPES = set(CA_BUNDLE_A_SOURCE_OUT_TYPES)
 BUNDLE_A_IN_TYPES = set(CA_BUNDLE_A_TARGET_IN_TYPES)
 MIN_E2E_CASHFLOW_DISTINCT_TYPES = 5

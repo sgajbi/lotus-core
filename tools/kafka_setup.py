@@ -58,6 +58,9 @@ TOPICS_TO_CREATE = [
     "valuation_day_completed",
     "position_timeseries_day_completed",
     "portfolio_aggregation_day_completed",
+    "financial_reconciliation_requested",
+    "financial_reconciliation_completed",
+    "portfolio_day_controls_evaluated",
     # Reprocessing Topic
     "transactions_reprocessing_requested", # <-- NEW TOPIC
 ]

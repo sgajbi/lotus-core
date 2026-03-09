@@ -1,4 +1,5 @@
 # tests/e2e/test_dual_currency_workflow.py
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -13,8 +14,9 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture that ingests a full dual-currency trade scenario.
     It waits until the final position is fully calculated and valued before yielding.
     """
-    portfolio_id = "E2E_DUAL_CURRENCY_01"
-    security_id = "SEC_DAIMLER_DE"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_DUAL_CURRENCY_{suffix}"
+    security_id = f"SEC_DAIMLER_{suffix}"
     buy_date, sell_date = "2025-08-10", "2025-08-15"
 
     # 1. Ingest prerequisite reference data
@@ -72,7 +74,7 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
                 {
                     "transaction_id": f"{security_id}_BUY",
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "DAI",
+                    "instrument_id": security_id,
                     "security_id": security_id,
                     "transaction_date": f"{buy_date}T10:00:00Z",
                     "transaction_type": "BUY",
@@ -85,7 +87,7 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
                 {
                     "transaction_id": f"{security_id}_SELL",
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "DAI",
+                    "instrument_id": security_id,
                     "security_id": security_id,
                     "transaction_date": f"{sell_date}T10:00:00Z",
                     "transaction_type": "SELL",

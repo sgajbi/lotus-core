@@ -26,6 +26,27 @@ router = APIRouter(prefix="/portfolios", tags=["Transactions"])
 async def get_transactions(
     portfolio_id: str = Path(..., description="Portfolio identifier."),
     security_id: Optional[str] = Query(None, description="Filter by a specific security ID."),
+    transaction_type: Optional[str] = Query(
+        None, description="Filter by canonical transaction type, including FX business types."
+    ),
+    component_type: Optional[str] = Query(
+        None, description="Filter by FX component type such as FX_CONTRACT_OPEN."
+    ),
+    linked_transaction_group_id: Optional[str] = Query(
+        None, description="Filter by linked transaction group id for multi-row economic events."
+    ),
+    fx_contract_id: Optional[str] = Query(
+        None, description="Filter by FX contract identifier."
+    ),
+    swap_event_id: Optional[str] = Query(
+        None, description="Filter by FX swap event identifier."
+    ),
+    near_leg_group_id: Optional[str] = Query(
+        None, description="Filter by FX swap near-leg group identifier."
+    ),
+    far_leg_group_id: Optional[str] = Query(
+        None, description="Filter by FX swap far-leg group identifier."
+    ),
     start_date: Optional[date] = Query(
         None, description="The start date for the date range filter (inclusive)."
     ),
@@ -55,6 +76,13 @@ async def get_transactions(
         return await service.get_transactions(
             portfolio_id=portfolio_id,
             security_id=security_id,
+            transaction_type=transaction_type,
+            component_type=component_type,
+            linked_transaction_group_id=linked_transaction_group_id,
+            fx_contract_id=fx_contract_id,
+            swap_event_id=swap_event_id,
+            near_leg_group_id=near_leg_group_id,
+            far_leg_group_id=far_leg_group_id,
             start_date=start_date,
             end_date=end_date,
             as_of_date=as_of_date,

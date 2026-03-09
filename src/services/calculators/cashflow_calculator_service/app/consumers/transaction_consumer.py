@@ -11,7 +11,6 @@ from portfolio_common.config import (
     CASHFLOW_RULE_CACHE_TTL_SECONDS as DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS,
 )
 from portfolio_common.config import KAFKA_CASHFLOW_CALCULATED_TOPIC
-from portfolio_common.database_models import CashflowRule
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import CashflowCalculatedEvent, TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
@@ -24,6 +23,7 @@ from portfolio_common.transaction_domain import (
     assert_portfolio_flow_cash_entry_mode_allowed,
     is_ca_bundle_a_transaction_type,
     normalize_cash_entry_mode,
+    resolve_effective_processing_transaction_type,
 )
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -41,8 +41,16 @@ CASHFLOW_RULE_CACHE_TTL_SECONDS = DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS
 
 
 @dataclass
+class CachedCashflowRule:
+    classification: str
+    timing: str
+    is_position_flow: bool
+    is_portfolio_flow: bool
+
+
+@dataclass
 class CashflowRuleCacheState:
-    rules_by_transaction_type: Dict[str, CashflowRule]
+    rules_by_transaction_type: Dict[str, CachedCashflowRule]
     loaded_at_monotonic_seconds: float
 
 
@@ -88,6 +96,7 @@ class LinkedCashLegError(ValueError):
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 LINKED_CASHFLOW_SKIP_TRANSACTION_TYPES = {"BUY", "SELL", "DIVIDEND", "INTEREST"}
+NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 
 
 class CashflowCalculatorConsumer(BaseConsumer):
@@ -102,13 +111,21 @@ class CashflowCalculatorConsumer(BaseConsumer):
         rules_list = await repo.get_all_rules()
         logger.info("Loaded %s cashflow rules from repository.", len(rules_list))
         return CashflowRuleCacheState(
-            rules_by_transaction_type={rule.transaction_type.upper(): rule for rule in rules_list},
+            rules_by_transaction_type={
+                rule.transaction_type.upper(): CachedCashflowRule(
+                    classification=rule.classification,
+                    timing=rule.timing,
+                    is_position_flow=rule.is_position_flow,
+                    is_portfolio_flow=rule.is_portfolio_flow,
+                )
+                for rule in rules_list
+            },
             loaded_at_monotonic_seconds=time.monotonic(),
         )
 
     async def _get_rule_for_transaction(
         self, db_session, transaction_type: str
-    ) -> Optional[CashflowRule]:
+    ) -> Optional[CachedCashflowRule]:
         """
         Retrieves the cashflow rule for a given transaction type, using a
         lazy-loaded in-memory cache with TTL refresh and missing-rule refresh.
@@ -174,7 +191,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         await tx.rollback()
                         return
 
-                    event_transaction_type = event.transaction_type.upper()
+                    event_transaction_type = resolve_effective_processing_transaction_type(event)
                     if is_ca_bundle_a_transaction_type(event_transaction_type):
                         assert_ca_bundle_a_transaction_valid(event)
                     assert_portfolio_flow_cash_entry_mode_allowed(event)
@@ -209,11 +226,28 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         await db.commit()
                         return
 
-                    rule = await self._get_rule_for_transaction(db, event.transaction_type)
+                    if event_transaction_type in NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES:
+                        logger.info(
+                            "Skipping cashflow creation for non-cash FX contract lifecycle event.",
+                            extra={
+                                "transaction_id": event.transaction_id,
+                                "transaction_type": event.transaction_type,
+                                "effective_processing_type": event_transaction_type,
+                                "component_type": event.component_type,
+                                "fx_contract_id": event.fx_contract_id,
+                            },
+                        )
+                        await idempotency_repo.mark_event_processed(
+                            event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                        )
+                        await db.commit()
+                        return
+
+                    rule = await self._get_rule_for_transaction(db, event_transaction_type)
                     if not rule:
                         raise NoCashflowRuleError(
                             "No cashflow rule found for transaction type "
-                            f"'{event.transaction_type}'. "
+                            f"'{event_transaction_type}'. "
                             "Message will be sent to DLQ."
                         )
 

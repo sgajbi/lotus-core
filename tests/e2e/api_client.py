@@ -69,7 +69,12 @@ class E2EApiClient:
         raise_for_status: bool = True,
     ) -> requests.Response:
         """Sends a POST request to a specified query endpoint."""
-        url = f"{self.query_url}{endpoint}"
+        base_url = (
+            self.query_control_plane_url
+            if endpoint.startswith("/integration/")
+            else self.query_url
+        )
+        url = f"{base_url}{endpoint}"
         response = self.session.post(url, json=payload, timeout=20)
         if raise_for_status:
             response.raise_for_status()
