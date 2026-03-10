@@ -28,6 +28,7 @@ from tests.test_support.pipeline_quiescence import (
     read_pipeline_last_activity_at,
     wait_for_pipeline_quiescence,
 )
+from tests.test_support.output_control import emit_test_output
 from tests.test_support.runtime_env import build_test_runtime_env, infer_test_profile
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -73,7 +74,7 @@ def docker_services(request):  # noqa: ARG001
     health_timeout = _env_int("LOTUS_TESTS_HEALTH_TIMEOUT_SECONDS", 180)
 
     try:
-        print(
+        emit_test_output(
             "\n--- Test runtime ---\n"
             f"project={os.environ['COMPOSE_PROJECT_NAME']}\n"
             f"profile={os.environ['LOTUS_TEST_ENV_PROFILE']}\n"
@@ -112,22 +113,22 @@ def docker_services(request):  # noqa: ARG001
             retry_wait_seconds=compose_retry_wait,
         )
 
-        print("\n--- Waiting for database migrations to complete ---")
+        emit_test_output("\n--- Waiting for database migrations to complete ---")
         wait_for_migration_runner(
             compose_file,
             timeout_seconds=migrations_timeout,
             poll_seconds=2,
         )
-        print("--- Database migrations completed successfully ---")
+        emit_test_output("--- Database migrations completed successfully ---")
         wait_for_kafka_metadata(
             os.environ["KAFKA_BOOTSTRAP_SERVERS"],
             timeout_seconds=health_timeout,
             poll_seconds=2,
         )
-        print(f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---")
+        emit_test_output(f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---")
 
         # Manual polling for service health
-        print("\n--- Waiting for API services to become healthy ---")
+        emit_test_output("\n--- Waiting for API services to become healthy ---")
         ingestion_base_url = os.environ["E2E_INGESTION_URL"].rstrip("/")
         query_base_url = os.environ["E2E_QUERY_URL"].rstrip("/")
         query_control_plane_base_url = os.environ["E2E_QUERY_CONTROL_PLANE_URL"].rstrip("/")
@@ -159,18 +160,21 @@ def docker_services(request):  # noqa: ARG001
                 timeout_seconds=health_timeout,
                 poll_seconds=3,
             )
-            print(f"--- Service '{service_name}' is healthy at {health_url} ---")
+            emit_test_output(
+                f"--- Service '{service_name}' is healthy at {health_url} ---",
+                verbose_only=True,
+            )
 
-        print("\n--- All API services are healthy, proceeding with tests ---")
+        emit_test_output("\n--- All API services are healthy, proceeding with tests ---")
         yield
     except DockerStackError as exc:
         pytest.fail(str(exc))
 
     finally:
         if _env_bool("LOTUS_TESTS_KEEP_STACK_UP", False):
-            print("\n--- Keeping Docker services running for post-failure inspection ---")
+            emit_test_output("\n--- Keeping Docker services running for post-failure inspection ---")
         else:
-            print("\n--- Tearing down Docker services ---")
+            emit_test_output("\n--- Tearing down Docker services ---")
             compose_down(compose_file)
 
 
@@ -206,7 +210,7 @@ def db_engine(docker_services):
         try:
             with engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
-            print("--- Database is connectable ---")
+            emit_test_output("--- Database is connectable ---", verbose_only=True)
             yield engine
             engine.dispose()
             return
@@ -285,7 +289,7 @@ def clean_db(db_engine):
     """
     A function-scoped fixture that cleans all data from tables using TRUNCATE.
     """
-    print("\n--- Cleaning database tables (function scope) ---")
+    emit_test_output("\n--- Cleaning database tables (function scope) ---", verbose_only=True)
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
     terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
 
@@ -315,7 +319,7 @@ def clean_db_module(db_engine):
     A module-scoped fixture that cleans all data from tables using TRUNCATE.
     Used by E2E tests to ensure a clean state before the test module runs.
     """
-    print("\n--- Cleaning database tables (module scope) ---")
+    emit_test_output("\n--- Cleaning database tables (module scope) ---", verbose_only=True)
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
     terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
     _wait_for_pipeline_idle(db_engine)
