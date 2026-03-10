@@ -6,14 +6,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.responses import Response
 
-from src.services.query_service.app.dtos.analytics_input_dto import (
-    AnalyticsExportCreateRequest,
-    AnalyticsWindow,
-    PortfolioAnalyticsReferenceRequest,
-    PortfolioAnalyticsTimeseriesRequest,
-    PositionAnalyticsTimeseriesRequest,
-)
-from src.services.query_service.app.routers.analytics_inputs import (
+from src.services.query_control_plane_service.app.routers.analytics_inputs import (
     _raise_http_for_analytics_error,
     create_analytics_export_job,
     get_analytics_export_job,
@@ -22,6 +15,13 @@ from src.services.query_service.app.routers.analytics_inputs import (
     get_portfolio_analytics_reference,
     get_portfolio_analytics_timeseries,
     get_position_analytics_timeseries,
+)
+from src.services.query_service.app.dtos.analytics_input_dto import (
+    AnalyticsExportCreateRequest,
+    AnalyticsWindow,
+    PortfolioAnalyticsReferenceRequest,
+    PortfolioAnalyticsTimeseriesRequest,
+    PositionAnalyticsTimeseriesRequest,
 )
 from src.services.query_service.app.services.analytics_timeseries_service import AnalyticsInputError
 

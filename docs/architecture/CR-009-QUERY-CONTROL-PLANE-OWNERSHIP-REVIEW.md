@@ -96,10 +96,18 @@ Implemented in the review program:
   - `src/services/query_control_plane_service/app/routers/`
 - moved control-plane router dependency tests into:
   - `tests/integration/services/query_control_plane_service/`
+- moved remaining router unit tests into:
+  - `tests/unit/services/query_control_plane_service/routers/`
 - added a service-local `enterprise_readiness.py` under `query_control_plane_service`
 - updated `query_control_plane_service/app/main.py` to import local routers and
   service-local enterprise-readiness middleware instead of importing those modules from
   `query_service`
+- removed the stale control-plane router copies from:
+  - `src/services/query_service/app/routers/analytics_inputs.py`
+  - `src/services/query_service/app/routers/capabilities.py`
+  - `src/services/query_service/app/routers/integration.py`
+  - `src/services/query_service/app/routers/operations.py`
+  - `src/services/query_service/app/routers/simulation.py`
 
 Important boundary preserved:
 

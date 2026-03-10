@@ -3,6 +3,25 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from src.services.query_control_plane_service.app.routers.integration import (
+    create_core_snapshot,
+    fetch_benchmark_catalog,
+    fetch_benchmark_definition,
+    fetch_benchmark_market_series,
+    fetch_benchmark_return_series,
+    fetch_classification_taxonomy,
+    fetch_index_catalog,
+    fetch_index_price_series,
+    fetch_index_return_series,
+    fetch_risk_free_series,
+    get_benchmark_coverage,
+    get_core_snapshot_service,
+    get_effective_integration_policy,
+    get_instrument_enrichment_bulk,
+    get_integration_service,
+    get_risk_free_coverage,
+    resolve_portfolio_benchmark_assignment,
+)
 from src.services.query_service.app.dtos.core_snapshot_dto import (
     CoreSnapshotMode,
     CoreSnapshotRequest,
@@ -25,25 +44,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexSeriesRequest,
     IntegrationWindow,
     RiskFreeSeriesRequest,
-)
-from src.services.query_service.app.routers.integration import (
-    create_core_snapshot,
-    fetch_benchmark_catalog,
-    fetch_benchmark_definition,
-    fetch_benchmark_market_series,
-    fetch_benchmark_return_series,
-    fetch_classification_taxonomy,
-    fetch_index_catalog,
-    fetch_index_price_series,
-    fetch_index_return_series,
-    fetch_risk_free_series,
-    get_benchmark_coverage,
-    get_core_snapshot_service,
-    get_effective_integration_policy,
-    get_instrument_enrichment_bulk,
-    get_integration_service,
-    get_risk_free_coverage,
-    resolve_portfolio_benchmark_assignment,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
