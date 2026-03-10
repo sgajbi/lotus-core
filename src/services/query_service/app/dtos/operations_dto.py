@@ -205,14 +205,37 @@ class CalculatorSloResponse(BaseModel):
     valuation: CalculatorSloBucket = Field(
         ...,
         description="Valuation calculator SLO snapshot for this portfolio.",
+        examples=[
+            {
+                "pending_jobs": 12,
+                "processing_jobs": 3,
+                "stale_processing_jobs": 1,
+                "failed_jobs": 0,
+                "failed_jobs_last_24h": 2,
+                "oldest_open_job_date": "2026-02-25",
+                "backlog_age_days": 7,
+            }
+        ],
     )
     aggregation: CalculatorSloBucket = Field(
         ...,
         description="Timeseries aggregation SLO snapshot for this portfolio.",
+        examples=[
+            {
+                "pending_jobs": 1,
+                "processing_jobs": 0,
+                "stale_processing_jobs": 0,
+                "failed_jobs": 0,
+                "failed_jobs_last_24h": 0,
+                "oldest_open_job_date": "2026-03-01",
+                "backlog_age_days": 1,
+            }
+        ],
     )
     reprocessing: ReprocessingSloBucket = Field(
         ...,
         description="Reprocessing SLO snapshot for this portfolio.",
+        examples=[{"active_reprocessing_keys": 4}],
     )
 
 
@@ -272,7 +295,20 @@ class LineageKeyListResponse(BaseModel):
     total: int = Field(..., description="Total matching keys for this portfolio.", examples=[24])
     skip: int = Field(..., description="Pagination offset.", examples=[0])
     limit: int = Field(..., description="Pagination limit.", examples=[50])
-    items: list[LineageKeyRecord] = Field(..., description="Current lineage key states.")
+    items: list[LineageKeyRecord] = Field(
+        ...,
+        description="Current lineage key states.",
+        examples=[
+            [
+                {
+                    "security_id": "AAPL.OQ",
+                    "epoch": 3,
+                    "watermark_date": "2025-11-01",
+                    "reprocessing_status": "CURRENT",
+                }
+            ]
+        ],
+    )
 
 
 class SupportJobRecord(BaseModel):
@@ -315,5 +351,19 @@ class SupportJobListResponse(BaseModel):
     skip: int = Field(..., description="Pagination offset.", examples=[0])
     limit: int = Field(..., description="Pagination limit.", examples=[50])
     items: list[SupportJobRecord] = Field(
-        ..., description="Operational jobs for support workflows."
+        ...,
+        description="Operational jobs for support workflows.",
+        examples=[
+            [
+                {
+                    "job_type": "VALUATION",
+                    "business_date": "2025-12-30",
+                    "status": "PENDING",
+                    "security_id": "AAPL.OQ",
+                    "epoch": 3,
+                    "attempt_count": 1,
+                    "failure_reason": None,
+                }
+            ]
+        ],
     )

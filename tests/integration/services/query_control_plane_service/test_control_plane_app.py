@@ -98,6 +98,19 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
     )
 
+    components = schema["components"]["schemas"]
+    calculator_slo = components["CalculatorSloResponse"]
+    lineage_keys = components["LineageKeyListResponse"]
+    support_jobs = components["SupportJobListResponse"]
+
+    assert calculator_slo["properties"]["valuation"]["description"] == (
+        "Valuation calculator SLO snapshot for this portfolio."
+    )
+    assert lineage_keys["properties"]["items"]["description"] == "Current lineage key states."
+    assert support_jobs["properties"]["items"]["description"] == (
+        "Operational jobs for support workflows."
+    )
+
 
 async def test_openapi_describes_simulation_parameters_and_examples(async_test_client):
     response = await async_test_client.get("/openapi.json")
