@@ -6,12 +6,6 @@ from decimal import Decimal
 from typing import Any, List
 
 from confluent_kafka import Message
-from logic.cost_basis_strategies import AverageCostBasisStrategy, FIFOBasisStrategy
-from logic.cost_calculator import CostCalculator
-from logic.disposition_engine import DispositionEngine
-from logic.error_reporter import ErrorReporter
-from logic.parser import TransactionParser
-from logic.sorter import TransactionSorter
 from portfolio_common.config import (
     KAFKA_INSTRUMENTS_TOPIC,
     KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
@@ -49,6 +43,15 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from .cost_engine.processing.cost_basis_strategies import (
+    AverageCostBasisStrategy,
+    FIFOBasisStrategy,
+)
+from .cost_engine.processing.cost_calculator import CostCalculator
+from .cost_engine.processing.disposition_engine import DispositionEngine
+from .cost_engine.processing.error_reporter import ErrorReporter
+from .cost_engine.processing.parser import TransactionParser
+from .cost_engine.processing.sorter import TransactionSorter
 from .repository import CostCalculatorRepository
 from .transaction_processor import TransactionProcessor
 
@@ -123,7 +126,7 @@ class CostCalculatorConsumer(BaseConsumer):
     def _transform_event_for_engine(self, event: TransactionEvent) -> dict:
         """
         Transforms a TransactionEvent into a raw dictionary suitable for the
-        financial-calculator-engine, converting fee fields to a Fees object structure.
+        cost-calculator-service engine package, converting fee fields to a Fees object structure.
         """
         event_dict = event.model_dump(mode="json")
         trade_fee_str = event_dict.pop("trade_fee", "0") or "0"

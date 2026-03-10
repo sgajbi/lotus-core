@@ -1,5 +1,4 @@
-# libs/financial-calculator-engine/src/logic/sorter.py
-from core.models.transaction import Transaction
+from ..domain.models.transaction import Transaction
 
 
 class TransactionSorter:

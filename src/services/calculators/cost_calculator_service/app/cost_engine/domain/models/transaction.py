@@ -1,5 +1,3 @@
-# libs/financial-calculator-engine/src/core/models/transaction.py
-
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional

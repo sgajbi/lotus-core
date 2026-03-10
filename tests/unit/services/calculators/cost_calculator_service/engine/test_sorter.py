@@ -1,11 +1,13 @@
-# tests/unit/libs/financial-calculator-engine/unit/test_sorter.py
-
 from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from core.models.transaction import Transaction
-from logic.sorter import TransactionSorter
+from cost_engine.domain.models.transaction import (
+    Transaction,
+)
+from cost_engine.processing.sorter import (
+    TransactionSorter,
+)
 
 
 @pytest.fixture

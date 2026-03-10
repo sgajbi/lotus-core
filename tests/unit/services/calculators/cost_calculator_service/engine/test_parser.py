@@ -1,10 +1,12 @@
-# tests/unit/libs/financial-calculator-engine/unit/test_parser.py
-
 from decimal import Decimal
 
 import pytest
-from logic.error_reporter import ErrorReporter
-from logic.parser import TransactionParser
+from cost_engine.processing.error_reporter import (
+    ErrorReporter,
+)
+from cost_engine.processing.parser import (
+    TransactionParser,
+)
 
 
 @pytest.fixture

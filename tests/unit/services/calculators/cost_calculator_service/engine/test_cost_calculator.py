@@ -1,16 +1,27 @@
-# tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py
-
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
-from core.enums.transaction_type import TransactionType
-from core.models.transaction import Fees, Transaction
-from logic.cost_basis_strategies import FIFOBasisStrategy
-from logic.cost_calculator import CostCalculator
-from logic.disposition_engine import DispositionEngine
-from logic.error_reporter import ErrorReporter
+from cost_engine.domain.enums.transaction_type import (
+    TransactionType,
+)
+from cost_engine.domain.models.transaction import (
+    Fees,
+    Transaction,
+)
+from cost_engine.processing.cost_basis_strategies import (
+    FIFOBasisStrategy,
+)
+from cost_engine.processing.cost_calculator import (
+    CostCalculator,
+)
+from cost_engine.processing.disposition_engine import (
+    DispositionEngine,
+)
+from cost_engine.processing.error_reporter import (
+    ErrorReporter,
+)
 
 
 @pytest.fixture

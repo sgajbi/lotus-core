@@ -1,11 +1,10 @@
-# libs/financial-calculator-engine/src/logic/cost_basis_strategies.py
 import logging
 from collections import defaultdict, deque
 from decimal import Decimal
 from typing import Deque, Dict, Optional, Protocol, Tuple
 
-from core.models.transaction import Transaction
-from logic.cost_objects import CostLot
+from ..domain.models.transaction import Transaction
+from .cost_objects import CostLot
 
 logger = logging.getLogger(__name__)
 

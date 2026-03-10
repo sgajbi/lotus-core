@@ -2,14 +2,13 @@ import logging
 import time
 from typing import Any
 
-from core.models.error import ErroredTransaction
-from core.models.transaction import Transaction
-from logic.cost_calculator import CostCalculator
-from logic.disposition_engine import DispositionEngine
-from logic.error_reporter import ErrorReporter
-from logic.parser import TransactionParser
-from logic.sorter import TransactionSorter
-
+from .cost_engine.domain.models.error import ErroredTransaction
+from .cost_engine.domain.models.transaction import Transaction
+from .cost_engine.processing.cost_calculator import CostCalculator
+from .cost_engine.processing.disposition_engine import DispositionEngine
+from .cost_engine.processing.error_reporter import ErrorReporter
+from .cost_engine.processing.parser import TransactionParser
+from .cost_engine.processing.sorter import TransactionSorter
 from .monitoring import RECALCULATION_DEPTH, RECALCULATION_DURATION_SECONDS
 
 logger = logging.getLogger(__name__)
@@ -19,8 +18,7 @@ class TransactionProcessor:
     """
     Orchestrates end-to-end transaction recalculation for the cost calculator service.
 
-    This layer is service-owned orchestration around the shared cost-basis domain logic.
-    The reusable engine remains in `financial-calculator-engine/src/{core,logic}`.
+    This layer orchestrates the service-owned cost-basis engine.
     """
 
     def __init__(

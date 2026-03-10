@@ -3,7 +3,6 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
-from core.models.transaction import Transaction as EngineTransaction
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     FxRate,
@@ -18,6 +17,8 @@ from portfolio_common.events import TransactionEvent
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 
 
 class CostCalculatorRepository:

@@ -3,12 +3,24 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
-from logic.cost_basis_strategies import FIFOBasisStrategy
-from logic.cost_calculator import CostCalculator
-from logic.disposition_engine import DispositionEngine
-from logic.error_reporter import ErrorReporter
-from logic.parser import TransactionParser
-from logic.sorter import TransactionSorter
+from cost_engine.processing.cost_basis_strategies import (
+    FIFOBasisStrategy,
+)
+from cost_engine.processing.cost_calculator import (
+    CostCalculator,
+)
+from cost_engine.processing.disposition_engine import (
+    DispositionEngine,
+)
+from cost_engine.processing.error_reporter import (
+    ErrorReporter,
+)
+from cost_engine.processing.parser import (
+    TransactionParser,
+)
+from cost_engine.processing.sorter import (
+    TransactionSorter,
+)
 
 from src.services.calculators.cost_calculator_service.app.transaction_processor import (
     TransactionProcessor,

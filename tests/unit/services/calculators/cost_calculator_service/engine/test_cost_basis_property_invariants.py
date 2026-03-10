@@ -3,10 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from core.models.transaction import Transaction
+from cost_engine.domain.models.transaction import (
+    Transaction,
+)
+from cost_engine.processing.cost_basis_strategies import (
+    AverageCostBasisStrategy,
+    FIFOBasisStrategy,
+)
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from logic.cost_basis_strategies import AverageCostBasisStrategy, FIFOBasisStrategy
 
 
 def _buy_txn(transaction_id: str, quantity: Decimal, cost_per_share: Decimal) -> Transaction:

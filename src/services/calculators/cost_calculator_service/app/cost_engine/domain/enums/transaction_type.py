@@ -1,5 +1,3 @@
-# src/core/enums/transaction_type.py
-
 from enum import Enum
 
 

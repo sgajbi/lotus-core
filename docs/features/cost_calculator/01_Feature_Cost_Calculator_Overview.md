@@ -4,7 +4,7 @@
 
 The **`cost_calculator_service`** is a crucial backend data enrichment service that calculates the **cost basis** of security purchases and the **realized profit and loss (P&L)** on sales. It consumes raw (but persisted) transaction events and produces new, enriched events with these calculated financial figures.
 
-This service ensures that all P&L is calculated accurately, even in complex scenarios involving back-dated trades, by using a **full history recalculation** method for each security. All of its core financial logic is encapsulated in the reusable `financial-calculator-engine` library.
+This service ensures that all P&L is calculated accurately, even in complex scenarios involving back-dated trades, by using a **full history recalculation** method for each security. Its cost-basis engine now lives directly under the service package, which makes ownership and deployment boundaries explicit.
 
 ## 2. Key Features
 

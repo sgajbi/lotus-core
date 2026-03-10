@@ -31,8 +31,7 @@ It also kept two package dependencies alive for no live reason:
 ## Actions taken
 
 - Removed the dead `core/config/settings.py` module.
-- Removed the now-unused library dependencies from
-  `src/libs/financial-calculator-engine/pyproject.toml`.
+- Removed the now-unused library dependencies from the engine package.
 
 ## Rationale
 
@@ -42,16 +41,16 @@ Keeping dead config scaffolding in a shared library is harmful:
 - it increases maintenance surface
 - it keeps stale dependencies in the package graph
 
-The shared library should contain reusable domain logic only, not a phantom app
+The engine surface should contain reusable domain logic only, not a phantom app
 runtime layer.
 
 ## Follow-up
 
-The remaining `core/enums/cost_method.py` is currently low-usage and should be
-reviewed separately before removal or broader adoption. It represents domain
-vocabulary rather than a dead runtime contract.
+The remaining `core/enums/cost_method.py` was reviewed separately in CR-018.
+Later, the remaining live engine code was folded into the owning service in
+CR-020 once production usage confirmed it was not actually shared.
 
 ## Evidence
 
 - deleted `src/libs/financial-calculator-engine/src/core/config/settings.py`
-- updated `src/libs/financial-calculator-engine/pyproject.toml`
+- package dependency cleanup completed before CR-020 ownership finalization

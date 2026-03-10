@@ -1,5 +1,3 @@
-# src/logic/cost_objects.py
-
 from decimal import Decimal
 
 

@@ -5,7 +5,9 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from core.models.transaction import Transaction as EngineTransaction
+from cost_engine.domain.models.transaction import (
+    Transaction as EngineTransaction,
+)
 from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
@@ -246,7 +248,8 @@ async def test_consumer_integration_with_engine(
     mock_idempotency_repo.is_event_processed.assert_called_once()
     mock_repo.get_transaction_history.assert_called_once()
     updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
-    assert isinstance(updated_transaction_arg, EngineTransaction)
+    assert updated_transaction_arg.__class__.__name__ == "Transaction"
+    assert updated_transaction_arg.transaction_id == "SELL01"
     assert updated_transaction_arg.realized_gain_loss == Decimal("250.0")
     assert updated_transaction_arg.economic_event_id == "EVT-SELL-PORT_COST_01-SELL01"
     assert updated_transaction_arg.linked_transaction_group_id == "LTG-SELL-PORT_COST_01-SELL01"
@@ -302,12 +305,10 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.create_or_update_transaction_event.side_effect = (
-        lambda event: DBTransaction(
-            **event.model_dump(
-                exclude_none=True,
-                exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
-            )
+    mock_repo.create_or_update_transaction_event.side_effect = lambda event: DBTransaction(
+        **event.model_dump(
+            exclude_none=True,
+            exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
         )
     )
     mock_idempotency_repo.is_event_processed.return_value = False

@@ -1,10 +1,14 @@
-# tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_strategies.py
 from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from core.models.transaction import Transaction
-from logic.cost_basis_strategies import AverageCostBasisStrategy, FIFOBasisStrategy
+from cost_engine.domain.models.transaction import (
+    Transaction,
+)
+from cost_engine.processing.cost_basis_strategies import (
+    AverageCostBasisStrategy,
+    FIFOBasisStrategy,
+)
 
 # --- Tests for AverageCostBasisStrategy ---
 

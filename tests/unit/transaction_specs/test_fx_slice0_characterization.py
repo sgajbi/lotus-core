@@ -2,10 +2,18 @@ from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from core.enums.transaction_type import TransactionType
-from core.models.transaction import Transaction as EngineTransaction
-from logic.cost_calculator import CostCalculator
-from logic.error_reporter import ErrorReporter
+from cost_engine.domain.enums.transaction_type import (
+    TransactionType,
+)
+from cost_engine.domain.models.transaction import (
+    Transaction as EngineTransaction,
+)
+from cost_engine.processing.cost_calculator import (
+    CostCalculator,
+)
+from cost_engine.processing.error_reporter import (
+    ErrorReporter,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
@@ -114,8 +122,7 @@ def test_fx_transaction_types_are_registered_but_engine_processing_is_explicitly
     assert error_reporter.has_errors()
     assert error_reporter.has_errors_for("FX-SLICE0-003")
     assert any(
-        "Canonical FX transaction processing is not implemented yet"
-        in errored.error_reason
+        "Canonical FX transaction processing is not implemented yet" in errored.error_reason
         for errored in error_reporter.get_errors()
     )
     assert fx_transaction.net_cost is None

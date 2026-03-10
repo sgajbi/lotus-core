@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from core.enums.transaction_type import TransactionType
+from cost_engine.domain.enums.transaction_type import TransactionType
 from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
     CA_BUNDLE_A_SOURCE_OUT_TYPES,

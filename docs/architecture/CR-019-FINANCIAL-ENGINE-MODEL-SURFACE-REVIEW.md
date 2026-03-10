@@ -2,8 +2,8 @@
 
 ## Scope
 
-Remaining `financial-calculator-engine` core model files after the engine runtime
-and config cleanup.
+Remaining financial-engine model files after the engine runtime and config
+cleanup.
 
 ## Findings
 
@@ -28,30 +28,30 @@ production or test consumers.
 
 ## Actions taken
 
-- Kept `core/models/transaction.py` as shared engine domain vocabulary
-- Extracted the live shared error model into `core/models/error.py`
-- Updated engine logic and cost-calculator service orchestration to import from
-  `core.models.error`
-- Removed dead files:
+- Replaced the vague top-level `core/` and `logic/` import surface with a real
+  `domain/` and `processing/` structure for the live code.
+- Updated cost-calculator service and tests to import the namespaced package
+- Removed dead standalone-API files:
   - `core/models/request.py`
   - `core/models/response.py`
+- Removed the obsolete generic source files under `core/` and `logic/`
 
 ## Rationale
 
-The shared engine should contain only reusable domain models that are actively
-consumed by shared cost-basis logic or its owning service orchestration.
+The engine should contain only live domain models and processing logic.
 
-Dead API wrapper models create false architectural signals and increase the
-surface area that future engineers have to reason about.
+Dead API wrapper models and vague top-level module names create false
+architectural signals and make ownership harder to understand. The remaining
+engine is shared domain/process logic, so it should look like a proper package.
 
 ## Follow-up
 
-Review the remaining `core/models/transaction.py` surface only if engine/domain
-ownership changes again. It is live and correctly owned today.
+Service ownership was finalized later in CR-020 once production usage confirmed
+the engine was no longer truly shared.
 
 ## Evidence
 
-- `src/libs/financial-calculator-engine/src/core/models/transaction.py`
-- `src/libs/financial-calculator-engine/src/core/models/error.py`
-- `src/libs/financial-calculator-engine/src/logic/error_reporter.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/domain/models/transaction.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/domain/models/error.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/processing/error_reporter.py`
 - `src/services/calculators/cost_calculator_service/app/transaction_processor.py`

@@ -2,10 +2,18 @@ from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from core.enums.transaction_type import TransactionType
-from core.models.transaction import Transaction as EngineTransaction
-from logic.cost_calculator import CostCalculator
-from logic.error_reporter import ErrorReporter
+from cost_engine.domain.enums.transaction_type import (
+    TransactionType,
+)
+from cost_engine.domain.models.transaction import (
+    Transaction as EngineTransaction,
+)
+from cost_engine.processing.cost_calculator import (
+    CostCalculator,
+)
+from cost_engine.processing.error_reporter import (
+    ErrorReporter,
+)
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent

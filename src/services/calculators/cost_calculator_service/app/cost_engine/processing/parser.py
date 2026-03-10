@@ -1,11 +1,11 @@
-# libs/financial-calculator-engine/src/logic/parser.py
 import logging
 from decimal import Decimal
 from typing import Any
 
-from core.models.transaction import Transaction
-from logic.error_reporter import ErrorReporter
 from pydantic import TypeAdapter, ValidationError
+
+from ..domain.models.transaction import Transaction
+from .error_reporter import ErrorReporter
 
 logger = logging.getLogger(__name__)
 
