@@ -276,6 +276,39 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
     assert to_currency["description"] == "Quote currency code for the requested FX series."
 
 
+async def test_openapi_describes_lookup_catalog_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    portfolio_lookups = schema["paths"]["/lookups/portfolios"]["get"]
+    instrument_lookups = schema["paths"]["/lookups/instruments"]["get"]
+    currency_lookups = schema["paths"]["/lookups/currencies"]["get"]
+
+    portfolio_client_id = next(
+        parameter
+        for parameter in portfolio_lookups["parameters"]
+        if parameter["name"] == "client_id"
+    )
+    assert portfolio_client_id["description"] == "Optional CIF filter for tenant/client scoping."
+
+    instrument_product_type = next(
+        parameter
+        for parameter in instrument_lookups["parameters"]
+        if parameter["name"] == "product_type"
+    )
+    assert instrument_product_type["description"] == (
+        "Optional product type filter (for example: Equity, Bond)."
+    )
+
+    currency_source = next(
+        parameter for parameter in currency_lookups["parameters"] if parameter["name"] == "source"
+    )
+    assert currency_source["description"] == (
+        "Currency source scope. Use ALL, PORTFOLIOS, or INSTRUMENTS."
+    )
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
