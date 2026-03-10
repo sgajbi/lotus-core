@@ -235,12 +235,24 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     components = schema["components"]["schemas"]
     policy_response = components["EffectiveIntegrationPolicyResponse"]
     enrichment_request = components["InstrumentEnrichmentBulkRequest"]
+    core_snapshot_governance = components["CoreSnapshotGovernanceMetadata"]
+    core_snapshot_freshness = components["CoreSnapshotFreshnessMetadata"]
+    core_snapshot_sections = components["CoreSnapshotSections"]
 
     assert policy_response["properties"]["policy_provenance"]["description"] == (
         "Policy lineage metadata showing how the effective policy was resolved."
     )
     assert enrichment_request["properties"]["security_ids"]["description"] == (
         "Canonical Lotus security identifiers to enrich in one deterministic batch."
+    )
+    assert core_snapshot_governance["properties"]["requested_sections"]["examples"] == [
+        ["positions_baseline", "positions_projected", "positions_delta"]
+    ]
+    assert core_snapshot_freshness["properties"]["snapshot_timestamp"]["description"] == (
+        "UTC timestamp of the resolved baseline snapshot when one exists."
+    )
+    assert core_snapshot_sections["properties"]["positions_delta"]["description"] == (
+        "Per-security baseline versus projected deltas."
     )
 
 
