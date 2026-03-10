@@ -8,6 +8,7 @@ from portfolio_common.events import MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.valuation_job_repository import ValuationJobRepository
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, OperationalError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
@@ -62,6 +63,36 @@ class PriceEventConsumer(BaseConsumer):
                         return
 
                     latest_business_date = await valuation_repo.get_latest_business_date()
+                    event_correlation_id = correlation_id
+                    if not event_correlation_id or event_correlation_id == "<not-set>":
+                        event_correlation_id = (
+                            f"PRICE_EVENT_{event.security_id}_{event.price_date.isoformat()}"
+                        )
+
+                    if latest_business_date and event.price_date <= latest_business_date:
+                        open_position_keys = (
+                            await valuation_repo.find_open_position_keys_for_security_on_date(
+                                event.security_id, event.price_date
+                            )
+                        )
+                        for portfolio_id, security_id, epoch in open_position_keys:
+                            await ValuationJobRepository(db).upsert_job(
+                                portfolio_id=portfolio_id,
+                                security_id=security_id,
+                                valuation_date=event.price_date,
+                                epoch=epoch,
+                                correlation_id=event_correlation_id,
+                            )
+                        if open_position_keys:
+                            logger.info(
+                                "Queued immediate valuation jobs for market price event.",
+                                extra={
+                                    "security_id": event.security_id,
+                                    "price_date": event.price_date,
+                                    "job_count": len(open_position_keys),
+                                },
+                            )
+
                     is_backdated = latest_business_date and event.price_date < latest_business_date
 
                     if is_backdated:
@@ -78,7 +109,7 @@ class PriceEventConsumer(BaseConsumer):
                         )
 
                     await idempotency_repo.mark_event_processed(
-                        event_id, "N/A", SERVICE_NAME, correlation_id
+                        event_id, "N/A", SERVICE_NAME, event_correlation_id
                     )
 
         except (json.JSONDecodeError, ValidationError) as e:

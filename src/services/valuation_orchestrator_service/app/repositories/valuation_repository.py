@@ -72,6 +72,52 @@ class ValuationRepository:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
+    @async_timed(
+        repository="ValuationRepository", method="find_open_position_keys_for_security_on_date"
+    )
+    async def find_open_position_keys_for_security_on_date(
+        self, security_id: str, a_date: date
+    ) -> List[Tuple[str, str, int]]:
+        """
+        Finds all (portfolio_id, security_id, epoch) keys that had an open position
+        in the given security on or before the supplied date based on the latest
+        position_history row per portfolio/epoch.
+        """
+        latest_history_subquery = (
+            select(
+                PositionHistory.portfolio_id.label("portfolio_id"),
+                PositionHistory.security_id.label("security_id"),
+                PositionHistory.epoch.label("epoch"),
+                PositionHistory.quantity.label("quantity"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionHistory.portfolio_id, PositionHistory.epoch),
+                    order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
+                )
+                .label("rn"),
+            )
+            .where(
+                PositionHistory.security_id == security_id,
+                PositionHistory.position_date <= a_date,
+            )
+            .subquery()
+        )
+
+        stmt = select(
+            latest_history_subquery.c.portfolio_id,
+            latest_history_subquery.c.security_id,
+            latest_history_subquery.c.epoch,
+        ).where(
+            latest_history_subquery.c.rn == 1,
+            latest_history_subquery.c.quantity > 0,
+        )
+
+        result = await self.db.execute(stmt)
+        return [
+            (row.portfolio_id, row.security_id, row.epoch)
+            for row in result.all()
+        ]
+
     @async_timed(repository="ValuationRepository", method="delete_instrument_reprocessing_triggers")
     async def delete_instrument_reprocessing_triggers(self, security_ids: List[str]) -> None:
         """Deletes instrument reprocessing triggers by their security IDs."""
