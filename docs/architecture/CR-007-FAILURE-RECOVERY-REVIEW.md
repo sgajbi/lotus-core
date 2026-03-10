@@ -88,12 +88,28 @@ Keep the current bounded-recovery policy for now, but make it explicit:
 Do **not** tighten the thresholds blindly before classification exists.
 That would change policy before improving clarity.
 
+## Implementation update
+
+Implemented:
+
+- explicit recovery classification in `scripts/failure_recovery_gate.py`
+  - `FULLY_DRAINED`
+  - `BOUNDED_RECOVERY`
+  - `FAILED_RECOVERY`
+- direct unit tests for the gate decision matrix in:
+  - `tests/unit/scripts/test_failure_recovery_gate.py`
+
+Result:
+
+- timeout-to-baseline is no longer semantically ambiguous in the gate output
+- reports can distinguish bounded but acceptable recovery from a fully drained recovery
+
 ## Sign-off state
 
-Current state: `In Review`
+Current state: `Hardened`
 
 Reason:
 
-- the behavior is now understood
-- the correct next hardening step is clear
-- implementation and tests for explicit classification have not landed yet
+- the ambiguity has been resolved in implementation
+- lower-level tests now exist for the decision table
+- future work, if any, is policy tuning rather than missing control semantics

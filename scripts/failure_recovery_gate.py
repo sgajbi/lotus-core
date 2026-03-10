@@ -19,6 +19,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -29,6 +30,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+
+
+class RecoveryMode(StrEnum):
+    FULLY_DRAINED = "FULLY_DRAINED"
+    BOUNDED_RECOVERY = "BOUNDED_RECOVERY"
+    FAILED_RECOVERY = "FAILED_RECOVERY"
 
 
 @dataclass(slots=True)
@@ -45,8 +52,52 @@ class RecoveryResult:
     backlog_age_seconds_after_recovery: float
     dlq_pressure_ratio_after_recovery: float
     replay_pressure_ratio_after_recovery: float
+    recovery_mode: str
     checks_passed: bool
     failed_checks: list[str]
+
+
+def _evaluate_recovery_result(
+    *,
+    backlog_growth_jobs: int,
+    drain_seconds_to_baseline: float | None,
+    backlog_age_seconds_after_recovery: float,
+    dlq_pressure_ratio_after_recovery: float,
+    replay_pressure_ratio_after_recovery: float,
+) -> tuple[RecoveryMode, list[str]]:
+    failed_checks: list[str] = []
+    if backlog_growth_jobs < 2:
+        failed_checks.append("backlog growth during interruption was too small (< 2 jobs)")
+    if drain_seconds_to_baseline is not None and drain_seconds_to_baseline > 420:
+        failed_checks.append(
+            f"recovery drain {drain_seconds_to_baseline:.2f}s exceeded max 420.00s"
+        )
+    if drain_seconds_to_baseline is None and backlog_age_seconds_after_recovery > 1200:
+        failed_checks.append(
+            "recovery drain timeout with elevated backlog age (>1200s) "
+            "indicates incomplete recovery"
+        )
+    if backlog_age_seconds_after_recovery > 1800:
+        failed_checks.append(
+            "backlog age after recovery "
+            f"{backlog_age_seconds_after_recovery:.2f}s exceeded 1800s"
+        )
+    if dlq_pressure_ratio_after_recovery > 5.0:
+        failed_checks.append(
+            "DLQ pressure after recovery "
+            f"{dlq_pressure_ratio_after_recovery:.4f} exceeded 5.0000"
+        )
+    if replay_pressure_ratio_after_recovery > 5.0:
+        failed_checks.append(
+            "Replay pressure after recovery "
+            f"{replay_pressure_ratio_after_recovery:.4f} exceeded 5.0000"
+        )
+
+    if failed_checks:
+        return RecoveryMode.FAILED_RECOVERY, failed_checks
+    if drain_seconds_to_baseline is None:
+        return RecoveryMode.BOUNDED_RECOVERY, failed_checks
+    return RecoveryMode.FULLY_DRAINED, failed_checks
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
@@ -250,6 +301,7 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
         f"# Failure Recovery Gate {result.run_id}",
         "",
         f"- Overall passed: {result.checks_passed}",
+        f"- Recovery mode: `{result.recovery_mode}`",
         f"- Interrupted container: `{result.interruption_container}`",
         f"- Interruption duration (s): {result.interruption_seconds}",
         "",
@@ -395,26 +447,13 @@ def main() -> int:
             recovery_health["error_budget"].get("replay_backlog_pressure_ratio", 0.0)
         )
 
-        failed_checks: list[str] = []
-        if backlog_growth < 2:
-            failed_checks.append("backlog growth during interruption was too small (< 2 jobs)")
-        if drain_seconds is not None and drain_seconds > 420:
-            failed_checks.append(f"recovery drain {drain_seconds:.2f}s exceeded max 420.00s")
-        if drain_seconds is None and backlog_age > 1200:
-            failed_checks.append(
-                "recovery drain timeout with elevated backlog age (>1200s) "
-                "indicates incomplete recovery"
-            )
-        if backlog_age > 1800:
-            failed_checks.append(f"backlog age after recovery {backlog_age:.2f}s exceeded 1800s")
-        if dlq_pressure > 5.0:
-            failed_checks.append(
-                f"DLQ pressure after recovery {dlq_pressure:.4f} exceeded 5.0000"
-            )
-        if replay_pressure > 5.0:
-            failed_checks.append(
-                f"Replay pressure after recovery {replay_pressure:.4f} exceeded 5.0000"
-            )
+        recovery_mode, failed_checks = _evaluate_recovery_result(
+            backlog_growth_jobs=backlog_growth,
+            drain_seconds_to_baseline=drain_seconds,
+            backlog_age_seconds_after_recovery=backlog_age,
+            dlq_pressure_ratio_after_recovery=dlq_pressure,
+            replay_pressure_ratio_after_recovery=replay_pressure,
+        )
 
         result = RecoveryResult(
             run_id=run_id,
@@ -429,6 +468,7 @@ def main() -> int:
             backlog_age_seconds_after_recovery=round(backlog_age, 3),
             dlq_pressure_ratio_after_recovery=round(dlq_pressure, 6),
             replay_pressure_ratio_after_recovery=round(replay_pressure, 6),
+            recovery_mode=recovery_mode.value,
             checks_passed=not failed_checks,
             failed_checks=failed_checks,
         )
