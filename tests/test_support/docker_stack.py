@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 import requests
+import yaml
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
 
@@ -35,6 +36,50 @@ def ensure_docker_engine_available(
             "Docker engine is not available. Start Docker Desktop/daemon before running "
             "integration or E2E tests."
         ) from exc
+
+
+def _load_compose_images(compose_file: str) -> list[str]:
+    compose_path = Path(compose_file)
+    data = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
+    services = data.get("services", {})
+    images: list[str] = []
+    for service in services.values():
+        image = service.get("image")
+        if image and image not in images:
+            images.append(image)
+    return images
+
+
+def ensure_required_images_available(
+    compose_file: str,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> None:
+    if os.getenv("LOTUS_TESTS_PULL_BASE_IMAGES", "true").strip().lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return
+
+    missing_images: list[str] = []
+    for image in _load_compose_images(compose_file):
+        result = runner(
+            ["docker", "image", "inspect", image],
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            missing_images.append(image)
+
+    for image in missing_images:
+        try:
+            runner(["docker", "pull", image], check=True, capture_output=True)
+        except subprocess.CalledProcessError as exc:
+            details = (exc.stderr or b"").decode("utf-8", errors="ignore").strip()
+            raise DockerStackError(
+                f"Failed to pull required Docker image '{image}': {details}"
+            ) from exc
 
 
 def _is_retryable_compose_up_error(stderr: str) -> bool:
@@ -75,6 +120,7 @@ def compose_up(
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> None:
     ensure_docker_engine_available(runner)
+    ensure_required_images_available(compose_file, runner)
     _remove_stale_project_containers(compose_file, runner)
     try:
         runner(
