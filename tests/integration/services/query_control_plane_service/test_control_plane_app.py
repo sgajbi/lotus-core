@@ -342,6 +342,27 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     )
     assert currency_param["description"] == "Risk-free series currency."
 
+    components = schema["components"]["schemas"]
+    benchmark_catalog = components["BenchmarkCatalogResponse"]
+    benchmark_market_series_response = components["BenchmarkMarketSeriesResponse"]
+    risk_free_series_response = components["RiskFreeSeriesResponse"]
+    coverage_response = components["CoverageResponse"]
+    classification_taxonomy_response = components["ClassificationTaxonomyResponse"]
+
+    assert benchmark_catalog["properties"]["records"]["description"] == (
+        "Benchmark definition records effective for the requested date."
+    )
+    assert benchmark_market_series_response["properties"]["quality_status_summary"]["examples"] == [
+        {"accepted": 31, "estimated": 2}
+    ]
+    assert risk_free_series_response["properties"]["lineage"]["examples"] == [
+        {"contract_version": "rfc_062_v1", "source_system": "lotus-core"}
+    ]
+    assert coverage_response["properties"]["missing_dates_count"]["examples"] == [2]
+    assert classification_taxonomy_response["properties"]["records"]["description"] == (
+        "Classification taxonomy entries effective on the requested date."
+    )
+
 
 async def test_openapi_describes_capabilities_query_parameters(async_test_client):
     response = await async_test_client.get("/openapi.json")
