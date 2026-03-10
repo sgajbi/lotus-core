@@ -8,9 +8,7 @@ version = "0.1.0"
 description = "A core library for processing financial transactions and calculating cost basis."
 requires-python = ">=3.11"
 dependencies = [
-    "pydantic>=2.0,<3.0",
-    "pydantic-settings>=2.0,<3.0",
-    "python-dotenv>=1.0,<2.0"
+    "pydantic>=2.0,<3.0"
 ]
 
 [tool.setuptools.packages.find]
