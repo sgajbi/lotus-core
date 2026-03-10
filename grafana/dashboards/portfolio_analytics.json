@@ -191,6 +191,82 @@
       ],
       "title": "Pending Outbox Events",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (job) (rate(http_requests_total{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|position_calculator_service|pipeline_orchestrator_service|valuation_orchestrator_service|cashflow_calculator_service|cost_calculator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}[5m]))",
+          "legendFormat": "{{job}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP Request Rate by Service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 12,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "up{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|position_calculator_service|pipeline_orchestrator_service|valuation_orchestrator_service|cashflow_calculator_service|cost_calculator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}",
+          "legendFormat": "{{job}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Service Availability by Job",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
@@ -207,6 +283,6 @@
   "timezone": "browser",
   "title": "Portfolio Analytics Overview",
   "uid": "portfolio-analytics-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
