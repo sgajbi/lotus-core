@@ -44,8 +44,8 @@ Evidence:
 - `src/services/query_service/app/routers/portfolios.py`
 - `src/services/query_service/app/routers/positions.py`
 - `src/services/query_service/app/routers/transactions.py`
-- `src/services/query_service/app/routers/simulation.py`
-- `src/services/query_service/app/routers/integration.py`
+- `src/services/query_control_plane_service/app/routers/simulation.py`
+- `src/services/query_control_plane_service/app/routers/integration.py`
 - `src/services/query_service/app/services/simulation_service.py`
 
 ## Requirement-to-Implementation Traceability

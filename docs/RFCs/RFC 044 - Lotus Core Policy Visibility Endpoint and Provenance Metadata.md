@@ -37,7 +37,7 @@ Fully implemented:
 1. Core snapshot response schema includes governance metadata with policy provenance block.
 
 Evidence:
-- `src/services/query_service/app/routers/integration.py`
+- `src/services/query_control_plane_service/app/routers/integration.py`
 - `src/services/query_service/app/services/integration_service.py`
 - `src/services/query_service/app/dtos/integration_dto.py`
 - `src/services/query_service/app/dtos/core_snapshot_dto.py`

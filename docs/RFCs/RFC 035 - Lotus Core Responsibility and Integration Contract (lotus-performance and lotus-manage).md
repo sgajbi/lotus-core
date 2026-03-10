@@ -48,8 +48,8 @@ Evidence:
 - `src/services/ingestion_service/app/routers/portfolio_bundle.py`
 - `src/services/ingestion_service/app/routers/uploads.py`
 - `src/services/ingestion_service/app/adapter_mode.py`
-- `src/services/query_service/app/routers/integration.py`
-- `src/services/query_service/app/routers/capabilities.py`
+- `src/services/query_control_plane_service/app/routers/integration.py`
+- `src/services/query_control_plane_service/app/routers/capabilities.py`
 - `src/services/query_service/app/services/capabilities_service.py`
 - `tests/integration/services/ingestion_service/test_ingestion_routers.py`
 - `tests/integration/services/query_service/test_capabilities_router_dependency.py`

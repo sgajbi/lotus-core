@@ -33,4 +33,4 @@ Initial implementation resolves feature flags from environment variables. This i
 ## Links
 
 1. `docs/RFCs/RFC 038 - lotus-core Integration Capabilities API.md`
-2. `src/services/query_service/app/routers/capabilities.py`
+2. `src/services/query_control_plane_service/app/routers/capabilities.py`

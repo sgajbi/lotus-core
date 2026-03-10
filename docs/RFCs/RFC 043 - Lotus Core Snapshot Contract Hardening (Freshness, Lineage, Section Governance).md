@@ -40,7 +40,7 @@ Implemented in snapshot response/flow:
 3. Direct policy-aware section gating in `create_core_snapshot` with strict-mode `403` behavior and non-strict section filtering.
 
 Evidence:
-- `src/services/query_service/app/routers/integration.py`
+- `src/services/query_control_plane_service/app/routers/integration.py`
 - `src/services/query_service/app/services/core_snapshot_service.py`
 - `src/services/query_service/app/dtos/core_snapshot_dto.py`
 - `src/services/query_service/app/services/integration_service.py`
