@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -284,6 +285,8 @@ async def test_projected_positions_adds_new_security_from_change(mock_dependenci
     assert response.positions[0].security_id == "SEC_NEW_US"
     assert response.positions[0].instrument_name == "New Security"
     assert response.positions[0].delta_quantity == 5.0
+    assert response.positions[0].cost_basis == Decimal("0")
+    assert response.positions[0].cost_basis_local == Decimal("0")
 
 
 async def test_projected_positions_filters_non_positive_after_changes(mock_dependencies):
@@ -329,15 +332,15 @@ async def test_validate_session_active_raises_when_session_missing():
 @pytest.mark.parametrize(
     ("transaction_type", "quantity", "amount", "expected"),
     [
-        ("BUY", 10, None, 10.0),
-        ("TRANSFER_IN", 5, 99, 5.0),
-        ("SELL", 7, None, -7.0),
-        ("TRANSFER_OUT", 3, 99, -3.0),
-        ("DEPOSIT", None, 5, 0.0),
-        ("WITHDRAWAL", None, 3, 0.0),
-        ("FEE", None, 2, 0.0),
-        ("TAX", None, 1, 0.0),
-        ("UNKNOWN", 9, None, 0.0),
+        ("BUY", 10, None, Decimal("10")),
+        ("TRANSFER_IN", 5, 99, Decimal("5")),
+        ("SELL", 7, None, Decimal("-7")),
+        ("TRANSFER_OUT", 3, 99, Decimal("-3")),
+        ("DEPOSIT", None, 5, Decimal("0")),
+        ("WITHDRAWAL", None, 3, Decimal("0")),
+        ("FEE", None, 2, Decimal("0")),
+        ("TAX", None, 1, Decimal("0")),
+        ("UNKNOWN", 9, None, Decimal("0")),
     ],
 )
 async def test_change_quantity_effect_rules(transaction_type, quantity, amount, expected):

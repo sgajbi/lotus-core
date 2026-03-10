@@ -1,4 +1,5 @@
-# src/services/query_service/app/dtos/cashflow_dto.py
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -8,7 +9,7 @@ class CashflowRecord(BaseModel):
     for API responses.
     """
 
-    amount: float = Field(
+    amount: Decimal = Field(
         ...,
         description="Signed cashflow amount expressed in the reported cashflow currency.",
         examples=[-18542.0],
@@ -47,4 +48,3 @@ class CashflowRecord(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
-

@@ -235,8 +235,8 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
 
         assert response.positions[0].valuation is not None
         assert response.positions[0].valuation.market_price is None
-        assert response.positions[0].valuation.market_value == 123.45
-        assert response.positions[0].valuation.unrealized_gain_loss == 0
+        assert response.positions[0].valuation.market_value == Decimal("123.45")
+        assert response.positions[0].valuation.unrealized_gain_loss == Decimal("0")
         assert response.positions[0].held_since_date == date(2025, 1, 3)
 
 

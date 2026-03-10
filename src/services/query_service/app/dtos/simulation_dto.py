@@ -1,5 +1,5 @@
-# services/query-service/app/dtos/simulation_dto.py
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -95,12 +95,12 @@ class SimulationChangeInput(BaseModel):
         description="Transaction quantity used for quantity-driven changes.",
         examples=[100.0],
     )
-    price: float | None = Field(
+    price: Decimal | None = Field(
         default=None,
         description="Unit price associated with the simulated transaction, when relevant.",
         examples=[127.45],
     )
-    amount: float | None = Field(
+    amount: Decimal | None = Field(
         default=None,
         description="Cash amount associated with the simulated transaction, when relevant.",
         examples=[12745.0],
@@ -155,12 +155,12 @@ class SimulationChangeRecord(BaseModel):
         description="Projected transaction quantity.",
         examples=[100.0],
     )
-    price: float | None = Field(
+    price: Decimal | None = Field(
         default=None,
         description="Projected transaction unit price.",
         examples=[127.45],
     )
-    amount: float | None = Field(
+    amount: Decimal | None = Field(
         default=None,
         description="Projected transaction cash amount.",
         examples=[12745.0],
@@ -246,12 +246,12 @@ class ProjectedPositionRecord(BaseModel):
         description="Net quantity change introduced by the simulation.",
         examples=[100.0],
     )
-    cost_basis: float | None = Field(
+    cost_basis: Decimal | None = Field(
         default=None,
         description="Current baseline cost basis in portfolio reporting currency.",
         examples=[28500.0],
     )
-    cost_basis_local: float | None = Field(
+    cost_basis_local: Decimal | None = Field(
         default=None,
         description="Current baseline cost basis in local instrument currency.",
         examples=[28500.0],
