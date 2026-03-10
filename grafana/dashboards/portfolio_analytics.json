@@ -430,6 +430,115 @@
       ],
       "title": "Replay Duplicate and Failure Pressure",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "ingestion_backlog_age_seconds",
+          "legendFormat": "backlog_age_seconds",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "reprocessing_active_keys_total",
+          "legendFormat": "active_reprocessing_keys",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Ingestion Backlog and Active Reprocessing",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_claimed_total[5m]))",
+          "legendFormat": "{{job_type}} - claimed",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_completed_total[5m]))",
+          "legendFormat": "{{job_type}} - completed",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_failed_total[5m]))",
+          "legendFormat": "{{job_type}} - failed",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Reprocessing Worker Throughput and Failures",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
