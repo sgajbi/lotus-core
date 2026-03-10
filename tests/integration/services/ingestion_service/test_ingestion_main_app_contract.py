@@ -275,6 +275,46 @@ async def test_openapi_describes_portfolio_market_and_fx_shared_schemas(async_te
     ]
 
 
+async def test_openapi_describes_instrument_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    instrument = components["Instrument"]
+    instrument_request = components["InstrumentIngestionRequest"]
+
+    assert instrument["properties"]["security_id"]["description"] == (
+        "Canonical security identifier used across portfolios, transactions, and valuation."
+    )
+    assert instrument["properties"]["contract_rate"]["examples"] == ["1.0850000000"]
+    assert instrument["properties"]["ultimate_parent_issuer_name"]["examples"] == [
+        "Barclays Group Holdings PLC"
+    ]
+    assert instrument_request["properties"]["instruments"]["description"] == (
+        "Instrument master records to ingest or upsert."
+    )
+    assert instrument_request["properties"]["instruments"]["examples"] == [
+        [
+            {
+                "security_id": "SEC_BARC_PERP",
+                "name": "Barclays PLC 8% Perpetual",
+                "isin": "US06738E2046",
+                "currency": "USD",
+                "product_type": "bond",
+                "asset_class": "fixed_income",
+                "sector": "financials",
+                "country_of_risk": "GB",
+                "rating": "BB+",
+                "issuer_id": "ISSUER_BARC",
+                "issuer_name": "Barclays PLC",
+                "ultimate_parent_issuer_id": "ULTIMATE_BARC",
+                "ultimate_parent_issuer_name": "Barclays Group Holdings PLC",
+            }
+        ]
+    ]
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
