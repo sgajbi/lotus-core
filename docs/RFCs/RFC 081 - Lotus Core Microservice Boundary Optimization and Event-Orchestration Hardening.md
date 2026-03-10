@@ -1,7 +1,7 @@
 # RFC 081 - Lotus Core Microservice Boundary Optimization and Event-Orchestration Hardening
 
-**Status**: Implemented  
-**Date**: 2026-03-08  
+**Status**: In Progress (Reopened for hardening)  
+**Date**: 2026-03-10  
 **Owner**: lotus-core Architecture  
 **Reviewers**: Platform Architecture, Data Engineering, QA, SRE  
 **Approvers**: *TBD*
@@ -38,9 +38,42 @@ Implemented under RFC 081 as of 2026-03-08:
 - support/control-plane visibility of the latest portfolio-day controls state
   through support overview APIs
 
-RFC 081 architectural scope is implemented. Remaining work, if any, should now be treated
-as normal follow-on product hardening or additional control-policy consumers, not as open
-boundary-decomposition scope under this RFC.
+The service-boundary decomposition remains implemented, but RFC 081 is reopened because
+post-merge heavy-runtime validation exposed unresolved hardening gaps across orchestration,
+idempotency, replay handling, and test isolation. Those gaps are part of the banking-grade
+delivery standard for this RFC and must be closed before RFC 081 can be treated as complete.
+
+## 0.2 Reopened hardening scope (2026-03-10)
+
+RFC 081 is reopened to close the gap between:
+
+- topology decomposition being present
+- and the system actually behaving deterministically under full E2E, replay, and recovery load
+
+Observed post-closure failure classes:
+
+- portfolio aggregation completed before the full day input set was materially available
+- late same-day inputs did not always re-arm completed aggregation safely
+- duplicate downstream fan-out occurred from position-timeseries processing paths
+- shared runtime instrumentation (`EpochFencer`) could throw and DLQ valid work
+- Docker-backed test orchestration lacked a sufficiently strong quiescence and drain contract
+
+These are not new feature requests. They are RFC 081 hardening deltas because they sit directly on:
+
+- event-orchestration correctness
+- microservice boundary behavior under asynchronous timing skew
+- confidence in release-grade validation
+
+## 0.3 Closure criteria for reopened RFC 081
+
+RFC 081 may be closed again only when all of the following are true:
+
+- heavy E2E workflows are green on a clean stack without manual intervention
+- failure-recovery and backlog-drain gates are green on `main`
+- no known duplicate fan-out or premature aggregation path remains
+- quiescence-aware cleanup is used by the Docker-backed test harness
+- newly discovered distributed failure modes are pushed down into unit/integration coverage
+- main-grade pipeline evidence is refreshed after those hardening changes land
 
 ## 1. Purpose and Goals
 
@@ -359,6 +392,8 @@ Exit criteria:
 - No known implicit trigger dependency remains in critical calculation path.
 - SLOs maintained or improved under target volume.
 - Financial reconciliation controls pass for production-like runs.
+- Full-stack E2E and recovery gates remain green after clean rebuilds on `main`.
+- Test orchestration proves deterministic quiescence between suites and modules.
 
 ## 11. Risks and Mitigations
 
@@ -611,7 +646,7 @@ Testing completed for this slice:
   - new business-domain RFCs that consume the explicit control-plane contracts
   - independent reliability or observability enhancements under active runbooks
 
-## 16. Closure Evidence (2026-03-08)
+## 16. Closure Evidence (2026-03-08, superseded by reopen)
 
 RFC 081 is closed as implemented based on merged code, runtime topology alignment,
 and main-grade validation evidence on `main` commit
@@ -654,9 +689,61 @@ Validation evidence:
 
 Closure assessment:
 
-- No open architectural decomposition delta remains under RFC 081.
-- Documentation, runtime topology, orchestration policy, and test coverage are
-  aligned with the implemented service model.
-- The remaining `Failure Recovery Gate` in the active push-to-main run is a
-  release-grade runtime assurance gate, not an architectural completion blocker
-  for this RFC.
+- This closure record is retained as historical evidence for the topology split,
+  but it is no longer sufficient as the active completion claim for RFC 081.
+
+## 17. Reopen Update (2026-03-10)
+
+RFC 081 is reopened because runtime evidence invalidated the prior closure claim.
+
+What remains valid:
+
+- service-boundary decomposition delivered by RFC 081 still stands
+- the control-plane services introduced by RFC 081 remain the correct directional architecture
+
+What is no longer accepted as complete:
+
+- claiming banking-grade runtime confidence without proving deterministic behavior under
+  heavy asynchronous test and recovery scenarios
+
+Concrete defects found after the original closure:
+
+1. Position-timeseries duplicate fan-out
+- duplicate snapshot/completion processing could produce repeated
+  `position_timeseries_day_completed` events and noisy downstream re-arms
+
+2. Premature portfolio aggregation completion
+- aggregation could complete for a day before all same-day position-timeseries inputs
+  were present, leaving portfolio-timeseries rows materially incomplete
+
+3. Late-input rearm contract gap
+- completed aggregation jobs were guarded too aggressively by correlation id,
+  preventing genuine late same-day inputs from reopening the aggregation stage
+
+4. Shared epoch-fencing runtime bug
+- `EpochFencer` metrics emission used mismatched Prometheus labels and could throw
+  at runtime, causing valid work to be dead-lettered
+
+5. Test-orchestration confidence gap
+- Docker-backed module cleanup and heavy-suite sequencing relied on weaker quiescence
+  assumptions than the architecture now requires
+
+Hardening workstreams now tracked under RFC 081:
+
+- A. deterministic stage re-arm and duplicate fan-out suppression
+- B. quiescence/drain-aware Docker-backed test orchestration
+- C. heavy-gate proof for `e2e-all` and failure-recovery on `main`
+- D. downward propagation of distributed failure modes into unit and integration suites
+
+Current implementation progress on the reopened hardening scope:
+
+- fixed duplicate same-state position-timeseries fan-out suppression
+- fixed aggregation re-arm semantics for late material inputs on already-completed days
+- fixed shared `EpochFencer` metric label mismatch that could DLQ valid work
+- added or updated lower-level tests covering those paths
+- strengthened test runtime isolation with explicit quiescence support
+
+Current remaining gap after those fixes:
+
+- at least one Day-5 portfolio-timeseries business-path defect remains under isolated E2E
+  execution and must be resolved before RFC 081 can be re-closed
