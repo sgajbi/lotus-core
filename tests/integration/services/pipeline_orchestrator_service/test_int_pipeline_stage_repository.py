@@ -164,3 +164,35 @@ async def test_upsert_portfolio_control_stage_status_escalates_to_failed(
     await async_db_session.commit()
 
     assert stage.status == "FAILED"
+
+
+async def test_get_latest_portfolio_control_stage_epoch_returns_highest_epoch(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = PipelineStageRepository(async_db_session)
+
+    await repo.upsert_portfolio_control_stage_status(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="PORT-CTRL-3",
+        business_date=date(2026, 3, 7),
+        epoch=2,
+        status="COMPLETED",
+        source_event_type="financial_reconciliation_completed",
+    )
+    await repo.upsert_portfolio_control_stage_status(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="PORT-CTRL-3",
+        business_date=date(2026, 3, 7),
+        epoch=4,
+        status="COMPLETED",
+        source_event_type="financial_reconciliation_completed",
+    )
+    await async_db_session.commit()
+
+    latest_epoch = await repo.get_latest_portfolio_control_stage_epoch(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="PORT-CTRL-3",
+        business_date=date(2026, 3, 7),
+    )
+
+    assert latest_epoch == 4

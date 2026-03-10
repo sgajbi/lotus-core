@@ -155,6 +155,20 @@ class PipelineStageRepository:
         await self.db.refresh(stage)
         return stage
 
+    async def get_latest_portfolio_control_stage_epoch(
+        self,
+        *,
+        stage_name: str,
+        portfolio_id: str,
+        business_date: date,
+    ) -> int | None:
+        stmt = select(func.max(PipelineStageState.epoch)).where(
+            PipelineStageState.stage_name == stage_name,
+            PipelineStageState.portfolio_id == portfolio_id,
+            PipelineStageState.business_date == business_date,
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     @staticmethod
     def build_portfolio_stage_key(
         *,

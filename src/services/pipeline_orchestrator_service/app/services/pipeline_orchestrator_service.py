@@ -94,6 +94,13 @@ class PipelineOrchestratorService:
             status=event.outcome_status,
             source_event_type="financial_reconciliation_completed",
         )
+        latest_epoch = await self.repo.get_latest_portfolio_control_stage_epoch(
+            stage_name=FINANCIAL_RECONCILIATION_STAGE,
+            portfolio_id=event.portfolio_id,
+            business_date=event.business_date,
+        )
+        if latest_epoch is not None and latest_epoch != event.epoch:
+            return
         controls_blocking = self.is_control_stage_blocking(stage.status)
         controls_event = PortfolioDayControlsEvaluatedEvent(
             portfolio_id=event.portfolio_id,
