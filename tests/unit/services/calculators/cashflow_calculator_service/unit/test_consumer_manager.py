@@ -63,6 +63,8 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
     monkeypatch.setattr(consumer_manager, "CashflowCalculatorConsumer", _FakeSuccessConsumer)
     manager = consumer_manager.ConsumerManager()
 
+    assert len(manager.consumers) == 2
+
     run_task = asyncio.create_task(manager.run())
     await asyncio.sleep(0.05)
     manager._shutdown_event.set()
@@ -75,6 +77,8 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):
     monkeypatch.setattr(consumer_manager, "CashflowCalculatorConsumer", _FakeFailingConsumer)
     manager = consumer_manager.ConsumerManager()
+
+    assert len(manager.consumers) == 2
 
     with pytest.raises(RuntimeError, match="Critical service task"):
         await asyncio.wait_for(manager.run(), timeout=2)

@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+import sqlalchemy as sa
 from portfolio_common.database_models import (
     Cashflow,
     Portfolio,
@@ -251,3 +252,99 @@ async def test_get_income_cashflows_is_epoch_aware(
     # Verify it returned the record from epoch 1 and filtered out the one from epoch 0
     assert results[0].epoch == 1
     assert results[0].amount == Decimal("100")
+
+
+async def test_cashflows_allow_same_transaction_id_across_epochs(clean_db, async_db_session):
+    """
+    GIVEN a transaction that is recalculated into a new epoch
+    WHEN cashflows are persisted for both the original and replay epochs
+    THEN the database should retain both versions keyed by (transaction_id, epoch).
+    """
+    portfolio_id = "EPOCH_CASHFLOW_PORT"
+    security_id = "EPOCH_CASHFLOW_SEC"
+    transaction_id = "EPOCH_CASHFLOW_TXN_01"
+
+    async_db_session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+    async_db_session.add(
+            Transaction(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                instrument_id="I-EPOCH-1",
+                security_id=security_id,
+                transaction_date=date(2025, 2, 10),
+                transaction_type="BUY",
+                quantity=1,
+                price=100,
+                gross_transaction_amount=100,
+                trade_currency="USD",
+                currency="USD",
+            )
+        )
+    async_db_session.add(
+            PositionState(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                epoch=1,
+                watermark_date=date(2025, 2, 9),
+            )
+        )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            Cashflow(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                cashflow_date=date(2025, 2, 10),
+                amount=Decimal("-100"),
+                currency="USD",
+                classification="INVESTMENT_OUTFLOW",
+                timing="BOD",
+                calculation_type="NET",
+                is_position_flow=True,
+                epoch=0,
+            ),
+            Cashflow(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                cashflow_date=date(2025, 2, 10),
+                amount=Decimal("-100"),
+                currency="USD",
+                classification="INVESTMENT_OUTFLOW",
+                timing="BOD",
+                calculation_type="NET",
+                is_position_flow=True,
+                epoch=1,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    result = await async_db_session.execute(
+        sa.text(
+            """
+            SELECT transaction_id, epoch
+            FROM cashflows
+            WHERE transaction_id = :transaction_id
+            ORDER BY epoch
+            """
+        ),
+        {"transaction_id": transaction_id},
+    )
+    rows = result.fetchall()
+
+    assert rows == [(transaction_id, 0), (transaction_id, 1)]

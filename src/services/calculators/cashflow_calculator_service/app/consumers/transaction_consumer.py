@@ -10,7 +10,10 @@ from confluent_kafka import Message
 from portfolio_common.config import (
     CASHFLOW_RULE_CACHE_TTL_SECONDS as DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS,
 )
-from portfolio_common.config import KAFKA_CASHFLOW_CALCULATED_TOPIC
+from portfolio_common.config import (
+    KAFKA_CASHFLOW_CALCULATED_TOPIC,
+    KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+)
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import CashflowCalculatedEvent, TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
@@ -174,12 +177,52 @@ class CashflowCalculatorConsumer(BaseConsumer):
             event_data = json.loads(value)
             event = TransactionEvent.model_validate(event_data)
 
+            if (
+                msg.topic() == KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC
+                and (event.epoch or 0) == 0
+            ):
+                logger.info(
+                    "Skipping non-replay processed-transaction event on replay cashflow path.",
+                    extra={
+                        "transaction_id": event.transaction_id,
+                        "topic": msg.topic(),
+                        "epoch": event.epoch or 0,
+                    },
+                )
+                return
+
             async for db in get_async_db_session():
                 tx = await db.begin()
                 try:
                     idempotency_repo = IdempotencyRepository(db)
                     cashflow_repo = CashflowRepository(db)
                     outbox_repo = OutboxRepository(db)
+
+                    if msg.topic() == KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC:
+                        portfolio_exists = await cashflow_repo.portfolio_exists(event.portfolio_id)
+                        transaction_exists = await cashflow_repo.transaction_exists(
+                            event.transaction_id,
+                            portfolio_id=event.portfolio_id,
+                        )
+                        if not portfolio_exists or not transaction_exists:
+                            logger.warning(
+                                "Skipping stale replay cashflow event because canonical state "
+                                "has already been removed.",
+                                extra={
+                                    "transaction_id": event.transaction_id,
+                                    "portfolio_id": event.portfolio_id,
+                                    "security_id": event.security_id,
+                                    "epoch": event.epoch or 0,
+                                    "portfolio_exists": portfolio_exists,
+                                    "transaction_exists": transaction_exists,
+                                    "topic": msg.topic(),
+                                },
+                            )
+                            await idempotency_repo.mark_event_processed(
+                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                            )
+                            await db.commit()
+                            return
 
                     fencer = EpochFencer(db, service_name=SERVICE_NAME)
                     if not await fencer.check(event):
