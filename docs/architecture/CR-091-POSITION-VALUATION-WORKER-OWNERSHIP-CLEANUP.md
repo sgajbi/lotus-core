@@ -32,6 +32,9 @@ current-state docs were keeping them alive.
 - Corrected current-state schema catalog references to the live ownership surface in
   `valuation_orchestrator_service`
 - Fixed stale copied path headers in the surviving orchestrator files
+- Restored the still-valid scheduler, reprocessing worker, and consumer behavior tests under
+  `tests/unit/services/valuation_orchestrator_service/` so ownership cleanup did not reduce
+  coverage on the live runtime
 
 ## Result
 
@@ -51,4 +54,4 @@ risk of future fixes being applied to the wrong service.
   - `src/services/valuation_orchestrator_service/app/consumer_manager.py`
 - focused validation:
   - `python -m pytest tests/unit/services/calculators/position_valuation_calculator/core/test_consumer_manager_runtime.py tests/unit/services/calculators/position_valuation_calculator/logic/test_valuation_logic.py tests/unit/services/calculators/position_valuation_calculator/repositories/test_unit_valuation_repo.py tests/unit/services/valuation_orchestrator_service/unit/test_valuation_orchestrator_consumer_manager_runtime.py -q`
-
+  - `python -m pytest tests/unit/services/valuation_orchestrator_service/consumers/test_price_event_consumer.py tests/unit/services/valuation_orchestrator_service/consumers/test_valuation_readiness_consumer.py tests/unit/services/valuation_orchestrator_service/core/test_reprocessing_worker.py tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py tests/unit/services/valuation_orchestrator_service/unit/test_valuation_orchestrator_consumer_manager_runtime.py -q`

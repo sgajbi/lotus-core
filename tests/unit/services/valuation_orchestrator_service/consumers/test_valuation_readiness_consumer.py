@@ -8,7 +8,7 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.calculators.position_valuation_calculator.app.consumers.valuation_readiness_consumer import (  # noqa: E501
+from src.services.valuation_orchestrator_service.app.consumers.valuation_readiness_consumer import (
     SERVICE_NAME,
     ValuationReadinessConsumer,
 )
@@ -33,13 +33,13 @@ class _SingleSessionAsyncIterator:
 
 @pytest.fixture
 def consumer() -> ValuationReadinessConsumer:
-    c = ValuationReadinessConsumer(
+    consumer = ValuationReadinessConsumer(
         bootstrap_servers="mock_server",
         topic="portfolio_day_ready_for_valuation",
         group_id="test_group",
     )
-    c._send_to_dlq_async = AsyncMock()
-    return c
+    consumer._send_to_dlq_async = AsyncMock()
+    return consumer
 
 
 @pytest.fixture
@@ -76,15 +76,15 @@ def mock_dependencies():
 
     with (
         patch(
-            "services.calculators.position_valuation_calculator.app.consumers.valuation_readiness_consumer.get_async_db_session",  # noqa: E501
+            "src.services.valuation_orchestrator_service.app.consumers.valuation_readiness_consumer.get_async_db_session",
             new=get_session_gen,
         ),
         patch(
-            "services.calculators.position_valuation_calculator.app.consumers.valuation_readiness_consumer.IdempotencyRepository",  # noqa: E501
+            "src.services.valuation_orchestrator_service.app.consumers.valuation_readiness_consumer.IdempotencyRepository",
             return_value=mock_idempotency_repo,
         ),
         patch(
-            "services.calculators.position_valuation_calculator.app.consumers.valuation_readiness_consumer.ValuationJobRepository",  # noqa: E501
+            "src.services.valuation_orchestrator_service.app.consumers.valuation_readiness_consumer.ValuationJobRepository",
             return_value=mock_job_repo,
         ),
     ):
