@@ -464,6 +464,51 @@ async def test_openapi_describes_transaction_corporate_action_fields(async_test_
     )
 
 
+async def test_openapi_describes_reference_data_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    benchmark_definition = components["BenchmarkDefinitionRecord"]
+    index_price_series = components["IndexPriceSeriesRecord"]
+    benchmark_definition_request = components["BenchmarkDefinitionIngestionRequest"]
+    index_definition_request = components["IndexDefinitionIngestionRequest"]
+    classification_request = components["ClassificationTaxonomyIngestionRequest"]
+
+    assert benchmark_definition["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the benchmark definition payload."
+    )
+    assert index_price_series["properties"]["source_timestamp"]["examples"] == [
+        "2026-01-02T21:00:00Z"
+    ]
+    assert (
+        benchmark_definition_request["properties"]["benchmark_definitions"]["description"]
+        == "Benchmark definition records to ingest or upsert."
+    )
+    assert index_definition_request["properties"]["indices"]["examples"] == [
+        [
+            {
+                "index_id": "IDX_MSCI_WORLD_TR",
+                "index_name": "MSCI World Total Return",
+                "index_currency": "USD",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    ]
+    assert classification_request["properties"]["classification_taxonomy"]["examples"] == [
+        [
+            {
+                "classification_set_id": "wm_global_taxonomy_v1",
+                "taxonomy_scope": "index",
+                "dimension_name": "sector",
+                "dimension_value": "technology",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    ]
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
