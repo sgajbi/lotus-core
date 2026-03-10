@@ -51,7 +51,10 @@ class ConsumerManager:
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
 
         logger.info(
-            "ConsumerManager initialized with %s portfolio aggregation consumer(s) and 1 scheduler.",
+            (
+                "ConsumerManager initialized with %s portfolio aggregation consumer(s) "
+                "and 1 scheduler."
+            ),
             len(self.consumers),
         )
 
