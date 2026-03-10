@@ -4,18 +4,6 @@ import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from .routers import (
-    business_dates,
-    fx_rates,
-    instruments,
-    market_prices,
-    portfolio_bundle,
-    portfolios,
-    reference_data,
-    reprocessing,
-    transactions,
-    uploads,
-)
 from fastapi import FastAPI, Request, status
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
@@ -31,6 +19,19 @@ from portfolio_common.logging_utils import (
 from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUESTS_TOTAL
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
 from prometheus_fastapi_instrumentator import Instrumentator
+
+from .routers import (
+    business_dates,
+    fx_rates,
+    instruments,
+    market_prices,
+    portfolio_bundle,
+    portfolios,
+    reference_data,
+    reprocessing,
+    transactions,
+    uploads,
+)
 
 SERVICE_PREFIX = "ING"
 SERVICE_NAME = "ingestion_service"
@@ -50,9 +51,12 @@ async def lifespan(app: FastAPI):
     try:
         app_state["kafka_producer"] = get_kafka_producer()
         logger.info("Kafka producer initialized successfully.")
-    except Exception:
+    except Exception as exc:
         logger.critical("FATAL: Could not initialize Kafka producer on startup.", exc_info=True)
         app_state["kafka_producer"] = None
+        raise RuntimeError(
+            "ingestion_service failed startup because Kafka producer initialization failed"
+        ) from exc
 
     yield
 
