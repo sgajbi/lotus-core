@@ -272,6 +272,25 @@ async def test_consumer_stale_replay_payload_exits_before_canonical_lookup(
     mock_dependencies["idempotency_repo"].mark_event_processed.assert_awaited_once()
 
 
+async def test_consumer_marks_stage_gate_processed_with_header_correlation(
+    position_consumer: TransactionEventConsumer,
+    mock_kafka_message: MagicMock,
+    mock_transaction_event: TransactionEvent,
+    mock_dependencies: dict,
+):
+    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["position_repo"].get_transaction_by_id.return_value = mock_transaction_event
+
+    await position_consumer.process_message(mock_kafka_message)
+
+    mock_dependencies["idempotency_repo"].mark_event_processed.assert_awaited_once_with(
+        "transaction_processing_completed-0-123",
+        mock_transaction_event.portfolio_id,
+        "position-calculator",
+        "test-corr-id",
+    )
+
+
 async def test_consumer_sends_to_dlq_on_logic_failure(
     position_consumer: TransactionEventConsumer,
     mock_kafka_message: MagicMock,

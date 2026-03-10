@@ -61,6 +61,10 @@ class TransactionEventConsumer(BaseConsumer):
         value = msg.value().decode("utf-8")
         event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
         correlation_id = correlation_id_var.get()
+        correlation_token = None
+        if correlation_id == "<not-set>":
+            correlation_id = self._resolve_message_correlation_id(msg)
+            correlation_token = correlation_id_var.set(correlation_id)
         gate_event = None
         event = None
 
@@ -127,3 +131,6 @@ class TransactionEventConsumer(BaseConsumer):
         except Exception as e:
             logger.error("Unexpected error in position calculator; sending to DLQ.", exc_info=True)
             await self._send_to_dlq_async(msg, e)
+        finally:
+            if correlation_token is not None:
+                correlation_id_var.reset(correlation_token)

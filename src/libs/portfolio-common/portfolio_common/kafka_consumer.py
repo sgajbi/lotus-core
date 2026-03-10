@@ -127,6 +127,27 @@ class BaseConsumer(ABC):
         self._consumer.subscribe([self.topic])
         logger.info(f"Consumer successfully subscribed to topic '{self.topic}'.")
 
+    def _resolve_message_correlation_id(self, msg: Message) -> str:
+        """
+        Resolve the message correlation id from Kafka headers, falling back to a
+        generated service-scoped id when no header is present.
+        """
+        corr_id = None
+        if msg.headers():
+            for key, value in msg.headers():
+                if key == "correlation_id":
+                    corr_id = value.decode("utf-8") if value else None
+                    break
+
+        if not corr_id:
+            corr_id = generate_correlation_id(self.service_prefix)
+            logger.warning(
+                "No correlation ID in message from topic "
+                f"'{msg.topic()}'. Generated new ID: {corr_id}"
+            )
+
+        return corr_id
+
     async def _send_to_dlq_async(self, msg: Message, error: Exception):
         """
         Sends a message that failed processing to the Dead-Letter Queue.
@@ -243,20 +264,7 @@ class BaseConsumer(ABC):
             start_time = time.monotonic()
             processed_successfully = False
             try:
-                corr_id = None
-                if msg.headers():
-                    for key, value in msg.headers():
-                        if key == "correlation_id":
-                            corr_id = value.decode("utf-8") if value else None
-                            break
-
-                if not corr_id:
-                    corr_id = generate_correlation_id(self.service_prefix)
-                    logger.warning(
-                        "No correlation ID in message from topic "
-                        f"'{msg.topic()}'. Generated new ID: {corr_id}"
-                    )
-
+                corr_id = self._resolve_message_correlation_id(msg)
                 token = correlation_id_var.set(corr_id)
 
                 if inspect.iscoroutinefunction(self.process_message):
