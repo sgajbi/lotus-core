@@ -187,6 +187,36 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
 
 
+async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    projection = schema["paths"]["/portfolios/{portfolio_id}/cashflow-projection"]["get"]
+
+    portfolio_id = next(
+        parameter for parameter in projection["parameters"] if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_id["description"] == "Portfolio identifier."
+
+    horizon_days = next(
+        parameter for parameter in projection["parameters"] if parameter["name"] == "horizon_days"
+    )
+    assert horizon_days["description"] == "Projection window in days from as_of_date."
+
+    include_projected = next(
+        parameter
+        for parameter in projection["parameters"]
+        if parameter["name"] == "include_projected"
+    )
+    assert include_projected["description"] == (
+        "When true, includes projected future-dated cashflows."
+    )
+
+    not_found = projection["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Portfolio with id PORT-CF-001 not found"
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
