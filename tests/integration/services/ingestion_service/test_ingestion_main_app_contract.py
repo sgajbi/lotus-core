@@ -355,6 +355,36 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
     ]
 
 
+async def test_openapi_describes_transaction_dual_leg_and_income_fields(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    transaction = response.json()["components"]["schemas"]["Transaction"]
+    properties = transaction["properties"]
+
+    assert properties["economic_event_id"]["description"] == (
+        "Canonical economic event identifier that groups all legs or "
+        "components of the same economic workflow."
+    )
+    assert properties["linked_transaction_group_id"]["description"] == (
+        "Canonical linkage group identifier shared by related product and cash-leg entries."
+    )
+    assert properties["cash_entry_mode"]["description"] == (
+        "Cash-leg handling mode. Use AUTO_GENERATE for service-generated "
+        "cash legs or UPSTREAM_PROVIDED when the upstream cash entry is authoritative."
+    )
+    assert properties["link_type"]["description"] == (
+        "Canonical relationship label between product and cash-leg entries."
+    )
+    assert properties["interest_direction"]["description"] == (
+        "Semantic direction for INTEREST transactions. Supported values are INCOME and EXPENSE."
+    )
+    assert properties["net_interest_amount"]["description"] == (
+        "Net interest amount supplied upstream for reconciliation against "
+        "gross and deduction fields."
+    )
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 

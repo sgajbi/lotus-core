@@ -102,26 +102,27 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "EVT-2026-00987"},
         description=(
-            "Canonical economic event identifier. Optional in Slice 1, "
-            "planned to become required in strict canonical mode."
+            "Canonical economic event identifier that groups all legs or "
+            "components of the same economic workflow."
         ),
     )
     linked_transaction_group_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "LTG-2026-00456"},
         description=(
-            "Canonical linkage group identifier for related entries. " "Optional in Slice 1."
+            "Canonical linkage group identifier shared by related product "
+            "and cash-leg entries."
         ),
     )
     calculation_policy_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "BUY_DEFAULT_POLICY"},
-        description="Resolved BUY policy identifier. Optional in Slice 1.",
+        description="Resolved calculation-policy identifier used to process the transaction.",
     )
     calculation_policy_version: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "1.0.0"},
-        description="Resolved BUY policy version. Optional in Slice 1.",
+        description="Resolved calculation-policy version used to process the transaction.",
     )
     source_system: Optional[str] = Field(
         default=None,
@@ -132,91 +133,94 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "AUTO_GENERATE"},
         description=(
-            "Cash-leg generation mode. Use AUTO_GENERATE for service-generated cash "
-            "leg, or UPSTREAM_PROVIDED when a separate upstream cash entry is "
-            "authoritative."
+            "Cash-leg handling mode. Use AUTO_GENERATE for service-generated "
+            "cash legs or UPSTREAM_PROVIDED when the upstream cash entry is authoritative."
         ),
     )
     external_cash_transaction_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "CASH-ENTRY-2026-0001"},
         description=(
-            "Upstream cash transaction identifier when cash_entry_mode is " "UPSTREAM_PROVIDED."
+            "Upstream cash transaction identifier when cash_entry_mode is "
+            "UPSTREAM_PROVIDED."
         ),
     )
     settlement_cash_account_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "CASH-ACC-USD-001"},
         description=(
-            "Settlement cash account identifier used to build the generated "
-            "ADJUSTMENT cash leg in AUTO_GENERATE mode."
+            "Settlement cash account identifier used to resolve or build the "
+            "cash-leg posting destination."
         ),
     )
     settlement_cash_instrument_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "CASH-USD"},
         description=(
-            "Optional direct cash instrument_id for generated ADJUSTMENT cash legs. "
-            "If omitted, engine resolves from settlement_cash_account_id."
+            "Optional direct cash instrument identifier for generated or "
+            "linked cash legs. If omitted, the engine resolves from the account mapping."
         ),
     )
     movement_direction: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "INFLOW"},
         description=(
-            "Cash movement direction for ADJUSTMENT transactions. "
+            "Cash movement direction for cash-leg style transactions. "
             "Supported canonical values are INFLOW and OUTFLOW."
         ),
     )
     originating_transaction_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "TRN001"},
-        description="Product-leg transaction id linked to an ADJUSTMENT cash leg.",
+        description="Product-leg transaction identifier linked to the related cash-leg entry.",
     )
     originating_transaction_type: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "BUY"},
-        description="Product-leg transaction type linked to an ADJUSTMENT cash leg.",
+        description="Product-leg transaction type linked to the related cash-leg entry.",
     )
     adjustment_reason: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "BUY_SETTLEMENT"},
-        description="Canonical reason code describing why an ADJUSTMENT cash leg exists.",
+        description="Canonical reason code describing why the cash-leg entry exists.",
     )
     link_type: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "BUY_TO_CASH"},
-        description="Canonical relationship label between product leg and ADJUSTMENT cash leg.",
+        description="Canonical relationship label between product and cash-leg entries.",
     )
     reconciliation_key: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "REC-2026-0001"},
-        description="Optional reconciliation key shared by paired dual-leg transactions.",
+        description=(
+            "Optional reconciliation key shared by paired or grouped "
+            "dual-leg transactions."
+        ),
     )
     interest_direction: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "INCOME"},
         description=(
-            "Optional INTEREST semantic direction. Supported canonical values are "
+            "Semantic direction for INTEREST transactions. Supported values are "
             "INCOME and EXPENSE."
         ),
     )
     withholding_tax_amount: Optional[condecimal(ge=Decimal(0))] = Field(
         default=None,
         json_schema_extra={"example": "15.25"},
-        description="Optional withholding tax amount for INTEREST transactions.",
+        description="Withholding tax amount applied to the interest transaction.",
     )
     other_interest_deductions_amount: Optional[condecimal(ge=Decimal(0))] = Field(
         default=None,
         json_schema_extra={"example": "1.00"},
-        description="Optional non-tax deductions applied to INTEREST transactions.",
+        description="Other non-tax deductions applied to the interest transaction.",
     )
     net_interest_amount: Optional[condecimal(ge=Decimal(0))] = Field(
         default=None,
         json_schema_extra={"example": "108.20"},
         description=(
-            "Optional net-interest amount supplied upstream for reconciliation "
-            "against gross and deduction fields."
+            "Net interest amount supplied upstream for reconciliation against "
+            "gross and deduction fields."
         ),
     )
     component_type: Optional[str] = Field(
