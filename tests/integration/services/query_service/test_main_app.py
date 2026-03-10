@@ -111,6 +111,38 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
 
 
+async def test_openapi_describes_transaction_filters_and_not_found_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    transactions = schema["paths"]["/portfolios/{portfolio_id}/transactions"]["get"]
+
+    portfolio_param = next(
+        parameter for parameter in transactions["parameters"] if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_param["description"] == "Portfolio identifier."
+
+    transaction_type = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "transaction_type"
+    )
+    assert transaction_type["description"] == (
+        "Filter by canonical transaction type, including FX business types."
+    )
+
+    fx_contract_id = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "fx_contract_id"
+    )
+    assert fx_contract_id["description"] == "Filter by FX contract identifier."
+
+    not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
@@ -123,5 +155,3 @@ async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     assert "/portfolios/{portfolio_id}/performance" not in paths
     assert "/portfolios/{portfolio_id}/performance/mwr" not in paths
     assert "/portfolios/{portfolio_id}/positions-analytics" not in paths
-
-
