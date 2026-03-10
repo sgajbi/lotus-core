@@ -36,7 +36,6 @@ Evidence:
 - `tests/e2e/test_review_pipeline.py`
 - `tests/e2e/test_complex_portfolio_lifecycle.py`
 - `src/services/query_service/app/main.py`
-- `src/services/query_service/app/routers/legacy_gone.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -46,7 +45,7 @@ Evidence:
 | Epoch-consistent section orchestration | Responsibility moved to lotus-report | migration decision and 410 tests |
 | Review DTO and review router in-core | Not active in current query-service | router listing in repo |
 | Review latency observability in-core | Not applicable after de-ownership | no active review path |
-| Migration guidance for callers | Implemented via `410` response with target endpoint | e2e review tests; `legacy_gone.py` |
+| Migration guidance for callers | Implemented via disabled-route behavior contract and shared E2E assertions | e2e review tests; shared assertions |
 
 ## Design Reasoning and Trade-offs
 
@@ -75,8 +74,8 @@ Remaining work belongs to lotus-report and consuming applications.
 1. Hard-disabled migration behavior:
    - `tests/e2e/test_review_pipeline.py`
    - `tests/e2e/test_complex_portfolio_lifecycle.py`
-2. Migration response helper:
-   - `src/services/query_service/app/routers/legacy_gone.py`
+2. Disabled-route behavior policy:
+   - `tests/e2e/assertions.py`
 
 ## Original Acceptance Criteria Alignment
 
