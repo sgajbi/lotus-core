@@ -103,10 +103,37 @@ Recommended implementation order:
 
 ## Sign-off state
 
-Current state: `Refactor Needed`
+## Progress update
+
+Implemented in this review program:
+
+- extracted shared valuation query/claim logic into
+  `src/libs/portfolio-common/portfolio_common/valuation_repository_base.py`
+- reduced both service-local valuation repository files to thin wrappers that preserve:
+  - existing import paths
+  - service-local metric hooks
+  - existing unit/integration test patch points
+
+Validation performed on the converged valuation path:
+
+- unit:
+  - `tests/unit/services/calculators/position_valuation_calculator/repositories/test_valuation_repository_worker_metrics.py`
+  - `tests/unit/services/calculators/position_valuation_calculator/repositories/test_unit_valuation_repo.py`
+- integration:
+  - `tests/integration/services/calculators/position_valuation_calculator/test_int_valuation_repo.py`
+  - `tests/integration/services/calculators/position_valuation_calculator/test_int_instrument_reprocessing_repo.py`
+
+Remaining CR-006 scope:
+
+- timeseries repository convergence is still open
+- worker-only methods and post-RFC-81 ownership differences need to be handled without
+  reintroducing blurred service boundaries
+
+## Sign-off state
+
+Current state: `In Review`
 
 Reason:
 
-- findings are clear
-- some test hardening has landed
-- structural convergence has not yet been implemented
+- valuation duplication is now converged safely
+- timeseries duplication still remains and is the remaining CR-006 refactor target
