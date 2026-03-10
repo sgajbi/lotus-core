@@ -143,6 +143,50 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
     assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"
 
 
+async def test_openapi_describes_position_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    latest_positions = schema["paths"]["/portfolios/{portfolio_id}/positions"]["get"]
+    position_history = schema["paths"]["/portfolios/{portfolio_id}/position-history"]["get"]
+
+    positions_portfolio_id = next(
+        parameter
+        for parameter in latest_positions["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert positions_portfolio_id["description"] == "Portfolio identifier."
+
+    include_projected = next(
+        parameter
+        for parameter in latest_positions["parameters"]
+        if parameter["name"] == "include_projected"
+    )
+    assert include_projected["description"] == (
+        "When true, includes future-dated projected position state "
+        "beyond current business_date."
+    )
+
+    history_security_id = next(
+        parameter
+        for parameter in position_history["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert history_security_id["description"] == (
+        "Security identifier for the position-history drill-down."
+    )
+
+    positions_not_found = latest_positions["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    history_not_found = position_history["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert positions_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+    assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
