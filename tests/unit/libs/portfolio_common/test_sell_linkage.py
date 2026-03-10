@@ -2,7 +2,6 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
-
 from portfolio_common.events import TransactionEvent
 from portfolio_common.transaction_domain import (
     SELL_AVCO_POLICY_ID,
