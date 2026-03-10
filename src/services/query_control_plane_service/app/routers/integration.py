@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +49,20 @@ from src.services.query_service.app.services.integration_service import Integrat
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
+INTEGRATION_POLICY_BLOCKED_EXAMPLE = {
+    "detail": "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
+}
+CORE_SNAPSHOT_NOT_FOUND_EXAMPLE = {"detail": "Portfolio PORT-INT-001 not found"}
+CORE_SNAPSHOT_CONFLICT_EXAMPLE = {
+    "detail": "Simulation session SIM-20260310-0001 expected version mismatch"
+}
+CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE = {
+    "detail": "Section portfolio_totals requires valuation dependencies that are not available."
+}
+INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
+    "detail": "security_ids must contain at least one identifier"
+}
+
 
 def get_integration_service(
     db: AsyncSession = Depends(get_async_db_session),
@@ -72,9 +86,21 @@ def get_core_snapshot_service(
     ),
 )
 async def get_effective_integration_policy(
-    consumer_system: str = Query("lotus-gateway"),
-    tenant_id: str = Query("default"),
-    include_sections: list[str] | None = Query(None),
+    consumer_system: str = Query(
+        "lotus-gateway",
+        description="Downstream consumer system requesting policy resolution.",
+        examples=["lotus-performance"],
+    ),
+    tenant_id: str = Query(
+        "default",
+        description="Tenant identifier used for policy resolution.",
+        examples=["tenant_sg_pb"],
+    ),
+    include_sections: list[str] | None = Query(
+        None,
+        description="Optional requested snapshot sections to evaluate against policy.",
+        examples=["positions_baseline", "portfolio_totals"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> EffectiveIntegrationPolicyResponse:
     response = integration_service.get_effective_policy(
@@ -93,14 +119,20 @@ async def get_effective_integration_policy(
             "description": "Invalid request payload or invalid section/mode combination."
         },
         status.HTTP_403_FORBIDDEN: {
-            "description": "Requested sections are blocked by strict integration policy."
+            "description": "Requested sections are blocked by strict integration policy.",
+            "content": {"application/json": {"example": INTEGRATION_POLICY_BLOCKED_EXAMPLE}},
         },
-        status.HTTP_404_NOT_FOUND: {"description": "Portfolio or simulation session not found."},
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio or simulation session not found.",
+            "content": {"application/json": {"example": CORE_SNAPSHOT_NOT_FOUND_EXAMPLE}},
+        },
         status.HTTP_409_CONFLICT: {
-            "description": "Simulation expected version mismatch or portfolio/session conflict."
+            "description": "Simulation expected version mismatch or portfolio/session conflict.",
+            "content": {"application/json": {"example": CORE_SNAPSHOT_CONFLICT_EXAMPLE}},
         },
         status.HTTP_422_UNPROCESSABLE_ENTITY: {
-            "description": "Section cannot be fulfilled due to missing valuation dependencies."
+            "description": "Section cannot be fulfilled due to missing valuation dependencies.",
+            "content": {"application/json": {"example": CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE}},
         },
     },
     summary="Generate a generic core snapshot",
@@ -110,10 +142,22 @@ async def get_effective_integration_policy(
     ),
 )
 async def create_core_snapshot(
-    portfolio_id: str,
     request: CoreSnapshotRequest,
-    consumer_system: str = Query("lotus-performance"),
-    tenant_id: str = Query("default"),
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier for the snapshot request.",
+        examples=["PORT-INT-001"],
+    ),
+    consumer_system: str = Query(
+        "lotus-performance",
+        description="Downstream consumer system requesting the core snapshot.",
+        examples=["lotus-performance"],
+    ),
+    tenant_id: str = Query(
+        "default",
+        description="Tenant identifier used for policy resolution.",
+        examples=["tenant_sg_pb"],
+    ),
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> CoreSnapshotResponse:
@@ -192,7 +236,10 @@ async def create_core_snapshot(
     "/instruments/enrichment-bulk",
     response_model=InstrumentEnrichmentBulkResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {"description": "Invalid request payload."},
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Invalid request payload.",
+            "content": {"application/json": {"example": INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE}},
+        },
     },
     summary="Resolve issuer enrichment for security identifiers",
     description=(

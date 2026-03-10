@@ -158,3 +158,37 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
+
+
+async def test_openapi_describes_integration_policy_and_core_snapshot(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    effective_policy = schema["paths"]["/integration/policy/effective"]["get"]
+    core_snapshot = schema["paths"]["/integration/portfolios/{portfolio_id}/core-snapshot"]["post"]
+    enrichment_bulk = schema["paths"]["/integration/instruments/enrichment-bulk"]["post"]
+
+    consumer_system = next(
+        parameter
+        for parameter in effective_policy["parameters"]
+        if parameter["name"] == "consumer_system"
+    )
+    assert consumer_system["description"] == (
+        "Downstream consumer system requesting policy resolution."
+    )
+
+    portfolio_param = next(
+        parameter
+        for parameter in core_snapshot["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_param["description"] == "Portfolio identifier for the snapshot request."
+
+    blocked_example = core_snapshot["responses"]["403"]["content"]["application/json"]["example"]
+    assert blocked_example["detail"] == "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
+
+    invalid_enrichment = enrichment_bulk["responses"]["400"]["content"]["application/json"][
+        "example"
+    ]
+    assert invalid_enrichment["detail"] == "security_ids must contain at least one identifier"
