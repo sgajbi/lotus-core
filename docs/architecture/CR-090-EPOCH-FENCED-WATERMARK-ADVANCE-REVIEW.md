@@ -3,10 +3,8 @@
 ## Scope
 
 - `src/libs/portfolio-common/portfolio_common/position_state_repository.py`
-- `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`
 - `src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py`
 - `tests/unit/libs/portfolio-common/test_position_state_repository.py`
-- `tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py`
 
 ## Finding
 
@@ -32,7 +30,7 @@ with information derived from an older epoch snapshot.
   - `portfolio_id`
   - `security_id`
   - `expected_epoch`
-- Updated both valuation scheduler implementations to pass the observed epoch through to the
+- Updated the valuation scheduler implementation to pass the observed epoch through to the
   watermark-advance write
 - Added unit coverage proving:
   - stale expected epochs do not overwrite newer rows
@@ -52,5 +50,4 @@ already advanced epochs.
 ## Evidence
 
 - `python -m pytest tests/unit/libs/portfolio-common/test_position_state_repository.py tests/unit/services/calculators/position_valuation_calculator/core/test_valuation_scheduler.py -q`
-  - `12 passed`
-
+  - `12 passed` before ownership cleanup in CR-091

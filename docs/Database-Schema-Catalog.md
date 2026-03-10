@@ -637,7 +637,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Durable valuation work queue.
 - **Description**: Portfolio/security/date/epoch valuation tasks with retry and failure metadata.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/libs/portfolio-common/portfolio_common/valuation_job_repository.py`, `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/libs/portfolio-common/portfolio_common/valuation_job_repository.py`, `src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -794,7 +794,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Instrument-level trigger state for back-dated changes.
 - **Description**: Earliest impacted date per security awaiting fan-out into reprocessing jobs.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/instrument_reprocessing_state_repository.py`, `src/services/calculators/position_valuation_calculator/app/consumers/price_event_consumer.py`
+- **Usage (modules/features)**: `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/instrument_reprocessing_state_repository.py`, `src/services/valuation_orchestrator_service/app/consumers/price_event_consumer.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `security_id` (String): Canonical security identifier.
@@ -807,7 +807,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Durable reprocessing control queue.
 - **Description**: System jobs that reset/advance watermarks and orchestrate historical recalculation.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py`, `src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py`, `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`
+- **Usage (modules/features)**: `src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py`, `src/services/valuation_orchestrator_service/app/core/reprocessing_worker.py`, `src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

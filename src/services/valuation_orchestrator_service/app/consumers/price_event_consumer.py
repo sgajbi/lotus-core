@@ -1,4 +1,4 @@
-# src/services/calculators/position_valuation_calculator/app/consumers/price_event_consumer.py
+# src/services/valuation_orchestrator_service/app/consumers/price_event_consumer.py
 import json
 import logging
 
