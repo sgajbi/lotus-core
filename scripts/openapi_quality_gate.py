@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections import Counter
 from pathlib import Path
 
 # Ensure the repository root is importable when script is executed directly.
 REPO_ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault("LOTUS_TOOLING_QUIET", "1")
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
