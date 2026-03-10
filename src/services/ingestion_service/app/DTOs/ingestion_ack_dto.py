@@ -35,7 +35,9 @@ class IngestionAcceptedResponse(BaseModel):
     )
     idempotency_key: str | None = Field(
         default=None,
-        description=("Client-supplied idempotency key if provided in X-Idempotency-Key header."),
+        description=(
+            "Client-supplied idempotency key if provided in the X-Idempotency-Key header."
+        ),
         examples=["core-ingest-20260228-portfolio-123-batch-01"],
     )
 
@@ -43,6 +45,9 @@ class IngestionAcceptedResponse(BaseModel):
 class BatchIngestionAcceptedResponse(IngestionAcceptedResponse):
     job_id: str = Field(
         ...,
-        description="Asynchronous ingestion job identifier for client-side tracking.",
+        description=(
+            "Asynchronous ingestion job identifier used for client polling, "
+            "replay controls, and operational support."
+        ),
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     )

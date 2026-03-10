@@ -8,6 +8,8 @@ class ReprocessingRequest(BaseModel):
     transaction_ids: List[str] = Field(
         ...,
         min_length=1,
-        description="A non-empty list of transaction_id strings to be reprocessed.",
+        description=(
+            "Canonical transaction identifiers to reprocess in the current replay request."
+        ),
         examples=[["TRN_001", "TRN_002"]],
     )

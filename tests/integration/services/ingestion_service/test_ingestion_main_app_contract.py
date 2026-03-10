@@ -139,7 +139,8 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
         ["TRN_001", "TRN_002"]
     ]
     assert batch_ack["properties"]["job_id"]["description"] == (
-        "Asynchronous ingestion job identifier for client-side tracking."
+        "Asynchronous ingestion job identifier used for client polling, "
+        "replay controls, and operational support."
     )
 
 
@@ -507,6 +508,23 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
             }
         ]
     ]
+
+
+async def test_openapi_describes_write_plane_acknowledgement_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+    reprocessing_request = components["ReprocessingRequest"]
+    batch_ack = components["BatchIngestionAcceptedResponse"]
+
+    assert reprocessing_request["properties"]["transaction_ids"]["description"] == (
+        "Canonical transaction identifiers to reprocess in the current replay request."
+    )
+    assert batch_ack["properties"]["job_id"]["description"] == (
+        "Asynchronous ingestion job identifier used for client polling, "
+        "replay controls, and operational support."
+    )
 
 
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
