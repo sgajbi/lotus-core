@@ -30,13 +30,13 @@ def test_integration_all_suite_tracks_full_integration_tree() -> None:
     assert get_suite("integration-all") == ["tests/integration"]
 
 
-def test_sell_rfc_suite_includes_sell_query_contract_tests() -> None:
-    sell_suite = get_suite("sell-rfc")
+def test_sell_contract_suite_includes_sell_query_contract_tests() -> None:
+    sell_suite = get_suite("transaction-sell-contract")
     assert "tests/integration/services/query_service/test_sell_state_router.py" in sell_suite
 
 
-def test_fx_rfc_suite_includes_fx_contract_surfaces() -> None:
-    fx_suite = get_suite("fx-rfc")
+def test_fx_contract_suite_includes_fx_contract_surfaces() -> None:
+    fx_suite = get_suite("transaction-fx-contract")
     assert "tests/unit/libs/portfolio_common/test_fx_validation.py" in fx_suite
     assert "tests/integration/services/query_service/test_transactions_router.py" in fx_suite
     assert (

@@ -125,14 +125,6 @@ SUITES: dict[str, list[str]] = {
     ],
 }
 
-# Backward-compatible aliases for previous suite names.
-SUITES["buy-rfc"] = SUITES["transaction-buy-contract"]
-SUITES["sell-rfc"] = SUITES["transaction-sell-contract"]
-SUITES["dividend-rfc"] = SUITES["transaction-dividend-contract"]
-SUITES["interest-rfc"] = SUITES["transaction-interest-contract"]
-SUITES["fx-rfc"] = SUITES["transaction-fx-contract"]
-SUITES["portfolio-flow-bundle-rfc"] = SUITES["transaction-portfolio-flow-bundle-contract"]
-
 SOURCE = "src/services/query_service/app"
 SUITE_PYTEST_ARGS: dict[str, list[str]] = {
     "unit": ["-m", "not integration_db"],
@@ -150,12 +142,6 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "transaction-interest-contract": "integration",
     "transaction-fx-contract": "integration",
     "transaction-portfolio-flow-bundle-contract": "integration",
-    "buy-rfc": "integration",
-    "sell-rfc": "integration",
-    "dividend-rfc": "integration",
-    "interest-rfc": "integration",
-    "fx-rfc": "integration",
-    "portfolio-flow-bundle-rfc": "integration",
     "e2e-smoke": "e2e",
     "e2e-all": "e2e",
 }
