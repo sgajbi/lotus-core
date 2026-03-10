@@ -41,7 +41,7 @@ class Transaction(BaseModel):
     )
     gross_transaction_amount: condecimal(gt=Decimal(0)) = Field(
         description="Gross economic amount before fees, taxes, or deductions.",
-        json_schema_extra={"example": "1500.0"}
+        json_schema_extra={"example": "1500.0"},
     )
     trade_currency: str = Field(
         description="Trade currency in which price and gross amount are quoted.",
@@ -49,16 +49,14 @@ class Transaction(BaseModel):
     )
     currency: str = Field(
         description=(
-            "Canonical transaction currency retained for compatibility "
-            "with downstream ledgers."
+            "Canonical transaction currency retained for compatibility " "with downstream ledgers."
         ),
         json_schema_extra={"example": "USD"},
     )
     trade_fee: Optional[condecimal(ge=Decimal(0))] = Field(
         default=Decimal(0),
         description=(
-            "Aggregate trade fee applied to the transaction when fee "
-            "breakdown is not split out."
+            "Aggregate trade fee applied to the transaction when fee " "breakdown is not split out."
         ),
         json_schema_extra={"example": "5.0"},
     )
@@ -93,8 +91,7 @@ class Transaction(BaseModel):
     settlement_date: Optional[datetime] = Field(
         default=None,
         description=(
-            "Optional settlement timestamp used for cash-leg timing and "
-            "operations monitoring."
+            "Optional settlement timestamp used for cash-leg timing and " "operations monitoring."
         ),
         json_schema_extra={"example": "2023-01-17T10:00:00Z"},
     )
@@ -110,8 +107,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "LTG-2026-00456"},
         description=(
-            "Canonical linkage group identifier shared by related product "
-            "and cash-leg entries."
+            "Canonical linkage group identifier shared by related product " "and cash-leg entries."
         ),
     )
     calculation_policy_id: Optional[str] = Field(
@@ -141,8 +137,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "CASH-ENTRY-2026-0001"},
         description=(
-            "Upstream cash transaction identifier when cash_entry_mode is "
-            "UPSTREAM_PROVIDED."
+            "Upstream cash transaction identifier when cash_entry_mode is " "UPSTREAM_PROVIDED."
         ),
     )
     settlement_cash_account_id: Optional[str] = Field(
@@ -193,8 +188,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "REC-2026-0001"},
         description=(
-            "Optional reconciliation key shared by paired or grouped "
-            "dual-leg transactions."
+            "Optional reconciliation key shared by paired or grouped " "dual-leg transactions."
         ),
     )
     interest_direction: Optional[str] = Field(
@@ -227,8 +221,8 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "FX_CASH_SETTLEMENT_BUY"},
         description=(
-            "Canonical FX component type when transaction_type is FX_SPOT, "
-            "FX_FORWARD, or FX_SWAP."
+            "Canonical FX component role within the economic event, such as "
+            "cash settlement or contract open/close."
         ),
     )
     component_id: Optional[str] = Field(
@@ -244,7 +238,10 @@ class Transaction(BaseModel):
     fx_cash_leg_role: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "BUY"},
-        description="Canonical FX cash-leg role. Supported values are BUY and SELL.",
+        description=(
+            "Canonical FX settlement-leg direction for the cash component. "
+            "Supported values are BUY and SELL."
+        ),
     )
     linked_fx_cash_leg_id: Optional[str] = Field(
         default=None,
@@ -254,7 +251,10 @@ class Transaction(BaseModel):
     settlement_status: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "PENDING"},
-        description="Settlement status for FX cash settlement components.",
+        description=(
+            "Settlement lifecycle status for FX cash-settlement components, "
+            "for example PENDING or SETTLED."
+        ),
     )
     pair_base_currency: Optional[str] = Field(
         default=None,
@@ -269,7 +269,10 @@ class Transaction(BaseModel):
     fx_rate_quote_convention: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "QUOTE_PER_BASE"},
-        description="Explicit FX quote convention for interpreting contract_rate.",
+        description=(
+            "Explicit quote convention used to interpret contract_rate, for "
+            "example QUOTE_PER_BASE."
+        ),
     )
     buy_currency: Optional[str] = Field(
         default=None,
@@ -294,12 +297,18 @@ class Transaction(BaseModel):
     contract_rate: Optional[condecimal(gt=Decimal(0))] = Field(
         default=None,
         json_schema_extra={"example": "1.095"},
-        description="Contractual FX rate for the deal.",
+        description=(
+            "Contractual FX rate agreed for the deal, interpreted using "
+            "fx_rate_quote_convention."
+        ),
     )
     fx_contract_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "FXC-2026-0001"},
-        description="Stable FX contract identifier for forwards/swaps and spot-under-policy.",
+        description=(
+            "Stable FX contract identifier used to group open, close, and "
+            "settlement components for the same forward or swap contract."
+        ),
     )
     fx_contract_open_transaction_id: Optional[str] = Field(
         default=None,
@@ -314,62 +323,89 @@ class Transaction(BaseModel):
     settlement_of_fx_contract_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "FXC-2026-0001"},
-        description="FX contract identifier settled by this cash component.",
+        description=(
+            "FX contract identifier whose settlement obligation is being "
+            "discharged by this cash component."
+        ),
     )
     swap_event_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "FXSWAP-2026-0001"},
-        description="Stable FX swap event identifier.",
+        description=(
+            "Stable economic event identifier shared by all legs and "
+            "settlement components of the same FX swap."
+        ),
     )
     near_leg_group_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "FXSWAP-2026-0001-NEAR"},
-        description="Near-leg linkage group identifier for FX swaps.",
+        description=(
+            "Linkage group identifier for the near leg of an FX swap, used to "
+            "tie together its product and settlement components."
+        ),
     )
     far_leg_group_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "FXSWAP-2026-0001-FAR"},
-        description="Far-leg linkage group identifier for FX swaps.",
+        description=(
+            "Linkage group identifier for the far leg of an FX swap, used to "
+            "tie together its product and settlement components."
+        ),
     )
     spot_exposure_model: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "NONE"},
-        description="Policy-driven spot exposure model. Supported values are NONE and FX_CONTRACT.",
+        description=(
+            "Policy-driven spot exposure model. Supported values are NONE and " "FX_CONTRACT."
+        ),
     )
     fx_realized_pnl_mode: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "UPSTREAM_PROVIDED"},
-        description="Policy-driven realized FX P&L mode.",
+        description=(
+            "Policy-driven mode for realized FX P&L population, for example "
+            "NONE or UPSTREAM_PROVIDED."
+        ),
     )
     realized_capital_pnl_local: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "0.00"},
-        description="Realized capital P&L in local currency. Must be explicit zero for FX.",
+        description=(
+            "Realized capital P&L in local currency. Under the canonical FX "
+            "model this is expected to remain explicit zero."
+        ),
     )
     realized_fx_pnl_local: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "1250.00"},
-        description="Realized FX P&L in local currency.",
+        description=(
+            "Realized FX P&L in local currency for the transaction or " "settlement component."
+        ),
     )
     realized_total_pnl_local: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "1250.00"},
-        description="Total realized P&L in local currency.",
+        description=(
+            "Total realized P&L in local currency after combining capital and " "FX components."
+        ),
     )
     realized_capital_pnl_base: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "0.00"},
-        description="Realized capital P&L in base currency. Must be explicit zero for FX.",
+        description=(
+            "Realized capital P&L translated into portfolio base currency. "
+            "Under the canonical FX model this is expected to remain explicit zero."
+        ),
     )
     realized_fx_pnl_base: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "1250.00"},
-        description="Realized FX P&L in base currency.",
+        description=("Realized FX P&L translated into portfolio base currency."),
     )
     realized_total_pnl_base: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "1250.00"},
-        description="Total realized P&L in base currency.",
+        description=("Total realized P&L translated into portfolio base currency."),
     )
     parent_transaction_reference: Optional[str] = Field(
         default=None,

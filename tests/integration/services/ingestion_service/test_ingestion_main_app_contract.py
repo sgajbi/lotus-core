@@ -84,9 +84,7 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     assert commit_schema["properties"]["published_rows"]["description"] == (
         "Count of rows published to canonical ingestion topics."
     )
-    assert row_error_schema["properties"]["message"]["examples"] == [
-        "baseCurrency is required"
-    ]
+    assert row_error_schema["properties"]["message"]["examples"] == ["baseCurrency is required"]
 
 
 async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(async_test_client):
@@ -161,35 +159,51 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
     business_dates = paths["/ingest/business-dates"]["post"]
     benchmark_assignments = paths["/ingest/benchmark-assignments"]["post"]
 
-    assert portfolios["responses"]["429"]["content"]["application/json"]["example"]["detail"][
-        "code"
-    ] == "INGESTION_RATE_LIMIT_EXCEEDED"
-    assert portfolios["responses"]["503"]["content"]["application/json"]["example"]["detail"][
-        "code"
-    ] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        portfolios["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
+    assert (
+        portfolios["responses"]["503"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_MODE_BLOCKS_WRITES"
+    )
 
-    assert single_transaction["responses"]["500"]["content"]["application/json"]["example"][
-        "detail"
-    ]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert batch_transactions["responses"]["429"]["content"]["application/json"]["example"][
-        "detail"
-    ]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    assert (
+        single_transaction["responses"]["500"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        batch_transactions["responses"]["429"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
 
-    assert instruments["responses"]["429"]["content"]["application/json"]["example"]["detail"][
-        "code"
-    ] == "INGESTION_RATE_LIMIT_EXCEEDED"
-    assert market_prices["responses"]["429"]["content"]["application/json"]["example"][
-        "detail"
-    ]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
-    assert fx_rates["responses"]["429"]["content"]["application/json"]["example"]["detail"][
-        "code"
-    ] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    assert (
+        instruments["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
+    assert (
+        market_prices["responses"]["429"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
+    assert (
+        fx_rates["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
 
     business_date_422 = business_dates["responses"]["422"]["content"]["application/json"]["example"]
     assert business_date_422["detail"]["code"] == "BUSINESS_DATE_PAYLOAD_EMPTY"
-    assert benchmark_assignments["responses"]["503"]["content"]["application/json"]["example"][
-        "detail"
-    ]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        benchmark_assignments["responses"]["503"]["content"]["application/json"]["example"][
+            "detail"
+        ]["code"]
+        == "INGESTION_MODE_BLOCKS_WRITES"
+    )
 
 
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
@@ -382,6 +396,38 @@ async def test_openapi_describes_transaction_dual_leg_and_income_fields(async_te
     assert properties["net_interest_amount"]["description"] == (
         "Net interest amount supplied upstream for reconciliation against "
         "gross and deduction fields."
+    )
+
+
+async def test_openapi_describes_transaction_fx_fields(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    transaction = response.json()["components"]["schemas"]["Transaction"]
+    properties = transaction["properties"]
+
+    assert properties["component_type"]["description"] == (
+        "Canonical FX component role within the economic event, such as "
+        "cash settlement or contract open/close."
+    )
+    assert properties["settlement_status"]["description"] == (
+        "Settlement lifecycle status for FX cash-settlement components, "
+        "for example PENDING or SETTLED."
+    )
+    assert properties["fx_contract_id"]["description"] == (
+        "Stable FX contract identifier used to group open, close, and "
+        "settlement components for the same forward or swap contract."
+    )
+    assert properties["swap_event_id"]["description"] == (
+        "Stable economic event identifier shared by all legs and "
+        "settlement components of the same FX swap."
+    )
+    assert properties["fx_realized_pnl_mode"]["description"] == (
+        "Policy-driven mode for realized FX P&L population, for example "
+        "NONE or UPSTREAM_PROVIDED."
+    )
+    assert properties["realized_total_pnl_base"]["description"] == (
+        "Total realized P&L translated into portfolio base currency."
     )
 
 
