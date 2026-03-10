@@ -73,18 +73,32 @@ class PositionHistoryRecord(BaseModel):
     as a result of a transaction.
     """
 
-    position_date: date = Field(..., description="The date of this position snapshot.")
-    transaction_id: str = Field(
-        ..., description="The ID of the transaction that created this position state."
+    position_date: date = Field(
+        ...,
+        description="Business date of this position-history snapshot.",
+        examples=["2025-12-30"],
     )
-    quantity: float = Field(..., description="The number of shares held as of this record.")
+    transaction_id: str = Field(
+        ...,
+        description="Transaction identifier that produced this position-history state.",
+        examples=["TXN-2025-12030-0007"],
+    )
+    quantity: float = Field(
+        ...,
+        description="Quantity held as of this position-history record.",
+        examples=[125.0],
+    )
 
     cost_basis: Decimal = Field(
-        ..., description="The total cost basis of the holding as of this record."
+        ...,
+        description="Total cost basis of the holding as of this position-history record.",
+        examples=[15000.0],
     )
 
     cost_basis_local: Optional[Decimal] = Field(
-        None, description="The total cost basis in the instrument's local currency."
+        None,
+        description="Total cost basis in the instrument's local currency.",
+        examples=[15000.0],
     )
 
     valuation: Optional[ValuationData] = Field(
@@ -104,10 +118,14 @@ class PortfolioPositionHistoryResponse(BaseModel):
     Represents the API response for a portfolio's position history.
     """
 
-    portfolio_id: str = Field(..., description="The ID of the portfolio.")
+    portfolio_id: str = Field(
+        ..., description="Portfolio identifier.", examples=["PF-001"]
+    )
     security_id: str = Field(
-        ..., description="The security ID for which the history is being returned."
+        ...,
+        description="Security identifier for which the history is returned.",
+        examples=["AAPL.OQ"],
     )
     positions: List[PositionHistoryRecord] = Field(
-        ..., description="A time-series list of position records."
+        ..., description="Time-series list of position-history records for the security."
     )

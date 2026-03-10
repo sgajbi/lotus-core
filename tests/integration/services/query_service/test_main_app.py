@@ -417,6 +417,37 @@ async def test_openapi_describes_shared_read_model_field_examples(async_test_cli
     )
 
 
+async def test_openapi_describes_position_cashflow_and_valuation_schema_depth(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    cashflow = components["CashflowRecord"]
+    valuation = components["ValuationData"]
+    position_history = components["PositionHistoryRecord"]
+
+    assert cashflow["properties"]["amount"]["description"] == (
+        "Signed cashflow amount expressed in the reported cashflow currency."
+    )
+    assert cashflow["properties"]["classification"]["description"] == (
+        "Canonical cashflow classification used by analytics and reporting."
+    )
+
+    assert valuation["properties"]["market_price"]["description"] == (
+        "Market price used for the position valuation snapshot."
+    )
+    assert valuation["properties"]["unrealized_gain_loss"]["description"] == (
+        "Unrealized gain or loss in portfolio base currency."
+    )
+
+    assert position_history["properties"]["transaction_id"]["description"] == (
+        "Transaction identifier that produced this position-history state."
+    )
+    assert position_history["properties"]["cost_basis_local"]["description"] == (
+        "Total cost basis in the instrument's local currency."
+    )
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
