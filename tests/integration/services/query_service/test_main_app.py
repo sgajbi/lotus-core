@@ -252,6 +252,30 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
     assert not_found["detail"] == "Portfolio with id PORT-DISC-001 not found"
 
 
+async def test_openapi_describes_reference_market_data_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    prices = schema["paths"]["/prices/"]["get"]
+    fx_rates = schema["paths"]["/fx-rates/"]["get"]
+
+    security_id = next(
+        parameter for parameter in prices["parameters"] if parameter["name"] == "security_id"
+    )
+    assert security_id["description"] == "Security identifier for the market-price series request."
+
+    from_currency = next(
+        parameter for parameter in fx_rates["parameters"] if parameter["name"] == "from_currency"
+    )
+    assert from_currency["description"] == "Base currency code for the requested FX series."
+
+    to_currency = next(
+        parameter for parameter in fx_rates["parameters"] if parameter["name"] == "to_currency"
+    )
+    assert to_currency["description"] == "Quote currency code for the requested FX series."
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200

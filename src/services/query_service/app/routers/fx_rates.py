@@ -1,12 +1,13 @@
 # services/query-service/app/routers/fx_rates.py
 from datetime import date
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
+from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.db import get_async_db_session
-from ..services.fx_rate_service import FxRateService
 from ..dtos.fx_rate_dto import FxRateResponse
+from ..services.fx_rate_service import FxRateService
 
 router = APIRouter(prefix="/fx-rates", tags=["FX Rates"])
 
@@ -22,16 +23,28 @@ router = APIRouter(prefix="/fx-rates", tags=["FX Rates"])
 )
 async def get_fx_rates(
     from_currency: str = Query(
-        ..., description="The base currency (e.g., USD).", min_length=3, max_length=3
+        ...,
+        description="Base currency code for the requested FX series.",
+        min_length=3,
+        max_length=3,
+        examples=["USD"],
     ),
     to_currency: str = Query(
-        ..., description="The quote currency (e.g., SGD).", min_length=3, max_length=3
+        ...,
+        description="Quote currency code for the requested FX series.",
+        min_length=3,
+        max_length=3,
+        examples=["SGD"],
     ),
     start_date: Optional[date] = Query(
-        None, description="The start date for the date range filter (inclusive)."
+        None,
+        description="The start date for the date range filter (inclusive).",
+        examples=["2026-01-01"],
     ),
     end_date: Optional[date] = Query(
-        None, description="The end date for the date range filter (inclusive)."
+        None,
+        description="The end date for the date range filter (inclusive).",
+        examples=["2026-03-31"],
     ),
     db: AsyncSession = Depends(get_async_db_session),
 ):
