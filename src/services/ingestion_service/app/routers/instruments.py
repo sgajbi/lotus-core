@@ -1,11 +1,14 @@
 # services/ingestion_service/app/routers/instruments.py
 import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from ..ack_response import build_batch_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.instrument_dto import InstrumentIngestionRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (    create_ingestion_job_id,
+from ..request_metadata import (
+    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
@@ -15,27 +18,53 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+INSTRUMENT_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+INSTRUMENT_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /ingest/instruments.",
+    }
+}
 
 
 @router.post(
     "/ingest/instruments",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the instrument request.",
+            "content": {
+                "application/json": {"example": INSTRUMENT_RATE_LIMIT_EXCEEDED_EXAMPLE}
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {"application/json": {"example": INSTRUMENT_MODE_BLOCKED_EXAMPLE}},
+        },
+    },
     tags=["Instruments"],
     summary="Ingest instruments",
     description=(
         "What: Accept canonical instrument/security reference records.\n"
-        "How: Validate schema, enforce ingestion mode/idempotency controls, and publish to asynchronous persistence pipeline.\n"
+        "How: Validate schema, enforce ingestion mode/idempotency controls, "
+        "and publish to asynchronous persistence pipeline.\n"
         "When: Use for security master onboarding and reference data corrections."
     ),
 )
 async def ingest_instruments(
     request: InstrumentIngestionRequest,
-    http_request: Request,    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    http_request: Request,
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     idempotency_key = resolve_idempotency_key(http_request)

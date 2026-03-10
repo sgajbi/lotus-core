@@ -1,10 +1,13 @@
 import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from ..ack_response import build_batch_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.portfolio_dto import PortfolioIngestionRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (    create_ingestion_job_id,
+from ..request_metadata import (
+    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
@@ -14,27 +17,53 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+PORTFOLIO_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+PORTFOLIO_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /ingest/portfolios.",
+    }
+}
 
 
 @router.post(
     "/ingest/portfolios",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the portfolio request.",
+            "content": {
+                "application/json": {"example": PORTFOLIO_RATE_LIMIT_EXCEEDED_EXAMPLE}
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {"application/json": {"example": PORTFOLIO_MODE_BLOCKED_EXAMPLE}},
+        },
+    },
     tags=["Portfolios"],
     summary="Ingest portfolios",
     description=(
         "What: Accept canonical portfolio master records.\n"
-        "How: Validate portfolio schema, enforce idempotency/mode checks, and publish asynchronously for persistence.\n"
+        "How: Validate portfolio schema, enforce idempotency/mode checks, "
+        "and publish asynchronously for persistence.\n"
         "When: Use when onboarding or updating portfolio metadata from upstream systems."
     ),
 )
 async def ingest_portfolios(
     request: PortfolioIngestionRequest,
-    http_request: Request,    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    http_request: Request,
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     idempotency_key = resolve_idempotency_key(http_request)

@@ -2,6 +2,12 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from portfolio_common.config import (
+    BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE,
+    BUSINESS_DATE_MAX_FUTURE_DAYS,
+)
+
 from ..ack_response import build_batch_ack
 from ..DTOs.business_date_dto import BusinessDateIngestionRequest
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
@@ -10,7 +16,8 @@ from ..repositories.business_calendar_repository import (
     BusinessCalendarRepository,
     get_business_calendar_repository,
 )
-from ..request_metadata import (    create_ingestion_job_id,
+from ..request_metadata import (
+    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
@@ -20,31 +27,85 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from portfolio_common.config import (
-    BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE,
-    BUSINESS_DATE_MAX_FUTURE_DAYS,
-)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+BUSINESS_DATE_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+BUSINESS_DATE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /ingest/business-dates.",
+    }
+}
+BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE = {
+    "detail": {
+        "code": "BUSINESS_DATE_PAYLOAD_EMPTY",
+        "message": "At least one business_date record is required.",
+    }
+}
+BUSINESS_DATE_FUTURE_POLICY_EXAMPLE = {
+    "detail": {
+        "code": "BUSINESS_DATE_FUTURE_POLICY_VIOLATION",
+        "message": "business_date '2026-12-31' exceeds allowed max '2026-04-09'.",
+    }
+}
+BUSINESS_DATE_MONOTONIC_POLICY_EXAMPLE = {
+    "detail": {
+        "code": "BUSINESS_DATE_MONOTONIC_POLICY_VIOLATION",
+        "message": (
+            "incoming max business_date '2026-01-15' for calendar_code 'SGX' is older "
+            "than latest persisted '2026-01-16'."
+        ),
+    }
+}
 
 
 @router.post(
     "/ingest/business-dates",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the business-date request.",
+            "content": {
+                "application/json": {
+                    "example": BUSINESS_DATE_RATE_LIMIT_EXCEEDED_EXAMPLE
+                }
+            },
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "Business-date payload violated validation or policy rules.",
+            "content": {
+                "application/json": {"example": BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE}
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {
+                "application/json": {"example": BUSINESS_DATE_MODE_BLOCKED_EXAMPLE}
+            },
+        },
+    },
     tags=["Business Dates"],
     summary="Ingest business dates",
     description=(
-        "What: Accept canonical business calendar dates used by valuation and processing lifecycles.\n"
-        "How: Validate date records, apply ingestion controls, and publish asynchronous persistence events.\n"
+        "What: Accept canonical business calendar dates used by valuation "
+        "and processing lifecycles.\n"
+        "How: Validate date records, apply ingestion controls, and publish "
+        "asynchronous persistence events.\n"
         "When: Use for calendar setup, holiday updates, and date-correction operations."
     ),
 )
 async def ingest_business_dates(
     request: BusinessDateIngestionRequest,
-    http_request: Request,    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    http_request: Request,
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
     business_calendar_repository: BusinessCalendarRepository = Depends(
         get_business_calendar_repository
@@ -71,10 +132,7 @@ async def ingest_business_dates(
     if not request.business_dates:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": "BUSINESS_DATE_PAYLOAD_EMPTY",
-                "message": "At least one business_date record is required.",
-            },
+            detail=BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE["detail"],
         )
 
     max_allowed_date = (datetime.now(UTC).date() + timedelta(days=BUSINESS_DATE_MAX_FUTURE_DAYS))

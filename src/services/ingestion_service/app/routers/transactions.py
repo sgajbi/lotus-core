@@ -1,10 +1,13 @@
 import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from ..ack_response import build_batch_ack, build_single_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse, IngestionAcceptedResponse
 from ..DTOs.transaction_dto import Transaction, TransactionIngestionRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (    create_ingestion_job_id,
+from ..request_metadata import (
+    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
@@ -14,27 +17,70 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+TRANSACTION_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+TRANSACTION_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /ingest/transaction.",
+    }
+}
+TRANSACTION_BATCH_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /ingest/transactions.",
+    }
+}
+TRANSACTION_PUBLISH_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Kafka publish failed for transaction payload.",
+        "failed_record_keys": ["TRN_001"],
+    }
+}
 
 
 @router.post(
     "/ingest/transaction",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IngestionAcceptedResponse,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the single-transaction request.",
+            "content": {
+                "application/json": {"example": TRANSACTION_RATE_LIMIT_EXCEEDED_EXAMPLE}
+            },
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Transaction publish failed after validation.",
+            "content": {"application/json": {"example": TRANSACTION_PUBLISH_FAILED_EXAMPLE}},
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {"application/json": {"example": TRANSACTION_MODE_BLOCKED_EXAMPLE}},
+        },
+    },
     tags=["Transactions"],
     summary="Ingest a single transaction",
     description=(
         "What: Accept one canonical transaction record for ledger ingestion.\n"
-        "How: Validate contract, enforce idempotency/mode controls, then publish asynchronously to Kafka.\n"
+        "How: Validate contract, enforce idempotency/mode controls, then "
+        "publish asynchronously to Kafka.\n"
         "When: Use for low-volume operational corrections or single-record onboarding."
     ),
 )
 async def ingest_transaction(
     transaction: Transaction,
-    request: Request,    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    request: Request,
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
 ):
     idempotency_key = resolve_idempotency_key(request)
     ingestion_job_service = get_ingestion_job_service()
@@ -87,17 +133,33 @@ async def ingest_transaction(
     "/ingest/transactions",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the transaction batch request.",
+            "content": {
+                "application/json": {
+                    "example": TRANSACTION_BATCH_RATE_LIMIT_EXCEEDED_EXAMPLE
+                }
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {"application/json": {"example": TRANSACTION_MODE_BLOCKED_EXAMPLE}},
+        },
+    },
     tags=["Transactions"],
     summary="Ingest a transaction batch",
     description=(
         "What: Accept a batch of canonical transaction records.\n"
-        "How: Persist ingestion job metadata, validate payload, and publish all valid records asynchronously.\n"
+        "How: Persist ingestion job metadata, validate payload, and publish "
+        "all valid records asynchronously.\n"
         "When: Use for standard API-driven batch ingestion workflows."
     ),
 )
 async def ingest_transactions(
     request: TransactionIngestionRequest,
-    http_request: Request,    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    http_request: Request,
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     idempotency_key = resolve_idempotency_key(http_request)

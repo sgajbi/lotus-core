@@ -145,6 +145,85 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
     )
 
 
+async def test_openapi_describes_remaining_ingestion_operational_responses(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    paths = schema["paths"]
+
+    portfolios = paths["/ingest/portfolios"]["post"]
+    single_transaction = paths["/ingest/transaction"]["post"]
+    batch_transactions = paths["/ingest/transactions"]["post"]
+    instruments = paths["/ingest/instruments"]["post"]
+    market_prices = paths["/ingest/market-prices"]["post"]
+    fx_rates = paths["/ingest/fx-rates"]["post"]
+    business_dates = paths["/ingest/business-dates"]["post"]
+    benchmark_assignments = paths["/ingest/benchmark-assignments"]["post"]
+
+    assert portfolios["responses"]["429"]["content"]["application/json"]["example"]["detail"][
+        "code"
+    ] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    assert portfolios["responses"]["503"]["content"]["application/json"]["example"]["detail"][
+        "code"
+    ] == "INGESTION_MODE_BLOCKS_WRITES"
+
+    assert single_transaction["responses"]["500"]["content"]["application/json"]["example"][
+        "detail"
+    ]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert batch_transactions["responses"]["429"]["content"]["application/json"]["example"][
+        "detail"
+    ]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+    assert instruments["responses"]["429"]["content"]["application/json"]["example"]["detail"][
+        "code"
+    ] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    assert market_prices["responses"]["429"]["content"]["application/json"]["example"][
+        "detail"
+    ]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    assert fx_rates["responses"]["429"]["content"]["application/json"]["example"]["detail"][
+        "code"
+    ] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+    business_date_422 = business_dates["responses"]["422"]["content"]["application/json"]["example"]
+    assert business_date_422["detail"]["code"] == "BUSINESS_DATE_PAYLOAD_EMPTY"
+    assert benchmark_assignments["responses"]["503"]["content"]["application/json"]["example"][
+        "detail"
+    ]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+
+
+async def test_openapi_describes_business_date_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    business_date = components["BusinessDate"]
+    business_date_request = components["BusinessDateIngestionRequest"]
+
+    assert business_date["properties"]["business_date"]["description"] == (
+        "Canonical business date to open for processing."
+    )
+    assert business_date["properties"]["calendar_code"]["examples"] == ["GLOBAL"]
+    assert business_date["properties"]["source_batch_id"]["examples"] == [
+        "business-dates-20260310-am"
+    ]
+    assert business_date_request["properties"]["business_dates"]["description"] == (
+        "Business dates to register for downstream valuation and timeseries scheduling."
+    )
+    assert business_date_request["properties"]["business_dates"]["examples"] == [
+        [
+            {
+                "business_date": "2026-03-10",
+                "calendar_code": "GLOBAL",
+                "market_code": "XSWX",
+                "source_system": "lotus-manage",
+                "source_batch_id": "business-dates-20260310-am",
+            }
+        ]
+    ]
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
