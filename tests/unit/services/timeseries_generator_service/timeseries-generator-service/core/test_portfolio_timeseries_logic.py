@@ -28,7 +28,7 @@ def mock_repo() -> AsyncMock:
     repo.get_instruments_by_ids = AsyncMock()
     repo.get_fx_rate = AsyncMock()
     repo.get_last_portfolio_timeseries_before = AsyncMock()
-    repo.get_all_snapshots_for_date = AsyncMock()
+    repo.get_latest_snapshots_for_date = AsyncMock()
     return repo
 
 
@@ -54,20 +54,19 @@ async def test_portfolio_logic_aggregates_correctly_with_epoch(
         )
     ]
 
-    # Simulate snapshots from different epochs; only epoch 2 should be included
-    snapshots_for_day = [
+    # Simulate latest-per-security snapshots. Mixed epochs are valid when only
+    # part of the portfolio has been reprocessed.
+    latest_snapshots_for_day = [
         DailyPositionSnapshot(security_id="SEC_AAPL", market_value=Decimal("10000"), epoch=2),
         DailyPositionSnapshot(security_id="CASH_USD", market_value=Decimal("50000"), epoch=2),
-        DailyPositionSnapshot(
-            security_id="SEC_OLD", market_value=Decimal("99999"), epoch=1
-        ),  # Should be ignored
+        DailyPositionSnapshot(security_id="SEC_IBM", market_value=Decimal("7000"), epoch=1),
     ]
 
     mock_repo.get_instruments_by_ids.return_value = [
         Instrument(security_id="CASH_USD", currency="USD")
     ]
     mock_repo.get_last_portfolio_timeseries_before.return_value = None
-    mock_repo.get_all_snapshots_for_date.return_value = snapshots_for_day
+    mock_repo.get_latest_snapshots_for_date.return_value = latest_snapshots_for_day
 
     # ACT
     result = await PortfolioTimeseriesLogic.calculate_daily_record(
@@ -80,7 +79,7 @@ async def test_portfolio_logic_aggregates_correctly_with_epoch(
 
     # ASSERT
     assert result.epoch == target_epoch
-    assert result.eod_market_value == Decimal("60000")  # 10000 + 50000
+    assert result.eod_market_value == Decimal("67000")  # 10000 + 50000 + 7000
 
 
 async def test_portfolio_logic_raises_error_if_fx_rate_is_missing(

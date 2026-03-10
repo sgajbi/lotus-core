@@ -35,6 +35,7 @@ def sample_event() -> FencedEvent:
     event.portfolio_id = "P1"
     event.security_id = "S1"
     event.epoch = 1
+    event.topic = "daily_position_snapshot_persisted"
     return event
 
 
@@ -83,6 +84,7 @@ async def test_fencer_returns_false_and_logs_for_stale_epoch(
     assert is_valid is False
     mock_metric.labels.assert_called_once_with(
         service_name="<not-set>",  # Default, can be overridden
+        topic="daily_position_snapshot_persisted",
         portfolio_id="P1",
         security_id="S1",
     )
@@ -109,5 +111,8 @@ async def test_fencer_can_be_configured_with_service_name(mock_dependencies, sam
     # ASSERT
     assert is_valid is False
     mock_metric.labels.assert_called_once_with(
-        service_name="TestService", portfolio_id="P1", security_id="S1"
+        service_name="TestService",
+        topic="daily_position_snapshot_persisted",
+        portfolio_id="P1",
+        security_id="S1",
     )

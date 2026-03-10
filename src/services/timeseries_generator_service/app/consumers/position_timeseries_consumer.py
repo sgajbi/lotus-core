@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import asdict, dataclass
 from datetime import date
 
 from confluent_kafka import Message
@@ -37,6 +38,19 @@ class PreviousTimeseriesNotFoundError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class _TimeseriesMaterialState:
+    bod_market_value: object
+    bod_cashflow_position: object
+    eod_cashflow_position: object
+    bod_cashflow_portfolio: object
+    eod_cashflow_portfolio: object
+    eod_market_value: object
+    fees: object
+    quantity: object
+    cost: object
+
+
 class PositionTimeseriesConsumer(BaseConsumer):
     @staticmethod
     def _parse_supported_event(event_data: dict) -> DailyPositionSnapshotPersistedEvent:
@@ -72,10 +86,36 @@ class PositionTimeseriesConsumer(BaseConsumer):
             )
             await self._send_to_dlq_async(msg, e)
 
+    @staticmethod
+    def _material_state(timeseries_record) -> _TimeseriesMaterialState:
+        return _TimeseriesMaterialState(
+            bod_market_value=timeseries_record.bod_market_value,
+            bod_cashflow_position=timeseries_record.bod_cashflow_position,
+            eod_cashflow_position=timeseries_record.eod_cashflow_position,
+            bod_cashflow_portfolio=timeseries_record.bod_cashflow_portfolio,
+            eod_cashflow_portfolio=timeseries_record.eod_cashflow_portfolio,
+            eod_market_value=timeseries_record.eod_market_value,
+            fees=timeseries_record.fees,
+            quantity=timeseries_record.quantity,
+            cost=timeseries_record.cost,
+        )
+
+    @classmethod
+    def _has_material_change(cls, existing_record, new_record) -> bool:
+        if existing_record is None:
+            return True
+        return asdict(cls._material_state(existing_record)) != asdict(cls._material_state(new_record))
+
     async def _stage_aggregation_job(
         self, db_session, portfolio_id: str, a_date: date, correlation_id: str
     ):
-        """Helper to idempotently create or reset an aggregation job."""
+        """
+        Idempotently stage an aggregation job.
+
+        Material position-timeseries changes for a portfolio-day must re-arm aggregation,
+        even when they arrive under the same correlation id as an earlier partial run.
+        Duplicate timeseries writes are filtered before this method is called.
+        """
         job_stmt = (
             pg_insert(PortfolioAggregationJob)
             .values(
@@ -86,7 +126,11 @@ class PositionTimeseriesConsumer(BaseConsumer):
             )
             .on_conflict_do_update(
                 index_elements=["portfolio_id", "aggregation_date"],
-                set_={"status": "PENDING", "updated_at": func.now()},
+                set_={
+                    "status": "PENDING",
+                    "correlation_id": correlation_id,
+                    "updated_at": func.now(),
+                },
             )
         )
         await db_session.execute(job_stmt)
@@ -145,12 +189,25 @@ class PositionTimeseriesConsumer(BaseConsumer):
                         event.portfolio_id, event.security_id, event.date
                     )
 
+                    existing_timeseries = await repo.get_position_timeseries(
+                        event.portfolio_id, event.security_id, event.date, event.epoch
+                    )
+
                     new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
                         current_snapshot=current_snapshot,
                         previous_snapshot=previous_snapshot,
                         cashflows=cashflows,
                         epoch=event.epoch,
                     )
+
+                    if not self._has_material_change(existing_timeseries, new_timeseries_record):
+                        logger.info(
+                            "Position timeseries already up to date for %s on %s epoch %s. Skipping downstream fan-out.",
+                            event.security_id,
+                            event.date,
+                            event.epoch,
+                        )
+                        return
 
                     await repo.upsert_position_timeseries(new_timeseries_record)
                     await self._stage_aggregation_job(

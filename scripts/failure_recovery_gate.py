@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -23,6 +24,11 @@ from typing import Any
 from uuid import uuid4
 
 import requests
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 
 
 @dataclass(slots=True)
@@ -56,13 +62,6 @@ def _run_capture(cmd: list[str], cwd: Path) -> str:
             f"stderr:\n{completed.stderr}"
         )
     return completed.stdout
-
-
-def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
-    cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
-    if build:
-        cmd.append("--build")
-    _run(cmd, cwd=repo_root)
 
 
 def _wait_ready(
@@ -281,25 +280,27 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
     return json_path, md_path
 
 
+def _load_test_runtime_helpers():
+    from tests.test_support.docker_stack import compose_down, compose_up, wait_for_migration_runner
+    from tests.test_support.runtime_env import build_test_runtime_env
+
+    return compose_down, compose_up, wait_for_migration_runner, build_test_runtime_env
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run deterministic failure-injection recovery gate."
     )
     parser.add_argument("--repo-root", default=".", help="Path to lotus-core repository root.")
     parser.add_argument("--compose-file", default="docker-compose.yml")
-    parser.add_argument(
-        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
-    )
-    parser.add_argument(
-        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
-    )
-    parser.add_argument(
-        "--event-replay-base-url", default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209")
-    )
+    parser.add_argument("--ingestion-base-url", default=None)
+    parser.add_argument("--query-base-url", default=None)
+    parser.add_argument("--event-replay-base-url", default=None)
     parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--skip-compose", action="store_true")
+    parser.add_argument("--keep-stack-up", action="store_true")
     parser.add_argument("--ready-timeout-seconds", type=int, default=240)
     parser.add_argument("--interruption-seconds", type=int, default=25)
     parser.add_argument("--recovery-timeout-seconds", type=int, default=480)
@@ -309,118 +310,138 @@ def main() -> int:
 
     repo_root = Path(args.repo_root).resolve()
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-
-    if not args.skip_compose:
-        _compose_up(repo_root=repo_root, compose_file=args.compose_file, build=args.build)
-    _wait_ready(
-        ingestion_base_url=args.ingestion_base_url,
-        event_replay_base_url=args.event_replay_base_url,
-        query_base_url=args.query_base_url,
-        timeout_seconds=args.ready_timeout_seconds,
+    compose_down, compose_up, wait_for_migration_runner, build_test_runtime_env = (
+        _load_test_runtime_helpers()
     )
 
-    started = time.time()
-    baseline_backlog_jobs = _get_backlog_jobs(
-        event_replay_base_url=args.event_replay_base_url,
-        ops_token=args.ops_token,
+    runtime_env, endpoints = build_test_runtime_env(
+        profile="integration",
+        scope="failure-recovery-gate",
+        env=os.environ.copy(),
+        preserve_existing=True,
     )
-    portfolio_id = f"FAIL_RECOVERY_{run_id}"
+    os.environ.update(runtime_env)
 
-    _ingest_transactions(
-        ingestion_base_url=args.ingestion_base_url,
-        portfolio_id=portfolio_id,
-        batches=2,
-        batch_size=40,
-        sleep_seconds_between_batches=0.1,
-    )
+    ingestion_base_url = args.ingestion_base_url or endpoints.e2e_ingestion_url
+    query_base_url = args.query_base_url or endpoints.e2e_query_url
+    event_replay_base_url = args.event_replay_base_url or endpoints.e2e_event_replay_url
 
-    interruption_target = _resolve_interruption_container(
-        repo_root=repo_root,
-        compose_file=args.compose_file,
-        interruption_container=args.interruption_container,
-    )
-    _pause_container(interruption_target, repo_root=repo_root)
-    peak_backlog = baseline_backlog_jobs
     try:
+        if not args.skip_compose:
+            compose_up(args.compose_file, build=args.build)
+            wait_for_migration_runner(args.compose_file, timeout_seconds=args.ready_timeout_seconds)
+        _wait_ready(
+            ingestion_base_url=ingestion_base_url,
+            event_replay_base_url=event_replay_base_url,
+            query_base_url=query_base_url,
+            timeout_seconds=args.ready_timeout_seconds,
+        )
+
+        started = time.time()
+        baseline_backlog_jobs = _get_backlog_jobs(
+            event_replay_base_url=event_replay_base_url,
+            ops_token=args.ops_token,
+        )
+        portfolio_id = f"FAIL_RECOVERY_{run_id}"
+
+        _ingest_transactions(
+            ingestion_base_url=ingestion_base_url,
+            portfolio_id=portfolio_id,
+            batches=2,
+            batch_size=40,
+            sleep_seconds_between_batches=0.1,
+        )
+
+        interruption_target = _resolve_interruption_container(
+            repo_root=repo_root,
+            compose_file=args.compose_file,
+            interruption_container=args.interruption_container,
+        )
+        _pause_container(interruption_target, repo_root=repo_root)
+        peak_backlog = baseline_backlog_jobs
         interruption_deadline = time.time() + args.interruption_seconds
         while time.time() < interruption_deadline:
             _ingest_transactions(
-                ingestion_base_url=args.ingestion_base_url,
+                ingestion_base_url=ingestion_base_url,
                 portfolio_id=portfolio_id,
                 batches=1,
                 batch_size=25,
                 sleep_seconds_between_batches=0.0,
             )
             current_backlog = _get_backlog_jobs(
-                event_replay_base_url=args.event_replay_base_url,
+                event_replay_base_url=event_replay_base_url,
                 ops_token=args.ops_token,
             )
             peak_backlog = max(peak_backlog, current_backlog)
             time.sleep(1)
-    finally:
         _unpause_container(interruption_target, repo_root=repo_root)
 
-    drain_seconds = _wait_drain_to_target_backlog(
-        event_replay_base_url=args.event_replay_base_url,
-        ops_token=args.ops_token,
-        target_backlog_jobs=max(baseline_backlog_jobs + 1, 0),
-        timeout_seconds=args.recovery_timeout_seconds,
-    )
-    recovery_health = _get_health_snapshot(
-        event_replay_base_url=args.event_replay_base_url,
-        ops_token=args.ops_token,
-    )
-    ended = time.time()
-
-    backlog_growth = max(0, peak_backlog - baseline_backlog_jobs)
-    backlog_age = float(recovery_health["slo"].get("backlog_age_seconds", 0.0))
-    dlq_pressure = float(recovery_health["error_budget"].get("dlq_pressure_ratio", 0.0))
-    replay_pressure = float(
-        recovery_health["error_budget"].get("replay_backlog_pressure_ratio", 0.0)
-    )
-
-    failed_checks: list[str] = []
-    if backlog_growth < 2:
-        failed_checks.append("backlog growth during interruption was too small (< 2 jobs)")
-    if drain_seconds is not None and drain_seconds > 420:
-        failed_checks.append(f"recovery drain {drain_seconds:.2f}s exceeded max 420.00s")
-    if drain_seconds is None and backlog_age > 1200:
-        failed_checks.append(
-            "recovery drain timeout with elevated backlog age (>1200s) "
-            "indicates incomplete recovery"
+        drain_seconds = _wait_drain_to_target_backlog(
+            event_replay_base_url=event_replay_base_url,
+            ops_token=args.ops_token,
+            target_backlog_jobs=max(baseline_backlog_jobs + 1, 0),
+            timeout_seconds=args.recovery_timeout_seconds,
         )
-    if backlog_age > 1800:
-        failed_checks.append(f"backlog age after recovery {backlog_age:.2f}s exceeded 1800s")
-    if dlq_pressure > 5.0:
-        failed_checks.append(f"DLQ pressure after recovery {dlq_pressure:.4f} exceeded 5.0000")
-    if replay_pressure > 5.0:
-        failed_checks.append(
-            f"Replay pressure after recovery {replay_pressure:.4f} exceeded 5.0000"
+        recovery_health = _get_health_snapshot(
+            event_replay_base_url=event_replay_base_url,
+            ops_token=args.ops_token,
+        )
+        ended = time.time()
+
+        backlog_growth = max(0, peak_backlog - baseline_backlog_jobs)
+        backlog_age = float(recovery_health["slo"].get("backlog_age_seconds", 0.0))
+        dlq_pressure = float(recovery_health["error_budget"].get("dlq_pressure_ratio", 0.0))
+        replay_pressure = float(
+            recovery_health["error_budget"].get("replay_backlog_pressure_ratio", 0.0)
         )
 
-    result = RecoveryResult(
-        run_id=run_id,
-        started_at=datetime.fromtimestamp(started, tz=UTC).isoformat(),
-        ended_at=datetime.fromtimestamp(ended, tz=UTC).isoformat(),
-        interruption_container=interruption_target,
-        interruption_seconds=args.interruption_seconds,
-        baseline_backlog_jobs=baseline_backlog_jobs,
-        peak_backlog_jobs_during_interruption=peak_backlog,
-        backlog_growth_jobs=backlog_growth,
-        drain_seconds_to_baseline=drain_seconds,
-        backlog_age_seconds_after_recovery=round(backlog_age, 3),
-        dlq_pressure_ratio_after_recovery=round(dlq_pressure, 6),
-        replay_pressure_ratio_after_recovery=round(replay_pressure, 6),
-        checks_passed=not failed_checks,
-        failed_checks=failed_checks,
-    )
-    json_path, md_path = _write_report(output_dir=(repo_root / args.output_dir), result=result)
-    print(f"Wrote failure recovery JSON report: {json_path}")
-    print(f"Wrote failure recovery Markdown report: {md_path}")
+        failed_checks: list[str] = []
+        if backlog_growth < 2:
+            failed_checks.append("backlog growth during interruption was too small (< 2 jobs)")
+        if drain_seconds is not None and drain_seconds > 420:
+            failed_checks.append(f"recovery drain {drain_seconds:.2f}s exceeded max 420.00s")
+        if drain_seconds is None and backlog_age > 1200:
+            failed_checks.append(
+                "recovery drain timeout with elevated backlog age (>1200s) "
+                "indicates incomplete recovery"
+            )
+        if backlog_age > 1800:
+            failed_checks.append(f"backlog age after recovery {backlog_age:.2f}s exceeded 1800s")
+        if dlq_pressure > 5.0:
+            failed_checks.append(
+                f"DLQ pressure after recovery {dlq_pressure:.4f} exceeded 5.0000"
+            )
+        if replay_pressure > 5.0:
+            failed_checks.append(
+                f"Replay pressure after recovery {replay_pressure:.4f} exceeded 5.0000"
+            )
 
-    if args.enforce and not result.checks_passed:
-        return 1
-    return 0
+        result = RecoveryResult(
+            run_id=run_id,
+            started_at=datetime.fromtimestamp(started, tz=UTC).isoformat(),
+            ended_at=datetime.fromtimestamp(ended, tz=UTC).isoformat(),
+            interruption_container=interruption_target,
+            interruption_seconds=args.interruption_seconds,
+            baseline_backlog_jobs=baseline_backlog_jobs,
+            peak_backlog_jobs_during_interruption=peak_backlog,
+            backlog_growth_jobs=backlog_growth,
+            drain_seconds_to_baseline=drain_seconds,
+            backlog_age_seconds_after_recovery=round(backlog_age, 3),
+            dlq_pressure_ratio_after_recovery=round(dlq_pressure, 6),
+            replay_pressure_ratio_after_recovery=round(replay_pressure, 6),
+            checks_passed=not failed_checks,
+            failed_checks=failed_checks,
+        )
+        json_path, md_path = _write_report(output_dir=(repo_root / args.output_dir), result=result)
+        print(f"Wrote failure recovery JSON report: {json_path}")
+        print(f"Wrote failure recovery Markdown report: {md_path}")
+
+        if args.enforce and not result.checks_passed:
+            return 1
+        return 0
+    finally:
+        if not args.skip_compose and not args.keep_stack_up:
+            compose_down(args.compose_file)
 
 
 if __name__ == "__main__":
