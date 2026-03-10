@@ -113,13 +113,19 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
         },
     )
 
-    # Poll until transactions are persisted before querying downstream analytics-input endpoint.
+    # Wait for the full downstream portfolio-timeseries chain to settle for the
+    # final business date. This module seeds a month-long scenario, so only
+    # waiting for transaction persistence leaves legitimate aggregation backlog
+    # running into the next module.
     poll_db_until(
-        query="SELECT count(*) FROM transactions WHERE portfolio_id = :pid",
-        params={"pid": portfolio_id},
-        validation_func=lambda r: r is not None and r[0] >= 2,
-        timeout=90,
-        fail_message="Pipeline did not persist MWR fixture transactions.",
+        query=(
+            "SELECT eod_market_value FROM portfolio_timeseries "
+            "WHERE portfolio_id = :pid AND date = :date"
+        ),
+        params={"pid": portfolio_id, "date": "2025-08-31"},
+        validation_func=lambda r: r is not None,
+        timeout=180,
+        fail_message="Pipeline did not settle MWR portfolio timeseries through the final day.",
     )
 
     return {"portfolio_id": portfolio_id}

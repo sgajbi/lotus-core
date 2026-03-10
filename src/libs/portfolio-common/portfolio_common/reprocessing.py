@@ -16,6 +16,7 @@ class FencedEvent(Protocol):
     portfolio_id: str
     security_id: str
     epoch: Optional[int]
+    topic: Optional[str]
 
 
 class EpochFencer:
@@ -48,6 +49,7 @@ class EpochFencer:
         if message_epoch < current_state.epoch:
             EPOCH_MISMATCH_DROPPED_TOTAL.labels(
                 service_name=self.service_name,
+                topic=getattr(event, "topic", "<unknown>") or "<unknown>",
                 portfolio_id=event.portfolio_id,
                 security_id=event.security_id,
             ).inc()

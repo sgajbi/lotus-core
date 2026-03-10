@@ -9,11 +9,9 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     Instrument,
 )
-from portfolio_common.events import (
-    DailyPositionSnapshotPersistedEvent,
-    ValuationDayCompletedEvent,
-)
+from portfolio_common.events import DailyPositionSnapshotPersistedEvent, ValuationDayCompletedEvent
 from portfolio_common.outbox_repository import OutboxRepository
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.timeseries_generator_service.app.consumers.position_timeseries_consumer import (
@@ -103,14 +101,18 @@ async def test_process_message_success(
     )
     mock_db_session.get.return_value = DailyPositionSnapshot(
         id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
         quantity=Decimal(100),
-        cost_basis=Decimal(1000),
+        cost_basis_local=Decimal(1000),
         market_value_local=Decimal(1100),
     )
     mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
         market_value_local=Decimal(1050)
     )
     mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = None
 
     # Mock the fencer to return True (process the message)
     with patch(
@@ -184,14 +186,18 @@ async def test_process_message_accepts_valuation_day_completed_event(
     )
     mock_db_session.get.return_value = DailyPositionSnapshot(
         id=valuation_event.daily_position_snapshot_id,
+        portfolio_id=valuation_event.portfolio_id,
+        security_id=valuation_event.security_id,
+        date=valuation_event.valuation_date,
         quantity=Decimal(100),
-        cost_basis=Decimal(1000),
+        cost_basis_local=Decimal(1000),
         market_value_local=Decimal(1100),
     )
     mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
         market_value_local=Decimal(1050)
     )
     mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = None
 
     with patch(
         "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
@@ -204,3 +210,75 @@ async def test_process_message_accepts_valuation_day_completed_event(
 
     mock_repo.upsert_position_timeseries.assert_awaited_once()
     mock_outbox_repo.create_outbox_event.assert_awaited_once()
+
+
+async def test_process_message_skips_downstream_fanout_for_identical_timeseries(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_repo.get_instrument.return_value = Instrument(
+        security_id=mock_event.security_id, currency="USD"
+    )
+    mock_db_session.get.return_value = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal(100),
+        cost_basis_local=Decimal(1000),
+        market_value_local=Decimal(1100),
+    )
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal(1050)
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = MagicMock(
+        bod_market_value=Decimal("1050"),
+        bod_cashflow_position=Decimal("0"),
+        eod_cashflow_position=Decimal("0"),
+        bod_cashflow_portfolio=Decimal("0"),
+        eod_cashflow_portfolio=Decimal("0"),
+        eod_market_value=Decimal("1100"),
+        fees=Decimal("0"),
+        quantity=Decimal("100"),
+        cost=Decimal("10"),
+    )
+
+    with patch(
+        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = True
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await consumer._process_message_with_retry(mock_kafka_message)
+
+    mock_repo.upsert_position_timeseries.assert_not_awaited()
+    mock_outbox_repo.create_outbox_event.assert_not_awaited()
+
+
+async def test_stage_aggregation_job_rearms_completed_job_for_late_material_input(
+    consumer: PositionTimeseriesConsumer,
+    mock_dependencies: dict,
+):
+    await consumer._stage_aggregation_job(
+        mock_dependencies["db_session"],
+        "PORT_TS_POS_01",
+        date(2025, 8, 12),
+        "corr-456",
+    )
+
+    executed_stmt = mock_dependencies["db_session"].execute.call_args[0][0]
+    compiled_stmt = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "SET status = %(param_1)s" in compiled_stmt or "SET status='PENDING'" in compiled_stmt
+    assert "correlation_id" in compiled_stmt
+    assert "WHERE NOT (" not in compiled_stmt

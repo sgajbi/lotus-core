@@ -8,7 +8,6 @@ from portfolio_common.config import (
     KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
     KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC,
-    KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -47,16 +46,6 @@ class ConsumerManager:
                 service_prefix=service_prefix,
             )
         )
-        self.consumers.append(
-            PositionTimeseriesConsumer(
-                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
-                group_id="timeseries_generator_group_positions_gate",
-                dlq_topic=dlq_topic,
-                service_prefix=service_prefix,
-            )
-        )
-
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
 
         logger.info(

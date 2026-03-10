@@ -277,6 +277,48 @@ async def test_process_message_skips_stale_epoch_event(
         cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
+async def test_process_message_skips_replay_event_when_canonical_state_was_removed(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    """
+    GIVEN a replay cashflow event that arrives after its canonical transaction/portfolio
+    state has been removed
+    WHEN the consumer processes the message
+    THEN it should acknowledge and skip the stale replay instead of retrying forever.
+    """
+    mock_cashflow_repo = mock_dependencies["cashflow_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_rules_repo = mock_dependencies["rules_repo"]
+
+    mock_kafka_message.topic.return_value = "processed_transactions_completed"
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_cashflow_repo.portfolio_exists.return_value = False
+    mock_cashflow_repo.transaction_exists.return_value = False
+
+    with patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = True
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await cashflow_consumer.process_message(mock_kafka_message)
+
+    mock_cashflow_repo.portfolio_exists.assert_awaited_once_with("PORT_CFC_01")
+    mock_cashflow_repo.transaction_exists.assert_awaited_once_with(
+        "TXN_CASHFLOW_CONSUMER", portfolio_id="PORT_CFC_01"
+    )
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.is_event_processed.assert_not_called()
+    mock_rules_repo.get_all_rules.assert_not_awaited()
+    mock_cashflow_repo.create_cashflow.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    cashflow_consumer._send_to_dlq_async.assert_not_called()
+
+
 async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
     cashflow_consumer: CashflowCalculatorConsumer,
 ):

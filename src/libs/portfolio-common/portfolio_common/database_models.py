@@ -671,7 +671,7 @@ class Cashflow(Base):
 
     transaction = relationship("Transaction", back_populates="cashflow")
 
-    __table_args__ = (UniqueConstraint("transaction_id", name="_transaction_id_uc"),)
+    __table_args__ = (UniqueConstraint("transaction_id", "epoch", name="_transaction_epoch_uc"),)
 
 
 class PositionLotState(Base):

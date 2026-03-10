@@ -135,11 +135,14 @@ def setup_sequential_jobs_with_snapshot_completeness(db_engine, clean_db):
                 _position_ts(portfolio_id, "SEC_A", day1),
             ]
         )
-        # Day2 inputs: keep complete for SEC_A so day2 can claim once day1 portfolio timeseries exists.  # noqa: E501
+        # Day2 inputs: provide a complete latest-per-security input set so the
+        # prior-day gate is the only remaining blocker once day1 completes.
         session.add_all(
             [
                 _snapshot(portfolio_id, "SEC_A", day2),
+                _snapshot(portfolio_id, "SEC_B", day2),
                 _position_ts(portfolio_id, "SEC_A", day2),
+                _position_ts(portfolio_id, "SEC_B", day2),
             ]
         )
         session.commit()
@@ -166,6 +169,7 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
     with Session(db_engine) as session:
         session.add(_position_ts(portfolio_id, "SEC_B", day1))
         session.commit()
+    await async_db_session.rollback()
 
     claimed_jobs_2 = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
@@ -186,9 +190,254 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
                 fees=Decimal("0"),
             )
         )
+        job = (
+            session.query(PortfolioAggregationJob)
+            .filter_by(portfolio_id=portfolio_id, aggregation_date=day1)
+            .one()
+        )
+        job.status = "COMPLETE"
         session.commit()
+    await async_db_session.rollback()
 
     claimed_jobs_3 = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
     assert len(claimed_jobs_3) == 1
     assert claimed_jobs_3[0].aggregation_date == day2
+
+
+async def test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_history(
+    db_engine, clean_db, async_db_session: AsyncSession
+):
+    portfolio_id = "FIRST_DAY_PORTFOLIO"
+    first_day = date(2025, 8, 19)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.flush()
+        session.add(
+            Instrument(
+                security_id="CASH_USD_FIRST",
+                name="Cash USD",
+                isin="CASH_USD_FIRST",
+                currency="USD",
+                product_type="Cash",
+            )
+        )
+        session.add(
+            PositionState(
+                portfolio_id=portfolio_id,
+                security_id="CASH_USD_FIRST",
+                epoch=0,
+                watermark_date=date(1970, 1, 1),
+            )
+        )
+        session.add(
+            PortfolioAggregationJob(
+                portfolio_id=portfolio_id,
+                aggregation_date=first_day,
+                status="PENDING",
+            )
+        )
+        session.add(_snapshot(portfolio_id, "CASH_USD_FIRST", first_day, epoch=0))
+        session.add(_position_ts(portfolio_id, "CASH_USD_FIRST", first_day, epoch=0))
+        session.commit()
+
+    repo = TimeseriesRepository(async_db_session)
+    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    await async_db_session.commit()
+
+    assert len(claimed_jobs) == 1
+    assert claimed_jobs[0].aggregation_date == first_day
+
+
+async def test_find_and_claim_eligible_jobs_accepts_mixed_latest_epochs_per_security(
+    db_engine, clean_db, async_db_session: AsyncSession
+):
+    portfolio_id = "MIXED_EPOCH_PORT"
+    a_date = date(2025, 8, 23)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.flush()
+        session.add_all(
+            [
+                Instrument(
+                    security_id="SEC_A",
+                    name="Sec A",
+                    isin="ISIN_A",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+                Instrument(
+                    security_id="SEC_B",
+                    name="Sec B",
+                    isin="ISIN_B",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_A",
+                    epoch=1,
+                    watermark_date=a_date,
+                ),
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_B",
+                    epoch=0,
+                    watermark_date=date(1970, 1, 1),
+                ),
+            ]
+        )
+        session.add(
+            PortfolioAggregationJob(
+                portfolio_id=portfolio_id, aggregation_date=a_date, status="PENDING"
+            )
+        )
+        session.add(
+            PortfolioTimeseries(
+                portfolio_id=portfolio_id,
+                date=date(2025, 8, 22),
+                epoch=1,
+                bod_market_value=Decimal("0"),
+                bod_cashflow=Decimal("0"),
+                eod_cashflow=Decimal("0"),
+                eod_market_value=Decimal("100"),
+                fees=Decimal("0"),
+            )
+        )
+        session.add_all(
+            [
+                _snapshot(portfolio_id, "SEC_A", a_date, epoch=1),
+                _snapshot(portfolio_id, "SEC_B", a_date, epoch=0),
+                _position_ts(portfolio_id, "SEC_A", a_date, epoch=1),
+                _position_ts(portfolio_id, "SEC_B", a_date, epoch=0),
+            ]
+        )
+        session.commit()
+
+    repo = TimeseriesRepository(async_db_session)
+    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    await async_db_session.commit()
+
+    assert len(claimed_jobs) == 1
+    assert claimed_jobs[0].aggregation_date == a_date
+
+
+async def test_find_and_claim_eligible_jobs_uses_prior_day_portfolio_row_even_when_current_epoch_has_advanced(  # noqa: E501
+    db_engine, clean_db, async_db_session: AsyncSession
+):
+    portfolio_id = "PRIOR_DAY_MIXED_EPOCH"
+    prior_day = date(2025, 8, 22)
+    target_day = date(2025, 8, 23)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.flush()
+        session.add_all(
+            [
+                Instrument(
+                    security_id="SEC_A",
+                    name="Sec A",
+                    isin="ISIN_A",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+                Instrument(
+                    security_id="SEC_B",
+                    name="Sec B",
+                    isin="ISIN_B",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_A",
+                    epoch=1,
+                    watermark_date=target_day,
+                ),
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_B",
+                    epoch=0,
+                    watermark_date=date(1970, 1, 1),
+                ),
+            ]
+        )
+        session.add(
+            PortfolioAggregationJob(
+                portfolio_id=portfolio_id, aggregation_date=target_day, status="PENDING"
+            )
+        )
+        session.add(
+            PortfolioTimeseries(
+                portfolio_id=portfolio_id,
+                date=prior_day,
+                epoch=0,
+                bod_market_value=Decimal("0"),
+                bod_cashflow=Decimal("0"),
+                eod_cashflow=Decimal("0"),
+                eod_market_value=Decimal("170"),
+                fees=Decimal("0"),
+            )
+        )
+        session.add_all(
+            [
+                _snapshot(portfolio_id, "SEC_A", target_day, epoch=1),
+                _snapshot(portfolio_id, "SEC_B", target_day, epoch=0),
+                _position_ts(portfolio_id, "SEC_A", target_day, epoch=1),
+                _position_ts(portfolio_id, "SEC_B", target_day, epoch=0),
+            ]
+        )
+        session.commit()
+
+    repo = TimeseriesRepository(async_db_session)
+    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    await async_db_session.commit()
+
+    assert len(claimed_jobs) == 1
+    assert claimed_jobs[0].aggregation_date == target_day

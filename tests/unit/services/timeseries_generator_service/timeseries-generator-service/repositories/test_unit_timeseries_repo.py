@@ -117,3 +117,83 @@ async def test_find_and_reset_stale_jobs(
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PENDING'" in compiled_query
     assert "WHERE portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
+
+
+async def test_get_all_position_timeseries_for_date_uses_latest_snapshot_epoch_per_security(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.get_all_position_timeseries_for_date("P1", date(2025, 1, 10), 3)
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "max(daily_position_snapshots.epoch)" in compiled_query
+    assert "GROUP BY daily_position_snapshots.security_id" in compiled_query
+    assert "JOIN" in compiled_query
+    assert "position_timeseries.security_id = anon_1.security_id" in compiled_query
+    assert "position_timeseries.epoch = anon_1.epoch" in compiled_query
+
+
+async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.get_latest_snapshots_for_date("P1", date(2025, 1, 10))
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "max(daily_position_snapshots.epoch)" in compiled_query
+    assert "GROUP BY daily_position_snapshots.security_id" in compiled_query
+    assert "daily_position_snapshots.epoch = anon_1.epoch" in compiled_query
+
+
+async def test_find_and_claim_eligible_jobs_prior_day_gate_does_not_require_current_epoch_match(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.find_and_claim_eligible_jobs(batch_size=5)
+
+    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert (
+        "portfolio_timeseries.date = portfolio_aggregation_jobs.aggregation_date -"
+        in compiled_query
+    )
+    assert "portfolio_timeseries.epoch =" not in compiled_query
+
+
+async def test_find_and_claim_eligible_jobs_first_day_gate_is_directly_correlated(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.find_and_claim_eligible_jobs(batch_size=5)
+
+    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert (
+        "portfolio_aggregation_jobs_1.portfolio_id = portfolio_aggregation_jobs.portfolio_id"
+        in compiled_query
+    )
+    assert "NOT (EXISTS" in compiled_query
+    assert "FROM portfolio_timeseries, portfolio_aggregation_jobs" not in compiled_query
+
+
+async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.find_and_claim_eligible_jobs(batch_size=5)
+
+    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "FROM daily_position_snapshots, portfolio_aggregation_jobs" not in compiled_query

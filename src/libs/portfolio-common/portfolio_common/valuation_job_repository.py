@@ -3,7 +3,7 @@ import logging
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, not_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,8 +30,11 @@ class ValuationJobRepository:
         correlation_id: Optional[str] = None,
     ) -> None:
         """
-        Idempotently creates or updates a valuation job, setting its status to 'PENDING'.
-        If a job for the same key (including epoch) exists, it will be reset to 'PENDING'.
+        Idempotently creates or updates a valuation job.
+
+        Duplicate scheduler polls for the same logical run must not re-arm an already completed
+        valuation job. A genuinely new replay/backfill run is allowed to re-arm the job via a
+        different correlation id.
         """
         try:
             job_data = {
@@ -54,6 +57,12 @@ class ValuationJobRepository:
             final_stmt = stmt.on_conflict_do_update(
                 index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
                 set_=update_dict,
+                where=not_(
+                    and_(
+                        PortfolioValuationJob.status == "COMPLETE",
+                        PortfolioValuationJob.correlation_id.is_not_distinct_from(correlation_id),
+                    )
+                ),
             )
 
             await self.db.execute(final_stmt)

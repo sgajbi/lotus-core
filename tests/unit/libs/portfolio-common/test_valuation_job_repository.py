@@ -57,7 +57,9 @@ async def test_upsert_job_builds_correct_statement(
     assert called_values["status"] == "PENDING"
 
     mock_pg_insert.return_value.values.return_value.on_conflict_do_update.assert_called_once_with(
-        index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"], set_=ANY
+        index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
+        set_=ANY,
+        where=ANY,
     )
 
     mock_db_session.execute.assert_awaited_once_with(mock_final_statement)

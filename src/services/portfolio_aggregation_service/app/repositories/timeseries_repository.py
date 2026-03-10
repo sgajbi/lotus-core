@@ -1,23 +1,24 @@
 # src/services/timeseries_generator_service/app/repositories/timeseries_repository.py
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional, List
-from sqlalchemy import select, update, exists, func
-from sqlalchemy.orm import aliased
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from typing import List, Optional
+
 from portfolio_common.database_models import (
-    PositionTimeseries,
-    PortfolioTimeseries,
-    Portfolio,
     Cashflow,
+    DailyPositionSnapshot,
     FxRate,
     Instrument,
+    Portfolio,
     PortfolioAggregationJob,
-    DailyPositionSnapshot,
+    PortfolioTimeseries,
     PositionState,
+    PositionTimeseries,
 )
 from portfolio_common.utils import async_timed
+from sqlalchemy import and_, exists, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,9 @@ class TimeseriesRepository:
 
             await self.db.execute(final_stmt)
             logger.info(
-                f"Staged upsert for position time series for {timeseries_record.security_id} on {timeseries_record.date}"
+                "Staged upsert for position time series for %s on %s",
+                timeseries_record.security_id,
+                timeseries_record.date,
             )
         except Exception as e:
             logger.error(f"Failed to stage upsert for position time series: {e}", exc_info=True)
@@ -99,7 +102,9 @@ class TimeseriesRepository:
 
             await self.db.execute(final_stmt)
             logger.info(
-                f"Staged upsert for portfolio time series for {timeseries_record.portfolio_id} on {timeseries_record.date}"
+                "Staged upsert for portfolio time series for %s on %s",
+                timeseries_record.portfolio_id,
+                timeseries_record.date,
             )
         except Exception as e:
             logger.error(f"Failed to stage upsert for portfolio time series: {e}", exc_info=True)
@@ -117,59 +122,64 @@ class TimeseriesRepository:
         p1 = PortfolioAggregationJob
         p2 = aliased(PortfolioAggregationJob)
         pts = PortfolioTimeseries
-        ps = PositionState
         dps = DailyPositionSnapshot
         position_ts = PositionTimeseries
 
-        # Subquery to find the current epoch for a given portfolio
-        current_epoch_subq = (
-            select(func.max(ps.epoch))
-            .where(ps.portfolio_id == p1.portfolio_id)
-            .scalar_subquery()
-            .correlate(p1)
-        )
-
         # Subquery to check for the existence of the prior day's timeseries record
-        prior_day_exists_subq = (
-            exists(pts)
-            .where(
+        prior_day_exists_subq = exists(
+            select(1).where(
                 pts.portfolio_id == p1.portfolio_id,
                 pts.date == p1.aggregation_date - timedelta(days=1),
-                pts.epoch == func.coalesce(current_epoch_subq, 0),
             )
+        ).correlate(p1)
+
+        no_portfolio_history_subq = ~exists(
+            select(1).where(pts.portfolio_id == p1.portfolio_id)
+        ).correlate(p1)
+        first_job_date_subq = (
+            select(func.min(p2.aggregation_date))
+            .where(p2.portfolio_id == p1.portfolio_id)
+            .scalar_subquery()
             .correlate(p1)
         )
 
-        # Subquery to check if this is the first job for a portfolio with no history
-        is_first_job_subq = p1.aggregation_date == (
-            select(func.min(p2.aggregation_date))
-            .where(
-                p2.portfolio_id == p1.portfolio_id,
-                ~exists(pts).where(pts.portfolio_id == p1.portfolio_id).correlate(p2),
+        # Subquery to check if this is the first job for a portfolio with no history.
+        is_first_job_subq = no_portfolio_history_subq & (
+            p1.aggregation_date == first_job_date_subq
+        )
+
+        latest_snapshot_epochs = (
+            select(
+                dps.security_id.label("security_id"),
+                func.max(dps.epoch).label("epoch"),
             )
-            .scalar_subquery()
+            .where(
+                dps.portfolio_id == p1.portfolio_id,
+                dps.date == p1.aggregation_date,
+            )
+            .group_by(dps.security_id)
             .correlate(p1)
+            .subquery()
         )
 
         expected_snapshot_count_subq = (
             select(func.count())
-            .select_from(dps)
-            .where(
-                dps.portfolio_id == p1.portfolio_id,
-                dps.date == p1.aggregation_date,
-                dps.epoch == func.coalesce(current_epoch_subq, 0),
-            )
+            .select_from(latest_snapshot_epochs)
             .scalar_subquery()
             .correlate(p1)
         )
 
         actual_position_timeseries_count_subq = (
             select(func.count())
-            .select_from(position_ts)
-            .where(
-                position_ts.portfolio_id == p1.portfolio_id,
-                position_ts.date == p1.aggregation_date,
-                position_ts.epoch == func.coalesce(current_epoch_subq, 0),
+            .select_from(latest_snapshot_epochs)
+            .join(
+                position_ts,
+                and_(
+                    position_ts.portfolio_id == p1.portfolio_id,
+                    position_ts.date == p1.aggregation_date,
+                    position_ts.security_id == latest_snapshot_epochs.c.security_id,
+                    position_ts.epoch == latest_snapshot_epochs.c.epoch,
+                ),
             )
             .scalar_subquery()
             .correlate(p1)
@@ -252,8 +262,33 @@ class TimeseriesRepository:
     async def get_all_position_timeseries_for_date(
         self, portfolio_id: str, a_date: date, epoch: int
     ) -> List[PositionTimeseries]:
-        stmt = select(PositionTimeseries).filter_by(
-            portfolio_id=portfolio_id, date=a_date, epoch=epoch
+        latest_snapshot_epochs = (
+            select(
+                DailyPositionSnapshot.security_id.label("security_id"),
+                func.max(DailyPositionSnapshot.epoch).label("epoch"),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.date == a_date,
+            )
+            .group_by(DailyPositionSnapshot.security_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(PositionTimeseries)
+            .join(
+                latest_snapshot_epochs,
+                and_(
+                    PositionTimeseries.security_id == latest_snapshot_epochs.c.security_id,
+                    PositionTimeseries.epoch == latest_snapshot_epochs.c.epoch,
+                ),
+            )
+            .where(
+                PositionTimeseries.portfolio_id == portfolio_id,
+                PositionTimeseries.date == a_date,
+            )
+            .order_by(PositionTimeseries.security_id)
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -277,10 +312,45 @@ class TimeseriesRepository:
             .filter(
                 PortfolioTimeseries.portfolio_id == portfolio_id, PortfolioTimeseries.date < a_date
             )
-            .order_by(PortfolioTimeseries.date.desc())
+            .order_by(PortfolioTimeseries.date.desc(), PortfolioTimeseries.epoch.desc())
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    @async_timed(repository="TimeseriesRepository", method="get_latest_snapshots_for_date")
+    async def get_latest_snapshots_for_date(
+        self, portfolio_id: str, a_date: date
+    ) -> List[DailyPositionSnapshot]:
+        latest_snapshot_epochs = (
+            select(
+                DailyPositionSnapshot.security_id.label("security_id"),
+                func.max(DailyPositionSnapshot.epoch).label("epoch"),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.date == a_date,
+            )
+            .group_by(DailyPositionSnapshot.security_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(DailyPositionSnapshot)
+            .join(
+                latest_snapshot_epochs,
+                and_(
+                    DailyPositionSnapshot.security_id == latest_snapshot_epochs.c.security_id,
+                    DailyPositionSnapshot.epoch == latest_snapshot_epochs.c.epoch,
+                ),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.date == a_date,
+            )
+            .order_by(DailyPositionSnapshot.security_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
 
     @async_timed(repository="TimeseriesRepository", method="find_and_reset_stale_jobs")
     async def find_and_reset_stale_jobs(self, timeout_minutes: int = 15) -> int:

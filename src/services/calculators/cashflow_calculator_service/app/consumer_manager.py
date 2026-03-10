@@ -7,6 +7,7 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
     KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -36,6 +37,15 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
                 group_id="cashflow_calculator_group",
+                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                service_prefix="CFLOW",
+            )
+        )
+        self.consumers.append(
+            CashflowCalculatorConsumer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                topic=KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+                group_id="cashflow_calculator_group_replay",
                 dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
                 service_prefix="CFLOW",
             )

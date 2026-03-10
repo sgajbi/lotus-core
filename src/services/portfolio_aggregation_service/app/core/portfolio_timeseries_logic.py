@@ -5,10 +5,11 @@ from decimal import Decimal
 from typing import List
 
 from portfolio_common.database_models import (
+    Portfolio,
     PortfolioTimeseries,
     PositionTimeseries,
-    Portfolio,
 )
+
 from ..repositories.timeseries_repository import TimeseriesRepository
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,10 @@ class PortfolioTimeseriesLogic:
                     instrument_currency, portfolio_currency, pos_ts.date
                 )
                 if not fx_rate:
-                    error_msg = f"Missing FX rate from {instrument_currency} to {portfolio_currency} for date {pos_ts.date}."
+                    error_msg = (
+                        f"Missing FX rate from {instrument_currency} "
+                        f"to {portfolio_currency} for date {pos_ts.date}."
+                    )
                     logger.error(error_msg)
                     raise FxRateNotFoundError(error_msg)
                 rate = fx_rate.rate
@@ -91,13 +95,13 @@ class PortfolioTimeseriesLogic:
             if (pos_ts.eod_cashflow_portfolio or Decimal(0)) < 0:
                 total_fees += abs(pos_ts.eod_cashflow_portfolio * rate)
 
-        # 3. Calculate End of Day Market Value from definitive snapshot records for the correct epoch
-        all_snapshots_for_day = await repo.get_all_snapshots_for_date(
+        # 3. Calculate end-of-day market value from the latest definitive
+        # snapshot for each security on the day.
+        latest_snapshots_for_day = await repo.get_latest_snapshots_for_date(
             portfolio.portfolio_id, a_date
         )
-        for snapshot in all_snapshots_for_day:
-            if snapshot.epoch == epoch:  # Only include snapshots from the target epoch
-                total_eod_mv += snapshot.market_value or Decimal(0)
+        for snapshot in latest_snapshots_for_day:
+            total_eod_mv += snapshot.market_value or Decimal(0)
 
         return PortfolioTimeseries(
             portfolio_id=portfolio.portfolio_id,

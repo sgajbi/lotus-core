@@ -23,6 +23,11 @@ from tests.test_support.docker_stack import (
     wait_for_kafka_metadata,
     wait_for_migration_runner,
 )
+from tests.test_support.pipeline_quiescence import (
+    read_pipeline_activity_snapshot,
+    read_pipeline_last_activity_at,
+    wait_for_pipeline_quiescence,
+)
 from tests.test_support.runtime_env import build_test_runtime_env, infer_test_profile
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -162,8 +167,11 @@ def docker_services(request):  # noqa: ARG001
         pytest.fail(str(exc))
 
     finally:
-        print("\n--- Tearing down Docker services ---")
-        compose_down(compose_file)
+        if _env_bool("LOTUS_TESTS_KEEP_STACK_UP", False):
+            print("\n--- Keeping Docker services running for post-failure inspection ---")
+        else:
+            print("\n--- Tearing down Docker services ---")
+            compose_down(compose_file)
 
 
 # --- NEW: E2E API Client Fixture ---
@@ -257,6 +265,21 @@ def _build_truncate_sql(connection) -> str:
     return f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE;"
 
 
+def _wait_for_pipeline_idle(db_engine) -> None:
+    timeout_seconds = _env_int("LOTUS_TESTS_QUIESCENCE_TIMEOUT_SECONDS", 120)
+    poll_seconds = _env_int("LOTUS_TESTS_QUIESCENCE_POLL_SECONDS", 1)
+    stable_cycles = _env_int("LOTUS_TESTS_QUIESCENCE_STABLE_CYCLES", 2)
+    quiet_seconds = _env_int("LOTUS_TESTS_QUIESCENCE_QUIET_SECONDS", 8)
+    wait_for_pipeline_quiescence(
+        timeout_seconds=timeout_seconds,
+        poll_seconds=poll_seconds,
+        stable_cycles=stable_cycles,
+        snapshot_reader=lambda: read_pipeline_activity_snapshot(db_engine),
+        quiet_seconds=quiet_seconds,
+        last_activity_reader=lambda: read_pipeline_last_activity_at(db_engine),
+    )
+
+
 @pytest.fixture(scope="function")
 def clean_db(db_engine):
     """
@@ -295,6 +318,7 @@ def clean_db_module(db_engine):
     print("\n--- Cleaning database tables (module scope) ---")
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
     terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
+    _wait_for_pipeline_idle(db_engine)
 
     def _terminate_for_deadlock_retry() -> None:
         with db_engine.begin() as connection:
