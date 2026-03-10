@@ -113,6 +113,34 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
 
+async def test_openapi_describes_event_replay_shared_schema_depth(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()["components"]["schemas"]
+
+    ops_mode = schema["IngestionOpsModeResponse"]
+    ops_mode_update = schema["IngestionOpsModeUpdateRequest"]
+    replay_request = schema["ConsumerDlqReplayRequest"]
+    replay_audit_list = schema["IngestionReplayAuditListResponse"]
+    idempotency = schema["IngestionIdempotencyDiagnosticsResponse"]
+
+    assert ops_mode["properties"]["mode"]["description"] == (
+        "Current ingestion operations mode used to control replay and write-ingress behavior."
+    )
+    assert ops_mode_update["properties"]["mode"]["description"] == (
+        "Target ingestion operations mode to apply."
+    )
+    assert replay_request["properties"]["dry_run"]["description"] == (
+        "When true, validate replayability and replay mapping without republishing messages."
+    )
+    assert replay_audit_list["properties"]["audits"]["description"] == (
+        "Replay audit rows matching the requested filters and time window."
+    )
+    assert idempotency["properties"]["keys"]["description"] == (
+        "Key-level idempotency diagnostics sorted by highest usage count."
+    )
+
+
 async def test_openapi_excludes_write_ingress_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200

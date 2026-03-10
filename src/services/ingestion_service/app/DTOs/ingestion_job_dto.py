@@ -209,7 +209,9 @@ class IngestionOperatingBandResponse(BaseModel):
         examples=[60],
     )
     operating_band: Literal["green", "yellow", "orange", "red"] = Field(
-        description="Current operating severity band for ingestion and calculator scaling workflows.",
+        description=(
+            "Current operating severity band for ingestion and calculator scaling workflows."
+        ),
         examples=["yellow"],
     )
     recommended_action: str = Field(
@@ -360,7 +362,8 @@ class IngestionOpsPolicyResponse(BaseModel):
     )
     partition_growth_strategy: Literal["scale_out_only", "pre_shard_large_portfolios"] = Field(
         description=(
-            "Kafka partition growth strategy: `scale_out_only` grows topic partitions with standard rebalancing; "
+            "Kafka partition growth strategy: `scale_out_only` grows topic partitions with "
+            "standard rebalancing; "
             "`pre_shard_large_portfolios` reserves extra partitions for hot-key portfolios."
         ),
         examples=["scale_out_only"],
@@ -439,7 +442,10 @@ class IngestionCapacityGroupResponse(BaseModel):
     )
     processed_records: int = Field(
         ge=0,
-        description="Records in this group that progressed out of accepted state (queued or failed).",
+        description=(
+            "Records in this group that progressed out of accepted state "
+            "(queued or failed)."
+        ),
         examples=[24000],
     )
     backlog_records: int = Field(
@@ -474,18 +480,23 @@ class IngestionCapacityGroupResponse(BaseModel):
     )
     utilization_ratio: Decimal = Field(
         ge=Decimal("0"),
-        description="Utilization ratio (`rho = lambda_in / capacity`). Values above 1 indicate overload.",
+        description=(
+            "Utilization ratio (`rho = lambda_in / capacity`). Values above 1 indicate overload."
+        ),
         examples=["0.520833"],
     )
     headroom_ratio: Decimal = Field(
-        description="Capacity headroom ratio (`1 - rho`). Negative values indicate sustained overload.",
+        description=(
+            "Capacity headroom ratio (`1 - rho`). Negative values indicate sustained overload."
+        ),
         examples=["0.479167"],
     )
     estimated_drain_seconds: float | None = Field(
         default=None,
         ge=0.0,
         description=(
-            "Estimated backlog drain time in seconds using `T_drain = backlog / (capacity - lambda_in)` "
+            "Estimated backlog drain time in seconds using "
+            "`T_drain = backlog / (capacity - lambda_in)` "
             "when net drain capacity is positive."
         ),
         examples=[300.0],
@@ -596,7 +607,10 @@ class IngestionBacklogBreakdownResponse(BaseModel):
     largest_group_backlog_share: Decimal = Field(
         ge=Decimal("0"),
         le=Decimal("1"),
-        description="Largest-group backlog concentration share (largest_group_backlog_jobs / total_backlog_jobs).",
+        description=(
+            "Largest-group backlog concentration share "
+            "(largest_group_backlog_jobs / total_backlog_jobs)."
+        ),
         examples=["0.5294"],
     )
     top_3_backlog_share: Decimal = Field(
@@ -680,7 +694,9 @@ class IngestionRetryRequest(BaseModel):
 
 class IngestionOpsModeResponse(BaseModel):
     mode: Literal["normal", "paused", "drain"] = Field(
-        description="Current ingestion operations mode.",
+        description=(
+            "Current ingestion operations mode used to control replay and write-ingress behavior."
+        ),
         examples=["normal"],
     )
     replay_window_start: datetime | None = Field(
@@ -706,7 +722,7 @@ class IngestionOpsModeResponse(BaseModel):
 
 class IngestionOpsModeUpdateRequest(BaseModel):
     mode: Literal["normal", "paused", "drain"] = Field(
-        description="Target ingestion operations mode.",
+        description="Target ingestion operations mode to apply.",
         examples=["paused"],
     )
     replay_window_start: datetime | None = Field(
@@ -832,7 +848,9 @@ class IngestionConsumerLagResponse(BaseModel):
 class ConsumerDlqReplayRequest(BaseModel):
     dry_run: bool = Field(
         default=False,
-        description="When true, validate replayability and mapping without republishing.",
+        description=(
+            "When true, validate replayability and replay mapping without republishing messages."
+        ),
         examples=[False],
     )
 
@@ -941,7 +959,7 @@ class IngestionReplayAuditResponse(BaseModel):
 
 class IngestionReplayAuditListResponse(BaseModel):
     audits: list[IngestionReplayAuditResponse] = Field(
-        description="Replay audit rows matching requested filters."
+        description="Replay audit rows matching the requested filters and time window."
     )
     total: int = Field(
         ge=0,
@@ -1026,7 +1044,7 @@ class IngestionIdempotencyDiagnosticsResponse(BaseModel):
         examples=[1],
     )
     keys: list[IngestionIdempotencyDiagnosticItemResponse] = Field(
-        description="Key-level diagnostics sorted by highest usage count."
+        description="Key-level idempotency diagnostics sorted by highest usage count."
     )
 
 
