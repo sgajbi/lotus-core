@@ -54,7 +54,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Tracks sandbox simulation sessions.
 - **Description**: Session-level envelope for hypothetical changes against a base portfolio.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/simulation_repository.py`, `src/services/query_service/app/services/simulation_service.py`, `src/services/query_service/app/routers/simulation.py`, `src/services/query_service/app/dtos/simulation_dto.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/simulation_repository.py`, `src/services/query_service/app/services/simulation_service.py`, `src/services/query_control_plane_service/app/main.py`, `src/services/query_service/app/dtos/simulation_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -72,7 +72,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Stores hypothetical transactions within simulation sessions.
 - **Description**: Proposed what-if changes that are not posted to canonical ledger.
 - **Relationships**: `session_id` -> `simulation_sessions.session_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/simulation_repository.py`, `src/services/query_service/app/services/simulation_service.py`, `src/services/query_service/app/dtos/simulation_dto.py`, `src/services/query_service/app/routers/simulation.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/simulation_repository.py`, `src/services/query_service/app/services/simulation_service.py`, `src/services/query_service/app/dtos/simulation_dto.py`, `src/services/query_control_plane_service/app/main.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -219,7 +219,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Benchmark reference master with versioned effective dating.
 - **Description**: Defines benchmark identity, conventions, provider metadata.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/routers/integration.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_control_plane_service/app/main.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -297,7 +297,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Index price time series.
 - **Description**: Reference index levels by date and convention.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_control_plane_service/app/main.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -319,7 +319,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Index return time series.
 - **Description**: Reference index returns by period and convention.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_control_plane_service/app/main.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -342,7 +342,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Benchmark return time series.
 - **Description**: Benchmark-level returns used by performance/risk consumers.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/routers/integration.py`, `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/main.py`, `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -365,7 +365,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Risk-free curve/reference series.
 - **Description**: Time series required by analytics that need risk-free assumptions.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/services/integration_service.py`, `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/routers/integration.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`
+- **Usage (modules/features)**: `src/services/query_service/app/services/integration_service.py`, `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_control_plane_service/app/main.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -389,7 +389,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Controlled classification dictionary.
 - **Description**: Defines allowed classification sets/codes used by benchmark/index metadata.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/routers/integration.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_control_plane_service/app/main.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_service/app/dtos/reference_integration_dto.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -542,7 +542,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Position-level analytical timeseries.
 - **Description**: Daily BOD/EOD rollups per position and epoch for analytics inputs.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; `security_id` -> `instruments.security_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_timeseries_repository.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`, `src/services/timeseries_generator_service/app/core/portfolio_timeseries_logic.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_timeseries_repository.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`, `src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
@@ -566,7 +566,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Portfolio-level analytical timeseries.
 - **Description**: Daily BOD/EOD rollups per portfolio and epoch.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_timeseries_repository.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/timeseries_generator_service/app/consumers/portfolio_timeseries_consumer.py`, `src/services/timeseries_generator_service/app/core/portfolio_timeseries_logic.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_timeseries_repository.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/services/portfolio_aggregation_service/app/repositories/timeseries_repository.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py`, `src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
@@ -621,7 +621,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Durable aggregation work queue.
 - **Description**: Portfolio/date tasks for timeseries aggregation with status tracking.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/timeseries_generator_service/app/consumers/portfolio_timeseries_consumer.py`, `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`, `src/services/timeseries_generator_service/app/core/aggregation_scheduler.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/portfolio_aggregation_service/app/repositories/timeseries_repository.py`, `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`, `src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py`, `src/services/portfolio_aggregation_service/app/main.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -825,7 +825,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Async export job lifecycle for analytics payloads.
 - **Description**: Tracks request fingerprint, execution state, and persisted export result payloads.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_export_repository.py`, `src/services/query_service/app/routers/analytics_inputs.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_export_repository.py`, `src/services/query_control_plane_service/app/main.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
