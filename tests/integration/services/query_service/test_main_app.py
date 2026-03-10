@@ -217,6 +217,41 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     assert not_found["detail"] == "Portfolio with id PORT-CF-001 not found"
 
 
+async def test_openapi_describes_portfolio_discovery_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    portfolio_query = schema["paths"]["/portfolios/"]["get"]
+    single_portfolio = schema["paths"]["/portfolios/{portfolio_id}"]["get"]
+
+    client_id = next(
+        parameter for parameter in portfolio_query["parameters"] if parameter["name"] == "client_id"
+    )
+    assert client_id["description"] == (
+        "Filter by the client grouping ID (CIF) to get all portfolios for a client."
+    )
+
+    booking_center_code = next(
+        parameter
+        for parameter in portfolio_query["parameters"]
+        if parameter["name"] == "booking_center_code"
+    )
+    assert booking_center_code["description"] == (
+        "Filter by booking center to get all portfolios for a business unit."
+    )
+
+    portfolio_id = next(
+        parameter
+        for parameter in single_portfolio["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_id["description"] == "Portfolio identifier."
+
+    not_found = single_portfolio["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Portfolio with id PORT-DISC-001 not found"
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
