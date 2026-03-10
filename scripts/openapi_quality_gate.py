@@ -97,6 +97,30 @@ def _missing_success_response_examples(operation: dict) -> list[str]:
     return missing
 
 
+def _missing_error_response_examples(operation: dict) -> list[str]:
+    responses = operation.get("responses", {})
+    if not isinstance(responses, dict):
+        return []
+    missing: list[str] = []
+    for code, response in responses.items():
+        code_str = str(code)
+        if not (code_str.startswith("4") or code_str.startswith("5") or code_str == "default"):
+            continue
+        if not isinstance(response, dict):
+            continue
+        content = response.get("content", {})
+        if not isinstance(content, dict):
+            continue
+        for media_type, media in content.items():
+            if "json" not in media_type:
+                continue
+            if not isinstance(media, dict):
+                continue
+            if "example" not in media and "examples" not in media:
+                missing.append(code_str)
+    return missing
+
+
 def evaluate_schema(schema: dict, service_name: str) -> list[str]:
     errors: list[str] = []
     missing_docs: list[tuple[str, str, str]] = []
@@ -134,6 +158,15 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
                             method_upper,
                             path,
                             f"success response example ({', '.join(missing_response_examples)})",
+                        )
+                    )
+                missing_error_examples = _missing_error_response_examples(operation)
+                if missing_error_examples:
+                    missing_docs.append(
+                        (
+                            method_upper,
+                            path,
+                            f"error response example ({', '.join(missing_error_examples)})",
                         )
                     )
 

@@ -150,3 +150,31 @@ def test_evaluate_schema_flags_missing_operation_examples() -> None:
     assert any("missing request example" in error for error in errors)
     assert any("missing parameter example" in error for error in errors)
     assert any("missing success response example" in error for error in errors)
+
+
+def test_evaluate_schema_flags_missing_error_response_examples() -> None:
+    schema = {
+        "paths": {
+            "/api/v1/reconcile": {
+                "post": {
+                    "operationId": "run_reconcile",
+                    "summary": "Run reconcile",
+                    "description": "Run controls.",
+                    "tags": ["reconcile"],
+                    "responses": {
+                        "200": {
+                            "description": "ok",
+                            "content": {"application/json": {"example": {"status": "ok"}}},
+                        },
+                        "422": {
+                            "description": "validation error",
+                            "content": {"application/json": {"schema": {"type": "object"}}},
+                        },
+                    },
+                }
+            }
+        }
+    }
+
+    errors = evaluate_schema(schema, service_name="query_service")
+    assert any("missing error response example" in error for error in errors)

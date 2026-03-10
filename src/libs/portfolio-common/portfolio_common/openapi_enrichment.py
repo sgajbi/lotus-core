@@ -299,8 +299,6 @@ def _ensure_operation_examples(schema: dict[str, Any]) -> None:
             if not isinstance(responses, dict):
                 continue
             for status_code, response in responses.items():
-                if not str(status_code).startswith("2"):
-                    continue
                 if not isinstance(response, dict):
                     continue
                 for media_type, media_content in response.get("content", {}).items():
@@ -367,7 +365,14 @@ def _ensure_schema_documentation(schema: dict[str, Any]) -> None:
             if not prop_schema.get("description"):
                 prop_schema["description"] = _infer_description(model_name, prop_name, prop_schema)
             if "example" not in prop_schema:
-                prop_schema["example"] = _infer_example(prop_name, prop_schema)
+                example = None
+                if any(
+                    key in prop_schema for key in ("$ref", "properties", "items", "allOf", "anyOf", "oneOf")
+                ) or prop_schema.get("type") in {"array", "object"}:
+                    example = _build_schema_example(prop_schema, root_schema=schema)
+                if example is None:
+                    example = _infer_example(prop_name, prop_schema)
+                prop_schema["example"] = example
 
 
 def enrich_openapi_schema(schema: dict[str, Any], service_name: str) -> dict[str, Any]:
