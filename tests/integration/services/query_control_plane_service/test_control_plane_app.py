@@ -172,6 +172,17 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
 
+    components = schema["components"]["schemas"]
+    page_metadata = components["PageMetadata"]
+    export_result_schema = components["AnalyticsExportJsonResultResponse"]
+
+    assert page_metadata["properties"]["next_page_token"]["description"] == (
+        "Opaque continuation token for the next page, null when no additional pages remain."
+    )
+    assert export_result_schema["properties"]["data"]["description"] == (
+        "Serialized observations or rows from the selected dataset."
+    )
+
 
 async def test_openapi_describes_integration_policy_and_core_snapshot(async_test_client):
     response = await async_test_client.get("/openapi.json")

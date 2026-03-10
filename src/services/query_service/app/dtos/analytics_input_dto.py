@@ -67,7 +67,10 @@ class LineageMetadata(BaseModel):
 class PageMetadata(BaseModel):
     next_page_token: str | None = Field(
         None,
-        description="Opaque continuation token for the next page, null when no additional pages remain.",
+        description=(
+            "Opaque continuation token for the next page, null when no additional pages remain."
+        ),
+        examples=["eyJwIjp7InZhbHVhdGlvbl9kYXRlIjoiMjAyNS0wMi0yOCJ9LCJzIjoiLi4uIn0="],
     )
 
     model_config = ConfigDict()
@@ -514,20 +517,24 @@ class AnalyticsExportCreateRequest(BaseModel):
         if self.dataset_type == "portfolio_timeseries":
             if self.portfolio_timeseries_request is None:
                 raise ValueError(
-                    "portfolio_timeseries_request must be provided when dataset_type=portfolio_timeseries."
+                    "portfolio_timeseries_request must be provided when "
+                    "dataset_type=portfolio_timeseries."
                 )
             if self.position_timeseries_request is not None:
                 raise ValueError(
-                    "position_timeseries_request must be null when dataset_type=portfolio_timeseries."
+                    "position_timeseries_request must be null when "
+                    "dataset_type=portfolio_timeseries."
                 )
         if self.dataset_type == "position_timeseries":
             if self.position_timeseries_request is None:
                 raise ValueError(
-                    "position_timeseries_request must be provided when dataset_type=position_timeseries."
+                    "position_timeseries_request must be provided when "
+                    "dataset_type=position_timeseries."
                 )
             if self.portfolio_timeseries_request is not None:
                 raise ValueError(
-                    "portfolio_timeseries_request must be null when dataset_type=position_timeseries."
+                    "portfolio_timeseries_request must be null when "
+                    "dataset_type=position_timeseries."
                 )
         return self
 
@@ -623,6 +630,17 @@ class AnalyticsExportJsonResultResponse(BaseModel):
     data: list[dict[str, object]] = Field(
         default_factory=list,
         description="Serialized observations or rows from the selected dataset.",
+        examples=[
+            [
+                {
+                    "valuation_date": "2025-01-31",
+                    "beginning_market_value": "1025000.1200000000",
+                    "ending_market_value": "1032000.5600000000",
+                    "valuation_status": "final",
+                    "cash_flows": [],
+                }
+            ]
+        ],
     )
 
     model_config = ConfigDict()
