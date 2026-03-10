@@ -122,6 +122,7 @@ class ValuationScheduler:
                     {
                         "portfolio_id": state.portfolio_id,
                         "security_id": state.security_id,
+                        "expected_epoch": state.epoch,
                         "watermark_date": new_watermark,
                         "status": new_status,
                     }

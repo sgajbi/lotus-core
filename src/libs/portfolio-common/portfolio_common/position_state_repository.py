@@ -27,7 +27,13 @@ class PositionStateRepository:
         """
         Performs an atomic bulk update of PositionState records.
         `updates` is a list of dicts, each with:
-        {'portfolio_id': str, 'security_id': str, 'watermark_date': date, 'status': str}
+        {
+            'portfolio_id': str,
+            'security_id': str,
+            'expected_epoch': int,
+            'watermark_date': date,
+            'status': str,
+        }
         """
         if not updates:
             return 0
@@ -39,6 +45,7 @@ class PositionStateRepository:
                 .where(
                     PositionState.portfolio_id == update_item["portfolio_id"],
                     PositionState.security_id == update_item["security_id"],
+                    PositionState.epoch == update_item["expected_epoch"],
                 )
                 .values(
                     watermark_date=update_item["watermark_date"],

@@ -182,12 +182,14 @@ async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
         {
             "portfolio_id": "P1",
             "security_id": "S1",
+            "expected_epoch": 1,
             "watermark_date": date(2025, 6, 15),
             "status": "CURRENT",
         },
         {
             "portfolio_id": "P2",
             "security_id": "S2",
+            "expected_epoch": 2,
             "watermark_date": date(2025, 6, 20),
             "status": "REPROCESSING",
         },
@@ -210,3 +212,41 @@ async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
     p2_state = await async_db_session.get(PositionState, ("P2", "S2"))
     assert p2_state.watermark_date == date(2025, 6, 20)
     assert p2_state.status == "REPROCESSING"
+
+
+async def test_bulk_update_states_does_not_overwrite_newer_epoch(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = PositionStateRepository(async_db_session)
+
+    async_db_session.add(
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 6, 1),
+            epoch=2,
+            status="REPROCESSING",
+        )
+    )
+    await async_db_session.commit()
+
+    updates = [
+        {
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "expected_epoch": 1,
+            "watermark_date": date(2025, 6, 15),
+            "status": "CURRENT",
+        }
+    ]
+
+    updated_count = await repo.bulk_update_states(updates)
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    assert updated_count == 0
+    state = await async_db_session.get(PositionState, ("P1", "S1"))
+    assert state is not None
+    assert state.epoch == 2
+    assert state.watermark_date == date(2025, 6, 1)
+    assert state.status == "REPROCESSING"

@@ -211,7 +211,10 @@ async def test_scheduler_advances_watermarks(
 
     assert len(updates_arg) == 2
     update1 = next(u for u in updates_arg if u["portfolio_id"] == "P1")
+    assert update1["expected_epoch"] == 1
     assert update1["status"] == "CURRENT"
+    update2 = next(u for u in updates_arg if u["portfolio_id"] == "P2")
+    assert update2["expected_epoch"] == 2
 
 
 async def test_scheduler_dispatches_claimed_jobs(
