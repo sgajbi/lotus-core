@@ -94,13 +94,22 @@ class ValuationRepositoryBase:
             .subquery()
         )
 
-        stmt = select(
-            latest_history_subquery.c.portfolio_id,
-            latest_history_subquery.c.security_id,
-            latest_history_subquery.c.epoch,
-        ).where(
-            latest_history_subquery.c.rn == 1,
-            latest_history_subquery.c.quantity > 0,
+        stmt = (
+            select(
+                latest_history_subquery.c.portfolio_id,
+                latest_history_subquery.c.security_id,
+                latest_history_subquery.c.epoch,
+            )
+            .join(
+                PositionState,
+                (PositionState.portfolio_id == latest_history_subquery.c.portfolio_id)
+                & (PositionState.security_id == latest_history_subquery.c.security_id)
+                & (PositionState.epoch == latest_history_subquery.c.epoch),
+            )
+            .where(
+                latest_history_subquery.c.rn == 1,
+                latest_history_subquery.c.quantity > 0,
+            )
         )
 
         result = await self.db.execute(stmt)

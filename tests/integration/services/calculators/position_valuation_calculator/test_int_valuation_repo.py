@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     Portfolio,
     PortfolioValuationJob,
     PositionHistory,
+    PositionState,
     Transaction,
 )
 from portfolio_common.valuation_job_repository import ValuationJobRepository
@@ -522,6 +523,90 @@ async def test_find_portfolios_holding_security_on_date(
 
     assert len(portfolio_ids) == 1
     assert portfolio_ids[0] == "P1"
+
+
+async def test_find_open_position_keys_for_security_on_date_uses_current_epoch_only(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P-CURRENT-1",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add_all(
+        [
+            Transaction(
+                transaction_id="T-CURRENT-0",
+                portfolio_id="P-CURRENT-1",
+                instrument_id="I-CURRENT-1",
+                security_id="S-CURRENT-1",
+                transaction_date=datetime(2025, 8, 1, 9, 0, 0),
+                transaction_type="BUY",
+                quantity=1,
+                price=1,
+                gross_transaction_amount=1,
+                trade_currency="USD",
+                currency="USD",
+            ),
+            Transaction(
+                transaction_id="T-CURRENT-1",
+                portfolio_id="P-CURRENT-1",
+                instrument_id="I-CURRENT-1",
+                security_id="S-CURRENT-1",
+                transaction_date=datetime(2025, 8, 2, 9, 0, 0),
+                transaction_type="BUY",
+                quantity=1,
+                price=1,
+                gross_transaction_amount=1,
+                trade_currency="USD",
+                currency="USD",
+            ),
+            PositionState(
+                portfolio_id="P-CURRENT-1",
+                security_id="S-CURRENT-1",
+                epoch=1,
+                watermark_date=date(2025, 8, 2),
+                status="CURRENT",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    async_db_session.add_all(
+        [
+            PositionHistory(
+                transaction_id="T-CURRENT-0",
+                portfolio_id="P-CURRENT-1",
+                security_id="S-CURRENT-1",
+                position_date=date(2025, 8, 1),
+                epoch=0,
+                quantity=Decimal("10"),
+                cost_basis=Decimal("10"),
+            ),
+            PositionHistory(
+                transaction_id="T-CURRENT-1",
+                portfolio_id="P-CURRENT-1",
+                security_id="S-CURRENT-1",
+                position_date=date(2025, 8, 2),
+                epoch=1,
+                quantity=Decimal("12"),
+                cost_basis=Decimal("12"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    keys = await repo.find_open_position_keys_for_security_on_date("S-CURRENT-1", date(2025, 8, 2))
+
+    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
 
 
 async def test_find_and_reset_stale_jobs(
