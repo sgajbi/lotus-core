@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import uuid
+import warnings
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -59,7 +60,10 @@ async def unique_dlq_topic(docker_services) -> str:
         try:
             f.result()  # The result itself is None on success
         except Exception as e:
-            print(f"Failed to delete topic {topic}: {e}")
+            warnings.warn(
+                f"Failed to delete topic {topic}: {e}",
+                stacklevel=2,
+            )
 
 
 async def test_dlq_replayer_consumes_and_republishes(
