@@ -206,6 +206,17 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     ]
     assert invalid_enrichment["detail"] == "security_ids must contain at least one identifier"
 
+    components = schema["components"]["schemas"]
+    policy_response = components["EffectiveIntegrationPolicyResponse"]
+    enrichment_request = components["InstrumentEnrichmentBulkRequest"]
+
+    assert policy_response["properties"]["policy_provenance"]["description"] == (
+        "Policy lineage metadata showing how the effective policy was resolved."
+    )
+    assert enrichment_request["properties"]["security_ids"]["description"] == (
+        "Canonical Lotus security identifiers to enrich in one deterministic batch."
+    )
+
 
 async def test_openapi_describes_capabilities_query_parameters(async_test_client):
     response = await async_test_client.get("/openapi.json")
