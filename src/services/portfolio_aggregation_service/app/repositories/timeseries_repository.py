@@ -144,9 +144,7 @@ class TimeseriesRepository:
         )
 
         # Subquery to check if this is the first job for a portfolio with no history.
-        is_first_job_subq = no_portfolio_history_subq & (
-            p1.aggregation_date == first_job_date_subq
-        )
+        is_first_job_subq = no_portfolio_history_subq & (p1.aggregation_date == first_job_date_subq)
 
         latest_snapshot_epochs = (
             select(
@@ -163,10 +161,7 @@ class TimeseriesRepository:
         )
 
         expected_snapshot_count_subq = (
-            select(func.count())
-            .select_from(latest_snapshot_epochs)
-            .scalar_subquery()
-            .correlate(p1)
+            select(func.count()).select_from(latest_snapshot_epochs).scalar_subquery().correlate(p1)
         )
 
         actual_position_timeseries_count_subq = (
@@ -362,7 +357,7 @@ class TimeseriesRepository:
                 PortfolioAggregationJob.status == "PROCESSING",
                 PortfolioAggregationJob.updated_at < stale_threshold,
             )
-            .values(status="PENDING")
+            .values(status="PENDING", updated_at=func.now())
         )
 
         result = await self.db.execute(stmt)

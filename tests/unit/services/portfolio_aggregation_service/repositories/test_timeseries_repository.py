@@ -16,6 +16,7 @@ def mock_db_session() -> AsyncMock:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
     result.fetchall.return_value = []
+    result.rowcount = 1
     session.execute = AsyncMock(return_value=result)
     return session
 
@@ -71,3 +72,16 @@ async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
 
     assert "FROM daily_position_snapshots, portfolio_aggregation_jobs" not in compiled_query
     assert "FROM position_timeseries, portfolio_aggregation_jobs" not in compiled_query
+
+
+async def test_find_and_reset_stale_jobs_refreshes_updated_at(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.find_and_reset_stale_jobs()
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "UPDATE portfolio_aggregation_jobs" in compiled_query
+    assert "SET status='PENDING'" in compiled_query
+    assert "updated_at=now()" in compiled_query
