@@ -267,6 +267,82 @@
       ],
       "title": "Service Availability by Job",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (reconciliation_type, status) (rate(financial_reconciliation_runs_total[5m]))",
+          "legendFormat": "{{reconciliation_type}} - {{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Reconciliation Run Outcomes per Second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 16,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (reconciliation_type, severity) (rate(financial_reconciliation_findings_total[5m]))",
+          "legendFormat": "{{reconciliation_type}} - {{severity}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Reconciliation Findings per Second",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
@@ -283,6 +359,6 @@
   "timezone": "browser",
   "title": "Portfolio Analytics Overview",
   "uid": "portfolio-analytics-overview",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
