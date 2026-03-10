@@ -74,7 +74,22 @@ class IngestionJobResponse(BaseModel):
 
 class IngestionJobListResponse(BaseModel):
     jobs: list[IngestionJobResponse] = Field(
-        description="Ingestion jobs matching the requested filters."
+        description="Ingestion jobs matching the requested filters and pagination window.",
+        examples=[
+            [
+                {
+                    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+                    "endpoint": "/ingest/transactions",
+                    "entity_type": "transaction",
+                    "status": "queued",
+                    "accepted_count": 125,
+                    "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+                    "request_id": "REQ:3a63936e-bf29-41e2-9f16-faf4e561d845",
+                    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                    "submitted_at": "2026-02-28T13:22:24.201Z",
+                }
+            ]
+        ],
     )
     total: int = Field(
         ge=0,
@@ -120,7 +135,19 @@ class IngestionJobFailureResponse(BaseModel):
 
 class IngestionJobFailureListResponse(BaseModel):
     failures: list[IngestionJobFailureResponse] = Field(
-        description="Failure events captured for the requested ingestion job."
+        description="Failure events captured for the requested ingestion job.",
+        examples=[
+            [
+                {
+                    "failure_id": "fail_01J5S27P16BSKQ3R2P2HK67GQZ",
+                    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+                    "failure_phase": "publish",
+                    "failure_reason": "Kafka publish timeout for topic raw_transactions.",
+                    "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+                    "failed_at": "2026-02-28T13:23:09.021Z",
+                }
+            ]
+        ],
     )
     total: int = Field(
         ge=0,
@@ -154,6 +181,11 @@ class IngestionHealthSummaryResponse(BaseModel):
         ge=0,
         description="Operational backlog count (accepted + queued).",
         examples=[10],
+    )
+    oldest_backlog_job_id: str | None = Field(
+        default=None,
+        description="Identifier of the oldest non-terminal job contributing to the backlog.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     )
 
 
@@ -368,6 +400,10 @@ class IngestionOpsPolicyResponse(BaseModel):
         ),
         examples=["scale_out_only"],
     )
+    replay_dry_run_supported: bool = Field(
+        description="Whether replay dry-run mode is supported by the active control plane.",
+        examples=[True],
+    )
 
 
 class IngestionReprocessingQueueItemResponse(BaseModel):
@@ -422,7 +458,19 @@ class IngestionReprocessingQueueHealthResponse(BaseModel):
         examples=[1],
     )
     queues: list[IngestionReprocessingQueueItemResponse] = Field(
-        description="Per-job-type queue health rows sorted by highest pending pressure."
+        description="Per-job-type queue health rows sorted by highest pending pressure.",
+        examples=[
+            [
+                {
+                    "job_type": "RESET_WATERMARKS",
+                    "pending_jobs": 14,
+                    "processing_jobs": 2,
+                    "failed_jobs": 1,
+                    "oldest_pending_created_at": "2026-03-03T04:10:11.000Z",
+                    "oldest_pending_age_seconds": 127.5,
+                }
+            ]
+        ],
     )
 
 
@@ -443,8 +491,7 @@ class IngestionCapacityGroupResponse(BaseModel):
     processed_records: int = Field(
         ge=0,
         description=(
-            "Records in this group that progressed out of accepted state "
-            "(queued or failed)."
+            "Records in this group that progressed out of accepted state " "(queued or failed)."
         ),
         examples=[24000],
     )

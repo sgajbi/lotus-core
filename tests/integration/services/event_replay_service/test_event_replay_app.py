@@ -75,9 +75,9 @@ async def test_openapi_includes_replay_examples(async_test_client):
 
     replay_operation = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     replay_examples = replay_operation["requestBody"]["content"]["application/json"]["examples"]
-    replay_response_example = replay_operation["responses"]["200"]["content"][
-        "application/json"
-    ]["example"]
+    replay_response_example = replay_operation["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
     assert "replay_now" in replay_examples
     assert replay_response_example["replay_status"] == "replayed"
 
@@ -138,6 +138,30 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."
+    )
+
+
+async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()["components"]["schemas"]
+
+    job_list = schema["IngestionJobListResponse"]
+    health_summary = schema["IngestionHealthSummaryResponse"]
+    ops_policy = schema["IngestionOpsPolicyResponse"]
+    queue_health = schema["IngestionReprocessingQueueHealthResponse"]
+
+    assert job_list["properties"]["jobs"]["description"] == (
+        "Ingestion jobs matching the requested filters and pagination window."
+    )
+    assert health_summary["properties"]["oldest_backlog_job_id"]["description"] == (
+        "Identifier of the oldest non-terminal job contributing to the backlog."
+    )
+    assert ops_policy["properties"]["replay_dry_run_supported"]["description"] == (
+        "Whether replay dry-run mode is supported by the active control plane."
+    )
+    assert queue_health["properties"]["queues"]["description"] == (
+        "Per-job-type queue health rows sorted by highest pending pressure."
     )
 
 
