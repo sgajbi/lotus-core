@@ -67,3 +67,33 @@ async def test_openapi_excludes_core_read_plane_endpoints(async_test_client):
     assert "/portfolios/{portfolio_id}" not in paths
     assert "/portfolios/{portfolio_id}/positions" not in paths
     assert "/portfolios/{portfolio_id}/transactions" not in paths
+
+
+async def test_openapi_describes_operations_support_parameters(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    overview = schema["paths"]["/support/portfolios/{portfolio_id}/overview"]["get"]
+    calculator_slos = schema["paths"]["/support/portfolios/{portfolio_id}/calculator-slos"]["get"]
+    lineage = schema["paths"]["/lineage/portfolios/{portfolio_id}/securities/{security_id}"]["get"]
+
+    overview_portfolio = next(
+        parameter for parameter in overview["parameters"] if parameter["name"] == "portfolio_id"
+    )
+    assert overview_portfolio["description"] == "Portfolio identifier."
+
+    stale_threshold = next(
+        parameter
+        for parameter in calculator_slos["parameters"]
+        if parameter["name"] == "stale_threshold_minutes"
+    )
+    assert stale_threshold["description"].startswith("Threshold in minutes")
+
+    not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
+
+    lineage_not_found = lineage["responses"]["404"]["content"]["application/json"]["example"]
+    assert lineage_not_found["detail"] == (
+        "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
+    )

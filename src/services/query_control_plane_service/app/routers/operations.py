@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Operations Support"])
 
+PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": "Portfolio with id PORT-OPS-001 not found"
+}
+
+LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
+}
+
 
 def get_operations_service(
     db: AsyncSession = Depends(get_async_db_session),
@@ -28,7 +36,12 @@ def get_operations_service(
 @router.get(
     "/support/portfolios/{portfolio_id}/overview",
     response_model=SupportOverviewResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
     summary="Get operational support overview for a portfolio",
     description=(
         "What: Return support-oriented operational state for one portfolio.\n"
@@ -38,7 +51,11 @@ def get_operations_service(
     ),
 )
 async def get_support_overview(
-    portfolio_id: str = Path(..., description="Portfolio identifier."),
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier.",
+        examples=["PORT-OPS-001"],
+    ),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
@@ -56,7 +73,12 @@ async def get_support_overview(
 @router.get(
     "/support/portfolios/{portfolio_id}/calculator-slos",
     response_model=CalculatorSloResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
     summary="Get calculator SLO baseline snapshot for a portfolio",
     description=(
         "What: Return calculator backlog, stale-processing, and failed-job baselines for one "
@@ -67,12 +89,17 @@ async def get_support_overview(
     ),
 )
 async def get_calculator_slos(
-    portfolio_id: str = Path(..., description="Portfolio identifier."),
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier.",
+        examples=["PORT-OPS-001"],
+    ),
     stale_threshold_minutes: int = Query(
         15,
         ge=1,
         le=1440,
         description="Threshold in minutes used to classify stale PROCESSING jobs.",
+        examples=[15],
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
@@ -93,7 +120,12 @@ async def get_calculator_slos(
 @router.get(
     "/support/portfolios/{portfolio_id}/valuation-jobs",
     response_model=SupportJobListResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
     summary="List valuation jobs for support workflows",
     description=(
         "What: List valuation jobs for a portfolio with support filters.\n"
@@ -102,12 +134,14 @@ async def get_calculator_slos(
     ),
 )
 async def get_valuation_jobs(
-    portfolio_id: str = Path(..., description="Portfolio identifier."),
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     status_filter: Optional[str] = Query(
-        None, description="Optional job status filter (e.g., PENDING, PROCESSING)."
+        None,
+        description="Optional job status filter (e.g., PENDING, PROCESSING).",
+        examples=["PENDING"],
     ),
-    skip: int = Query(0, ge=0, description="Pagination offset."),
-    limit: int = Query(100, ge=1, le=1000, description="Pagination limit."),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
@@ -127,7 +161,12 @@ async def get_valuation_jobs(
 @router.get(
     "/support/portfolios/{portfolio_id}/aggregation-jobs",
     response_model=SupportJobListResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
     summary="List aggregation jobs for support workflows",
     description=(
         "What: List portfolio aggregation jobs for support workflows.\n"
@@ -136,12 +175,14 @@ async def get_valuation_jobs(
     ),
 )
 async def get_aggregation_jobs(
-    portfolio_id: str = Path(..., description="Portfolio identifier."),
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     status_filter: Optional[str] = Query(
-        None, description="Optional job status filter (e.g., PENDING, PROCESSING)."
+        None,
+        description="Optional job status filter (e.g., PENDING, PROCESSING).",
+        examples=["PENDING"],
     ),
-    skip: int = Query(0, ge=0, description="Pagination offset."),
-    limit: int = Query(100, ge=1, le=1000, description="Pagination limit."),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
@@ -161,7 +202,12 @@ async def get_aggregation_jobs(
 @router.get(
     "/lineage/portfolios/{portfolio_id}/securities/{security_id}",
     response_model=LineageResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio/security lineage not found."}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio/security lineage not found.",
+            "content": {"application/json": {"example": LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
     summary="Get lineage state for a portfolio-security key",
     description=(
         "What: Return lineage state for one portfolio-security key.\n"
@@ -170,8 +216,8 @@ async def get_aggregation_jobs(
     ),
 )
 async def get_lineage(
-    portfolio_id: str = Path(..., description="Portfolio identifier."),
-    security_id: str = Path(..., description="Security identifier."),
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    security_id: str = Path(..., description="Security identifier.", examples=["SEC-US-IBM"]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
@@ -191,7 +237,12 @@ async def get_lineage(
 @router.get(
     "/lineage/portfolios/{portfolio_id}/keys",
     response_model=LineageKeyListResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
     summary="List lineage keys for a portfolio",
     description=(
         "What: List lineage keys for a portfolio.\n"
@@ -200,15 +251,19 @@ async def get_lineage(
     ),
 )
 async def get_lineage_keys(
-    portfolio_id: str = Path(..., description="Portfolio identifier."),
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     reprocessing_status: Optional[str] = Query(
-        None, description="Optional status filter for lineage keys (e.g., CURRENT, REPROCESSING)."
+        None,
+        description="Optional status filter for lineage keys (e.g., CURRENT, REPROCESSING).",
+        examples=["CURRENT"],
     ),
     security_id: Optional[str] = Query(
-        None, description="Optional security filter to narrow lineage key results."
+        None,
+        description="Optional security filter to narrow lineage key results.",
+        examples=["SEC-US-IBM"],
     ),
-    skip: int = Query(0, ge=0, description="Pagination offset."),
-    limit: int = Query(100, ge=1, le=1000, description="Pagination limit."),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
