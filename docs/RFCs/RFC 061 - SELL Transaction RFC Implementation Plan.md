@@ -36,7 +36,7 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 | Slice artifact trail (0..6) | Implemented | `docs/rfc-transaction-specs/transactions/SELL/SELL-SLICE-0-GAP-ASSESSMENT.md` .. `SELL-SLICE-6-CONFORMANCE-REPORT.md` |
 | SELL validation + reason codes | Implemented | `tests/unit/libs/portfolio_common/test_sell_validation.py`; slice-1 artifact |
 | Linkage and policy metadata persistence | Implemented | `tests/unit/libs/portfolio_common/test_sell_linkage.py`; slice-2 artifact |
-| Calculation and invariants | Implemented | `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py`; slice-3 artifact |
+| Calculation and invariants | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`; slice-3 artifact |
 | Disposal/cash-linkage behavior | Implemented | slice-4 artifact; calculator/query tests |
 | Query + observability completion | Implemented | `tests/integration/services/query_service/test_sell_state_router.py`; slice-5 artifact |
 | CI conformance gate | Implemented | `scripts/test_manifest.py` (`sell-rfc`); `.github/workflows/ci.yml` |

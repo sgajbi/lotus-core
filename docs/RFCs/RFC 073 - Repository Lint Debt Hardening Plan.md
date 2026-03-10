@@ -19,7 +19,7 @@ The plan runs as a dedicated stream in parallel with feature RFCs and uses stric
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | 0 | Completed | `docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md` |
-| 1 | Completed | Runtime-critical scope now Ruff-clean: `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/libs/financial-calculator-engine --statistics` |
+| 1 | Completed | Runtime-critical scope now Ruff-clean: `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/services/calculators/cost_calculator_service/app/cost_engine --statistics` |
 | 2 | Completed | Test scope now Ruff-clean: `python -m ruff check tests --statistics` |
 | 3 | Completed | Scripts/tooling scope now Ruff-clean: `python -m ruff check scripts --statistics` |
 | 4 | Pending | CI/global gate tightening |
@@ -75,7 +75,7 @@ Slice 1 Progress (Batch 1):
  - `src/services/calculators`
  - `src/services/persistence_service`
  - `src/libs/portfolio-common`
- - `src/libs/financial-calculator-engine`
+ - `src/services/calculators/cost_calculator_service/app/cost_engine`
 2. Actions:
  - applied safe lint-only fixes for `I001`, `F401`, `F841`
  - manual cleanup of one residual unused local variable in position consumer
@@ -112,10 +112,10 @@ Slice 1 Progress (Batch 3):
  - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 4):
-1. Scoped E501 reduction completed for financial-calculator-engine core/modeling chunk:
- - `src/libs/financial-calculator-engine/src/core/models/request.py`
- - `src/libs/financial-calculator-engine/src/core/models/transaction.py`
- - `src/libs/financial-calculator-engine/src/logic/cost_basis_strategies.py`
+1. Scoped E501 reduction completed for the old cost-engine core/modeling chunk:
+ - `src/services/calculators/cost_calculator_service/app/cost_engine/src/core/models/request.py`
+ - `src/services/calculators/cost_calculator_service/app/cost_engine/src/core/models/transaction.py`
+ - `src/services/calculators/cost_calculator_service/app/cost_engine/src/logic/cost_basis_strategies.py`
 2. Scope method:
  - `ruff format` on selected files, followed by manual wrapping of residual long descriptions/messages
 3. Snapshot impact:

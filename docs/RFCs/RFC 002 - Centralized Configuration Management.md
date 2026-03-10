@@ -43,7 +43,7 @@ The original RFC requested:
    - `src/libs/portfolio-common/portfolio_common/config.py`
 2. Config-aware services/routers consume shared constants and helpers.
 3. Typed settings are present in some domains:
-   - `src/libs/financial-calculator-engine/src/core/config/settings.py`
+   - `src/services/calculators/cost_calculator_service/app/cost_engine/src/core/config/settings.py`
 4. Ingestion control modules now consume centralized typed settings:
    - `src/services/ingestion_service/app/ops_controls.py`
    - `src/services/ingestion_service/app/services/ingestion_job_service.py`

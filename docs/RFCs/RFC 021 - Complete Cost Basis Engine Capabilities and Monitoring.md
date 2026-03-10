@@ -5,7 +5,7 @@
 | Status | Implemented |
 | Created | 2025-09-02 |
 | Last Updated | 2026-03-04 |
-| Owners | `financial-calculator-engine`, `cost_calculator_service`, `portfolio-common`, `persistence_service` |
+| Owners | `cost_calculator_service`, `portfolio-common`, `persistence_service` |
 | Depends On | RFC 005, RFC 010 |
 | Scope | AVCO method support, portfolio-level method selection, recalculation observability |
 
@@ -42,10 +42,10 @@ Evidence:
 - `src/libs/portfolio-common/portfolio_common/database_models.py`
 - `src/libs/portfolio-common/portfolio_common/events.py`
 - `src/services/calculators/cost_calculator_service/app/consumer.py`
-- `src/libs/financial-calculator-engine/src/logic/cost_basis_strategies.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/src/logic/cost_basis_strategies.py`
 - `src/services/calculators/cost_calculator_service/app/monitoring.py`
 - `src/services/calculators/cost_calculator_service/app/transaction_processor.py`
-- `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_strategies.py`
+- `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_strategies.py`
 - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
 - `tests/integration/services/persistence_service/repositories/test_repositories.py`
 - `tests/e2e/test_avco_workflow.py`
@@ -89,7 +89,7 @@ No material implementation gap remains for RFC 021 core intent.
 ## Test and Validation Evidence
 
 1. Engine AVCO correctness tests (including dual currency):
-   - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_strategies.py`
+   - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_strategies.py`
 2. Consumer strategy-selection tests:
    - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
 3. Persistence/model integration for `cost_basis_method`:

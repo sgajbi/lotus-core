@@ -135,13 +135,13 @@ Executed suites include:
 
 ## 8. Evidence
 
-- `src/libs/financial-calculator-engine/src/core/enums/transaction_type.py`
-- `src/libs/financial-calculator-engine/src/logic/cost_calculator.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/domain/enums/transaction_type.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/processing/cost_calculator.py`
 - `src/services/calculators/position_calculator/app/core/position_logic.py`
 - `src/services/calculators/cashflow_calculator_service/app/core/cashflow_logic.py`
 - `src/services/query_service/app/services/position_flow_effects.py`
 - `alembic/versions/d8e9f0a1b2c3_feat_add_ca_expansion_cashflow_rules.py`
-- `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py`
+- `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`
 - `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
 - `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
 - `tests/unit/services/query_service/services/test_position_flow_effects.py`

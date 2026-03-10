@@ -60,7 +60,7 @@ with focus on deterministic ordering and replay safety prerequisites for reversa
 ### 4.2 Engine sorter alignment
 
 - Mirrored dependency ranking in:
-  - `financial-calculator-engine/src/logic/sorter.py`
+  - `cost_calculator_service/app/cost_engine/processing/sorter.py`
 
 ### 4.3 Regression
 
@@ -106,9 +106,9 @@ Executed suites include:
 ## 8. Evidence
 
 - `src/libs/portfolio-common/portfolio_common/ca_bundle_a_ordering.py`
-- `src/libs/financial-calculator-engine/src/logic/sorter.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/processing/sorter.py`
 - `tests/unit/libs/portfolio-common/test_events.py`
-- `tests/unit/libs/financial-calculator-engine/unit/test_sorter.py`
+- `tests/unit/services/calculators/cost_calculator_service/engine/test_sorter.py`
 
 ## 9. Current Status
 

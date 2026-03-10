@@ -38,7 +38,7 @@ Current `lotus-core` already has strong FX-rate infrastructure for valuation and
 8. Extend query/observability surfaces and test gates so FX can be operated and audited to the same standard as other canonical transaction families.
 
 ## Current Implementation Reality (Baseline)
-1. `TransactionType` in `src/libs/financial-calculator-engine/src/core/enums/transaction_type.py` does not include `FX_SPOT`, `FX_FORWARD`, `FX_SWAP`, or the FX component transaction types defined by `RFC-FX-01`.
+1. `TransactionType` in `src/services/calculators/cost_calculator_service/app/cost_engine/domain/enums/transaction_type.py` does not include `FX_SPOT`, `FX_FORWARD`, `FX_SWAP`, or the FX component transaction types defined by `RFC-FX-01`.
 2. The cost engine has canonical BUY/SELL/DIVIDEND/INTEREST/portfolio-flow routing, but no FX-specific strategy, no FX contract handling, and no realized-FX-P&L-specific transaction path.
 3. The existing dual-leg accounting helpers under `portfolio_common.transaction_domain.adjustment_cash_leg` explicitly serve `DIVIDEND` and `INTEREST` via `ADJUSTMENT`; that model is not correct for FX because both settlement legs remain FX-classified cash components.
 4. Position and cashflow calculators have no canonical notion of `FX_CONTRACT` instruments, `FX_CONTRACT_OPEN`/`FX_CONTRACT_CLOSE`, or near/far swap leg grouping.

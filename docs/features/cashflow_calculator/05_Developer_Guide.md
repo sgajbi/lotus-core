@@ -18,7 +18,7 @@ To add support for a new transaction type (e.g., a "MANAGEMENT_FEE"), a new reco
 A developer's responsibility is to ensure the new transaction type exists in the system's enums and is handled correctly by upstream services.
 
 1.  **Verify Transaction Type Enum:** Ensure the new transaction type exists in the shared enum.
-    * **File:** `src/libs/financial-calculator-engine/src/core/enums/transaction_type.py`
+    * **File:** `src/services/calculators/cost_calculator_service/app/cost_engine/domain/enums/transaction_type.py`
 
 2.  **Add a Unit Test:** To ensure your new rule behaves as expected once added to the database, add a new test case to the logic test suite.
     * **File:** `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
