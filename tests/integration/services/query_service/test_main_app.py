@@ -377,6 +377,46 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
     )
 
 
+async def test_openapi_describes_shared_read_model_field_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+
+    portfolio_record = components["PortfolioRecord"]
+    market_price_record = components["MarketPriceRecord"]
+    fx_rate_record = components["FxRateRecord"]
+    lookup_item = components["LookupItem"]
+
+    assert portfolio_record["properties"]["base_currency"]["description"] == (
+        "ISO base currency code."
+    )
+    assert portfolio_record["properties"]["status"]["description"] == (
+        "Portfolio lifecycle status."
+    )
+
+    assert market_price_record["properties"]["price_date"]["description"] == (
+        "Business date of the market price observation."
+    )
+    assert market_price_record["properties"]["price"]["description"] == (
+        "Observed market price for the security on the given date."
+    )
+
+    assert fx_rate_record["properties"]["rate_date"]["description"] == (
+        "Business date of the FX rate observation."
+    )
+    assert fx_rate_record["properties"]["rate"]["description"] == (
+        "Observed FX rate for the requested currency pair on the given date."
+    )
+
+    assert lookup_item["properties"]["id"]["description"] == (
+        "Canonical identifier used by UI selectors."
+    )
+    assert lookup_item["properties"]["label"]["description"] == (
+        "Display label for UI selector option."
+    )
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200

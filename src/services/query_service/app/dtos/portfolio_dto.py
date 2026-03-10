@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict, Field
 from datetime import date
 from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PortfolioRecord(BaseModel):
@@ -51,5 +52,6 @@ class PortfolioQueryResponse(BaseModel):
     """
 
     portfolios: List[PortfolioRecord] = Field(
-        ..., description="List of portfolios matching query filters."
+        ...,
+        description="List of portfolio records matching the applied query filters.",
     )
