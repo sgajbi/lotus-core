@@ -97,3 +97,31 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_not_found["detail"] == (
         "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
     )
+
+
+async def test_openapi_describes_simulation_parameters_and_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    get_session = schema["paths"]["/simulation-sessions/{session_id}"]["get"]
+    delete_change = schema["paths"]["/simulation-sessions/{session_id}/changes/{change_id}"][
+        "delete"
+    ]
+    create_session = schema["components"]["schemas"]["SimulationSessionCreateRequest"]
+
+    session_param = next(
+        parameter for parameter in get_session["parameters"] if parameter["name"] == "session_id"
+    )
+    assert session_param["description"] == "Simulation session identifier."
+
+    not_found = get_session["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Simulation session SIM-20260310-0001 not found"
+
+    change_id_param = next(
+        parameter for parameter in delete_change["parameters"] if parameter["name"] == "change_id"
+    )
+    assert change_id_param["description"] == "Simulation change identifier."
+
+    portfolio_id = create_session["properties"]["portfolio_id"]
+    assert portfolio_id["description"] == "Portfolio identifier for the simulated scenario."
