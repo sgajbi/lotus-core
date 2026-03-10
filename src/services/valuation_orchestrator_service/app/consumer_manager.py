@@ -10,7 +10,10 @@ from portfolio_common.config import (
     KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
-from portfolio_common.runtime_supervision import wait_for_shutdown_or_task_failure
+from portfolio_common.runtime_supervision import (
+    shutdown_runtime_components,
+    wait_for_shutdown_or_task_failure,
+)
 
 from .consumers.price_event_consumer import PriceEventConsumer
 from .consumers.valuation_readiness_consumer import ValuationReadinessConsumer
@@ -90,12 +93,11 @@ class ConsumerManager:
             logger=logger,
         )
 
-        for consumer in self.consumers:
-            consumer.shutdown()
-        self.scheduler.stop()
-        self.reprocessing_worker.stop()
-        server.should_exit = True
-
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await shutdown_runtime_components(
+            tasks=self.tasks,
+            consumers=self.consumers,
+            stop_callbacks=[self.scheduler.stop, self.reprocessing_worker.stop],
+            server=server,
+        )
         if runtime_error is not None:
             raise runtime_error

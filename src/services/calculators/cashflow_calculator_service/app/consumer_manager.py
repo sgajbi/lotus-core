@@ -13,7 +13,10 @@ from portfolio_common.config import (
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
-from portfolio_common.runtime_supervision import wait_for_shutdown_or_task_failure
+from portfolio_common.runtime_supervision import (
+    shutdown_runtime_components,
+    wait_for_shutdown_or_task_failure,
+)
 
 from .consumers.transaction_consumer import CashflowCalculatorConsumer
 from .web import app as web_app
@@ -86,13 +89,12 @@ class ConsumerManager:
         )
 
         logger.info("Shutdown event received. Stopping all tasks...")
-        for consumer in self.consumers:
-            consumer.shutdown()
-
-        self.dispatcher.stop()
-        server.should_exit = True
-
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await shutdown_runtime_components(
+            tasks=self.tasks,
+            consumers=self.consumers,
+            stop_callbacks=[self.dispatcher.stop],
+            server=server,
+        )
         logger.info("All tasks have been successfully shut down.")
         if runtime_error is not None:
             raise runtime_error
