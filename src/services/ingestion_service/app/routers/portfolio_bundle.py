@@ -1,11 +1,14 @@
 import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from ..ack_response import build_batch_ack
 from ..adapter_mode import require_portfolio_bundle_adapter_enabled
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (    create_ingestion_job_id,
+from ..request_metadata import (
+    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
@@ -15,10 +18,25 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+PORTFOLIO_BUNDLE_DISABLED_EXAMPLE = {
+    "detail": "Portfolio bundle adapter mode is disabled in this environment."
+}
+PORTFOLIO_BUNDLE_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+PORTFOLIO_BUNDLE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /ingest/portfolio-bundle.",
+    }
+}
 
 
 @router.post(
@@ -27,21 +45,37 @@ router = APIRouter()
     response_model=BatchIngestionAcceptedResponse,
     responses={
         status.HTTP_410_GONE: {
-            "description": "Portfolio bundle adapter mode disabled for this environment."
-        }
+            "description": "Portfolio bundle adapter mode disabled for this environment.",
+            "content": {"application/json": {"example": PORTFOLIO_BUNDLE_DISABLED_EXAMPLE}},
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the portfolio-bundle request.",
+            "content": {
+                "application/json": {"example": PORTFOLIO_BUNDLE_RATE_LIMIT_EXCEEDED_EXAMPLE}
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {
+                "application/json": {"example": PORTFOLIO_BUNDLE_MODE_BLOCKED_EXAMPLE}
+            },
+        },
     },
     tags=["Portfolio Bundle"],
     summary="Ingest a complete portfolio bundle",
     description=(
         "What: Accept a mixed onboarding bundle containing portfolio, instrument, transaction, "
         "market-price, FX-rate, and business-date records.\n"
-        "How: Validate adapter payload and fan out records into existing canonical ingestion topics.\n"
-        "When: Use for adapter-mode onboarding (UI/manual/file workflows), not primary upstream integration."
+        "How: Validate adapter payload and fan out records into existing canonical "
+        "ingestion topics.\n"
+        "When: Use for adapter-mode onboarding (UI/manual/file workflows), "
+        "not primary upstream integration."
     ),
 )
 async def ingest_portfolio_bundle(
     request: PortfolioBundleIngestionRequest,
-    http_request: Request,    _: None = Depends(require_portfolio_bundle_adapter_enabled),
+    http_request: Request,
+    _: None = Depends(require_portfolio_bundle_adapter_enabled),
     ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):

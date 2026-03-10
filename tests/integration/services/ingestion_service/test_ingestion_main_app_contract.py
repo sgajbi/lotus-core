@@ -89,6 +89,34 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     ]
 
 
+async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    bundle = schema["paths"]["/ingest/portfolio-bundle"]["post"]
+    components = schema["components"]["schemas"]
+    bundle_schema = components["PortfolioBundleIngestionRequest"]
+
+    adapter_disabled = bundle["responses"]["410"]["content"]["application/json"]["example"]
+    assert adapter_disabled["detail"] == (
+        "Portfolio bundle adapter mode is disabled in this environment."
+    )
+
+    rate_limited = bundle["responses"]["429"]["content"]["application/json"]["example"]
+    assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+    mode_blocked = bundle["responses"]["503"]["content"]["application/json"]["example"]
+    assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+
+    assert bundle_schema["properties"]["portfolios"]["description"] == (
+        "Canonical portfolio onboarding records included in the bundle."
+    )
+    assert bundle_schema["properties"]["transactions"]["examples"] == [
+        [{"transaction_id": "TRN_001", "transaction_type": "BUY"}]
+    ]
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
