@@ -117,7 +117,10 @@ async def run_transaction_cashflow_reconciliation(
     x_correlation_id: str | None = Header(
         default=None,
         alias="X-Correlation-ID",
-        description="Optional correlation identifier propagated into the recorded reconciliation run.",
+        description=(
+            "Optional correlation identifier propagated into the recorded "
+            "reconciliation run."
+        ),
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
@@ -150,7 +153,10 @@ async def run_position_valuation_reconciliation(
     x_correlation_id: str | None = Header(
         default=None,
         alias="X-Correlation-ID",
-        description="Optional correlation identifier propagated into the recorded reconciliation run.",
+        description=(
+            "Optional correlation identifier propagated into the recorded "
+            "reconciliation run."
+        ),
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
@@ -185,7 +191,10 @@ async def run_timeseries_integrity_reconciliation(
     x_correlation_id: str | None = Header(
         default=None,
         alias="X-Correlation-ID",
-        description="Optional correlation identifier propagated into the recorded reconciliation run.",
+        description=(
+            "Optional correlation identifier propagated into the recorded "
+            "reconciliation run."
+        ),
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
