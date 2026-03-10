@@ -64,3 +64,37 @@ async def test_find_and_claim_jobs_maps_rows_to_models(
     assert len(claimed) == 1
     assert claimed[0].id == 10
     assert claimed[0].status == "PROCESSING"
+
+
+async def test_find_and_reset_stale_jobs_resets_processing_rows(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_select_result = MagicMock()
+    mock_select_result.scalars.return_value = [10, 11]
+    mock_update_result = MagicMock()
+    mock_update_result.rowcount = 2
+    mock_db_session.execute.side_effect = [mock_select_result, mock_update_result]
+
+    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30)
+
+    assert reset_count == 2
+    assert mock_db_session.execute.await_count == 2
+    select_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    update_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    assert "SELECT reprocessing_jobs.id" in str(select_stmt)
+    assert "UPDATE reprocessing_jobs SET status=:status" in str(update_stmt)
+
+
+async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_select_result = MagicMock()
+    mock_select_result.scalars.return_value = []
+    mock_db_session.execute.return_value = mock_select_result
+
+    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30)
+
+    assert reset_count == 0
+    assert mock_db_session.execute.await_count == 1

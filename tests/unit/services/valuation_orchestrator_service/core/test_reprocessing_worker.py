@@ -90,6 +90,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
         status="PENDING",
     )
 
+    mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
     mock_valuation_repo.find_portfolios_for_security.return_value = ["P1", "P2"]
     mock_state_repo.update_watermarks_if_older.return_value = 2
@@ -100,6 +101,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     mock_observe_claimed.assert_called_once_with("RESET_WATERMARKS", 1)
     mock_observe_completed.assert_called_once_with("RESET_WATERMARKS")
     mock_observe_failed.assert_not_called()
+    mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with()
     mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with("RESET_WATERMARKS", 10)
     mock_valuation_repo.find_portfolios_for_security.assert_awaited_once_with("S1")
     mock_state_repo.update_watermarks_if_older.assert_awaited_once_with(
@@ -126,6 +128,7 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
         status="PENDING",
     )
 
+    mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
     mock_valuation_repo.find_portfolios_for_security.return_value = ["P1"]
     mock_state_repo.update_watermarks_if_older.side_effect = RuntimeError("db write failed")
@@ -139,6 +142,19 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
     args, kwargs = mock_repro_job_repo.update_job_status.await_args
     assert args[:2] == (2, "FAILED")
     assert "db write failed" in kwargs["failure_reason"]
+
+
+async def test_worker_resets_stale_jobs_before_claiming(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
+
+    mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 3
+    mock_repro_job_repo.find_and_claim_jobs.return_value = []
+
+    await worker._process_batch()
+
+    mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with()
+    mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with("RESET_WATERMARKS", 10)
 
 
 async def test_worker_reads_poll_and_batch_from_environment(monkeypatch: pytest.MonkeyPatch):

@@ -46,6 +46,8 @@ class ReprocessingWorker:
                     state_repo = PositionStateRepository(db)
                     valuation_repo = ValuationRepository(db)
 
+                    await job_repo.find_and_reset_stale_jobs()
+
                     claimed_jobs = await job_repo.find_and_claim_jobs(
                         "RESET_WATERMARKS", self._batch_size
                     )
