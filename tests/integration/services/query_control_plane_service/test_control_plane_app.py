@@ -256,6 +256,93 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     )
 
 
+async def test_openapi_describes_benchmark_reference_parameters(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    benchmark_assignment = schema["paths"][
+        "/integration/portfolios/{portfolio_id}/benchmark-assignment"
+    ]["post"]
+    benchmark_definition = schema["paths"]["/integration/benchmarks/{benchmark_id}/definition"][
+        "post"
+    ]
+    benchmark_market_series = schema["paths"][
+        "/integration/benchmarks/{benchmark_id}/market-series"
+    ]["post"]
+    index_price_series = schema["paths"]["/integration/indices/{index_id}/price-series"]["post"]
+    benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"][
+        "post"
+    ]
+    risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"][
+        "post"
+    ]
+
+    portfolio_param = next(
+        parameter
+        for parameter in benchmark_assignment["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_param["description"] == (
+        "Portfolio identifier whose effective benchmark assignment is requested."
+    )
+
+    assignment_not_found = benchmark_assignment["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert assignment_not_found["detail"] == (
+        "No effective benchmark assignment found for portfolio and as_of_date."
+    )
+
+    benchmark_id = next(
+        parameter
+        for parameter in benchmark_definition["parameters"]
+        if parameter["name"] == "benchmark_id"
+    )
+    assert benchmark_id["description"] == (
+        "Benchmark identifier for the requested benchmark definition."
+    )
+
+    definition_not_found = benchmark_definition["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert definition_not_found["detail"] == (
+        "No effective benchmark definition found for benchmark_id and as_of_date."
+    )
+
+    market_series_param = next(
+        parameter
+        for parameter in benchmark_market_series["parameters"]
+        if parameter["name"] == "benchmark_id"
+    )
+    assert market_series_param["description"] == (
+        "Benchmark identifier for the requested market series input contract."
+    )
+
+    index_id = next(
+        parameter
+        for parameter in index_price_series["parameters"]
+        if parameter["name"] == "index_id"
+    )
+    assert index_id["description"] == "Index identifier for the requested raw price series."
+
+    coverage_param = next(
+        parameter
+        for parameter in benchmark_coverage["parameters"]
+        if parameter["name"] == "benchmark_id"
+    )
+    assert coverage_param["description"] == (
+        "Benchmark identifier for the requested coverage diagnostics."
+    )
+
+    currency_param = next(
+        parameter
+        for parameter in risk_free_coverage["parameters"]
+        if parameter["name"] == "currency"
+    )
+    assert currency_param["description"] == "Risk-free series currency."
+
+
 async def test_openapi_describes_capabilities_query_parameters(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200

@@ -62,6 +62,12 @@ CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE = {
 INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
     "detail": "security_ids must contain at least one identifier"
 }
+BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective benchmark assignment found for portfolio and as_of_date."
+}
+BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
+}
 
 
 def get_integration_service(
@@ -263,7 +269,12 @@ async def get_instrument_enrichment_bulk(
     "/portfolios/{portfolio_id}/benchmark-assignment",
     response_model=BenchmarkAssignmentResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {"description": "No effective benchmark assignment found."},
+        status.HTTP_404_NOT_FOUND: {
+            "description": "No effective benchmark assignment found.",
+            "content": {
+                "application/json": {"example": BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE}
+            },
+        },
     },
     summary="Resolve effective portfolio benchmark assignment",
     description=(
@@ -274,8 +285,12 @@ async def get_instrument_enrichment_bulk(
     ),
 )
 async def resolve_portfolio_benchmark_assignment(
-    portfolio_id: str,
     request: BenchmarkAssignmentRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose effective benchmark assignment is requested.",
+        examples=["PORT-INT-001"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkAssignmentResponse:
     response = cast(
@@ -297,7 +312,12 @@ async def resolve_portfolio_benchmark_assignment(
     "/benchmarks/{benchmark_id}/definition",
     response_model=BenchmarkDefinitionResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {"description": "No effective benchmark definition found."}
+        status.HTTP_404_NOT_FOUND: {
+            "description": "No effective benchmark definition found.",
+            "content": {
+                "application/json": {"example": BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE}
+            },
+        }
     },
     summary="Fetch effective benchmark definition",
     description=(
@@ -307,8 +327,12 @@ async def resolve_portfolio_benchmark_assignment(
     ),
 )
 async def fetch_benchmark_definition(
-    benchmark_id: str,
     request: BenchmarkDefinitionRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested benchmark definition.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkDefinitionResponse:
     response = cast(
@@ -386,8 +410,12 @@ async def fetch_index_catalog(
     ),
 )
 async def fetch_benchmark_market_series(
-    benchmark_id: str,
     request: BenchmarkMarketSeriesRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested market series input contract.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkMarketSeriesResponse:
     return cast(
@@ -409,8 +437,12 @@ async def fetch_benchmark_market_series(
     ),
 )
 async def fetch_index_price_series(
-    index_id: str,
     request: IndexSeriesRequest,
+    index_id: str = Path(
+        ...,
+        description="Index identifier for the requested raw price series.",
+        examples=["IDX-SP500"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> IndexPriceSeriesResponse:
     return cast(
@@ -430,8 +462,12 @@ async def fetch_index_price_series(
     ),
 )
 async def fetch_index_return_series(
-    index_id: str,
     request: IndexSeriesRequest,
+    index_id: str = Path(
+        ...,
+        description="Index identifier for the requested raw return series.",
+        examples=["IDX-SP500"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> IndexReturnSeriesResponse:
     return cast(
@@ -451,8 +487,12 @@ async def fetch_index_return_series(
     ),
 )
 async def fetch_benchmark_return_series(
-    benchmark_id: str,
     request: BenchmarkReturnSeriesRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested raw return series.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkReturnSeriesResponse:
     return cast(
@@ -519,8 +559,12 @@ async def fetch_classification_taxonomy(
     ),
 )
 async def get_benchmark_coverage(
-    benchmark_id: str,
     request: CoverageRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested coverage diagnostics.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> CoverageResponse:
     return cast(
