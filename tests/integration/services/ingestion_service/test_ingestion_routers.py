@@ -788,6 +788,21 @@ async def test_ingest_transactions_endpoint(
     mock_kafka_producer.publish_message.assert_called_once()
 
 
+async def test_ingest_transactions_endpoint_accepts_empty_batch(
+    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post("/ingest/transactions", json={"transactions": []})
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 0
+    assert "job_id" in body
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingestion_jobs_status_endpoint(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,

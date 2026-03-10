@@ -347,9 +347,11 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
     )
     assert transaction["properties"]["created_at"]["example"] == "2026-03-10T11:32:15Z"
     assert transaction_request["properties"]["transactions"]["description"] == (
-        "Canonical transaction records to ingest or upsert asynchronously."
+        "Canonical transaction records to ingest or upsert asynchronously. "
+        "An empty list is accepted as a no-op batch for client workflow consistency."
     )
     assert transaction_request["properties"]["transactions"]["examples"] == [
+        [],
         [
             {
                 "transaction_id": "TRN001",

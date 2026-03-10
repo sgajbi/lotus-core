@@ -595,9 +595,12 @@ class Transaction(BaseModel):
 class TransactionIngestionRequest(BaseModel):
     transactions: List[Transaction] = Field(
         ...,
-        description="Canonical transaction records to ingest or upsert asynchronously.",
-        min_length=1,
+        description=(
+            "Canonical transaction records to ingest or upsert asynchronously. "
+            "An empty list is accepted as a no-op batch for client workflow consistency."
+        ),
         examples=[
+            [],
             [
                 {
                     "transaction_id": "TRN001",
