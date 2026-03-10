@@ -48,6 +48,47 @@ async def test_openapi_declares_upload_400_contracts(async_test_client):
     assert "410" in paths["/ingest/portfolio-bundle"]["post"]["responses"]
 
 
+async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    preview = schema["paths"]["/ingest/uploads/preview"]["post"]
+    commit = schema["paths"]["/ingest/uploads/commit"]["post"]
+    components = schema["components"]["schemas"]
+    preview_body_ref = preview["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
+    commit_body_ref = commit["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
+    preview_body = components[preview_body_ref.rsplit("/", 1)[-1]]
+    commit_body = components[commit_body_ref.rsplit("/", 1)[-1]]
+
+    assert preview_body["properties"]["sample_size"]["description"] == (
+        "Maximum number of valid normalized sample rows to include in the preview."
+    )
+    assert commit_body["properties"]["allow_partial"]["description"] == (
+        "Allow valid rows to publish even when some rows fail validation."
+    )
+
+    commit_429 = commit["responses"]["429"]["content"]["application/json"]["example"]
+    assert commit_429["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+    commit_503 = commit["responses"]["503"]["content"]["application/json"]["example"]
+    assert commit_503["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+
+    preview_schema = components["UploadPreviewResponse"]
+    commit_schema = components["UploadCommitResponse"]
+    row_error_schema = components["UploadRowError"]
+
+    assert preview_schema["properties"]["sample_rows"]["description"] == (
+        "Normalized and validated sample rows for UI preview."
+    )
+    assert commit_schema["properties"]["published_rows"]["description"] == (
+        "Count of rows published to canonical ingestion topics."
+    )
+    assert row_error_schema["properties"]["message"]["examples"] == [
+        "baseCurrency is required"
+    ]
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
