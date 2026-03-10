@@ -224,6 +224,57 @@ async def test_openapi_describes_business_date_shared_schema(async_test_client):
     ]
 
 
+async def test_openapi_describes_portfolio_market_and_fx_shared_schemas(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+
+    portfolio = components["Portfolio"]
+    portfolio_request = components["PortfolioIngestionRequest"]
+    market_price = components["MarketPrice"]
+    market_price_request = components["MarketPriceIngestionRequest"]
+    fx_rate = components["FxRate"]
+    fx_rate_request = components["FxRateIngestionRequest"]
+
+    assert portfolio["properties"]["portfolio_id"]["description"] == (
+        "Canonical portfolio identifier used across all downstream calculators and query surfaces."
+    )
+    assert portfolio["properties"]["cost_basis_method"]["examples"] == ["FIFO"]
+    assert portfolio_request["properties"]["portfolios"]["description"] == (
+        "Canonical portfolio master records to ingest or upsert."
+    )
+
+    assert market_price["properties"]["price"]["description"] == (
+        "Canonical closing or approved valuation price for the security."
+    )
+    assert market_price_request["properties"]["market_prices"]["examples"] == [
+        [
+            {
+                "security_id": "SEC_AAPL",
+                "price_date": "2026-03-10",
+                "price": "175.5000000000",
+                "currency": "USD",
+            }
+        ]
+    ]
+
+    assert fx_rate["properties"]["rate"]["description"] == (
+        "FX conversion rate expressed as units of `to_currency` per one unit of `from_currency`."
+    )
+    assert fx_rate_request["properties"]["fx_rates"]["examples"] == [
+        [
+            {
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "rate_date": "2026-03-10",
+                "rate": "1.3500000000",
+            }
+        ]
+    ]
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
