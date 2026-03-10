@@ -117,6 +117,34 @@ async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(a
     ]
 
 
+async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    reprocess = schema["paths"]["/reprocess/transactions"]["post"]
+    components = schema["components"]["schemas"]
+
+    conflict = reprocess["responses"]["409"]["content"]["application/json"]["example"]
+    assert conflict["detail"]["code"] == "INGESTION_REPLAY_BLOCKED"
+
+    rate_limited = reprocess["responses"]["429"]["content"]["application/json"]["example"]
+    assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+    mode_blocked = reprocess["responses"]["503"]["content"]["application/json"]["example"]
+    assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+
+    reprocessing_request = components["ReprocessingRequest"]
+    batch_ack = components["BatchIngestionAcceptedResponse"]
+
+    assert reprocessing_request["properties"]["transaction_ids"]["examples"] == [
+        ["TRN_001", "TRN_002"]
+    ]
+    assert batch_ack["properties"]["job_id"]["description"] == (
+        "Asynchronous ingestion job identifier for client-side tracking."
+    )
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
