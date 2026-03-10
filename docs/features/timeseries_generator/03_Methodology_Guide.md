@@ -1,10 +1,10 @@
-# Methodology Guide: Timeseries Generator
+# Methodology Guide: Timeseries Generation and Portfolio Aggregation
 
-This guide details the methodologies used by the `timeseries_generator_service` to create its two primary data outputs: the `position_timeseries` and `portfolio_timeseries` tables.
+This guide details the methodologies used by the split time-series layer to create its two primary data outputs: the `position_timeseries` and `portfolio_timeseries` tables.
 
 ## 1. Position Time-Series Calculation
 
-For each `daily_position_snapshot` event it receives, the service creates a corresponding `position_timeseries` record for that specific day and epoch.
+For each `daily_position_snapshot` event it receives, `timeseries_generator_service` creates a corresponding `position_timeseries` record for that specific day and epoch.
 
 * **Beginning-of-Day (BOD) Market Value:** This is sourced directly from the **End-of-Day (EOD)** `market_value_local` of the *previous day's* snapshot. If no previous day snapshot exists, it is set to zero.
 * **End-of-Day (EOD) Market Value:** This is sourced directly from the `market_value_local` of the *current day's* snapshot.
@@ -13,10 +13,10 @@ For each `daily_position_snapshot` event it receives, the service creates a corr
 
 ## 2. Portfolio Time-Series Aggregation
 
-The creation of the portfolio-level time-series is a scheduled aggregation process that runs after the position-level data for a given day has been generated.
+The creation of the portfolio-level time-series is a scheduled aggregation process owned by `portfolio_aggregation_service` and runs after the position-level data for a given day has been generated.
 
 * **Beginning-of-Day (BOD) Market Value:** This is sourced directly from the **End-of-Day (EOD)** `eod_market_value` of the *previous day's* `portfolio_timeseries` record.
-* **Cash Flows & Fees:** The service fetches all `position_timeseries` records for the portfolio on the given day and for the correct epoch. It iterates through them, performing the following steps:
+* **Cash Flows & Fees:** The aggregation service fetches all `position_timeseries` records for the portfolio on the given day and for the correct epoch. It iterates through them, performing the following steps:
     1.  It sums the `bod_cashflow_portfolio` and `eod_cashflow_portfolio` fields from each record.
     2.  If a position's currency is different from the portfolio's base currency, it fetches the appropriate FX rate for that day and converts the cash flow amount to the portfolio's base currency before adding it to the running total.
     3.  Fees are aggregated by summing the absolute value of any negative portfolio-level cash flows.
