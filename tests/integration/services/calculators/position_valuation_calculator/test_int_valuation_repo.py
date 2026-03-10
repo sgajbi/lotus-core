@@ -12,6 +12,8 @@ from portfolio_common.database_models import (
     PositionHistory,
     Transaction,
 )
+from portfolio_common.valuation_job_repository import ValuationJobRepository
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
@@ -565,3 +567,45 @@ async def test_get_first_open_dates_for_keys(
     assert first_open_dates[("P1", "S2", 0)] == date(2025, 2, 10)
     assert first_open_dates[("P2", "S1", 1)] == date(2025, 6, 6)
     assert ("P99", "S99", 0) not in first_open_dates
+
+
+async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = ValuationJobRepository(async_db_session)
+
+    await repo.upsert_job(
+        portfolio_id="P-STAGE-1",
+        security_id="S-STAGE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=3,
+        correlation_id="corr-newer",
+    )
+    await async_db_session.commit()
+
+    await repo.upsert_job(
+        portfolio_id="P-STAGE-1",
+        security_id="S-STAGE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=2,
+        correlation_id="corr-stale",
+    )
+    await async_db_session.commit()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob).where(
+                    PortfolioValuationJob.portfolio_id == "P-STAGE-1",
+                    PortfolioValuationJob.security_id == "S-STAGE-1",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 11),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].epoch == 3
+    assert jobs[0].correlation_id == "corr-newer"
