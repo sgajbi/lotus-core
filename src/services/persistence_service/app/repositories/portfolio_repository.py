@@ -1,6 +1,7 @@
 # services/persistence_service/app/repositories/portfolio_repository.py
 import logging
 
+from portfolio_common.cost_basis import normalize_cost_basis_method
 from portfolio_common.database_models import Portfolio as DBPortfolio
 from portfolio_common.events import PortfolioEvent
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -24,6 +25,9 @@ class PortfolioRepository:
         """
         try:
             portfolio_data = event.model_dump()
+            portfolio_data["cost_basis_method"] = normalize_cost_basis_method(
+                portfolio_data.get("cost_basis_method")
+            ).value
 
             stmt = pg_insert(DBPortfolio).values(**portfolio_data)
 

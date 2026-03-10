@@ -16,6 +16,7 @@ from portfolio_common.config import (
     KAFKA_INSTRUMENTS_TOPIC,
     KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
 )
+from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
@@ -80,7 +81,9 @@ class CostCalculatorConsumer(BaseConsumer):
     persists updates, and emits a full TransactionEvent downstream.
     """
 
-    def _get_transaction_processor(self, cost_basis_method: str = "FIFO") -> TransactionProcessor:
+    def _get_transaction_processor(
+        self, cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO
+    ) -> TransactionProcessor:
         """
         Builds and returns an instance of the TransactionProcessor, injecting
         the specified cost basis strategy.
@@ -89,7 +92,8 @@ class CostCalculatorConsumer(BaseConsumer):
         parser = TransactionParser(error_reporter=error_reporter)
         sorter = TransactionSorter()
 
-        if cost_basis_method == "AVCO":
+        resolved_method = normalize_cost_basis_method(cost_basis_method)
+        if resolved_method is CostBasisMethod.AVCO:
             strategy = AverageCostBasisStrategy()
             logger.debug("Using AVCO strategy for cost basis calculation.")
         else:
@@ -214,7 +218,7 @@ class CostCalculatorConsumer(BaseConsumer):
                             f"Portfolio {event.portfolio_id} not found. Retrying..."
                         )
 
-                    cost_basis_method = portfolio.cost_basis_method or "FIFO"
+                    cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
                     event = enrich_sell_transaction_metadata(
                         event, cost_basis_method=cost_basis_method
                     )

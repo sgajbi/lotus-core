@@ -205,6 +205,24 @@ async def test_portfolio_repository_persists_cost_basis_method(
     assert persisted_portfolio.cost_basis_method == "AVCO"
 
 
+async def test_portfolio_event_rejects_legacy_average_cost_alias(
+    clean_db, async_db_session: AsyncSession
+):
+    with pytest.raises(ValueError, match="Unsupported cost basis method"):
+        PortfolioEvent(
+            portfolio_id="PORT_AVERAGE_COST_TEST_01",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            client_id="CIF_AVERAGE_COST_1",
+            status="ACTIVE",
+            risk_exposure="High",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            cost_basis_method="AVERAGE_COST",
+        )
+
+
 # --- Test for TransactionDBRepository (Now Async) ---
 async def test_transaction_repository_is_idempotent(clean_db, async_db_session: AsyncSession):
     """
