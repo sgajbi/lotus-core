@@ -125,3 +125,36 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
 
     portfolio_id = create_session["properties"]["portfolio_id"]
     assert portfolio_id["description"] == "Portfolio identifier for the simulated scenario."
+
+
+async def test_openapi_describes_analytics_input_parameters_and_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    portfolio_inputs = schema["paths"][
+        "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries"
+    ]["post"]
+    export_result = schema["paths"][
+        "/integration/exports/analytics-timeseries/jobs/{job_id}/result"
+    ]["get"]
+
+    portfolio_param = next(
+        parameter
+        for parameter in portfolio_inputs["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_param["description"] == (
+        "Portfolio identifier for the requested analytics input contract."
+    )
+
+    invalid_request = portfolio_inputs["responses"]["400"]["content"]["application/json"]["example"]
+    assert invalid_request["detail"] == "Either window or period must be provided."
+
+    job_id_param = next(
+        parameter for parameter in export_result["parameters"] if parameter["name"] == "job_id"
+    )
+    assert job_id_param["description"] == "Durable analytics export job identifier."
+
+    incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
+    assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
