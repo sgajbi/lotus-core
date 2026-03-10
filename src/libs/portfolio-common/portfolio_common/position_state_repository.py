@@ -102,6 +102,7 @@ class PositionStateRepository:
                 epoch=PositionState.epoch + 1,
                 watermark_date=new_watermark_date,
                 status="REPROCESSING",
+                updated_at=func.now(),
             )
             .returning(PositionState)
         )
@@ -129,6 +130,7 @@ class PositionStateRepository:
             .values(
                 watermark_date=new_watermark_date,
                 status="REPROCESSING",  # A watermark reset always implies reprocessing is needed
+                updated_at=func.now(),
             )
             .returning(PositionState.portfolio_id)
         )

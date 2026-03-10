@@ -88,6 +88,7 @@ async def test_increment_epoch_and_reset_watermark(clean_db, async_db_session: A
     # Verify the change was persisted
     fetched_state = await async_db_session.get(PositionState, (portfolio_id, security_id))
     assert fetched_state.epoch == 1
+    assert fetched_state.updated_at is not None
 
 
 async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSession):
@@ -142,6 +143,7 @@ async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSessi
     p1_state = await async_db_session.get(PositionState, ("P1", "S1"))
     assert p1_state.watermark_date == new_watermark
     assert p1_state.status == "REPROCESSING"
+    assert p1_state.updated_at is not None
 
     p2_state = await async_db_session.get(PositionState, ("P2", "S2"))
     assert p2_state.watermark_date == date(2025, 5, 1)  # Unchanged
@@ -150,6 +152,7 @@ async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSessi
     p3_state = await async_db_session.get(PositionState, ("P3", "S3"))
     assert p3_state.watermark_date == new_watermark
     assert p3_state.status == "REPROCESSING"
+    assert p3_state.updated_at is not None
 
 
 async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
