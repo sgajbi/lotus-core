@@ -12,7 +12,10 @@ from portfolio_common.config import (
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
-from portfolio_common.runtime_supervision import wait_for_shutdown_or_task_failure
+from portfolio_common.runtime_supervision import (
+    shutdown_runtime_components,
+    wait_for_shutdown_or_task_failure,
+)
 
 from .consumers.portfolio_timeseries_consumer import PortfolioTimeseriesConsumer
 from .core.aggregation_scheduler import AggregationScheduler
@@ -48,7 +51,10 @@ class ConsumerManager:
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
 
         logger.info(
-            "ConsumerManager initialized with %s portfolio aggregation consumer(s) and 1 scheduler.",
+            (
+                "ConsumerManager initialized with %s portfolio aggregation consumer(s) "
+                "and 1 scheduler."
+            ),
             len(self.consumers),
         )
 
@@ -79,12 +85,11 @@ class ConsumerManager:
             logger=logger,
         )
 
-        for consumer in self.consumers:
-            consumer.shutdown()
-        self.scheduler.stop()
-        self.dispatcher.stop()
-        server.should_exit = True
-
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await shutdown_runtime_components(
+            tasks=self.tasks,
+            consumers=self.consumers,
+            stop_callbacks=[self.scheduler.stop, self.dispatcher.stop],
+            server=server,
+        )
         if runtime_error is not None:
             raise runtime_error

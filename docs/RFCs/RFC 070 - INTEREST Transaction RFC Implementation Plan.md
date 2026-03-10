@@ -64,7 +64,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 | 0 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-0-GAP-ASSESSMENT.md`, `tests/unit/transaction_specs/test_interest_slice0_characterization.py` |
 | 1 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-1-VALIDATION-REASON-CODES.md`, `tests/unit/libs/portfolio_common/test_interest_validation.py` |
 | 2 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-2-PERSISTENCE-METADATA.md`, `tests/unit/libs/portfolio_common/test_interest_linkage.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` |
-| 3 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-3-CALCULATION-INVARIANTS.md`, `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py` |
+| 3 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-3-CALCULATION-INVARIANTS.md`, `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py` |
 | 4 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-4-CASH-LINKAGE-WITHHOLDING.md`, `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py` |
 | 5 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-5-QUERY-OBSERVABILITY.md`, `tests/integration/services/query_service/test_transactions_router.py` |
 | 6 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md`, `scripts/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml` |

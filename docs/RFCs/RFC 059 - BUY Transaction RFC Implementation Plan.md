@@ -37,7 +37,7 @@ The RFC should now be treated as a delivery record with follow-on enhancements, 
 | Slice artifact trail | Implemented | `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-0-GAP-ASSESSMENT.md` .. `BUY-SLICE-6-CONFORMANCE-REPORT.md` |
 | Canonical BUY validation + reason codes | Implemented | `tests/unit/libs/portfolio_common/test_buy_validation.py`; slice-1 artifact |
 | Metadata persistence/linkage | Implemented | `tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py`; calculator/persistence tests |
-| Calculation invariants and BUY semantics | Implemented | `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py`; slice-3 artifact |
+| Calculation invariants and BUY semantics | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`; slice-3 artifact |
 | Lot and accrued-offset durability | Implemented | `src/services/calculators/cost_calculator_service/app/repository.py`; `tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py` |
 | Query/read-model and supportability | Implemented | `src/services/query_service/app/routers/buy_state.py`; `tests/integration/services/query_service/test_buy_state_router.py` |
 | Dedicated conformance gate | Implemented with accepted residuals | `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-6-CONFORMANCE-REPORT.md`; `scripts/test_manifest.py` (`buy-rfc`) |

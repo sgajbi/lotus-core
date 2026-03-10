@@ -27,6 +27,6 @@ This slice introduces explicit DIVIDEND calculation semantics in the cost engine
 
 ## Evidence
 
-- `src/libs/financial-calculator-engine/src/logic/cost_calculator.py`
-- `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/processing/cost_calculator.py`
+- `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`
 - `tests/unit/transaction_specs/test_dividend_slice0_characterization.py`

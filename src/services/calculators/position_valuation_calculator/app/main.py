@@ -4,9 +4,8 @@ import logging
 
 from app.consumer_manager import ConsumerManager
 from portfolio_common.logging_utils import setup_logging
-from prometheus_fastapi_instrumentator import Instrumentator
+from portfolio_common.worker_runtime import run_instrumented_worker_service
 
-# This import is necessary for the Instrumentator to find the web app
 from .web import app as web_app
 
 setup_logging()
@@ -14,24 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 async def main():
-    """
-    Initializes and runs the valuation worker runtime.
-    """
-    logger.info("Position Valuation Worker Service starting up...")
-
-    # Instrument the web app before starting the server
-    Instrumentator().instrument(web_app).expose(web_app)
-    logger.info("Prometheus metrics exposed at /metrics")
-
-    manager = ConsumerManager()
-    try:
-        await manager.run()
-    except Exception as e:
-        logger.critical(
-            f"Position Valuation Worker Service encountered a critical error: {e}", exc_info=True
-        )
-    finally:
-        logger.info("Position Valuation Worker Service has shut down.")
+    await run_instrumented_worker_service(
+        service_name="Position Valuation Worker Service",
+        logger=logger,
+        manager=ConsumerManager(),
+        web_app=web_app,
+    )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import asyncio
 import contextlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 
 async def wait_for_shutdown_or_task_failure(
@@ -52,3 +52,31 @@ async def wait_for_shutdown_or_task_failure(
         shutdown_wait_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await shutdown_wait_task
+
+
+async def shutdown_runtime_components(
+    *,
+    tasks: Sequence[asyncio.Task],
+    consumers: Sequence[object] = (),
+    stop_callbacks: Sequence[Callable[[], object]] = (),
+    server=None,
+) -> None:
+    """
+    Stop service-local runtime components and await task teardown.
+
+    Consumers are shut down first, then service-local stop callbacks are invoked,
+    then the embedded web server is asked to exit, and finally all runtime tasks
+    are awaited with `return_exceptions=True` to guarantee bounded shutdown.
+    """
+    for consumer in consumers:
+        shutdown = getattr(consumer, "shutdown", None)
+        if callable(shutdown):
+            shutdown()
+
+    for stop_callback in stop_callbacks:
+        stop_callback()
+
+    if server is not None:
+        server.should_exit = True
+
+    await asyncio.gather(*tasks, return_exceptions=True)

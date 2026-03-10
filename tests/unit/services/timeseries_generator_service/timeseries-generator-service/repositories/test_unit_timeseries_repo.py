@@ -116,6 +116,7 @@ async def test_find_and_reset_stale_jobs(
 
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PENDING'" in compiled_query
+    assert "updated_at=now()" in compiled_query
     assert "WHERE portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
 
 

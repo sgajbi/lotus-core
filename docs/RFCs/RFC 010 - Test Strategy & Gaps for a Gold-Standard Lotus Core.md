@@ -51,8 +51,8 @@ Implemented evidence:
    - `scripts/failure_recovery_gate.py`
    - `scripts/institutional_signoff_pack.py`
 5. Property-based invariant coverage for financial calculator engine:
-   - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_property_invariants.py`
-   - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_strategies.py`
+   - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_property_invariants.py`
+   - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_strategies.py`
 6. Independent offline integrity auditing:
    - `scripts/offline_integrity_auditor.py`
    - `tests/unit/scripts/test_offline_integrity_auditor.py`
@@ -70,7 +70,7 @@ Still missing versus original full ambition:
 | Failure injection/recovery testing | Deterministic interruption/recovery gate | Implemented (initial) | `failure_recovery_gate.py` |
 | Full chaos matrix automation | Not yet broad/scheduled as requested | Partial gap | backlog delta RFC-010-D01 |
 | Independent offline integrity auditor | Ledger-vs-snapshot recomputation script with report artifacts | Implemented | `scripts/offline_integrity_auditor.py` |
-| Property-based financial invariants | Hypothesis-driven invariants for FIFO/AVCO cost-basis logic | Implemented | `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_property_invariants.py` |
+| Property-based financial invariants | Hypothesis-driven invariants for FIFO/AVCO cost-basis logic | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_property_invariants.py` |
 
 ## Design Reasoning and Trade-offs
 
@@ -104,7 +104,7 @@ Open deltas are high-value and still relevant to current platform maturity goals
    - `tests/integration/`
    - `tests/e2e/`
 2. Property-based invariants:
-   - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_property_invariants.py`
+   - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_property_invariants.py`
 3. Offline integrity auditor:
    - `scripts/offline_integrity_auditor.py`
    - `tests/unit/scripts/test_offline_integrity_auditor.py`

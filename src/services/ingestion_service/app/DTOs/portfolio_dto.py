@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field, ConfigDict
 from datetime import date
 from typing import List, Optional
+
+from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Portfolio(BaseModel):
@@ -21,7 +23,12 @@ class Portfolio(BaseModel):
     is_leverage_allowed: bool = Field(False)
     advisor_id: Optional[str] = Field(None)
     status: str
-    cost_basis_method: Optional[str] = Field("FIFO")
+    cost_basis_method: Optional[CostBasisMethod] = Field(CostBasisMethod.FIFO)
+
+    @field_validator("cost_basis_method", mode="before")
+    @classmethod
+    def _normalize_cost_basis_method(cls, value: object) -> CostBasisMethod:
+        return normalize_cost_basis_method(value)
 
     model_config = ConfigDict(
         json_schema_extra={

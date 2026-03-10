@@ -37,8 +37,8 @@
 - Canonical API contracts use `as_of_date` for deterministic outputs.
 - Epoch-aware query logic preserves atomic snapshot consistency.
 - Evidence:
-  - `src/services/query_service/app/routers/integration.py`
-  - `src/services/query_service/app/services/summary_service.py`
+  - `src/services/query_control_plane_service/app/main.py`
+  - `src/services/query_service/app/services/integration_service.py`
   - `docs/features/foundational_data_queries/03_Methodology_Guide.md`
 
 ## Concurrency and Conflict Policy

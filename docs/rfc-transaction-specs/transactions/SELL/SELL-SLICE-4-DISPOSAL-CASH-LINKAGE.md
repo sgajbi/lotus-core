@@ -21,7 +21,7 @@ This slice hardens deterministic disposal behavior and cash-linkage metadata pro
 - Unit tests:
   - `tests/unit/libs/portfolio_common/test_sell_linkage.py`
   - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
-  - `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py`
+  - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`
 
 ## Notes
 

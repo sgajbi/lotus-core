@@ -61,176 +61,70 @@ async def test_get_active_reprocessing_keys_count(
     assert "position_state.status = 'REPROCESSING'" in compiled
 
 
-async def test_get_pending_valuation_jobs_count(
+async def test_get_valuation_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
-    mock_execute_scalar_one(mock_db_session, 4)
+    mock_row = MagicMock(
+        pending_jobs=4,
+        processing_jobs=2,
+        stale_processing_jobs=1,
+        failed_jobs=3,
+        failed_jobs_last_hours=1,
+        oldest_open_job_date=date(2025, 8, 1),
+    )
+    mock_result = MagicMock()
+    mock_result.one.return_value = mock_row
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    value = await repository.get_pending_valuation_jobs_count("P1")
+    value = await repository.get_valuation_job_health_summary(
+        "P1", stale_minutes=15, failed_window_hours=24
+    )
 
-    assert value == 4
+    assert value.pending_jobs == 4
+    assert value.processing_jobs == 2
+    assert value.stale_processing_jobs == 1
+    assert value.failed_jobs == 3
+    assert value.failed_jobs_last_hours == 1
+    assert value.oldest_open_job_date == date(2025, 8, 1)
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in compiled.lower()
-    assert "portfolio_valuation_jobs.status IN ('PENDING', 'PROCESSING')" in compiled
+    assert "FILTER (WHERE portfolio_valuation_jobs.status IN ('PENDING', 'PROCESSING'))" in compiled
+    assert "FILTER (WHERE portfolio_valuation_jobs.status = 'FAILED')" in compiled
 
 
-async def test_get_pending_aggregation_jobs_count(
+async def test_get_aggregation_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
-    mock_execute_scalar_one(mock_db_session, 1)
+    mock_row = MagicMock(
+        pending_jobs=5,
+        processing_jobs=1,
+        stale_processing_jobs=0,
+        failed_jobs=2,
+        failed_jobs_last_hours=1,
+        oldest_open_job_date=date(2025, 8, 10),
+    )
+    mock_result = MagicMock()
+    mock_result.one.return_value = mock_row
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    value = await repository.get_pending_aggregation_jobs_count("P1")
+    value = await repository.get_aggregation_job_health_summary(
+        "P1", stale_minutes=15, failed_window_hours=24
+    )
 
-    assert value == 1
+    assert value.pending_jobs == 5
+    assert value.processing_jobs == 1
+    assert value.stale_processing_jobs == 0
+    assert value.failed_jobs == 2
+    assert value.failed_jobs_last_hours == 1
+    assert value.oldest_open_job_date == date(2025, 8, 10)
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_aggregation_jobs" in compiled.lower()
-    assert "portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING')" in compiled
-
-
-async def test_get_processing_aggregation_jobs_count(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 2)
-
-    value = await repository.get_processing_aggregation_jobs_count("P1")
-
-    assert value == 2
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_aggregation_jobs" in compiled.lower()
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
-
-
-async def test_get_stale_processing_aggregation_jobs_count(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 1)
-
-    value = await repository.get_stale_processing_aggregation_jobs_count("P1", stale_minutes=15)
-
-    assert value == 1
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_aggregation_jobs" in compiled.lower()
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
-    assert "portfolio_aggregation_jobs.updated_at <" in compiled
-
-
-async def test_get_processing_valuation_jobs_count(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 2)
-
-    value = await repository.get_processing_valuation_jobs_count("P1")
-
-    assert value == 2
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_valuation_jobs" in compiled.lower()
-    assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled
-
-
-async def test_get_stale_processing_valuation_jobs_count(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 1)
-
-    value = await repository.get_stale_processing_valuation_jobs_count("P1", stale_minutes=15)
-
-    assert value == 1
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_valuation_jobs" in compiled.lower()
-    assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled
-    assert "portfolio_valuation_jobs.updated_at <" in compiled
-
-
-async def test_get_oldest_pending_valuation_date(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one_or_none(mock_db_session, date(2025, 8, 1))
-
-    value = await repository.get_oldest_pending_valuation_date("P1")
-
-    assert value == date(2025, 8, 1)
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "min(portfolio_valuation_jobs.valuation_date)" in compiled.lower()
-    assert "portfolio_valuation_jobs.status IN ('PENDING', 'PROCESSING')" in compiled
-
-
-async def test_get_oldest_pending_aggregation_date(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one_or_none(mock_db_session, date(2025, 8, 10))
-
-    value = await repository.get_oldest_pending_aggregation_date("P1")
-
-    assert value == date(2025, 8, 10)
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "min(portfolio_aggregation_jobs.aggregation_date)" in compiled.lower()
-    assert "portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING')" in compiled
-
-
-async def test_get_valuation_failed_jobs_count(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 3)
-
-    value = await repository.get_valuation_failed_jobs_count("P1")
-
-    assert value == 3
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_valuation_jobs" in compiled.lower()
-    assert "portfolio_valuation_jobs.status = 'FAILED'" in compiled
-
-
-async def test_get_valuation_failed_jobs_last_hours(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 1)
-
-    value = await repository.get_valuation_failed_jobs_last_hours("P1", hours=24)
-
-    assert value == 1
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_valuation_jobs" in compiled.lower()
-    assert "portfolio_valuation_jobs.status = 'FAILED'" in compiled
-    assert "portfolio_valuation_jobs.updated_at >=" in compiled
-
-
-async def test_get_aggregation_failed_jobs_count(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 2)
-
-    value = await repository.get_aggregation_failed_jobs_count("P1")
-
-    assert value == 2
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_aggregation_jobs" in compiled.lower()
-    assert "portfolio_aggregation_jobs.status = 'FAILED'" in compiled
-
-
-async def test_get_aggregation_failed_jobs_last_hours(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 1)
-
-    value = await repository.get_aggregation_failed_jobs_last_hours("P1", hours=24)
-
-    assert value == 1
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from portfolio_aggregation_jobs" in compiled.lower()
-    assert "portfolio_aggregation_jobs.status = 'FAILED'" in compiled
-    assert "portfolio_aggregation_jobs.updated_at >=" in compiled
+    assert (
+        "FILTER (WHERE portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING'))" in compiled
+    )
+    assert "FILTER (WHERE portfolio_aggregation_jobs.status = 'FAILED')" in compiled
 
 
 async def test_get_latest_transaction_date(

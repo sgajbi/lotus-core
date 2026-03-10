@@ -24,7 +24,7 @@ Delivered:
 | Canonical INTEREST validation taxonomy | COVERED | `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_reason_codes.py`, `interest_validation.py`, `tests/unit/libs/portfolio_common/test_interest_validation.py` |
 | Strict metadata validation | COVERED | `validate_interest_transaction(..., strict_metadata=True)`, `tests/unit/libs/portfolio_common/test_interest_validation.py` |
 | Deterministic linkage/policy enrichment | COVERED | `interest_linkage.py`, `src/services/calculators/cost_calculator_service/app/consumer.py`, `tests/unit/libs/portfolio_common/test_interest_linkage.py` |
-| Calculation invariants (no qty/lot impact, explicit zero realized P&L) | COVERED | `src/libs/financial-calculator-engine/src/logic/cost_calculator.py` (`InterestStrategy`), `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py` |
+| Calculation invariants (no qty/lot impact, explicit zero realized P&L) | COVERED | `src/services/calculators/cost_calculator_service/app/cost_engine/processing/cost_calculator.py` (`InterestStrategy`), `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py` |
 | Direction semantics (income vs expense baseline) | COVERED | `interest_models.py`, `interest_validation.py`, `cashflow_logic.py`, tests in `test_interest_validation.py` and `test_cashflow_logic.py` |
 | Dual cash-entry mode (AUTO_GENERATE vs UPSTREAM_PROVIDED) | COVERED | `cashflow transaction_consumer.py`, tests in `test_cashflow_transaction_consumer.py` |
 | Withholding/net reconciliation primitives | COVERED | `interest_models.py`, `interest_validation.py`, `test_interest_validation.py` |
@@ -37,7 +37,7 @@ Delivered:
 - `python -m pytest -q tests/unit/transaction_specs/test_interest_slice0_characterization.py`
 - `python -m pytest -q tests/unit/libs/portfolio_common/test_interest_validation.py`
 - `python -m pytest -q tests/unit/libs/portfolio_common/test_interest_linkage.py`
-- `python -m pytest -q tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py -k "interest or dividend"`
+- `python -m pytest -q tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py -k "interest or dividend"`
 - `python -m pytest -q tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py -k "interest_metadata_defaults"`
 - `python -m pytest -q tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py -k "interest_external_mode or dividend_external_mode"`
 - `python -m pytest -q tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py -k "interest"`

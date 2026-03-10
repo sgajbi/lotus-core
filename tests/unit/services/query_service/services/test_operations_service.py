@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.repositories.operations_repository import JobHealthSummary
 from src.services.query_service.app.services.operations_service import OperationsService
 
 pytestmark = pytest.mark.asyncio
@@ -29,11 +30,22 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_current_portfolio_epoch.return_value = 2
     mock_ops_repo.get_active_reprocessing_keys_count.return_value = 1
-    mock_ops_repo.get_pending_valuation_jobs_count.return_value = 4
-    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 2
-    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 1
-    mock_ops_repo.get_oldest_pending_valuation_date.return_value = date(2025, 8, 20)
-    mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 1
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=4,
+        processing_jobs=2,
+        stale_processing_jobs=1,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=date(2025, 8, 20),
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=1,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+    )
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
@@ -183,11 +195,22 @@ async def test_get_support_overview_without_business_date(
     mock_ops_repo.get_latest_business_date.return_value = None
     mock_ops_repo.get_current_portfolio_epoch.return_value = 1
     mock_ops_repo.get_active_reprocessing_keys_count.return_value = 0
-    mock_ops_repo.get_pending_valuation_jobs_count.return_value = 0
-    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 0
-    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 0
-    mock_ops_repo.get_oldest_pending_valuation_date.return_value = None
-    mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 0
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+    )
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 31)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 31)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
@@ -212,17 +235,26 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_current_portfolio_epoch.return_value = 2
     mock_ops_repo.get_active_reprocessing_keys_count.return_value = 0
-    mock_ops_repo.get_pending_valuation_jobs_count.return_value = 0
-    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 0
-    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 0
-    mock_ops_repo.get_oldest_pending_valuation_date.return_value = None
-    mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 0
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+    )
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
-    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
-        2025, 8, 30
-    )
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
         "ControlStageStub",
@@ -240,18 +272,22 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
 async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_active_reprocessing_keys_count.return_value = 2
-    mock_ops_repo.get_pending_valuation_jobs_count.return_value = 7
-    mock_ops_repo.get_processing_valuation_jobs_count.return_value = 3
-    mock_ops_repo.get_stale_processing_valuation_jobs_count.return_value = 1
-    mock_ops_repo.get_valuation_failed_jobs_count.return_value = 4
-    mock_ops_repo.get_valuation_failed_jobs_last_hours.return_value = 2
-    mock_ops_repo.get_oldest_pending_valuation_date.return_value = date(2025, 8, 20)
-    mock_ops_repo.get_pending_aggregation_jobs_count.return_value = 5
-    mock_ops_repo.get_processing_aggregation_jobs_count.return_value = 2
-    mock_ops_repo.get_stale_processing_aggregation_jobs_count.return_value = 1
-    mock_ops_repo.get_aggregation_failed_jobs_count.return_value = 1
-    mock_ops_repo.get_aggregation_failed_jobs_last_hours.return_value = 1
-    mock_ops_repo.get_oldest_pending_aggregation_date.return_value = date(2025, 8, 25)
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=7,
+        processing_jobs=3,
+        stale_processing_jobs=1,
+        failed_jobs=4,
+        failed_jobs_last_hours=2,
+        oldest_open_job_date=date(2025, 8, 20),
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=5,
+        processing_jobs=2,
+        stale_processing_jobs=1,
+        failed_jobs=1,
+        failed_jobs_last_hours=1,
+        oldest_open_job_date=date(2025, 8, 25),
+    )
 
     response = await service.get_calculator_slos("P1", stale_threshold_minutes=15)
 

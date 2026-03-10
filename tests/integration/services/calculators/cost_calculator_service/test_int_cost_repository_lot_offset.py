@@ -2,7 +2,9 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from core.models.transaction import Transaction as EngineTransaction
+from cost_engine.domain.models.transaction import (
+    Transaction as EngineTransaction,
+)
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     Portfolio,

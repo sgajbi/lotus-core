@@ -6,17 +6,11 @@ from decimal import Decimal
 from typing import Any, List
 
 from confluent_kafka import Message
-from engine.transaction_processor import TransactionProcessor
-from logic.cost_basis_strategies import AverageCostBasisStrategy, FIFOBasisStrategy
-from logic.cost_calculator import CostCalculator
-from logic.disposition_engine import DispositionEngine
-from logic.error_reporter import ErrorReporter
-from logic.parser import TransactionParser
-from logic.sorter import TransactionSorter
 from portfolio_common.config import (
     KAFKA_INSTRUMENTS_TOPIC,
     KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
 )
+from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
@@ -49,7 +43,17 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from .cost_engine.processing.cost_basis_strategies import (
+    AverageCostBasisStrategy,
+    FIFOBasisStrategy,
+)
+from .cost_engine.processing.cost_calculator import CostCalculator
+from .cost_engine.processing.disposition_engine import DispositionEngine
+from .cost_engine.processing.error_reporter import ErrorReporter
+from .cost_engine.processing.parser import TransactionParser
+from .cost_engine.processing.sorter import TransactionSorter
 from .repository import CostCalculatorRepository
+from .transaction_processor import TransactionProcessor
 
 logger = logging.getLogger(__name__)
 SERVICE_NAME = "cost-calculator"
@@ -80,7 +84,9 @@ class CostCalculatorConsumer(BaseConsumer):
     persists updates, and emits a full TransactionEvent downstream.
     """
 
-    def _get_transaction_processor(self, cost_basis_method: str = "FIFO") -> TransactionProcessor:
+    def _get_transaction_processor(
+        self, cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO
+    ) -> TransactionProcessor:
         """
         Builds and returns an instance of the TransactionProcessor, injecting
         the specified cost basis strategy.
@@ -89,7 +95,8 @@ class CostCalculatorConsumer(BaseConsumer):
         parser = TransactionParser(error_reporter=error_reporter)
         sorter = TransactionSorter()
 
-        if cost_basis_method == "AVCO":
+        resolved_method = normalize_cost_basis_method(cost_basis_method)
+        if resolved_method is CostBasisMethod.AVCO:
             strategy = AverageCostBasisStrategy()
             logger.debug("Using AVCO strategy for cost basis calculation.")
         else:
@@ -119,7 +126,7 @@ class CostCalculatorConsumer(BaseConsumer):
     def _transform_event_for_engine(self, event: TransactionEvent) -> dict:
         """
         Transforms a TransactionEvent into a raw dictionary suitable for the
-        financial-calculator-engine, converting fee fields to a Fees object structure.
+        cost-calculator-service engine package, converting fee fields to a Fees object structure.
         """
         event_dict = event.model_dump(mode="json")
         trade_fee_str = event_dict.pop("trade_fee", "0") or "0"
@@ -214,7 +221,7 @@ class CostCalculatorConsumer(BaseConsumer):
                             f"Portfolio {event.portfolio_id} not found. Retrying..."
                         )
 
-                    cost_basis_method = portfolio.cost_basis_method or "FIFO"
+                    cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
                     event = enrich_sell_transaction_metadata(
                         event, cost_basis_method=cost_basis_method
                     )

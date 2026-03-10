@@ -6,7 +6,7 @@ Slice 3 hardens INTEREST calculation behavior in the cost engine and introduces 
 
 ## Delivered Artifacts
 
-- `src/libs/financial-calculator-engine/src/logic/cost_calculator.py`
+- `src/services/calculators/cost_calculator_service/app/cost_engine/processing/cost_calculator.py`
   - new `InterestStrategy` with explicit INTEREST invariants
   - explicit zero realized P&L semantics for INTEREST
   - baseline direction validation (`INCOME` or `EXPENSE`)
@@ -16,7 +16,7 @@ Slice 3 hardens INTEREST calculation behavior in the cost engine and introduces 
   - `INTEREST_012_INVALID_INTEREST_DIRECTION`
 - `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_validation.py`
   - direction validation rule
-- `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py`
+- `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`
   - INTEREST invariant and direction tests
 - `tests/unit/libs/portfolio_common/test_interest_validation.py`
   - canonical direction validation tests

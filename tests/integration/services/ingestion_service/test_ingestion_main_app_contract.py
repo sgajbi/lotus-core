@@ -2,6 +2,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from src.services.ingestion_service.app import main as ingestion_main
 from src.services.ingestion_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -55,3 +56,15 @@ async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_
     assert "/ingestion/jobs" not in paths
     assert "/ingestion/dlq/consumer-events" not in paths
     assert "/ingestion/health/policy" not in paths
+
+
+async def test_ingestion_service_fails_startup_when_kafka_init_fails(monkeypatch):
+    def raise_kafka_init_error():
+        raise RuntimeError("broker unavailable")
+
+    monkeypatch.setattr(ingestion_main, "get_kafka_producer", raise_kafka_init_error)
+    ingestion_main.app_state.clear()
+
+    with pytest.raises(RuntimeError, match="Kafka producer initialization failed"):
+        async with app.router.lifespan_context(app):
+            pass

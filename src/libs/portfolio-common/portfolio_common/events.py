@@ -3,12 +3,13 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .ca_bundle_a_ordering import (
     ca_bundle_a_dependency_rank,
     ca_bundle_a_target_order_key,
 )
+from .cost_basis import CostBasisMethod, normalize_cost_basis_method
 
 
 class BusinessDateEvent(BaseModel):
@@ -42,7 +43,12 @@ class PortfolioEvent(BaseModel):
     is_leverage_allowed: bool = Field(False)
     advisor_id: Optional[str] = Field(None)
     status: str
-    cost_basis_method: Optional[str] = Field("FIFO")
+    cost_basis_method: Optional[CostBasisMethod] = Field(CostBasisMethod.FIFO)
+
+    @field_validator("cost_basis_method", mode="before")
+    @classmethod
+    def _normalize_cost_basis_method(cls, value: object) -> CostBasisMethod:
+        return normalize_cost_basis_method(value)
 
 
 class FxRateEvent(BaseModel):

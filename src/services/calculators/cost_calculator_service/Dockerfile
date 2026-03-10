@@ -17,9 +17,8 @@ WORKDIR /app
 
 FROM python-base as builder
 
-# 1. Copy local library source code first
+# 1. Copy local shared library source first
 COPY src/libs/portfolio-common/ /app/src/libs/portfolio-common/
-COPY src/libs/financial-calculator-engine/ /app/src/libs/financial-calculator-engine/
 
 # 2. Copy service app code
 COPY src/services/calculators/cost_calculator_service/pyproject.toml /app/src/services/calculators/cost_calculator_service/pyproject.toml
@@ -27,7 +26,6 @@ COPY src/services/calculators/cost_calculator_service/app /app/src/services/calc
 
 # 3. Install all packages
 RUN pip install /app/src/libs/portfolio-common
-RUN pip install /app/src/libs/financial-calculator-engine
 RUN pip install /app/src/services/calculators/cost_calculator_service
 
 

@@ -6,18 +6,18 @@ This guide provides developers with instructions for understanding, extending, a
 
 The cost calculation logic is split into two distinct parts to ensure a clean separation of concerns:
 
-* **`cost_calculator_service`:** This is the microservice itself. Its sole responsibility is orchestration. It contains the Kafka consumer, database repositories, and the logic for fetching and persisting data. It acts as a wrapper around the engine.
-* **`financial-calculator-engine`:** This is a pure, stateless library that contains all the complex financial logic. It knows nothing about Kafka or databases. It takes a list of raw transaction data, processes it, and returns a list of enriched transaction objects. This separation makes the core logic highly portable and easy to unit test in isolation.
+* **`cost_calculator_service`:** This is the microservice itself. It owns both orchestration and the cost engine. The service contains the Kafka consumer, database repositories, and the logic for fetching, recalculating, and persisting cost state.
+* **`app/cost_engine`:** This is the service-owned, pure cost-basis engine. It is stateless and knows nothing about Kafka or databases. It takes raw transaction data, processes it, and returns enriched transaction objects. Keeping it inside the owning service makes the deployment and ownership boundary explicit without sacrificing testability.
 
 ## 2. Adding Logic for a New Transaction Type
 
 To add support for a new transaction type (e.g., a "GIFT_IN" of securities), follow these steps:
 
-1.  **Update the Enum:** Add the new transaction type to the `TransactionType` enum in the engine.
-    * **File:** `src/libs/financial-calculator-engine/src/core/enums/transaction_type.py`
+1.  **Update the Enum:** Add the new transaction type to the `TransactionType` enum in the cost engine.
+    * **File:** `src/services/calculators/cost_calculator_service/app/cost_engine/domain/enums/transaction_type.py`
 
-2.  **Create a New Strategy:** In the service's logic file, create a new class that implements the `TransactionCostStrategy` protocol. This class will contain the specific business logic for your new transaction type.
-    * **File:** `src/services/calculators/cost_calculator_service/app/logic/cost_calculator.py`
+2.  **Create a New Strategy:** In the cost engine processing layer, create a new class that implements the `TransactionCostStrategy` protocol. This class will contain the specific business logic for your new transaction type.
+    * **File:** `src/services/calculators/cost_calculator_service/app/cost_engine/processing/cost_calculator.py`
 
     ```python
     class GiftInStrategy:
@@ -43,5 +43,5 @@ To add support for a new transaction type (e.g., a "GIFT_IN" of securities), fol
 
 When adding new logic, ensure you also add corresponding tests:
 
-* **Engine Logic:** Add unit tests for your new strategy's financial calculations in `tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py`.
+* **Engine Logic:** Add unit tests for your new strategy's financial calculations in `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`.
 * **Consumer Integration:** If necessary, add tests to `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py` to verify the consumer's orchestration of the new logic.
