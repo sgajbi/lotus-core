@@ -412,7 +412,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Canonical transaction ledger.
 - **Description**: Ingested transactions enriched with cost and policy metadata.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; ORM relationship `costs` -> `TransactionCost`; ORM relationship `cashflow` -> `Cashflow`
-- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/consumer.py`, `src/libs/financial-calculator-engine/src/logic/cost_calculator.py`, `src/services/query_service/app/repositories/transaction_repository.py`, `src/services/ingestion_service/app/routers/transactions.py`, `src/libs/financial-calculator-engine/src/engine/transaction_processor.py`, `src/services/calculators/cost_calculator_service/app/repository.py`
+- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/consumer.py`, `src/libs/financial-calculator-engine/src/logic/cost_calculator.py`, `src/services/query_service/app/repositories/transaction_repository.py`, `src/services/ingestion_service/app/routers/transactions.py`, `src/services/calculators/cost_calculator_service/app/transaction_processor.py`, `src/services/calculators/cost_calculator_service/app/repository.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -448,7 +448,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Normalized transaction fee breakdown.
 - **Description**: Per-transaction fee components (brokerage, duty, exchange fee, etc.).
 - **Relationships**: `transaction_id` -> `transactions.transaction_id`; ORM relationship `transaction` -> `Transaction`
-- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/repository.py`, `src/libs/portfolio-common/portfolio_common/models.py`, `src/services/calculators/cost_calculator_service/app/consumer.py`, `src/libs/financial-calculator-engine/src/logic/cost_calculator.py`, `src/libs/financial-calculator-engine/src/engine/transaction_processor.py`
+- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/repository.py`, `src/libs/portfolio-common/portfolio_common/models.py`, `src/services/calculators/cost_calculator_service/app/consumer.py`, `src/libs/financial-calculator-engine/src/logic/cost_calculator.py`, `src/services/calculators/cost_calculator_service/app/transaction_processor.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

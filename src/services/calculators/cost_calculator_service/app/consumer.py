@@ -6,7 +6,6 @@ from decimal import Decimal
 from typing import Any, List
 
 from confluent_kafka import Message
-from engine.transaction_processor import TransactionProcessor
 from logic.cost_basis_strategies import AverageCostBasisStrategy, FIFOBasisStrategy
 from logic.cost_calculator import CostCalculator
 from logic.disposition_engine import DispositionEngine
@@ -50,6 +49,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from .repository import CostCalculatorRepository
+from .transaction_processor import TransactionProcessor
 
 logger = logging.getLogger(__name__)
 SERVICE_NAME = "cost-calculator"

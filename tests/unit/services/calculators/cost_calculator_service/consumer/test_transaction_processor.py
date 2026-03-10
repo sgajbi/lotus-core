@@ -1,15 +1,18 @@
-# tests/unit/libs/financial-calculator-engine/unit/test_transaction_processor.py
+# tests/unit/services/calculators/cost_calculator_service/consumer/test_transaction_processor.py
 from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
-from engine.transaction_processor import TransactionProcessor
 from logic.cost_basis_strategies import FIFOBasisStrategy
 from logic.cost_calculator import CostCalculator
 from logic.disposition_engine import DispositionEngine
 from logic.error_reporter import ErrorReporter
 from logic.parser import TransactionParser
 from logic.sorter import TransactionSorter
+
+from src.services.calculators.cost_calculator_service.app.transaction_processor import (
+    TransactionProcessor,
+)
 
 
 @pytest.fixture
@@ -121,8 +124,12 @@ def test_transaction_processor_handles_backdated_insert(
     assert results["BUY_2_BACKDATED"].realized_gain_loss == Decimal("0")
 
 
-@patch("engine.transaction_processor.RECALCULATION_DURATION_SECONDS")
-@patch("engine.transaction_processor.RECALCULATION_DEPTH")
+@patch(
+    "src.services.calculators.cost_calculator_service.app.transaction_processor.RECALCULATION_DURATION_SECONDS"
+)
+@patch(
+    "src.services.calculators.cost_calculator_service.app.transaction_processor.RECALCULATION_DEPTH"
+)
 def test_transaction_processor_records_metrics(
     mock_depth_metric, mock_duration_metric, transaction_processor: TransactionProcessor
 ):

@@ -43,8 +43,8 @@ Evidence:
 - `src/libs/portfolio-common/portfolio_common/events.py`
 - `src/services/calculators/cost_calculator_service/app/consumer.py`
 - `src/libs/financial-calculator-engine/src/logic/cost_basis_strategies.py`
-- `src/libs/financial-calculator-engine/src/engine/monitoring.py`
-- `src/libs/financial-calculator-engine/src/engine/transaction_processor.py`
+- `src/services/calculators/cost_calculator_service/app/monitoring.py`
+- `src/services/calculators/cost_calculator_service/app/transaction_processor.py`
 - `tests/unit/libs/financial-calculator-engine/unit/test_cost_basis_strategies.py`
 - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
 - `tests/integration/services/persistence_service/repositories/test_repositories.py`

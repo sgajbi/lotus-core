@@ -48,7 +48,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py",
         "tests/unit/services/ingestion_service/test_transaction_model.py",
         "tests/unit/libs/financial-calculator-engine/unit/test_cost_calculator.py",
-        "tests/unit/libs/financial-calculator-engine/unit/test_transaction_processor.py",
+        "tests/unit/services/calculators/cost_calculator_service/consumer/test_transaction_processor.py",
         "tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py",
         "tests/unit/services/query_service/repositories/test_buy_state_repository.py",
         "tests/unit/services/query_service/services/test_buy_state_service.py",
