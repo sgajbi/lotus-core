@@ -7,21 +7,60 @@ from pydantic import BaseModel, Field, condecimal
 
 
 class Transaction(BaseModel):
-    transaction_id: str = Field(json_schema_extra={"example": "TRN001"})
-    portfolio_id: str = Field(json_schema_extra={"example": "PORT001"})
-    instrument_id: str = Field(json_schema_extra={"example": "AAPL"})
-    security_id: str = Field(json_schema_extra={"example": "SEC_AAPL"})
-    transaction_date: datetime = Field(json_schema_extra={"example": "2023-01-15T10:00:00Z"})
-    transaction_type: str = Field(json_schema_extra={"example": "BUY"})
-    quantity: condecimal(ge=Decimal(0)) = Field(json_schema_extra={"example": "10.0"})
-    price: condecimal(ge=Decimal(0)) = Field(json_schema_extra={"example": "150.0"})
+    transaction_id: str = Field(
+        description="Canonical transaction identifier for ingestion, replay, and audit workflows.",
+        json_schema_extra={"example": "TRN001"},
+    )
+    portfolio_id: str = Field(
+        description="Canonical portfolio identifier that owns the transaction.",
+        json_schema_extra={"example": "PORT001"},
+    )
+    instrument_id: str = Field(
+        description="Canonical instrument identifier associated with the transaction.",
+        json_schema_extra={"example": "AAPL"},
+    )
+    security_id: str = Field(
+        description="Canonical security identifier associated with the transaction record.",
+        json_schema_extra={"example": "SEC_AAPL"},
+    )
+    transaction_date: datetime = Field(
+        description="Trade or economic timestamp used to order the transaction in the ledger.",
+        json_schema_extra={"example": "2023-01-15T10:00:00Z"},
+    )
+    transaction_type: str = Field(
+        description="Canonical transaction type that drives downstream calculator behavior.",
+        json_schema_extra={"example": "BUY"},
+    )
+    quantity: condecimal(ge=Decimal(0)) = Field(
+        description="Absolute traded quantity or units moved by the transaction.",
+        json_schema_extra={"example": "10.0"},
+    )
+    price: condecimal(ge=Decimal(0)) = Field(
+        description="Per-unit transaction price in the trade currency.",
+        json_schema_extra={"example": "150.0"},
+    )
     gross_transaction_amount: condecimal(gt=Decimal(0)) = Field(
+        description="Gross economic amount before fees, taxes, or deductions.",
         json_schema_extra={"example": "1500.0"}
     )
-    trade_currency: str = Field(json_schema_extra={"example": "USD"})
-    currency: str = Field(json_schema_extra={"example": "USD"})
+    trade_currency: str = Field(
+        description="Trade currency in which price and gross amount are quoted.",
+        json_schema_extra={"example": "USD"},
+    )
+    currency: str = Field(
+        description=(
+            "Canonical transaction currency retained for compatibility "
+            "with downstream ledgers."
+        ),
+        json_schema_extra={"example": "USD"},
+    )
     trade_fee: Optional[condecimal(ge=Decimal(0))] = Field(
-        default=Decimal(0), json_schema_extra={"example": "5.0"}
+        default=Decimal(0),
+        description=(
+            "Aggregate trade fee applied to the transaction when fee "
+            "breakdown is not split out."
+        ),
+        json_schema_extra={"example": "5.0"},
     )
     brokerage: Optional[condecimal(ge=Decimal(0))] = Field(
         default=None,
@@ -51,7 +90,14 @@ class Transaction(BaseModel):
         description="Other fee components not covered by standard fields.",
         json_schema_extra={"example": "0.15"},
     )
-    settlement_date: Optional[datetime] = None
+    settlement_date: Optional[datetime] = Field(
+        default=None,
+        description=(
+            "Optional settlement timestamp used for cash-leg timing and "
+            "operations monitoring."
+        ),
+        json_schema_extra={"example": "2023-01-17T10:00:00Z"},
+    )
     economic_event_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "EVT-2026-00987"},
@@ -441,8 +487,35 @@ class Transaction(BaseModel):
         json_schema_extra={"example": "UPSTREAM_PROVIDED"},
         description="Synthetic flow origin descriptor for audit and lineage.",
     )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        description="Ingestion-side creation timestamp for lineage and troubleshooting.",
+        json_schema_extra={"example": "2026-03-10T11:32:15Z"},
+    )
 
 
 class TransactionIngestionRequest(BaseModel):
-    transactions: List[Transaction]
+    transactions: List[Transaction] = Field(
+        ...,
+        description="Canonical transaction records to ingest or upsert asynchronously.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "transaction_id": "TRN001",
+                    "portfolio_id": "PORT001",
+                    "instrument_id": "AAPL",
+                    "security_id": "SEC_AAPL",
+                    "transaction_date": "2023-01-15T10:00:00Z",
+                    "transaction_type": "BUY",
+                    "quantity": "10.0",
+                    "price": "150.0",
+                    "gross_transaction_amount": "1500.0",
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                    "trade_fee": "5.0",
+                    "settlement_date": "2023-01-17T10:00:00Z",
+                }
+            ]
+        ],
+    )

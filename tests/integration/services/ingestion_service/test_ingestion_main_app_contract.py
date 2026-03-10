@@ -315,6 +315,46 @@ async def test_openapi_describes_instrument_shared_schema(async_test_client):
     ]
 
 
+async def test_openapi_describes_transaction_core_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    transaction = components["Transaction"]
+    transaction_request = components["TransactionIngestionRequest"]
+
+    assert transaction["properties"]["transaction_id"]["description"] == (
+        "Canonical transaction identifier for ingestion, replay, and audit workflows."
+    )
+    assert transaction["properties"]["gross_transaction_amount"]["description"] == (
+        "Gross economic amount before fees, taxes, or deductions."
+    )
+    assert transaction["properties"]["created_at"]["example"] == "2026-03-10T11:32:15Z"
+    assert transaction_request["properties"]["transactions"]["description"] == (
+        "Canonical transaction records to ingest or upsert asynchronously."
+    )
+    assert transaction_request["properties"]["transactions"]["examples"] == [
+        [
+            {
+                "transaction_id": "TRN001",
+                "portfolio_id": "PORT001",
+                "instrument_id": "AAPL",
+                "security_id": "SEC_AAPL",
+                "transaction_date": "2023-01-15T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": "10.0",
+                "price": "150.0",
+                "gross_transaction_amount": "1500.0",
+                "trade_currency": "USD",
+                "currency": "USD",
+                "trade_fee": "5.0",
+                "settlement_date": "2023-01-17T10:00:00Z",
+            }
+        ]
+    ]
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
