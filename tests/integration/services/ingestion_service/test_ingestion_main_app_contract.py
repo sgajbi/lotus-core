@@ -431,6 +431,39 @@ async def test_openapi_describes_transaction_fx_fields(async_test_client):
     )
 
 
+async def test_openapi_describes_transaction_corporate_action_fields(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    transaction = response.json()["components"]["schemas"]["Transaction"]
+    properties = transaction["properties"]
+
+    assert properties["parent_transaction_reference"]["description"] == (
+        "Corporate-action parent transaction reference used to link child "
+        "transactions back to the upstream parent instruction."
+    )
+    assert properties["child_role"]["description"] == (
+        "Canonical corporate-action child role used to drive dependency-aware "
+        "processing and downstream calculator interpretation."
+    )
+    assert properties["linked_cash_transaction_id"]["description"] == (
+        "Linked cash transaction identifier used for cash-in-lieu or "
+        "other corporate-action settlement entries."
+    )
+    assert properties["has_synthetic_flow"]["description"] == (
+        "Whether this transaction carries a position-level synthetic flow "
+        "payload for analytics and performance treatment."
+    )
+    assert properties["synthetic_flow_valuation_method"]["description"] == (
+        "Synthetic flow valuation method classification used to explain "
+        "how the synthetic amount was derived."
+    )
+    assert properties["synthetic_flow_source"]["description"] == (
+        "Origin descriptor that explains whether the synthetic flow was "
+        "supplied upstream or derived internally."
+    )
+
+
 async def test_openapi_excludes_event_replay_control_plane_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
