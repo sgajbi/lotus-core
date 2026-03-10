@@ -123,6 +123,34 @@ async def test_openapi_includes_reconciliation_examples(async_test_client: httpx
     assert finding_example["findings"][0]["finding_type"] == "missing_cashflow"
 
 
+async def test_openapi_describes_reconciliation_schema_fields(async_test_client: httpx.AsyncClient):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+
+    run_response = components["ReconciliationRunResponse"]["properties"]
+    finding_response = components["ReconciliationFindingResponse"]["properties"]
+    request_schema = components["ReconciliationRunRequest"]["properties"]
+
+    assert run_response["run_id"]["description"] == "Unique reconciliation run identifier."
+    assert run_response["status"]["description"] == "Lifecycle status of the run."
+    assert run_response["summary"]["description"].startswith("Structured summary")
+
+    assert finding_response["finding_type"]["description"] == (
+        "Canonical finding classification emitted by the control."
+    )
+    assert finding_response["detail"]["description"].startswith("Additional structured detail")
+
+    assert request_schema["portfolio_id"]["description"].startswith("Optional portfolio scope")
+    assert request_schema["tolerance"]["description"].startswith("Optional numeric tolerance")
+
+    get_run_operation = schema["paths"]["/reconciliation/runs/{run_id}"]["get"]
+    assert get_run_operation["responses"]["404"]["content"]["application/json"]["example"] == {
+        "detail": "Reconciliation run 'FRR-20260306-0001' was not found."
+    }
+
+
 async def test_transaction_cashflow_run_persists_missing_cashflow_finding(
     async_test_client: httpx.AsyncClient,
     async_db_session: AsyncSession,

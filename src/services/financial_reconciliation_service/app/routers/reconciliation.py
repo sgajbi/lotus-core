@@ -15,6 +15,10 @@ from ..services import ReconciliationService
 
 router = APIRouter(tags=["financial-reconciliation"])
 
+NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": "Reconciliation run 'FRR-20260306-0001' was not found."
+}
+
 RECONCILIATION_RUN_REQUEST_EXAMPLES = {
     "portfolio_day_scope": {
         "summary": "Portfolio-day scoped control run",
@@ -110,7 +114,12 @@ def _service(db_session: AsyncSession) -> ReconciliationService:
 async def run_transaction_cashflow_reconciliation(
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     db_session: AsyncSession = Depends(get_async_db_session),
-    x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
+    x_correlation_id: str | None = Header(
+        default=None,
+        alias="X-Correlation-ID",
+        description="Optional correlation identifier propagated into the recorded reconciliation run.",
+        examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
+    ),
 ):
     service = _service(db_session)
     run = await service.run_transaction_cashflow(request=request, correlation_id=x_correlation_id)
@@ -138,7 +147,12 @@ async def run_transaction_cashflow_reconciliation(
 async def run_position_valuation_reconciliation(
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     db_session: AsyncSession = Depends(get_async_db_session),
-    x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
+    x_correlation_id: str | None = Header(
+        default=None,
+        alias="X-Correlation-ID",
+        description="Optional correlation identifier propagated into the recorded reconciliation run.",
+        examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
+    ),
 ):
     service = _service(db_session)
     run = await service.run_position_valuation(request=request, correlation_id=x_correlation_id)
@@ -168,7 +182,12 @@ async def run_position_valuation_reconciliation(
 async def run_timeseries_integrity_reconciliation(
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     db_session: AsyncSession = Depends(get_async_db_session),
-    x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
+    x_correlation_id: str | None = Header(
+        default=None,
+        alias="X-Correlation-ID",
+        description="Optional correlation identifier propagated into the recorded reconciliation run.",
+        examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
+    ),
 ):
     service = _service(db_session)
     run = await service.run_timeseries_integrity(request=request, correlation_id=x_correlation_id)
@@ -197,10 +216,21 @@ async def run_timeseries_integrity_reconciliation(
 async def list_reconciliation_runs(
     reconciliation_type: str | None = Query(
         default=None,
+        description="Optional reconciliation type filter.",
         examples=["transaction_cashflow"],
     ),
-    portfolio_id: str | None = Query(default=None, examples=["PORT-OPS-001"]),
-    limit: int = Query(default=50, ge=1, le=200),
+    portfolio_id: str | None = Query(
+        default=None,
+        description="Optional portfolio filter.",
+        examples=["PORT-OPS-001"],
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum number of runs to return.",
+        examples=[50],
+    ),
     db_session: AsyncSession = Depends(get_async_db_session),
 ):
     repository = ReconciliationRepository(db_session)
@@ -220,7 +250,11 @@ async def list_reconciliation_runs(
         200: {
             "description": "One reconciliation run.",
             "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "Run was not found.",
+            "content": {"application/json": {"example": NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def get_reconciliation_run(

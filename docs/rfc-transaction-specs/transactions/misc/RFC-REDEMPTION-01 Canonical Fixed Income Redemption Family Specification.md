@@ -469,7 +469,7 @@ Realized FX pnl: policy-driven (may be 0, upstream-provided, or derived via cash
 
 - maturity redemption at par with embedded accrued interest
 - call redemption above par
-- partial redemption with FIFO, LIFO, average cost
+- partial redemption with FIFO and AVCO
 - embedded vs separate fees/taxes
 - cross-currency base conversion fields populated
 - realized P&L fields always present and split (capital vs FX)
