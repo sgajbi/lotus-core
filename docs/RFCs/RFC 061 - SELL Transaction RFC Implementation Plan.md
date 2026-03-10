@@ -21,13 +21,13 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 3. Enforce disposal semantics, oversell policy controls, and linkage consistency.
 4. Persist policy metadata and transaction linkage fields.
 5. Provide query surfaces for disposal/audit/reconciliation.
-6. Publish conformance evidence and CI regression gate (`sell-rfc`).
+6. Publish conformance evidence and CI regression gate (`transaction-sell-contract`).
 
 ## Current Implementation Reality
 1. SELL slice artifacts exist under transaction-spec paths.
 2. SELL linkage/policy metadata and validation tests exist.
 3. SELL query surfaces exist in query-service (`sell_state` routes and tests).
-4. CI includes `sell-rfc` test suite in matrix.
+4. CI includes `transaction-sell-contract` test suite in matrix.
 5. As with BUY, lifecycle telemetry is strong, while centralized persisted lifecycle state-machine depth remains a follow-on improvement area.
 
 ## Requirement-to-Implementation Traceability
@@ -39,7 +39,7 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 | Calculation and invariants | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`; slice-3 artifact |
 | Disposal/cash-linkage behavior | Implemented | slice-4 artifact; calculator/query tests |
 | Query + observability completion | Implemented | `tests/integration/services/query_service/test_sell_state_router.py`; slice-5 artifact |
-| CI conformance gate | Implemented | `scripts/test_manifest.py` (`sell-rfc`); `.github/workflows/ci.yml` |
+| CI conformance gate | Implemented | `scripts/test_manifest.py` (`transaction-sell-contract`); `.github/workflows/ci.yml` |
 
 ## Design Reasoning and Trade-offs
 1. Slice-by-slice rollout minimized accounting regression risk.
@@ -63,7 +63,7 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 2. `tests/unit/libs/portfolio_common/test_sell_validation.py`
 3. `tests/unit/libs/portfolio_common/test_sell_linkage.py`
 4. `tests/integration/services/query_service/test_sell_state_router.py`
-5. `scripts/test_manifest.py` and `.github/workflows/ci.yml` (`sell-rfc`)
+5. `scripts/test_manifest.py` and `.github/workflows/ci.yml` (`transaction-sell-contract`)
 
 ## Original Acceptance Criteria Alignment
 1. Slice execution and evidence trail: aligned.

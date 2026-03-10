@@ -85,7 +85,7 @@ Slice 1 Progress (Batch 1):
  - removed in batch: `105` findings (`I001/F401/F841` fully eliminated in scope)
 4. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 2):
 1. Resolved remaining non-E501 issues in runtime-critical scope:
@@ -95,7 +95,7 @@ Slice 1 Progress (Batch 2):
  - `0` remaining for `I001/F401/F841/E402/E711/F541`
 3. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 3):
 1. Scoped E501 reduction completed for persistence runtime + integration boundary files:
@@ -109,7 +109,7 @@ Slice 1 Progress (Batch 3):
  - runtime-critical scope E501 count: `238 -> 216` (`-22`)
 4. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 4):
 1. Scoped E501 reduction completed for the old cost-engine core/modeling chunk:
@@ -122,7 +122,7 @@ Slice 1 Progress (Batch 4):
  - runtime-critical scope E501 count: `216 -> 188` (`-28`)
 4. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 5):
 1. Scoped E501 reduction completed for valuation-consumer runtime hotspot:
@@ -133,7 +133,7 @@ Slice 1 Progress (Batch 5):
  - runtime-critical scope E501 count: `188 -> 164` (`-24`)
 4. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 6):
 1. Scoped E501 reduction completed for valuation repository hotspot:
@@ -144,7 +144,7 @@ Slice 1 Progress (Batch 6):
  - runtime-critical scope E501 count: `164 -> 150` (`-14`)
 4. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 7):
 1. Scoped E501 reduction completed for portfolio-common runtime configuration/consumer hotspot:
@@ -156,7 +156,7 @@ Slice 1 Progress (Batch 7):
  - runtime-critical scope E501 count: `150 -> 125` (`-25`)
 4. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 
 Slice 1 Progress (Batch 8):
 1. Cleared final runtime-scope `E501` findings across calculators and shared libs.
@@ -165,7 +165,7 @@ Slice 1 Progress (Batch 8):
  - scope status: Ruff clean (no remaining findings)
 3. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 4. Slice 1 exit criteria:
  - cleaned runtime domains remain Ruff-clean: `met`
  - functional regression suite for affected domains passes: `met`
@@ -182,7 +182,7 @@ Slice 2 Progress (Accelerated Pass):
  - test scope status: Ruff-clean
 4. Regression evidence:
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 5. Slice 2 exit criteria:
  - cleaned test domains remain Ruff-clean: `met`
  - suite pass-rate unchanged: `met`
@@ -217,7 +217,7 @@ Slice 3 Progress (Accelerated Pass):
 4. Regression evidence:
  - `python -m ruff check scripts --statistics` -> clean
  - `make typecheck` -> passed
- - `python scripts/test_manifest.py --suite interest-rfc --quiet` -> `113 passed`
+ - `python scripts/test_manifest.py --suite transaction-interest-contract --quiet` -> `113 passed`
 5. Slice 3 exit criteria:
  - governance tooling remains operational and Ruff-clean: `met`
 

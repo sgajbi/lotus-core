@@ -6,10 +6,10 @@ Slice 8 closes RFC 082 by wiring canonical FX coverage into the repository's sta
 ## Delivered in Slice 8
 1. Dedicated manifest suite added in [scripts/test_manifest.py](C:\Users\Sandeep\projects\lotus-core\scripts\test_manifest.py):
  - `transaction-fx-contract`
- - alias `fx-rfc`
+ - alias `transaction-fx-contract`
 2. Dedicated local targets added in [Makefile](C:\Users\Sandeep\projects\lotus-core\Makefile):
  - `test-transaction-fx-contract`
- - `test-fx-rfc`
+ - `test-transaction-fx-contract`
 3. CI matrix coverage added in [.github/workflows/ci.yml](C:\Users\Sandeep\projects\lotus-core\.github\workflows\ci.yml), including `transaction-fx-contract` and full-E2E execution on `main`.
 4. FX query-router integration coverage extended in [test_transactions_router.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\query_service\test_transactions_router.py) to verify FX filter forwarding.
 5. FX end-to-end lifecycle coverage added in [test_fx_lifecycle.py](C:\Users\Sandeep\projects\lotus-core\tests\e2e\test_fx_lifecycle.py) for:

@@ -41,7 +41,7 @@ Quality target:
  - separate external cash entry mode
  - deterministic linkage across income and cash legs
 6. Ensure cash-linkage and reconciliation behavior is auditable and queryable.
-7. Add dedicated DIVIDEND regression suite and CI wiring equivalent to `buy-rfc`/`sell-rfc`.
+7. Add dedicated DIVIDEND regression suite and CI wiring equivalent to `transaction-buy-contract`/`transaction-sell-contract`.
 8. Produce a slice-6 conformance report mapping `RFC-DIVIDEND-01` requirements to code/tests.
 
 ## Current Implementation Reality (Baseline)
@@ -65,7 +65,7 @@ Quality target:
 | Withholding/ROC decomposition model | Not implemented | No canonical fields/logic for gross/net/withholding/ROC components | Slice 3-4 |
 | Cash-linkage + reconciliation supportability | Partially implemented | Basic cashflow exists; no dedicated DIVIDEND linkage/query contract | Slice 4-5 |
 | DIVIDEND query-state surfaces | Not implemented | No DIVIDEND-specific router/DTO/repository/service surfaces | Slice 5 |
-| Dedicated regression suite + CI alias | Not implemented | No `transaction-dividend-contract` / `dividend-rfc` suite | Slice 6 |
+| Dedicated regression suite + CI alias | Not implemented | No `transaction-dividend-contract` / `transaction-dividend-contract` suite | Slice 6 |
 | RFC conformance mapping report | Not implemented | No section-to-evidence closure artifact | Slice 6 |
 
 ## Slice Plan (0..6)
@@ -158,11 +158,11 @@ Exit Criteria:
 Deliverables:
 1. `scripts/test_manifest.py` suite entries:
  - `transaction-dividend-contract`
- - alias `dividend-rfc`
+ - alias `transaction-dividend-contract`
 2. `Makefile` targets:
  - `test-transaction-dividend-contract`
- - `test-dividend-rfc`
-3. CI matrix wiring for `dividend-rfc`.
+ - `test-transaction-dividend-contract`
+3. CI matrix wiring for `transaction-dividend-contract`.
 4. `docs/rfc-transaction-specs/transactions/DIVIDEND/DIVIDEND-SLICE-6-CONFORMANCE-REPORT.md`
 
 Exit Criteria:

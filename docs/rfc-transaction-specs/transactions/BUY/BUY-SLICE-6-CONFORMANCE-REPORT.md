@@ -2,7 +2,7 @@
 
 ## Scope
 
-This report closes RFC-059 Slice 6 by mapping `RFC-BUY-01` requirements to implementation evidence and the dedicated BUY regression suite (`buy-rfc`).
+This report closes RFC-059 Slice 6 by mapping `RFC-BUY-01` requirements to implementation evidence and the dedicated BUY regression suite (`transaction-buy-contract`).
 
 Status labels:
 
@@ -31,17 +31,17 @@ Behavior labels:
 | 12. BUY Accrued-Interest Offset Rules | COVERED | MATCHES | `tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py` | Accrued-interest offset initialization and persistence are validated. |
 | 13. BUY Timing Rules | PARTIALLY_COVERED | PARTIALLY_MATCHES | `tests/unit/libs/portfolio_common/test_buy_validation.py` | Date ordering and settlement-date requirements are enforced; broader policy-level timing modes remain to be added with later transaction RFC rollout. |
 | 14. BUY Query / Output Contract | COVERED | MATCHES | `tests/unit/services/query_service/repositories/test_buy_state_repository.py`, `tests/unit/services/query_service/services/test_buy_state_service.py`, `tests/integration/services/query_service/test_buy_state_router.py` | BUY lot/offset/cash-linkage query surfaces are implemented and tested. |
-| 17. BUY Test Matrix | COVERED | MATCHES | `scripts/test_manifest.py` (`buy-rfc` suite) | Dedicated regression suite now aggregates BUY-critical tests across unit/integration layers. |
+| 17. BUY Test Matrix | COVERED | MATCHES | `scripts/test_manifest.py` (`transaction-buy-contract` suite) | Dedicated regression suite now aggregates BUY-critical tests across unit/integration layers. |
 | 19. BUY Configurable Policies | COVERED | MATCHES | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py` | BUY policy hook coverage exists for accrued-interest exclusion policy. |
 | 20. BUY Gap Assessment Checklist | COVERED | MATCHES | `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-0-GAP-ASSESSMENT.md`, this report | Gap tracking and final conformance evidence are now both in-repo artifacts. |
 
 ## Dedicated Regression Suite
 
-- Suite name: `buy-rfc`
+- Suite name: `transaction-buy-contract`
 - Source: `scripts/test_manifest.py`
-- Local command: `make test-buy-rfc`
-- CI command: `python scripts/test_manifest.py --suite buy-rfc --with-coverage --coverage-file .coverage.buy-rfc`
-- CI wiring: `.github/workflows/ci.yml` test matrix includes `buy-rfc`
+- Local command: `make test-transaction-buy-contract`
+- CI command: `python scripts/test_manifest.py --suite transaction-buy-contract --with-coverage --coverage-file .coverage.transaction-buy-contract`
+- CI wiring: `.github/workflows/ci.yml` test matrix includes `transaction-buy-contract`
 
 ## Residual Accepted Gaps
 

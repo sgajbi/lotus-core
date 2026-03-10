@@ -57,7 +57,7 @@ Current `lotus-core` already has strong FX-rate infrastructure for valuation and
 | Swap near/far leg grouping semantics | Not implemented | No `swap_event_id`, `near_leg_group_id`, or `far_leg_group_id` handling | Slice 5 |
 | Realized FX P&L semantics and policy traceability | Not implemented | No FX-specific realized P&L contract or policy mode support | Slice 6 |
 | Query/observability supportability | Not implemented | No FX-specific traceability on existing query/support surfaces | Slice 7 |
-| Dedicated FX regression gate and conformance report | Implemented | `transaction-fx-contract` / `fx-rfc` suite wiring, CI matrix entry, conformance report, and FX E2E lifecycle coverage | Slice 8 |
+| Dedicated FX regression gate and conformance report | Implemented | `transaction-fx-contract` / `transaction-fx-contract` suite wiring, CI matrix entry, conformance report, and FX E2E lifecycle coverage | Slice 8 |
 
 ## Slice Plan (0..8)
 
@@ -185,10 +185,10 @@ Exit Criteria:
 Deliverables:
 1. `scripts/test_manifest.py` suite entries:
  - `transaction-fx-contract`
- - alias `fx-rfc`
+ - alias `transaction-fx-contract`
 2. `Makefile` targets:
  - `test-transaction-fx-contract`
- - `test-fx-rfc`
+ - `test-transaction-fx-contract`
 3. CI matrix wiring for FX contract/conformance coverage.
 4. `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-8-CONFORMANCE-REPORT.md`
 

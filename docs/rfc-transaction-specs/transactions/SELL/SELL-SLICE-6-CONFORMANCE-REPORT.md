@@ -2,7 +2,7 @@
 
 ## Scope
 
-This report closes RFC-061 Slice 6 by mapping `RFC-SELL-01` requirements to implementation evidence and the dedicated SELL regression suite (`sell-rfc`).
+This report closes RFC-061 Slice 6 by mapping `RFC-SELL-01` requirements to implementation evidence and the dedicated SELL regression suite (`transaction-sell-contract`).
 
 Status labels:
 
@@ -30,17 +30,17 @@ Behavior labels:
 | 11. SELL Cash and Dual-Accounting Rules | COVERED | MATCHES | `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`, `tests/unit/services/query_service/services/test_sell_state_service.py` | SELL inflow sign, linkage propagation, and cash reconciliation shape are validated. |
 | 12. SELL Timing Rules | PARTIALLY_COVERED | PARTIALLY_MATCHES | `tests/unit/libs/portfolio_common/test_sell_validation.py` | Settlement date and date ordering rules are enforced; extended timing policy modes remain future work. |
 | 14. SELL Query / Output Contract | COVERED | MATCHES | `tests/unit/services/query_service/repositories/test_sell_state_repository.py`, `tests/unit/services/query_service/services/test_sell_state_service.py`, `tests/integration/services/query_service/test_sell_state_router.py` | SELL disposal and cash-linkage query surfaces are implemented and tested. |
-| 17. SELL Test Matrix | COVERED | MATCHES | `scripts/test_manifest.py` (`sell-rfc` suite) | Dedicated regression suite aggregates SELL-critical tests across unit/integration layers and CI matrix. |
+| 17. SELL Test Matrix | COVERED | MATCHES | `scripts/test_manifest.py` (`transaction-sell-contract` suite) | Dedicated regression suite aggregates SELL-critical tests across unit/integration layers and CI matrix. |
 | 19. SELL Configurable Policies | PARTIALLY_COVERED | PARTIALLY_MATCHES | `tests/unit/libs/portfolio_common/test_sell_linkage.py`, `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py` | FIFO/AVCO deterministic policy assignment implemented; oversold policy is explicit but unsupported by design. |
 | 20. SELL Gap Assessment Checklist | COVERED | MATCHES | `docs/rfc-transaction-specs/transactions/SELL/SELL-SLICE-0-GAP-ASSESSMENT.md`, this report | Gap matrix plus final conformance evidence are both in-repo artifacts. |
 
 ## Dedicated Regression Suite
 
-- Suite name: `sell-rfc`
+- Suite name: `transaction-sell-contract`
 - Source: `scripts/test_manifest.py`
-- Local command: `make test-sell-rfc`
-- CI command: `python scripts/test_manifest.py --suite sell-rfc --with-coverage --coverage-file .coverage.sell-rfc`
-- CI wiring: `.github/workflows/ci.yml` test matrix includes `sell-rfc`
+- Local command: `make test-transaction-sell-contract`
+- CI command: `python scripts/test_manifest.py --suite transaction-sell-contract --with-coverage --coverage-file .coverage.transaction-sell-contract`
+- CI wiring: `.github/workflows/ci.yml` test matrix includes `transaction-sell-contract`
 
 ## Residual Accepted Gaps
 

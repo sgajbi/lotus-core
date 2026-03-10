@@ -10,10 +10,10 @@ Delivered:
 
 - `scripts/test_manifest.py`
   - `transaction-interest-contract`
-  - alias `interest-rfc`
+  - alias `transaction-interest-contract`
 - `Makefile`
   - `test-transaction-interest-contract`
-  - `test-interest-rfc`
+  - `test-transaction-interest-contract`
 - `.github/workflows/ci.yml`
   - matrix includes `transaction-interest-contract`
 
@@ -44,7 +44,7 @@ Delivered:
 - `python -m pytest -q tests/unit/services/ingestion_service/test_transaction_model.py`
 - `python -m pytest -q tests/unit/services/query_service/services/test_transaction_service.py`
 - `python -m pytest -q tests/integration/services/query_service/test_transactions_router.py`
-- `python scripts/test_manifest.py --suite interest-rfc --quiet`
+- `python scripts/test_manifest.py --suite transaction-interest-contract --quiet`
 - `python scripts/migration_contract_check.py --mode alembic-sql`
 - `python -m ruff check ... --ignore E501` on changed INTEREST slice files
 

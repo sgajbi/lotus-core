@@ -8,10 +8,10 @@ Create a dedicated RFC-074 contract test lane and enforce it in local and CI wor
 
 1. Added manifest suite:
  - `transaction-portfolio-flow-bundle-contract`
- - Alias: `portfolio-flow-bundle-rfc`
+ - Alias: `transaction-portfolio-flow-bundle-contract`
 2. Added Make targets:
  - `test-transaction-portfolio-flow-bundle-contract`
- - `test-portfolio-flow-bundle-rfc`
+ - `test-transaction-portfolio-flow-bundle-contract`
 3. Added CI matrix entry in `.github/workflows/ci.yml`:
  - `transaction-portfolio-flow-bundle-contract`
 4. Suite coverage includes:
