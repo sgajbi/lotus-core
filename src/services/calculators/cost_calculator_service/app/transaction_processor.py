@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any
 
-from core.models.response import ErroredTransaction
+from core.models.error import ErroredTransaction
 from core.models.transaction import Transaction
 from logic.cost_calculator import CostCalculator
 from logic.disposition_engine import DispositionEngine

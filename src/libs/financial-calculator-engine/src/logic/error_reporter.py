@@ -1,5 +1,5 @@
 # libs/financial-calculator-engine/src/logic/error_reporter.py
-from core.models.response import ErroredTransaction
+from core.models.error import ErroredTransaction
 
 
 class ErrorReporter:
