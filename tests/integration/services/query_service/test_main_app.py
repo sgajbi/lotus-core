@@ -309,6 +309,32 @@ async def test_openapi_describes_lookup_catalog_contract_examples(async_test_cli
     )
 
 
+async def test_openapi_describes_instrument_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    instruments = schema["paths"]["/instruments/"]["get"]
+    record = schema["components"]["schemas"]["InstrumentRecord"]
+
+    security_id = next(
+        parameter for parameter in instruments["parameters"] if parameter["name"] == "security_id"
+    )
+    assert security_id["description"] == "Filter by a specific security identifier."
+
+    product_type = next(
+        parameter for parameter in instruments["parameters"] if parameter["name"] == "product_type"
+    )
+    assert product_type["description"] == (
+        "Filter by a specific product type such as Equity or Bond."
+    )
+
+    assert record["properties"]["security_id"]["description"] == "Canonical security identifier."
+    assert record["properties"]["pair_base_currency"]["description"] == (
+        "FX pair base currency when the record represents an FX contract instrument."
+    )
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
