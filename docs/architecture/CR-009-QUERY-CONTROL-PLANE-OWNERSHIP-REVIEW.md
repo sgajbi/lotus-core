@@ -90,21 +90,31 @@ Do **not** re-merge the services. The runtime split remains correct.
 
 ## Action taken
 
-No source move was applied in this review batch.
+Implemented in the review program:
 
-Reason:
+- moved control-plane router modules into:
+  - `src/services/query_control_plane_service/app/routers/`
+- moved control-plane router dependency tests into:
+  - `tests/integration/services/query_control_plane_service/`
+- added a service-local `enterprise_readiness.py` under `query_control_plane_service`
+- updated `query_control_plane_service/app/main.py` to import local routers and
+  service-local enterprise-readiness middleware instead of importing those modules from
+  `query_service`
 
-- this is a structural ownership cleanup, not a correctness hotfix
-- moving router modules and tests is a larger refactor that should be done intentionally,
-  not mixed into unrelated hardening slices
+Important boundary preserved:
+
+- DTOs, repositories, and service-layer query logic remain shared from the canonical
+  query-service package where that is still the intended source of business/query behavior
+- the cleanup in this batch is specifically about control-plane app ownership, router
+  ownership, and test ownership
 
 The review has been logged so the cleanup can be taken as a dedicated convergence task.
 
 ## Sign-off state
 
-Current state: `Refactor Needed`
+Current state: `Hardened`
 
 Reason:
 
 - boundary is correct at API/runtime layer
-- ownership is not yet correct at source-tree layer
+- router, app, and test ownership is now also aligned with the control-plane service

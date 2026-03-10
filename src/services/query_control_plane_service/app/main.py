@@ -18,11 +18,11 @@ from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUE
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from src.services.query_service.app.enterprise_readiness import (
+from .enterprise_readiness import (
     build_enterprise_audit_middleware,
     validate_enterprise_runtime_config,
 )
-from src.services.query_service.app.routers import (
+from .routers import (
     analytics_inputs,
     capabilities,
     integration,

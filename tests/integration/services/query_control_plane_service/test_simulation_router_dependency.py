@@ -7,7 +7,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.main import app
-from src.services.query_service.app.routers.simulation import (
+from src.services.query_control_plane_service.app.routers.simulation import (
     SimulationService,
     get_simulation_service,
 )
