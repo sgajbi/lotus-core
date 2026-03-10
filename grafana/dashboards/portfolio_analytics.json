@@ -343,6 +343,93 @@
       ],
       "title": "Reconciliation Findings per Second",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (recovery_path, replay_status) (rate(ingestion_replay_audit_total[5m]))",
+          "legendFormat": "{{recovery_path}} - {{replay_status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replay Audit Outcomes per Second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 20,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (recovery_path) (rate(ingestion_replay_duplicate_blocked_total[5m]))",
+          "legendFormat": "{{recovery_path}} - duplicate_blocked",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (recovery_path, replay_status) (rate(ingestion_replay_failure_total[5m]))",
+          "legendFormat": "{{recovery_path}} - {{replay_status}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Replay Duplicate and Failure Pressure",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
@@ -359,6 +446,6 @@
   "timezone": "browser",
   "title": "Portfolio Analytics Overview",
   "uid": "portfolio-analytics-overview",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }
