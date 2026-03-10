@@ -125,15 +125,19 @@ Validation performed on the converged valuation path:
 
 Remaining CR-006 scope:
 
-- timeseries repository convergence is still open
-- worker-only methods and post-RFC-81 ownership differences need to be handled without
-  reintroducing blurred service boundaries
+- no remaining duplicated valuation/timeseries repository body remains between the split
+  services reviewed here
+- the only intentional timeseries difference is the worker-local
+  `get_position_timeseries(...)` helper retained in `timeseries_generator_service`
+- future review can still look for shared runtime scaffolding, but that is no longer a duplicate
+  repository-body problem under this review id
 
 ## Sign-off state
 
-Current state: `In Review`
+Current state: `Hardened`
 
 Reason:
 
-- valuation duplication is now converged safely
-- timeseries duplication still remains and is the remaining CR-006 refactor target
+- valuation duplication is converged through a shared base
+- timeseries duplication is converged through a shared base while preserving the worker-only
+  helper in the position-timeseries service
