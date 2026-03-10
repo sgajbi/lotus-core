@@ -367,7 +367,8 @@ def _ensure_schema_documentation(schema: dict[str, Any]) -> None:
             if "example" not in prop_schema:
                 example = None
                 if any(
-                    key in prop_schema for key in ("$ref", "properties", "items", "allOf", "anyOf", "oneOf")
+                    key in prop_schema
+                    for key in ("$ref", "properties", "items", "allOf", "anyOf", "oneOf")
                 ) or prop_schema.get("type") in {"array", "object"}:
                     example = _build_schema_example(prop_schema, root_schema=schema)
                 if example is None:
