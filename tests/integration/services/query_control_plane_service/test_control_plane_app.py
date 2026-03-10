@@ -213,3 +213,18 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert consumer_system["schema"]["default"] == "lotus-gateway"
     assert tenant_id["description"] == "Tenant or client identifier for policy resolution."
     assert tenant_id["schema"]["default"] == "default"
+
+    components = schema["components"]["schemas"]
+    feature_capability = components["FeatureCapability"]
+    workflow_capability = components["WorkflowCapability"]
+
+    assert feature_capability["properties"]["key"]["description"] == "Canonical feature key."
+    assert feature_capability["properties"]["owner_service"]["description"] == (
+        "Owning service for the feature capability."
+    )
+    assert workflow_capability["properties"]["workflow_key"]["description"] == (
+        "Workflow identifier."
+    )
+    assert workflow_capability["properties"]["required_features"]["description"] == (
+        "Feature keys required for workflow execution."
+    )

@@ -3,22 +3,52 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 ConsumerSystem = Literal["lotus-gateway", "lotus-performance", "lotus-manage", "UI", "UNKNOWN"]
 
 
 class FeatureCapability(BaseModel):
-    key: str = Field(..., description="Canonical feature key.")
-    enabled: bool = Field(..., description="Whether this feature is enabled.")
-    owner_service: str = Field(..., description="Owning service for the feature capability.")
-    description: str = Field(..., description="Human-readable capability summary.")
+    key: str = Field(
+        ...,
+        description="Canonical feature key.",
+        examples=["lotus_core.ingestion.bulk_upload_adapter"],
+    )
+    enabled: bool = Field(
+        ...,
+        description="Whether this feature is enabled.",
+        examples=[True],
+    )
+    owner_service: str = Field(
+        ...,
+        description="Owning service for the feature capability.",
+        examples=["lotus-core"],
+    )
+    description: str = Field(
+        ...,
+        description="Human-readable capability summary.",
+        examples=["CSV/XLSX preview and commit support for onboarding workflows."],
+    )
 
 
 class WorkflowCapability(BaseModel):
-    workflow_key: str = Field(..., description="Workflow identifier.")
-    enabled: bool = Field(..., description="Whether workflow is enabled for current context.")
+    workflow_key: str = Field(
+        ...,
+        description="Workflow identifier.",
+        examples=["portfolio_bulk_onboarding"],
+    )
+    enabled: bool = Field(
+        ...,
+        description="Whether workflow is enabled for current context.",
+        examples=[True],
+    )
     required_features: list[str] = Field(
-        default_factory=list, description="Feature keys required for workflow execution."
+        default_factory=list,
+        description="Feature keys required for workflow execution.",
+        examples=[
+            [
+                "lotus_core.ingestion.bulk_upload_adapter",
+                "lotus_core.ingestion.portfolio_bundle_adapter",
+            ]
+        ],
     )
 
 
@@ -88,7 +118,9 @@ class IntegrationCapabilitiesResponse(BaseModel):
                         "key": "lotus_core.ingestion.bulk_upload_adapter",
                         "enabled": True,
                         "owner_service": "lotus-core",
-                        "description": "CSV/XLSX preview+commit adapter endpoints for onboarding workflows.",
+                        "description": (
+                            "CSV/XLSX preview+commit adapter endpoints for onboarding workflows."
+                        ),
                     }
                 ],
                 "workflows": [
