@@ -139,6 +139,21 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     portfolio_id = create_session["properties"]["portfolio_id"]
     assert portfolio_id["description"] == "Portfolio identifier for the simulated scenario."
 
+    components = schema["components"]["schemas"]
+    session_response = components["SimulationSessionResponse"]
+    changes_response = components["SimulationChangesResponse"]
+    projected_positions = components["ProjectedPositionsResponse"]
+
+    assert session_response["properties"]["session"]["description"] == (
+        "Simulation session metadata."
+    )
+    assert changes_response["properties"]["changes"]["description"] == (
+        "Current ordered set of simulation changes recorded for the session."
+    )
+    assert projected_positions["properties"]["positions"]["description"] == (
+        "Projected positions after all simulation changes are applied."
+    )
+
 
 async def test_openapi_describes_analytics_input_parameters_and_examples(async_test_client):
     response = await async_test_client.get("/openapi.json")

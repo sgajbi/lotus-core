@@ -63,6 +63,17 @@ class SimulationSessionRecord(BaseModel):
 class SimulationSessionResponse(BaseModel):
     session: SimulationSessionRecord = Field(
         description="Simulation session metadata.",
+        examples=[
+            {
+                "session_id": "SIM-20260310-0001",
+                "portfolio_id": "PORT-SIM-001",
+                "status": "ACTIVE",
+                "version": 3,
+                "created_by": "ops.user@lotus",
+                "created_at": "2026-03-10T08:15:00Z",
+                "expires_at": "2026-03-11T08:15:00Z",
+            }
+        ],
     )
 
 
@@ -188,6 +199,24 @@ class SimulationChangesResponse(BaseModel):
     )
     changes: list[SimulationChangeRecord] = Field(
         description="Current ordered set of simulation changes recorded for the session.",
+        examples=[
+            [
+                {
+                    "change_id": "SIM-CHG-0001",
+                    "session_id": "SIM-20260310-0001",
+                    "portfolio_id": "PORT-SIM-001",
+                    "security_id": "SEC-US-IBM",
+                    "transaction_type": "BUY",
+                    "quantity": 100.0,
+                    "price": 127.45,
+                    "amount": 12745.0,
+                    "currency": "USD",
+                    "effective_date": "2026-03-10",
+                    "metadata": {"source": "manual-what-if", "note": "defensive rebalance"},
+                    "created_at": "2026-03-10T08:20:00Z",
+                }
+            ]
+        ],
     )
 
 
@@ -245,6 +274,20 @@ class ProjectedPositionsResponse(BaseModel):
     )
     positions: list[ProjectedPositionRecord] = Field(
         description="Projected positions after all simulation changes are applied.",
+        examples=[
+            [
+                {
+                    "security_id": "SEC-US-IBM",
+                    "instrument_name": "IBM Common Stock",
+                    "asset_class": "Equity",
+                    "baseline_quantity": 250.0,
+                    "proposed_quantity": 350.0,
+                    "delta_quantity": 100.0,
+                    "cost_basis": 28500.0,
+                    "cost_basis_local": 28500.0,
+                }
+            ]
+        ],
     )
 
 
