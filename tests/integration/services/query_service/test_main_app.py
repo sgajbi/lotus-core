@@ -335,6 +335,48 @@ async def test_openapi_describes_instrument_contract_examples(async_test_client)
     )
 
 
+async def test_openapi_describes_buy_sell_state_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    buy_lots = schema["paths"]["/portfolios/{portfolio_id}/positions/{security_id}/lots"]["get"]
+    sell_disposals = schema["paths"][
+        "/portfolios/{portfolio_id}/positions/{security_id}/sell-disposals"
+    ]["get"]
+    sell_cash_linkage = schema["paths"][
+        "/portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage"
+    ]["get"]
+
+    buy_security_id = next(
+        parameter for parameter in buy_lots["parameters"] if parameter["name"] == "security_id"
+    )
+    assert buy_security_id["description"] == "Security identifier for the BUY-state position key."
+
+    sell_security_id = next(
+        parameter
+        for parameter in sell_disposals["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert sell_security_id["description"] == "Security identifier for the SELL-state position key."
+
+    sell_transaction_id = next(
+        parameter
+        for parameter in sell_cash_linkage["parameters"]
+        if parameter["name"] == "transaction_id"
+    )
+    assert sell_transaction_id["description"] == "Security-side SELL transaction identifier."
+
+    buy_not_found = buy_lots["responses"]["404"]["content"]["application/json"]["example"]
+    sell_not_found = sell_disposals["responses"]["404"]["content"]["application/json"]["example"]
+    assert buy_not_found["detail"] == (
+        "BUY state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
+    )
+    assert sell_not_found["detail"] == (
+        "SELL state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
+    )
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
