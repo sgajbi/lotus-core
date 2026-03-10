@@ -10,7 +10,6 @@ from sqlalchemy import create_engine, exc, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
-# --- NEW: Import the E2E API Client ---
 from tests.e2e.api_client import E2EApiClient
 from tests.test_support.db_cleanup import truncate_with_deadlock_retry
 from tests.test_support.docker_stack import (
@@ -23,12 +22,12 @@ from tests.test_support.docker_stack import (
     wait_for_kafka_metadata,
     wait_for_migration_runner,
 )
+from tests.test_support.output_control import emit_test_output
 from tests.test_support.pipeline_quiescence import (
     read_pipeline_activity_snapshot,
     read_pipeline_last_activity_at,
     wait_for_pipeline_quiescence,
 )
-from tests.test_support.output_control import emit_test_output
 from tests.test_support.runtime_env import build_test_runtime_env, infer_test_profile
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -125,7 +124,9 @@ def docker_services(request):  # noqa: ARG001
             timeout_seconds=health_timeout,
             poll_seconds=2,
         )
-        emit_test_output(f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---")
+        emit_test_output(
+            f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---"
+        )
 
         # Manual polling for service health
         emit_test_output("\n--- Waiting for API services to become healthy ---")
@@ -172,7 +173,9 @@ def docker_services(request):  # noqa: ARG001
 
     finally:
         if _env_bool("LOTUS_TESTS_KEEP_STACK_UP", False):
-            emit_test_output("\n--- Keeping Docker services running for post-failure inspection ---")
+            emit_test_output(
+                "\n--- Keeping Docker services running for post-failure inspection ---"
+            )
         else:
             emit_test_output("\n--- Tearing down Docker services ---")
             compose_down(compose_file)
