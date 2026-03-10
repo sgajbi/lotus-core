@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
 from src.services.ingestion_service.app.DTOs.business_date_dto import BusinessDateIngestionRequest
@@ -127,6 +127,40 @@ INGESTION_OPS_MODE_EXAMPLE = {
     "replay_window_end": "2026-03-06T06:00:00Z",
     "updated_by": "ops_automation",
     "updated_at": "2026-03-06T02:15:07.234Z",
+}
+
+INGESTION_JOB_NOT_FOUND_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job_01J5S0J6D3BAVMK2E1V0WQ7MCC' was not found.",
+    }
+}
+
+INGESTION_JOB_RETRY_UNSUPPORTED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_JOB_RETRY_UNSUPPORTED",
+        "message": (
+            "Ingestion job 'job_01J5S0J6D3BAVMK2E1V0WQ7MCC' does not have stored request "
+            "payload and cannot be retried."
+        ),
+    }
+}
+
+INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
+        "message": "Retry blocked because an equivalent deterministic replay already succeeded.",
+        "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+    }
+}
+
+INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND",
+        "message": (
+            "Consumer DLQ event 'cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6' was not found."
+        ),
+    }
 }
 
 
@@ -278,11 +312,18 @@ def _payload_record_count(payload: dict[str, Any] | None) -> int:
         200: {
             "description": "One ingestion job.",
             "content": {"application/json": {"example": INGESTION_JOB_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "Ingestion job was not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
     },
 )
 async def get_ingestion_job(
-    job_id: str,
+    job_id: str = Path(
+        description="Ingestion job identifier.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     job = await ingestion_job_service.get_job(job_id)
@@ -324,12 +365,38 @@ async def get_ingestion_job(
     },
 )
 async def list_ingestion_jobs(
-    status: str | None = Query(default=None),
-    entity_type: str | None = Query(default=None),
-    submitted_from: datetime | None = Query(default=None),
-    submitted_to: datetime | None = Query(default=None),
-    cursor: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=500),
+    status: str | None = Query(
+        default=None,
+        description="Optional job status filter.",
+        examples=["queued"],
+    ),
+    entity_type: str | None = Query(
+        default=None,
+        description="Optional canonical entity type filter.",
+        examples=["transaction"],
+    ),
+    submitted_from: datetime | None = Query(
+        default=None,
+        description="Optional inclusive lower bound for job submission timestamp.",
+        examples=["2026-03-06T00:00:00Z"],
+    ),
+    submitted_to: datetime | None = Query(
+        default=None,
+        description="Optional inclusive upper bound for job submission timestamp.",
+        examples=["2026-03-06T23:59:59Z"],
+    ),
+    cursor: str | None = Query(
+        default=None,
+        description="Opaque pagination cursor from the previous page.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Maximum number of jobs to return.",
+        examples=[100],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     status_value = status if status in {"accepted", "queued", "failed"} else None
@@ -357,8 +424,17 @@ async def list_ingestion_jobs(
     ),
 )
 async def list_ingestion_job_failures(
-    job_id: str,
-    limit: int = Query(default=100, ge=1, le=500),
+    job_id: str = Path(
+        description="Ingestion job identifier.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Maximum number of failure events to return.",
+        examples=[100],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     job = await ingestion_job_service.get_job(job_id)
@@ -387,7 +463,10 @@ async def list_ingestion_job_failures(
     ),
 )
 async def get_ingestion_job_records(
-    job_id: str,
+    job_id: str = Path(
+        description="Ingestion job identifier.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     record_status = await ingestion_job_service.get_job_record_status(job_id)
@@ -419,11 +498,31 @@ async def get_ingestion_job_records(
         200: {
             "description": "Ingestion job accepted for replay or replay dry-run completed.",
             "content": {"application/json": {"example": INGESTION_JOB_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "Ingestion job was not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
+        409: {
+            "description": "Retry is not allowed or replay is unsupported for the requested scope.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "retry_unsupported": {"value": INGESTION_JOB_RETRY_UNSUPPORTED_EXAMPLE},
+                        "duplicate_blocked": {
+                            "value": INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 async def retry_ingestion_job(
-    job_id: str,
+    job_id: str = Path(
+        description="Ingestion job identifier.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
     retry_request: IngestionRetryRequest = Body(
         default_factory=IngestionRetryRequest,
         openapi_examples=INGESTION_RETRY_REQUEST_EXAMPLES,
@@ -922,11 +1021,20 @@ async def list_consumer_dlq_events(
             "content": {
                 "application/json": {"example": CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE}
             },
-        }
+        },
+        404: {
+            "description": "Consumer DLQ event was not found.",
+            "content": {
+                "application/json": {"example": INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE}
+            },
+        },
     },
 )
 async def replay_consumer_dlq_event(
-    event_id: str,
+    event_id: str = Path(
+        description="Consumer dead-letter event identifier.",
+        examples=["cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6"],
+    ),
     replay_request: ConsumerDlqReplayRequest = Body(
         default_factory=ConsumerDlqReplayRequest,
         openapi_examples=CONSUMER_DLQ_REPLAY_REQUEST_EXAMPLES,
@@ -1193,11 +1301,33 @@ async def replay_consumer_dlq_event(
     },
 )
 async def list_ingestion_replay_audits(
-    limit: int = Query(default=100, ge=1, le=500),
-    recovery_path: str | None = Query(default=None),
-    replay_status: str | None = Query(default=None),
-    replay_fingerprint: str | None = Query(default=None),
-    job_id: str | None = Query(default=None),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Maximum number of replay audit rows to return.",
+        examples=[100],
+    ),
+    recovery_path: str | None = Query(
+        default=None,
+        description="Optional recovery-path filter.",
+        examples=["consumer_dlq_replay"],
+    ),
+    replay_status: str | None = Query(
+        default=None,
+        description="Optional replay-status filter.",
+        examples=["replayed"],
+    ),
+    replay_fingerprint: str | None = Query(
+        default=None,
+        description="Optional deterministic replay fingerprint filter.",
+        examples=["c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"],
+    ),
+    job_id: str | None = Query(
+        default=None,
+        description="Optional ingestion job identifier filter.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     audits = await ingestion_job_service.list_replay_audits(

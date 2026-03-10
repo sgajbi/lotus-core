@@ -87,6 +87,32 @@ async def test_openapi_includes_replay_examples(async_test_client):
     assert ops_control_example["mode"] == "paused"
 
 
+async def test_openapi_describes_event_replay_operational_parameters(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    get_job = schema["paths"]["/ingestion/jobs/{job_id}"]["get"]
+    retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
+    replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
+    list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
+
+    job_id_parameter = next(param for param in get_job["parameters"] if param["name"] == "job_id")
+    assert job_id_parameter["description"] == "Ingestion job identifier."
+
+    status_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "status")
+    assert status_parameter["description"] == "Optional job status filter."
+
+    retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
+        "examples"
+    ]
+    assert "retry_unsupported" in retry_conflict_examples
+    assert "duplicate_blocked" in retry_conflict_examples
+
+    replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
+    assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
+
+
 async def test_openapi_excludes_write_ingress_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
