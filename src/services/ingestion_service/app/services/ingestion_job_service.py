@@ -65,9 +65,7 @@ REPLAY_MAX_BACKLOG_JOBS = _RUNTIME_POLICY.replay_max_backlog_jobs
 DLQ_BUDGET_EVENTS_PER_WINDOW = _RUNTIME_POLICY.dlq_budget_events_per_window
 DEFAULT_LOOKBACK_MINUTES = _RUNTIME_POLICY.default_lookback_minutes
 DEFAULT_FAILURE_RATE_THRESHOLD = _RUNTIME_POLICY.default_failure_rate_threshold
-DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = (
-    _RUNTIME_POLICY.default_queue_latency_threshold_seconds
-)
+DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_queue_latency_threshold_seconds
 DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_backlog_age_threshold_seconds
 REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = (
     _RUNTIME_POLICY.reprocessing_worker_poll_interval_seconds
@@ -133,9 +131,7 @@ def classify_operating_band(
         or signals.dlq_pressure_ratio >= policy.red_dlq_pressure_ratio
     ):
         if signals.backlog_age_seconds >= policy.red_backlog_age_seconds:
-            triggered_signals.append(
-                f"backlog_age_seconds>={int(policy.red_backlog_age_seconds)}"
-            )
+            triggered_signals.append(f"backlog_age_seconds>={int(policy.red_backlog_age_seconds)}")
         if signals.dlq_pressure_ratio >= policy.red_dlq_pressure_ratio:
             triggered_signals.append(
                 f"dlq_pressure_ratio>={policy.red_dlq_pressure_ratio.normalize()}"
@@ -460,17 +456,15 @@ class IngestionJobService:
     ) -> None:
         async for db in get_async_db_session():
             async with db.begin():
-                updated = (
-                    await db.execute(
-                        update(DBIngestionJob)
-                        .where(DBIngestionJob.job_id == job_id)
-                        .values(
-                            status="failed",
-                            completed_at=datetime.now(UTC),
-                            failure_reason=failure_reason,
-                        )
-                        .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
+                updated = await db.execute(
+                    update(DBIngestionJob)
+                    .where(DBIngestionJob.job_id == job_id)
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(UTC),
+                        failure_reason=failure_reason,
                     )
+                    .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
                 )
                 row = updated.first()
                 if row is None:
@@ -493,16 +487,14 @@ class IngestionJobService:
     async def mark_retried(self, job_id: str) -> None:
         async for db in get_async_db_session():
             async with db.begin():
-                updated = (
-                    await db.execute(
-                        update(DBIngestionJob)
-                        .where(DBIngestionJob.job_id == job_id)
-                        .values(
-                            retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
-                            last_retried_at=datetime.now(UTC),
-                        )
-                        .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
+                updated = await db.execute(
+                    update(DBIngestionJob)
+                    .where(DBIngestionJob.job_id == job_id)
+                    .values(
+                        retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
+                        last_retried_at=datetime.now(UTC),
                     )
+                    .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
                 )
                 row = updated.first()
                 if row is None:
@@ -593,9 +585,7 @@ class IngestionJobService:
                 await db.execute(
                     select(
                         func.count(DBIngestionJob.id),
-                        func.sum(
-                            case((DBIngestionJob.status == "accepted", 1), else_=0)
-                        ),
+                        func.sum(case((DBIngestionJob.status == "accepted", 1), else_=0)),
                         func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)),
                         func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)),
                     )
@@ -785,8 +775,7 @@ class IngestionJobService:
             else "scale_out_only"
         )
         calculator_peak_lag_age_seconds = {
-            key: max(1, int(value))
-            for key, value in CALCULATOR_PEAK_LAG_AGE_SECONDS.items()
+            key: max(1, int(value)) for key, value in CALCULATOR_PEAK_LAG_AGE_SECONDS.items()
         }
         values = {
             "lookback_minutes_default": DEFAULT_LOOKBACK_MINUTES,
@@ -824,6 +813,7 @@ class IngestionJobService:
             "calculator_peak_lag_age_seconds": calculator_peak_lag_age_seconds,
             "replay_isolation_mode": replay_isolation_mode,
             "partition_growth_strategy": partition_growth_strategy,
+            "replay_dry_run_supported": True,
         }
         serialized = json.dumps(values, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
@@ -855,32 +845,30 @@ class IngestionJobService:
             calculator_peak_lag_age_seconds=calculator_peak_lag_age_seconds,
             replay_isolation_mode=replay_isolation_mode,  # type: ignore[arg-type]
             partition_growth_strategy=partition_growth_strategy,  # type: ignore[arg-type]
+            replay_dry_run_supported=True,
         )
 
     async def get_reprocessing_queue_health(self) -> IngestionReprocessingQueueHealthResponse:
         now = datetime.now(UTC)
         async for db in get_async_db_session():
-            stmt = (
-                select(
-                    DBReprocessingJob.job_type.label("job_type"),
-                    func.sum(case((DBReprocessingJob.status == "PENDING", 1), else_=0)).label(
-                        "pending_jobs"
-                    ),
-                    func.sum(
-                        case((DBReprocessingJob.status == "PROCESSING", 1), else_=0)
-                    ).label("processing_jobs"),
-                    func.sum(case((DBReprocessingJob.status == "FAILED", 1), else_=0)).label(
-                        "failed_jobs"
-                    ),
-                    func.min(
-                        case(
-                            (DBReprocessingJob.status == "PENDING", DBReprocessingJob.created_at),
-                            else_=None,
-                        )
-                    ).label("oldest_pending_created_at"),
-                )
-                .group_by(DBReprocessingJob.job_type)
-            )
+            stmt = select(
+                DBReprocessingJob.job_type.label("job_type"),
+                func.sum(case((DBReprocessingJob.status == "PENDING", 1), else_=0)).label(
+                    "pending_jobs"
+                ),
+                func.sum(case((DBReprocessingJob.status == "PROCESSING", 1), else_=0)).label(
+                    "processing_jobs"
+                ),
+                func.sum(case((DBReprocessingJob.status == "FAILED", 1), else_=0)).label(
+                    "failed_jobs"
+                ),
+                func.min(
+                    case(
+                        (DBReprocessingJob.status == "PENDING", DBReprocessingJob.created_at),
+                        else_=None,
+                    )
+                ).label("oldest_pending_created_at"),
+            ).group_by(DBReprocessingJob.job_type)
             result = await db.execute(stmt)
             rows = result.mappings().all()
 
@@ -1110,8 +1098,8 @@ class IngestionJobService:
 
             largest_group_backlog_jobs = int(items[0].backlog_jobs if items else 0)
             if total_backlog_jobs > 0:
-                largest_group_backlog_share = (
-                    Decimal(largest_group_backlog_jobs) / Decimal(total_backlog_jobs)
+                largest_group_backlog_share = Decimal(largest_group_backlog_jobs) / Decimal(
+                    total_backlog_jobs
                 )
                 top_3_backlog_jobs = int(sum(item.backlog_jobs for item in items[:3]))
                 top_3_backlog_share = Decimal(top_3_backlog_jobs) / Decimal(total_backlog_jobs)
@@ -1519,9 +1507,9 @@ class IngestionJobService:
                     await db.execute(
                         select(
                             func.count(DBIngestionJob.id).label("total_jobs"),
-                            func.sum(
-                                case((DBIngestionJob.status == "failed", 1), else_=0)
-                            ).label("failed_jobs"),
+                            func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
+                                "failed_jobs"
+                            ),
                             func.sum(
                                 case(
                                     (DBIngestionJob.status.in_(["accepted", "queued"]), 1),

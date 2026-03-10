@@ -41,7 +41,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 3. Cost calculator uses generic `IncomeStrategy` for `INTEREST` (no INTEREST-specific invariant taxonomy).
 4. No `portfolio_common.transaction_domain.interest_*` model/validator/reason-code modules exist.
 5. No INTEREST-specific metadata enrichment helper exists in calculator consumers.
-6. No INTEREST-specific transaction contract suite (`interest-rfc`) exists in test manifest/CI.
+6. No INTEREST-specific transaction contract suite (`transaction-interest-contract`) exists in test manifest/CI.
 
 ## Requirement-to-Implementation Gap Matrix
 | Requirement | Current State | Gap | Planned Slice |
@@ -53,7 +53,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 | Income vs expense direction contract | Not implemented | No canonical direction field/validation/policy defaults | Slice 3-4 |
 | Dual cash-entry mode linkage behavior | Partially implemented | DIVIDEND-only explicit handling today; INTEREST mode behavior not explicit | Slice 4 |
 | Query/observability supportability | Partially implemented | Generic transaction query only; no INTEREST-focused traceability coverage | Slice 5 |
-| Dedicated INTEREST regression suite + CI alias | Not implemented | No `transaction-interest-contract` / `interest-rfc` suite wiring | Slice 6 |
+| Dedicated INTEREST regression suite + CI alias | Not implemented | No `transaction-interest-contract` / `transaction-interest-contract` suite wiring | Slice 6 |
 | INTEREST conformance closure report | Not implemented | No RFC-to-evidence closure artifact | Slice 6 |
 
 ## Slice Plan (0..6)
@@ -140,11 +140,11 @@ Exit Criteria:
 Deliverables:
 1. `scripts/test_manifest.py` suite entries:
  - `transaction-interest-contract`
- - alias `interest-rfc`
+ - alias `transaction-interest-contract`
 2. `Makefile` targets:
  - `test-transaction-interest-contract`
- - `test-interest-rfc`
-3. CI matrix wiring for `interest-rfc`.
+ - `test-transaction-interest-contract`
+3. CI matrix wiring for `transaction-interest-contract`.
 4. `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md`
 
 Exit Criteria:

@@ -268,9 +268,9 @@ If `cash_currency != security_currency`:
 
 ### 11.4 Cost basis allocation for redeemed quantity
 
-Lotus-core must allocate cost basis from lots using configured policy:
+Lotus-core currently allocates cost basis from lots using supported policy:
 
-- `FIFO | LIFO | AVERAGE_COST | SPECIFIC_ID`
+- `FIFO | AVCO`
 
 Allocated basis:
 
@@ -469,7 +469,7 @@ Realized FX pnl: policy-driven (may be 0, upstream-provided, or derived via cash
 
 - maturity redemption at par with embedded accrued interest
 - call redemption above par
-- partial redemption with FIFO, LIFO, average cost
+- partial redemption with FIFO and AVCO
 - embedded vs separate fees/taxes
 - cross-currency base conversion fields populated
 - realized P&L fields always present and split (capital vs FX)
@@ -492,7 +492,7 @@ Must be configurable and versioned:
 
 - `redemption_cash_effective_timing`
 - `redemption_pnl_recognition_timing`
-- lot selection policy (`FIFO/LIFO/AVERAGE_COST/SPECIFIC_ID`)
+- lot selection policy (`FIFO/AVCO`)
 - basis rounding/precision rules
 - proceeds reconciliation tolerance
 - realized FX pnl mode (`NONE | UPSTREAM_PROVIDED | CASH_LOT_COST_METHOD`)

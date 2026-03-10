@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,10 +104,10 @@ class SimulationService:
                 baseline_as_of = position_date
             baseline_map[row.security_id] = {
                 "security_id": row.security_id,
-                "baseline_quantity": float(row.quantity),
-                "proposed_quantity": float(row.quantity),
-                "cost_basis": float(row.cost_basis) if row.cost_basis is not None else None,
-                "cost_basis_local": float(row.cost_basis_local)
+                "baseline_quantity": Decimal(str(row.quantity)),
+                "proposed_quantity": Decimal(str(row.quantity)),
+                "cost_basis": Decimal(str(row.cost_basis)) if row.cost_basis is not None else None,
+                "cost_basis_local": Decimal(str(row.cost_basis_local))
                 if row.cost_basis_local is not None
                 else None,
                 "instrument_name": instrument.name if instrument else row.security_id,
@@ -119,10 +120,10 @@ class SimulationService:
             if security_id not in baseline_map:
                 baseline_map[security_id] = {
                     "security_id": security_id,
-                    "baseline_quantity": 0.0,
-                    "proposed_quantity": 0.0,
-                    "cost_basis": 0.0,
-                    "cost_basis_local": 0.0,
+                    "baseline_quantity": Decimal("0"),
+                    "proposed_quantity": Decimal("0"),
+                    "cost_basis": Decimal("0"),
+                    "cost_basis_local": Decimal("0"),
                     "instrument_name": security_id,
                     "asset_class": None,
                 }
@@ -139,7 +140,7 @@ class SimulationService:
         for change in changes:
             record = baseline_map[change.security_id]
             qty = self._change_quantity_effect(change)
-            record["proposed_quantity"] += float(qty)
+            record["proposed_quantity"] += qty
 
         response_rows: list[ProjectedPositionRecord] = []
         for row in baseline_map.values():
@@ -203,9 +204,9 @@ class SimulationService:
             portfolio_id=row.portfolio_id,
             security_id=row.security_id,
             transaction_type=row.transaction_type,
-            quantity=(float(row.quantity) if row.quantity is not None else None),
-            price=(float(row.price) if row.price is not None else None),
-            amount=(float(row.amount) if row.amount is not None else None),
+            quantity=(Decimal(str(row.quantity)) if row.quantity is not None else None),
+            price=(Decimal(str(row.price)) if row.price is not None else None),
+            amount=(Decimal(str(row.amount)) if row.amount is not None else None),
             currency=row.currency,
             effective_date=row.effective_date,
             metadata=row.change_metadata,

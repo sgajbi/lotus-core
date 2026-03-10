@@ -16,6 +16,21 @@ from services.calculators.position_valuation_calculator.app.consumers.valuation_
 pytestmark = pytest.mark.asyncio
 
 
+class _SingleSessionAsyncIterator:
+    def __init__(self, session):
+        self._session = session
+        self._yielded = False
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._yielded:
+            raise StopAsyncIteration
+        self._yielded = True
+        return self._session
+
+
 @pytest.fixture
 def consumer() -> ValuationReadinessConsumer:
     c = ValuationReadinessConsumer(
@@ -56,8 +71,8 @@ def mock_dependencies():
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_db_session.begin.return_value = AsyncMock()
 
-    async def get_session_gen():
-        yield mock_db_session
+    def get_session_gen():
+        return _SingleSessionAsyncIterator(mock_db_session)
 
     with (
         patch(

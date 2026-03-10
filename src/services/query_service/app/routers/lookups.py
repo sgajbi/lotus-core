@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from portfolio_common.db import get_async_db_session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.lookup_dto import LookupItem, LookupResponse
 from ..services.instrument_service import InstrumentService
@@ -37,21 +36,33 @@ def _filter_limit_sort_items(
     "/portfolios",
     response_model=LookupResponse,
     summary="Portfolio Lookup Catalog",
-    description="Returns portfolio selector options for lotus-gateway/UI portfolio selection workflows.",
+    description=(
+        "Returns portfolio selector options for lotus-gateway/UI portfolio selection workflows."
+    ),
 )
 async def get_portfolio_lookups(
     client_id: str | None = Query(
-        default=None, description="Optional CIF filter for tenant/client scoping."
+        default=None,
+        description="Optional CIF filter for tenant/client scoping.",
+        examples=["CIF-100200"],
     ),
     booking_center_code: str | None = Query(
         default=None,
         description="Optional booking-center filter for business-unit specific catalogs.",
+        examples=["SGPB"],
     ),
     q: str | None = Query(
         default=None,
         description="Optional case-insensitive search text applied to portfolio ID.",
+        examples=["PORT-00"],
     ),
-    limit: int = Query(default=500, ge=1, le=1000),
+    limit: int = Query(
+        default=500,
+        ge=1,
+        le=1000,
+        description="Maximum number of lookup items to return after filtering and sorting.",
+        examples=[100],
+    ),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
     service = PortfolioService(db)
@@ -73,17 +84,29 @@ async def get_portfolio_lookups(
     "/instruments",
     response_model=LookupResponse,
     summary="Instrument Lookup Catalog",
-    description="Returns instrument selector options for lotus-gateway/UI trade and intake workflows.",
+    description=(
+        "Returns instrument selector options for lotus-gateway/UI trade and intake workflows."
+    ),
 )
 async def get_instrument_lookups(
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=1000,
+        description="Maximum number of instrument lookup items to return.",
+        examples=[200],
+    ),
     product_type: str | None = Query(
         default=None,
         description="Optional product type filter (for example: Equity, Bond).",
+        examples=["Equity"],
     ),
     q: str | None = Query(
         default=None,
-        description="Optional case-insensitive search text applied to security ID and instrument name.",
+        description=(
+            "Optional case-insensitive search text applied to security ID and instrument name."
+        ),
+        examples=["AAPL"],
     ),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
@@ -110,17 +133,31 @@ async def get_instrument_lookups(
     ),
 )
 async def get_currency_lookups(
-    instrument_page_limit: int = Query(default=500, ge=50, le=1000),
+    instrument_page_limit: int = Query(
+        default=500,
+        ge=50,
+        le=1000,
+        description="Page size used when scanning instruments to derive the currency catalog.",
+        examples=[500],
+    ),
     source: str = Query(
         default="ALL",
         pattern="^(ALL|PORTFOLIOS|INSTRUMENTS)$",
         description="Currency source scope. Use ALL, PORTFOLIOS, or INSTRUMENTS.",
+        examples=["ALL"],
     ),
     q: str | None = Query(
         default=None,
         description="Optional case-insensitive search text applied to currency code.",
+        examples=["USD"],
     ),
-    limit: int = Query(default=500, ge=1, le=1000),
+    limit: int = Query(
+        default=500,
+        ge=1,
+        le=1000,
+        description="Maximum number of currency lookup items to return after filtering.",
+        examples=[100],
+    ),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
     portfolio_service = PortfolioService(db)

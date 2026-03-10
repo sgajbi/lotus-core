@@ -1,41 +1,81 @@
 # src/services/ingestion_service/app/routers/reprocessing.py
 import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+
 from ..ack_response import build_batch_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
+from ..DTOs.reprocessing_dto import ReprocessingRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (    create_ingestion_job_id,
+from ..request_metadata import (
+    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
-
-from ..DTOs.reprocessing_dto import ReprocessingRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Define the new topic name
 REPROCESSING_REQUESTED_TOPIC = "transactions_reprocessing_requested"
+REPROCESSING_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_REPLAY_BLOCKED",
+        "message": "Reprocessing publication is temporarily blocked by operating policy.",
+    }
+}
+REPROCESSING_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /reprocess/transactions.",
+    }
+}
 
 
 @router.post(
     "/reprocess/transactions",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": "Reprocessing publication is currently blocked by policy controls.",
+            "content": {"application/json": {"example": REPROCESSING_BLOCKED_EXAMPLE}},
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the reprocessing request.",
+            "content": {
+                "application/json": {"example": REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE}
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {
+                "application/json": {"example": REPROCESSING_MODE_BLOCKED_EXAMPLE}
+            },
+        },
+    },
     tags=["Reprocessing"],
     summary="Request transaction reprocessing",
     description=(
-        "What: Accept transaction identifiers that require deterministic historical recalculation.\n"
-        "How: Validate request, persist ingestion job metadata, and publish reprocessing command events.\n"
+        "What: Accept transaction identifiers that require deterministic historical "
+        "recalculation.\n"
+        "How: Validate request, persist ingestion job metadata, "
+        "and publish reprocessing command events.\n"
         "When: Use for operational correction workflows after retroactive data changes."
     ),
 )
 async def reprocess_transactions(
     request: ReprocessingRequest,
-    http_request: Request,    kafka_producer: KafkaProducer = Depends(get_kafka_producer),
+    http_request: Request,
+    kafka_producer: KafkaProducer = Depends(get_kafka_producer),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     """

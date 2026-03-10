@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +49,26 @@ from src.services.query_service.app.services.integration_service import Integrat
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
+INTEGRATION_POLICY_BLOCKED_EXAMPLE = {
+    "detail": "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
+}
+CORE_SNAPSHOT_NOT_FOUND_EXAMPLE = {"detail": "Portfolio PORT-INT-001 not found"}
+CORE_SNAPSHOT_CONFLICT_EXAMPLE = {
+    "detail": "Simulation session SIM-20260310-0001 expected version mismatch"
+}
+CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE = {
+    "detail": "Section portfolio_totals requires valuation dependencies that are not available."
+}
+INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
+    "detail": "security_ids must contain at least one identifier"
+}
+BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective benchmark assignment found for portfolio and as_of_date."
+}
+BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
+}
+
 
 def get_integration_service(
     db: AsyncSession = Depends(get_async_db_session),
@@ -72,9 +92,21 @@ def get_core_snapshot_service(
     ),
 )
 async def get_effective_integration_policy(
-    consumer_system: str = Query("lotus-gateway"),
-    tenant_id: str = Query("default"),
-    include_sections: list[str] | None = Query(None),
+    consumer_system: str = Query(
+        "lotus-gateway",
+        description="Downstream consumer system requesting policy resolution.",
+        examples=["lotus-performance"],
+    ),
+    tenant_id: str = Query(
+        "default",
+        description="Tenant identifier used for policy resolution.",
+        examples=["tenant_sg_pb"],
+    ),
+    include_sections: list[str] | None = Query(
+        None,
+        description="Optional requested snapshot sections to evaluate against policy.",
+        examples=["positions_baseline", "portfolio_totals"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> EffectiveIntegrationPolicyResponse:
     response = integration_service.get_effective_policy(
@@ -93,14 +125,20 @@ async def get_effective_integration_policy(
             "description": "Invalid request payload or invalid section/mode combination."
         },
         status.HTTP_403_FORBIDDEN: {
-            "description": "Requested sections are blocked by strict integration policy."
+            "description": "Requested sections are blocked by strict integration policy.",
+            "content": {"application/json": {"example": INTEGRATION_POLICY_BLOCKED_EXAMPLE}},
         },
-        status.HTTP_404_NOT_FOUND: {"description": "Portfolio or simulation session not found."},
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio or simulation session not found.",
+            "content": {"application/json": {"example": CORE_SNAPSHOT_NOT_FOUND_EXAMPLE}},
+        },
         status.HTTP_409_CONFLICT: {
-            "description": "Simulation expected version mismatch or portfolio/session conflict."
+            "description": "Simulation expected version mismatch or portfolio/session conflict.",
+            "content": {"application/json": {"example": CORE_SNAPSHOT_CONFLICT_EXAMPLE}},
         },
         status.HTTP_422_UNPROCESSABLE_ENTITY: {
-            "description": "Section cannot be fulfilled due to missing valuation dependencies."
+            "description": "Section cannot be fulfilled due to missing valuation dependencies.",
+            "content": {"application/json": {"example": CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE}},
         },
     },
     summary="Generate a generic core snapshot",
@@ -110,10 +148,22 @@ async def get_effective_integration_policy(
     ),
 )
 async def create_core_snapshot(
-    portfolio_id: str,
     request: CoreSnapshotRequest,
-    consumer_system: str = Query("lotus-performance"),
-    tenant_id: str = Query("default"),
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier for the snapshot request.",
+        examples=["PORT-INT-001"],
+    ),
+    consumer_system: str = Query(
+        "lotus-performance",
+        description="Downstream consumer system requesting the core snapshot.",
+        examples=["lotus-performance"],
+    ),
+    tenant_id: str = Query(
+        "default",
+        description="Tenant identifier used for policy resolution.",
+        examples=["tenant_sg_pb"],
+    ),
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> CoreSnapshotResponse:
@@ -192,7 +242,10 @@ async def create_core_snapshot(
     "/instruments/enrichment-bulk",
     response_model=InstrumentEnrichmentBulkResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {"description": "Invalid request payload."},
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Invalid request payload.",
+            "content": {"application/json": {"example": INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE}},
+        },
     },
     summary="Resolve issuer enrichment for security identifiers",
     description=(
@@ -216,7 +269,12 @@ async def get_instrument_enrichment_bulk(
     "/portfolios/{portfolio_id}/benchmark-assignment",
     response_model=BenchmarkAssignmentResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {"description": "No effective benchmark assignment found."},
+        status.HTTP_404_NOT_FOUND: {
+            "description": "No effective benchmark assignment found.",
+            "content": {
+                "application/json": {"example": BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE}
+            },
+        },
     },
     summary="Resolve effective portfolio benchmark assignment",
     description=(
@@ -227,8 +285,12 @@ async def get_instrument_enrichment_bulk(
     ),
 )
 async def resolve_portfolio_benchmark_assignment(
-    portfolio_id: str,
     request: BenchmarkAssignmentRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose effective benchmark assignment is requested.",
+        examples=["PORT-INT-001"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkAssignmentResponse:
     response = cast(
@@ -250,7 +312,12 @@ async def resolve_portfolio_benchmark_assignment(
     "/benchmarks/{benchmark_id}/definition",
     response_model=BenchmarkDefinitionResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {"description": "No effective benchmark definition found."}
+        status.HTTP_404_NOT_FOUND: {
+            "description": "No effective benchmark definition found.",
+            "content": {
+                "application/json": {"example": BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE}
+            },
+        }
     },
     summary="Fetch effective benchmark definition",
     description=(
@@ -260,8 +327,12 @@ async def resolve_portfolio_benchmark_assignment(
     ),
 )
 async def fetch_benchmark_definition(
-    benchmark_id: str,
     request: BenchmarkDefinitionRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested benchmark definition.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkDefinitionResponse:
     response = cast(
@@ -339,8 +410,12 @@ async def fetch_index_catalog(
     ),
 )
 async def fetch_benchmark_market_series(
-    benchmark_id: str,
     request: BenchmarkMarketSeriesRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested market series input contract.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkMarketSeriesResponse:
     return cast(
@@ -362,8 +437,12 @@ async def fetch_benchmark_market_series(
     ),
 )
 async def fetch_index_price_series(
-    index_id: str,
     request: IndexSeriesRequest,
+    index_id: str = Path(
+        ...,
+        description="Index identifier for the requested raw price series.",
+        examples=["IDX-SP500"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> IndexPriceSeriesResponse:
     return cast(
@@ -383,8 +462,12 @@ async def fetch_index_price_series(
     ),
 )
 async def fetch_index_return_series(
-    index_id: str,
     request: IndexSeriesRequest,
+    index_id: str = Path(
+        ...,
+        description="Index identifier for the requested raw return series.",
+        examples=["IDX-SP500"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> IndexReturnSeriesResponse:
     return cast(
@@ -404,8 +487,12 @@ async def fetch_index_return_series(
     ),
 )
 async def fetch_benchmark_return_series(
-    benchmark_id: str,
     request: BenchmarkReturnSeriesRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested raw return series.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkReturnSeriesResponse:
     return cast(
@@ -472,8 +559,12 @@ async def fetch_classification_taxonomy(
     ),
 )
 async def get_benchmark_coverage(
-    benchmark_id: str,
     request: CoverageRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested coverage diagnostics.",
+        examples=["BENCH-SP500-TR"],
+    ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> CoverageResponse:
     return cast(

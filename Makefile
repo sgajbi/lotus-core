@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-buy-rfc test-sell-rfc test-dividend-rfc test-interest-rfc test-fx-rfc test-portfolio-flow-bundle-rfc test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack security-audit check coverage-gate ci ci-local docker-build clean
+.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack security-audit check coverage-gate ci ci-local docker-build clean
 
 install:
 	python scripts/bootstrap_dev.py
@@ -90,32 +90,20 @@ test-ops-contract:
 test-transaction-buy-contract:
 	python scripts/test_manifest.py --suite transaction-buy-contract --quiet
 
-test-buy-rfc: test-transaction-buy-contract
-
 test-transaction-sell-contract:
 	python scripts/test_manifest.py --suite transaction-sell-contract --quiet
-
-test-sell-rfc: test-transaction-sell-contract
 
 test-transaction-dividend-contract:
 	python scripts/test_manifest.py --suite transaction-dividend-contract --quiet
 
-test-dividend-rfc: test-transaction-dividend-contract
-
 test-transaction-interest-contract:
 	python scripts/test_manifest.py --suite transaction-interest-contract --quiet
-
-test-interest-rfc: test-transaction-interest-contract
 
 test-transaction-fx-contract:
 	python scripts/test_manifest.py --suite transaction-fx-contract --quiet
 
-test-fx-rfc: test-transaction-fx-contract
-
 test-transaction-portfolio-flow-bundle-contract:
 	python scripts/test_manifest.py --suite transaction-portfolio-flow-bundle-contract --quiet
-
-test-portfolio-flow-bundle-rfc: test-transaction-portfolio-flow-bundle-contract
 
 test-e2e-smoke:
 	python scripts/test_manifest.py --suite e2e-smoke --quiet

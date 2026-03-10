@@ -75,9 +75,9 @@ async def test_openapi_includes_replay_examples(async_test_client):
 
     replay_operation = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     replay_examples = replay_operation["requestBody"]["content"]["application/json"]["examples"]
-    replay_response_example = replay_operation["responses"]["200"]["content"][
-        "application/json"
-    ]["example"]
+    replay_response_example = replay_operation["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
     assert "replay_now" in replay_examples
     assert replay_response_example["replay_status"] == "replayed"
 
@@ -85,6 +85,84 @@ async def test_openapi_includes_replay_examples(async_test_client):
         "content"
     ]["application/json"]["example"]
     assert ops_control_example["mode"] == "paused"
+
+
+async def test_openapi_describes_event_replay_operational_parameters(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    get_job = schema["paths"]["/ingestion/jobs/{job_id}"]["get"]
+    retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
+    replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
+    list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
+
+    job_id_parameter = next(param for param in get_job["parameters"] if param["name"] == "job_id")
+    assert job_id_parameter["description"] == "Ingestion job identifier."
+
+    status_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "status")
+    assert status_parameter["description"] == "Optional job status filter."
+
+    retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
+        "examples"
+    ]
+    assert "retry_unsupported" in retry_conflict_examples
+    assert "duplicate_blocked" in retry_conflict_examples
+
+    replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
+    assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
+
+
+async def test_openapi_describes_event_replay_shared_schema_depth(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()["components"]["schemas"]
+
+    ops_mode = schema["IngestionOpsModeResponse"]
+    ops_mode_update = schema["IngestionOpsModeUpdateRequest"]
+    replay_request = schema["ConsumerDlqReplayRequest"]
+    replay_audit_list = schema["IngestionReplayAuditListResponse"]
+    idempotency = schema["IngestionIdempotencyDiagnosticsResponse"]
+
+    assert ops_mode["properties"]["mode"]["description"] == (
+        "Current ingestion operations mode used to control replay and write-ingress behavior."
+    )
+    assert ops_mode_update["properties"]["mode"]["description"] == (
+        "Target ingestion operations mode to apply."
+    )
+    assert replay_request["properties"]["dry_run"]["description"] == (
+        "When true, validate replayability and replay mapping without republishing messages."
+    )
+    assert replay_audit_list["properties"]["audits"]["description"] == (
+        "Replay audit rows matching the requested filters and time window."
+    )
+    assert idempotency["properties"]["keys"]["description"] == (
+        "Key-level idempotency diagnostics sorted by highest usage count."
+    )
+
+
+async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()["components"]["schemas"]
+
+    job_list = schema["IngestionJobListResponse"]
+    health_summary = schema["IngestionHealthSummaryResponse"]
+    ops_policy = schema["IngestionOpsPolicyResponse"]
+    queue_health = schema["IngestionReprocessingQueueHealthResponse"]
+
+    assert job_list["properties"]["jobs"]["description"] == (
+        "Ingestion jobs matching the requested filters and pagination window."
+    )
+    assert health_summary["properties"]["oldest_backlog_job_id"]["description"] == (
+        "Identifier of the oldest non-terminal job contributing to the backlog."
+    )
+    assert ops_policy["properties"]["replay_dry_run_supported"]["description"] == (
+        "Whether replay dry-run mode is supported by the active control plane."
+    )
+    assert queue_health["properties"]["queues"]["description"] == (
+        "Per-job-type queue health rows sorted by highest pending pressure."
+    )
 
 
 async def test_openapi_excludes_write_ingress_endpoints(async_test_client):

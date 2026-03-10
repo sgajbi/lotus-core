@@ -1,6 +1,8 @@
 import logging
 from typing import Awaitable, Callable
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from ..ack_response import build_batch_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.reference_data_dto import (
@@ -15,16 +17,32 @@ from ..DTOs.reference_data_dto import (
     RiskFreeSeriesIngestionRequest,
 )
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import create_ingestion_job_id, get_request_lineage, resolve_idempotency_key
+from ..request_metadata import (
+    create_ingestion_job_id,
+    get_request_lineage,
+    resolve_idempotency_key,
+)
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from ..services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
     get_reference_data_ingestion_service,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+REFERENCE_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+REFERENCE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for the requested reference-data endpoint.",
+    }
+}
 
 
 async def _handle_reference_ingestion(
@@ -79,7 +97,11 @@ async def _handle_reference_ingestion(
         await persist_fn()
         await ingestion_job_service.mark_queued(job_result.job.job_id)
     except Exception as exc:
-        await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc), failure_phase="persist")
+        await ingestion_job_service.mark_failed(
+            job_result.job.job_id,
+            str(exc),
+            failure_phase="persist",
+        )
         raise
 
     return build_batch_ack(
@@ -91,22 +113,38 @@ async def _handle_reference_ingestion(
     )
 
 
+REFERENCE_INGESTION_RESPONSES = {
+    status.HTTP_429_TOO_MANY_REQUESTS: {
+        "description": "Write-rate protection blocked the reference-data request.",
+        "content": {"application/json": {"example": REFERENCE_RATE_LIMIT_EXCEEDED_EXAMPLE}},
+    },
+    status.HTTP_503_SERVICE_UNAVAILABLE: {
+        "description": "Ingestion operating mode blocked writes.",
+        "content": {"application/json": {"example": REFERENCE_MODE_BLOCKED_EXAMPLE}},
+    },
+}
+
+
 @router.post(
     "/ingest/benchmark-assignments",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest portfolio benchmark assignments",
     description=(
         "What: Accept effective-dated benchmark assignment records for portfolios.\n"
-        "How: Validate canonical contract, enforce ingestion controls, and upsert durable records.\n"
+        "How: Validate canonical contract, enforce ingestion controls, and "
+        "upsert durable records.\n"
         "When: Use for benchmark onboarding, assignment updates, and restatement correction cycles."
     ),
 )
 async def ingest_benchmark_assignments(
     request: PortfolioBenchmarkAssignmentIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -126,6 +164,7 @@ async def ingest_benchmark_assignments(
     "/ingest/benchmark-definitions",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest benchmark definitions",
     description=(
@@ -137,7 +176,9 @@ async def ingest_benchmark_assignments(
 async def ingest_benchmark_definitions(
     request: BenchmarkDefinitionIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -157,6 +198,7 @@ async def ingest_benchmark_definitions(
     "/ingest/benchmark-compositions",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest benchmark composition series",
     description=(
@@ -168,7 +210,9 @@ async def ingest_benchmark_definitions(
 async def ingest_benchmark_compositions(
     request: BenchmarkCompositionIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -188,6 +232,7 @@ async def ingest_benchmark_compositions(
     "/ingest/indices",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest index definitions",
     description=(
@@ -199,7 +244,9 @@ async def ingest_benchmark_compositions(
 async def ingest_indices(
     request: IndexDefinitionIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -219,6 +266,7 @@ async def ingest_indices(
     "/ingest/index-price-series",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest index price series",
     description=(
@@ -230,7 +278,9 @@ async def ingest_indices(
 async def ingest_index_price_series(
     request: IndexPriceSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -250,6 +300,7 @@ async def ingest_index_price_series(
     "/ingest/index-return-series",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest index return series",
     description=(
@@ -261,7 +312,9 @@ async def ingest_index_price_series(
 async def ingest_index_return_series(
     request: IndexReturnSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -281,6 +334,7 @@ async def ingest_index_return_series(
     "/ingest/benchmark-return-series",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest benchmark return series",
     description=(
@@ -292,7 +346,9 @@ async def ingest_index_return_series(
 async def ingest_benchmark_return_series(
     request: BenchmarkReturnSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -312,6 +368,7 @@ async def ingest_benchmark_return_series(
     "/ingest/risk-free-series",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest risk-free series",
     description=(
@@ -323,7 +380,9 @@ async def ingest_benchmark_return_series(
 async def ingest_risk_free_series(
     request: RiskFreeSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
@@ -343,6 +402,7 @@ async def ingest_risk_free_series(
     "/ingest/reference/classification-taxonomy",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest classification taxonomy",
     description=(
@@ -354,7 +414,9 @@ async def ingest_risk_free_series(
 async def ingest_classification_taxonomy(
     request: ClassificationTaxonomyIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(get_reference_data_ingestion_service),
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(

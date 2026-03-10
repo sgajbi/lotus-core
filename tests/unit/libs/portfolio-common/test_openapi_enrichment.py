@@ -106,3 +106,58 @@ def test_enrich_openapi_schema_populates_request_response_and_parameter_examples
         "status": "completed",
         "finding_count": 0,
     }
+
+
+def test_enrich_openapi_schema_populates_error_response_examples() -> None:
+    schema = {
+        "paths": {
+            "/api/v1/reconcile/{portfolio_id}": {
+                "post": {
+                    "summary": "Run reconcile",
+                    "description": "Run controls.",
+                    "tags": ["reconcile"],
+                    "responses": {
+                        "422": {
+                            "description": "Validation error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "HTTPValidationError": {
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/ValidationError"},
+                        }
+                    },
+                    "required": ["detail"],
+                },
+                "ValidationError": {
+                    "type": "object",
+                    "properties": {
+                        "loc": {"type": "array", "items": {"type": "string"}},
+                        "msg": {"type": "string", "example": "Field required"},
+                        "type": {"type": "string", "example": "missing"},
+                    },
+                    "required": ["loc", "msg", "type"],
+                },
+            }
+        },
+    }
+
+    enriched = enrich_openapi_schema(schema, service_name="financial_reconciliation_service")
+    example = enriched["paths"]["/api/v1/reconcile/{portfolio_id}"]["post"]["responses"]["422"][
+        "content"
+    ]["application/json"]["example"]
+
+    assert example["detail"][0]["msg"] == "Field required"
+    assert example["detail"][0]["type"] == "missing"

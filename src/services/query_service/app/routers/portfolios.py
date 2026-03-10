@@ -1,13 +1,18 @@
 # services/query-service/app/routers/portfolios.py
 from typing import Optional
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.db import get_async_db_session
-from ..services.portfolio_service import PortfolioService
 from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
+from ..services.portfolio_service import PortfolioService
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolios"])
+
+PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": "Portfolio with id PORT-DISC-001 not found"
+}
 
 
 def get_portfolio_service(
@@ -27,14 +32,19 @@ def get_portfolio_service(
 )
 async def get_portfolios(
     portfolio_id: Optional[str] = Query(
-        None, description="Filter by a single, specific portfolio ID."
+        None,
+        description="Filter by a single, specific portfolio ID.",
+        examples=["PORT-DISC-001"],
     ),
     client_id: Optional[str] = Query(
         None,
         description="Filter by the client grouping ID (CIF) to get all portfolios for a client.",
+        examples=["CIF-100200"],
     ),
     booking_center_code: Optional[str] = Query(
-        None, description="Filter by booking center to get all portfolios for a business unit."
+        None,
+        description="Filter by booking center to get all portfolios for a business unit.",
+        examples=["SGPB"],
     ),
     service: PortfolioService = Depends(get_portfolio_service),
 ):
@@ -52,11 +62,21 @@ async def get_portfolios(
 @router.get(
     "/{portfolio_id}",
     response_model=PortfolioRecord,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
     summary="Get a Single Portfolio by ID",
+    description="Returns the canonical portfolio record for a single portfolio identifier.",
 )
 async def get_portfolio_by_id(
-    portfolio_id: str,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier.",
+        examples=["PORT-DISC-001"],
+    ),
     service: PortfolioService = Depends(get_portfolio_service),
 ):
     """

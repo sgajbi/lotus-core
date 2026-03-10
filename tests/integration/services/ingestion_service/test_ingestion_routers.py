@@ -472,6 +472,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 },
                 "replay_isolation_mode": "shared_workers",
                 "partition_growth_strategy": "scale_out_only",
+                "replay_dry_run_supported": True,
             }
 
         async def get_reprocessing_queue_health(self):
@@ -664,9 +665,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[transactions_router.get_ingestion_job_service] = (
         lambda: fake_job_service
     )
-    app.dependency_overrides[portfolios_router.get_ingestion_job_service] = (
-        lambda: fake_job_service
-    )
+    app.dependency_overrides[portfolios_router.get_ingestion_job_service] = lambda: fake_job_service
     app.dependency_overrides[instruments_router.get_ingestion_job_service] = (
         lambda: fake_job_service
     )
@@ -683,9 +682,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[reprocessing_router.get_ingestion_job_service] = (
         lambda: fake_job_service
     )
-    event_replay_app.dependency_overrides[
-        ingestion_operations_router.get_ingestion_job_service
-    ] = lambda: fake_job_service
+    event_replay_app.dependency_overrides[ingestion_operations_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
+    )
 
     yield {"fake_job_service": fake_job_service}
 
@@ -786,6 +785,21 @@ async def test_ingest_transactions_endpoint(
     assert body["accepted_count"] == 1
     assert "job_id" in body
     mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_transactions_endpoint_accepts_empty_batch(
+    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post("/ingest/transactions", json={"transactions": []})
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 0
+    assert "job_id" in body
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_ingestion_jobs_status_endpoint(
@@ -911,9 +925,7 @@ async def test_ingestion_job_failure_history_and_retry(
     assert failure_history.json()["total"] >= 1
 
     mock_kafka_producer.publish_message.side_effect = None
-    retry_response = await event_replay_test_client.post(
-        f"/ingestion/jobs/{failed_job_id}/retry"
-    )
+    retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{failed_job_id}/retry")
     assert retry_response.status_code == 200
     assert retry_response.json()["status"] == "queued"
     assert retry_response.json()["retry_count"] == 1
@@ -1323,9 +1335,7 @@ async def test_ingestion_replay_audit_list_and_get(
     audits = list_response.json()["audits"]
     assert any(item["replay_id"] == replay_id for item in audits)
 
-    get_response = await event_replay_test_client.get(
-        f"/ingestion/audit/replays/{replay_id}"
-    )
+    get_response = await event_replay_test_client.get(f"/ingestion/audit/replays/{replay_id}")
     assert get_response.status_code == 200
     assert get_response.json()["replay_id"] == replay_id
 

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections import Counter
 from pathlib import Path
 
 # Ensure the repository root is importable when script is executed directly.
 REPO_ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault("LOTUS_TOOLING_QUIET", "1")
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -72,6 +74,19 @@ def _has_parameter_examples(operation: dict) -> bool:
     return True
 
 
+def _has_parameter_descriptions(operation: dict) -> bool:
+    parameters = operation.get("parameters", [])
+    if not isinstance(parameters, list):
+        return True
+    for parameter in parameters:
+        if not isinstance(parameter, dict):
+            continue
+        if parameter.get("description"):
+            continue
+        return False
+    return True
+
+
 def _missing_success_response_examples(operation: dict) -> list[str]:
     responses = operation.get("responses", {})
     if not isinstance(responses, dict):
@@ -92,6 +107,30 @@ def _missing_success_response_examples(operation: dict) -> list[str]:
                 continue
             if "example" not in media and "examples" not in media:
                 missing.append(str(code))
+    return missing
+
+
+def _missing_error_response_examples(operation: dict) -> list[str]:
+    responses = operation.get("responses", {})
+    if not isinstance(responses, dict):
+        return []
+    missing: list[str] = []
+    for code, response in responses.items():
+        code_str = str(code)
+        if not (code_str.startswith("4") or code_str.startswith("5") or code_str == "default"):
+            continue
+        if not isinstance(response, dict):
+            continue
+        content = response.get("content", {})
+        if not isinstance(content, dict):
+            continue
+        for media_type, media in content.items():
+            if "json" not in media_type:
+                continue
+            if not isinstance(media, dict):
+                continue
+            if "example" not in media and "examples" not in media:
+                missing.append(code_str)
     return missing
 
 
@@ -134,11 +173,22 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
                             f"success response example ({', '.join(missing_response_examples)})",
                         )
                     )
+                missing_error_examples = _missing_error_response_examples(operation)
+                if missing_error_examples:
+                    missing_docs.append(
+                        (
+                            method_upper,
+                            path,
+                            f"error response example ({', '.join(missing_error_examples)})",
+                        )
+                    )
 
             if not _has_request_example(operation):
                 missing_docs.append((method_upper, path, "request example"))
             if not _has_parameter_examples(operation):
                 missing_docs.append((method_upper, path, "parameter example"))
+            if not _has_parameter_descriptions(operation):
+                missing_docs.append((method_upper, path, "parameter description"))
 
     schemas = schema.get("components", {}).get("schemas", {})
     for model_name, model_schema in schemas.items():

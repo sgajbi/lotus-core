@@ -62,9 +62,19 @@ def test_evaluate_schema_accepts_documented_operation() -> None:
                             "description": "ok",
                             "content": {"application/json": {"example": {"items": []}}},
                         },
-                        "400": {"description": "bad request"},
+                        "400": {
+                            "description": "bad request",
+                            "content": {"application/json": {"example": {"detail": "bad request"}}},
+                        },
                     },
-                    "parameters": [{"name": "portfolio_id", "in": "query", "example": "PORT-1"}],
+                    "parameters": [
+                        {
+                            "name": "portfolio_id",
+                            "in": "query",
+                            "description": "Portfolio identifier.",
+                            "example": "PORT-1",
+                        }
+                    ],
                 }
             }
         }
@@ -150,3 +160,60 @@ def test_evaluate_schema_flags_missing_operation_examples() -> None:
     assert any("missing request example" in error for error in errors)
     assert any("missing parameter example" in error for error in errors)
     assert any("missing success response example" in error for error in errors)
+
+
+def test_evaluate_schema_flags_missing_error_response_examples() -> None:
+    schema = {
+        "paths": {
+            "/api/v1/reconcile": {
+                "post": {
+                    "operationId": "run_reconcile",
+                    "summary": "Run reconcile",
+                    "description": "Run controls.",
+                    "tags": ["reconcile"],
+                    "responses": {
+                        "200": {
+                            "description": "ok",
+                            "content": {"application/json": {"example": {"status": "ok"}}},
+                        },
+                        "422": {
+                            "description": "validation error",
+                            "content": {"application/json": {"schema": {"type": "object"}}},
+                        },
+                    },
+                }
+            }
+        }
+    }
+
+    errors = evaluate_schema(schema, service_name="query_service")
+    assert any("missing error response example" in error for error in errors)
+
+
+def test_evaluate_schema_flags_missing_parameter_descriptions() -> None:
+    schema = {
+        "paths": {
+            "/api/v1/positions": {
+                "get": {
+                    "operationId": "get_positions",
+                    "summary": "Get positions",
+                    "description": "Returns latest positions.",
+                    "tags": ["positions"],
+                    "responses": {
+                        "200": {
+                            "description": "ok",
+                            "content": {"application/json": {"example": {"items": []}}},
+                        },
+                        "400": {
+                            "description": "bad request",
+                            "content": {"application/json": {"example": {"detail": "bad"}}},
+                        },
+                    },
+                    "parameters": [{"name": "portfolio_id", "in": "query", "example": "PORT-1"}],
+                }
+            }
+        }
+    }
+
+    errors = evaluate_schema(schema, service_name="query_service")
+    assert any("missing parameter description" in error for error in errors)

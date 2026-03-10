@@ -57,6 +57,14 @@ class EffectiveIntegrationPolicyResponse(BaseModel):
     policy_provenance: PolicyProvenanceMetadata = Field(
         ...,
         description="Policy lineage metadata showing how the effective policy was resolved.",
+        examples=[
+            {
+                "policy_version": "tenant-default-v1",
+                "policy_source": "tenant",
+                "matched_rule_id": "tenant.tenant_sg_pb.consumers.lotus-performance",
+                "strict_mode": True,
+            }
+        ],
     )
     allowed_sections: list[str] = Field(
         default_factory=list,
@@ -75,7 +83,7 @@ class EffectiveIntegrationPolicyResponse(BaseModel):
 class InstrumentEnrichmentBulkRequest(BaseModel):
     security_ids: list[str] = Field(
         ...,
-        description="Canonical Lotus security identifiers to enrich.",
+        description="Canonical Lotus security identifiers to enrich in one deterministic batch.",
         examples=[["SEC_AAPL_US", "SEC_MSFT_US"]],
         min_length=1,
     )

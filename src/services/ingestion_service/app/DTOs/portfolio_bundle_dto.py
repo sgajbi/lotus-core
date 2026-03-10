@@ -18,14 +18,42 @@ class PortfolioBundleIngestionRequest(BaseModel):
     )
     mode: Literal["UPSERT", "REPLACE"] = Field(
         "UPSERT",
-        description="Ingestion mode for bundle semantics; current behavior is UPSERT-style event publication.",
+        description=(
+            "Ingestion mode for bundle semantics; current behavior is UPSERT-style "
+            "event publication."
+        ),
+        examples=["UPSERT"],
     )
-    business_dates: List[BusinessDate] = Field(default_factory=list)
-    portfolios: List[Portfolio] = Field(default_factory=list)
-    instruments: List[Instrument] = Field(default_factory=list)
-    transactions: List[Transaction] = Field(default_factory=list)
-    market_prices: List[MarketPrice] = Field(default_factory=list)
-    fx_rates: List[FxRate] = Field(default_factory=list)
+    business_dates: List[BusinessDate] = Field(
+        default_factory=list,
+        description="Canonical business-date records included in the bundle.",
+        examples=[[{"businessDate": "2026-01-02"}]],
+    )
+    portfolios: List[Portfolio] = Field(
+        default_factory=list,
+        description="Canonical portfolio onboarding records included in the bundle.",
+        examples=[[{"portfolioId": "PORT_001", "baseCurrency": "USD"}]],
+    )
+    instruments: List[Instrument] = Field(
+        default_factory=list,
+        description="Canonical instrument master records included in the bundle.",
+        examples=[[{"securityId": "SEC_AAPL", "productType": "Equity"}]],
+    )
+    transactions: List[Transaction] = Field(
+        default_factory=list,
+        description="Canonical transaction records included in the bundle.",
+        examples=[[{"transaction_id": "TRN_001", "transaction_type": "BUY"}]],
+    )
+    market_prices: List[MarketPrice] = Field(
+        default_factory=list,
+        description="Canonical market-price records included in the bundle.",
+        examples=[[{"securityId": "SEC_AAPL", "priceDate": "2026-01-02"}]],
+    )
+    fx_rates: List[FxRate] = Field(
+        default_factory=list,
+        description="Canonical FX-rate records included in the bundle.",
+        examples=[[{"fromCurrency": "USD", "toCurrency": "SGD"}]],
+    )
 
     @model_validator(mode="after")
     def validate_non_empty_bundle(self):

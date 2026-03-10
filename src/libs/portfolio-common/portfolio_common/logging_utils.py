@@ -51,7 +51,10 @@ def setup_logging():
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
 
-    root_logger.setLevel(logging.INFO)
+    if os.getenv("LOTUS_TOOLING_QUIET") == "1":
+        root_logger.setLevel(logging.ERROR)
+    else:
+        root_logger.setLevel(logging.INFO)
 
     handler = logging.StreamHandler(sys.stdout)
 

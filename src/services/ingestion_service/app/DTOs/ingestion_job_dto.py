@@ -74,7 +74,22 @@ class IngestionJobResponse(BaseModel):
 
 class IngestionJobListResponse(BaseModel):
     jobs: list[IngestionJobResponse] = Field(
-        description="Ingestion jobs matching the requested filters."
+        description="Ingestion jobs matching the requested filters and pagination window.",
+        examples=[
+            [
+                {
+                    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+                    "endpoint": "/ingest/transactions",
+                    "entity_type": "transaction",
+                    "status": "queued",
+                    "accepted_count": 125,
+                    "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+                    "request_id": "REQ:3a63936e-bf29-41e2-9f16-faf4e561d845",
+                    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                    "submitted_at": "2026-02-28T13:22:24.201Z",
+                }
+            ]
+        ],
     )
     total: int = Field(
         ge=0,
@@ -120,7 +135,19 @@ class IngestionJobFailureResponse(BaseModel):
 
 class IngestionJobFailureListResponse(BaseModel):
     failures: list[IngestionJobFailureResponse] = Field(
-        description="Failure events captured for the requested ingestion job."
+        description="Failure events captured for the requested ingestion job.",
+        examples=[
+            [
+                {
+                    "failure_id": "fail_01J5S27P16BSKQ3R2P2HK67GQZ",
+                    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+                    "failure_phase": "publish",
+                    "failure_reason": "Kafka publish timeout for topic raw_transactions.",
+                    "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+                    "failed_at": "2026-02-28T13:23:09.021Z",
+                }
+            ]
+        ],
     )
     total: int = Field(
         ge=0,
@@ -154,6 +181,11 @@ class IngestionHealthSummaryResponse(BaseModel):
         ge=0,
         description="Operational backlog count (accepted + queued).",
         examples=[10],
+    )
+    oldest_backlog_job_id: str | None = Field(
+        default=None,
+        description="Identifier of the oldest non-terminal job contributing to the backlog.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     )
 
 
@@ -209,7 +241,9 @@ class IngestionOperatingBandResponse(BaseModel):
         examples=[60],
     )
     operating_band: Literal["green", "yellow", "orange", "red"] = Field(
-        description="Current operating severity band for ingestion and calculator scaling workflows.",
+        description=(
+            "Current operating severity band for ingestion and calculator scaling workflows."
+        ),
         examples=["yellow"],
     )
     recommended_action: str = Field(
@@ -360,10 +394,15 @@ class IngestionOpsPolicyResponse(BaseModel):
     )
     partition_growth_strategy: Literal["scale_out_only", "pre_shard_large_portfolios"] = Field(
         description=(
-            "Kafka partition growth strategy: `scale_out_only` grows topic partitions with standard rebalancing; "
+            "Kafka partition growth strategy: `scale_out_only` grows topic partitions with "
+            "standard rebalancing; "
             "`pre_shard_large_portfolios` reserves extra partitions for hot-key portfolios."
         ),
         examples=["scale_out_only"],
+    )
+    replay_dry_run_supported: bool = Field(
+        description="Whether replay dry-run mode is supported by the active control plane.",
+        examples=[True],
     )
 
 
@@ -419,7 +458,19 @@ class IngestionReprocessingQueueHealthResponse(BaseModel):
         examples=[1],
     )
     queues: list[IngestionReprocessingQueueItemResponse] = Field(
-        description="Per-job-type queue health rows sorted by highest pending pressure."
+        description="Per-job-type queue health rows sorted by highest pending pressure.",
+        examples=[
+            [
+                {
+                    "job_type": "RESET_WATERMARKS",
+                    "pending_jobs": 14,
+                    "processing_jobs": 2,
+                    "failed_jobs": 1,
+                    "oldest_pending_created_at": "2026-03-03T04:10:11.000Z",
+                    "oldest_pending_age_seconds": 127.5,
+                }
+            ]
+        ],
     )
 
 
@@ -439,7 +490,9 @@ class IngestionCapacityGroupResponse(BaseModel):
     )
     processed_records: int = Field(
         ge=0,
-        description="Records in this group that progressed out of accepted state (queued or failed).",
+        description=(
+            "Records in this group that progressed out of accepted state " "(queued or failed)."
+        ),
         examples=[24000],
     )
     backlog_records: int = Field(
@@ -474,18 +527,23 @@ class IngestionCapacityGroupResponse(BaseModel):
     )
     utilization_ratio: Decimal = Field(
         ge=Decimal("0"),
-        description="Utilization ratio (`rho = lambda_in / capacity`). Values above 1 indicate overload.",
+        description=(
+            "Utilization ratio (`rho = lambda_in / capacity`). Values above 1 indicate overload."
+        ),
         examples=["0.520833"],
     )
     headroom_ratio: Decimal = Field(
-        description="Capacity headroom ratio (`1 - rho`). Negative values indicate sustained overload.",
+        description=(
+            "Capacity headroom ratio (`1 - rho`). Negative values indicate sustained overload."
+        ),
         examples=["0.479167"],
     )
     estimated_drain_seconds: float | None = Field(
         default=None,
         ge=0.0,
         description=(
-            "Estimated backlog drain time in seconds using `T_drain = backlog / (capacity - lambda_in)` "
+            "Estimated backlog drain time in seconds using "
+            "`T_drain = backlog / (capacity - lambda_in)` "
             "when net drain capacity is positive."
         ),
         examples=[300.0],
@@ -596,7 +654,10 @@ class IngestionBacklogBreakdownResponse(BaseModel):
     largest_group_backlog_share: Decimal = Field(
         ge=Decimal("0"),
         le=Decimal("1"),
-        description="Largest-group backlog concentration share (largest_group_backlog_jobs / total_backlog_jobs).",
+        description=(
+            "Largest-group backlog concentration share "
+            "(largest_group_backlog_jobs / total_backlog_jobs)."
+        ),
         examples=["0.5294"],
     )
     top_3_backlog_share: Decimal = Field(
@@ -680,7 +741,9 @@ class IngestionRetryRequest(BaseModel):
 
 class IngestionOpsModeResponse(BaseModel):
     mode: Literal["normal", "paused", "drain"] = Field(
-        description="Current ingestion operations mode.",
+        description=(
+            "Current ingestion operations mode used to control replay and write-ingress behavior."
+        ),
         examples=["normal"],
     )
     replay_window_start: datetime | None = Field(
@@ -706,7 +769,7 @@ class IngestionOpsModeResponse(BaseModel):
 
 class IngestionOpsModeUpdateRequest(BaseModel):
     mode: Literal["normal", "paused", "drain"] = Field(
-        description="Target ingestion operations mode.",
+        description="Target ingestion operations mode to apply.",
         examples=["paused"],
     )
     replay_window_start: datetime | None = Field(
@@ -832,7 +895,9 @@ class IngestionConsumerLagResponse(BaseModel):
 class ConsumerDlqReplayRequest(BaseModel):
     dry_run: bool = Field(
         default=False,
-        description="When true, validate replayability and mapping without republishing.",
+        description=(
+            "When true, validate replayability and replay mapping without republishing messages."
+        ),
         examples=[False],
     )
 
@@ -941,7 +1006,7 @@ class IngestionReplayAuditResponse(BaseModel):
 
 class IngestionReplayAuditListResponse(BaseModel):
     audits: list[IngestionReplayAuditResponse] = Field(
-        description="Replay audit rows matching requested filters."
+        description="Replay audit rows matching the requested filters and time window."
     )
     total: int = Field(
         ge=0,
@@ -1026,7 +1091,7 @@ class IngestionIdempotencyDiagnosticsResponse(BaseModel):
         examples=[1],
     )
     keys: list[IngestionIdempotencyDiagnosticItemResponse] = Field(
-        description="Key-level diagnostics sorted by highest usage count."
+        description="Key-level idempotency diagnostics sorted by highest usage count."
     )
 
 

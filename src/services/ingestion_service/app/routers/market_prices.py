@@ -1,11 +1,14 @@
 # services/ingestion_service/app/routers/market_prices.py
 import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from ..ack_response import build_batch_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.market_price_dto import MarketPriceIngestionRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (    create_ingestion_job_id,
+from ..request_metadata import (
+    create_ingestion_job_id,
     get_request_lineage,
     resolve_idempotency_key,
 )
@@ -15,27 +18,55 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+MARKET_PRICE_MODE_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_MODE_BLOCKS_WRITES",
+        "message": "Ingestion writes are currently disabled by operating mode.",
+    }
+}
+MARKET_PRICE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "Ingestion write rate limit exceeded for /ingest/market-prices.",
+    }
+}
 
 
 @router.post(
     "/ingest/market-prices",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Write-rate protection blocked the market-price request.",
+            "content": {
+                "application/json": {
+                    "example": MARKET_PRICE_RATE_LIMIT_EXCEEDED_EXAMPLE
+                }
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Ingestion operating mode blocked writes.",
+            "content": {"application/json": {"example": MARKET_PRICE_MODE_BLOCKED_EXAMPLE}},
+        },
+    },
     tags=["Market Prices"],
     summary="Ingest market prices",
     description=(
         "What: Accept canonical market price observations for securities.\n"
-        "How: Validate payload, enforce ingestion guardrails, and publish asynchronous events for valuation processing.\n"
+        "How: Validate payload, enforce ingestion guardrails, and publish "
+        "asynchronous events for valuation processing.\n"
         "When: Use for daily close pricing loads or intraday approved market data updates."
     ),
 )
 async def ingest_market_prices(
     request: MarketPriceIngestionRequest,
-    http_request: Request,    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    http_request: Request,
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     idempotency_key = resolve_idempotency_key(http_request)

@@ -144,6 +144,7 @@ async def test_dlq_payload_is_correct(
     )
     error = ValueError("Test Error")
     correlation_id = "corr-123"
+    test_consumer._record_consumer_dlq_event = AsyncMock()
 
     # ACT
     # Set the context variable to simulate the state within the consumer's run loop
@@ -174,6 +175,7 @@ async def test_dlq_payload_is_correct(
 
     headers_dict = dict(call_args["headers"])
     assert headers_dict["correlation_id"] == correlation_id.encode("utf-8")
+    test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
 async def test_classify_dlq_reason_code_deserialization():

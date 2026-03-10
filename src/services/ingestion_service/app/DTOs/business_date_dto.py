@@ -1,34 +1,53 @@
-# services/ingestion_service/app/DTOs/business_date_dto.py
 from datetime import date
-from typing import List
+
 from pydantic import BaseModel, Field
 
 
 class BusinessDate(BaseModel):
-    """
-    Represents a single business date for ingestion.
-    """
-    business_date: date = Field(..., description="A valid business date.")
+    business_date: date = Field(
+        ...,
+        description="Canonical business date to open for processing.",
+        examples=["2026-03-10"],
+    )
     calendar_code: str = Field(
         default="GLOBAL",
         description="Business calendar identifier (for example: GLOBAL, SIX_CH, NYSE_US).",
+        examples=["GLOBAL"],
     )
     market_code: str | None = Field(
         default=None,
         description="Optional market or venue code associated with the business date.",
+        examples=["XSWX"],
     )
     source_system: str | None = Field(
         default=None,
         description="Optional upstream source system identifier for lineage.",
+        examples=["lotus-manage"],
     )
     source_batch_id: str | None = Field(
         default=None,
         description="Optional upstream batch identifier for lineage and replay tracking.",
+        examples=["business-dates-20260310-am"],
     )
 
 
 class BusinessDateIngestionRequest(BaseModel):
-    """
-    Represents the request body for ingesting a list of business dates.
-    """
-    business_dates: List[BusinessDate]
+    business_dates: list[BusinessDate] = Field(
+        ...,
+        description=(
+            "Business dates to register for downstream valuation "
+            "and timeseries scheduling."
+        ),
+        min_length=1,
+        examples=[
+            [
+                {
+                    "business_date": "2026-03-10",
+                    "calendar_code": "GLOBAL",
+                    "market_code": "XSWX",
+                    "source_system": "lotus-manage",
+                    "source_batch_id": "business-dates-20260310-am",
+                }
+            ]
+        ],
+    )

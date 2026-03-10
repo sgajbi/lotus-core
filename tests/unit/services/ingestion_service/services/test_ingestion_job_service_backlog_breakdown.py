@@ -9,6 +9,21 @@ from src.services.ingestion_service.app.services.ingestion_job_service import In
 pytestmark = pytest.mark.asyncio
 
 
+class _SingleSessionAsyncIterator:
+    def __init__(self, session):
+        self._session = session
+        self._yielded = False
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._yielded:
+            raise StopAsyncIteration
+        self._yielded = True
+        return self._session
+
+
 @pytest.fixture
 def service() -> IngestionJobService:
     return IngestionJobService()
@@ -35,8 +50,8 @@ async def test_get_backlog_breakdown_computes_groups_and_concentration(
         async def execute(self, _stmt):
             return _FakeResult()
 
-    async def _mock_get_async_db_session():
-        yield _FakeSession()
+    def _mock_get_async_db_session():
+        return _SingleSessionAsyncIterator(_FakeSession())
 
     monkeypatch.setattr(service_module, "get_async_db_session", _mock_get_async_db_session)
 
@@ -66,8 +81,8 @@ async def test_get_backlog_breakdown_zero_backlog_has_zero_concentration(
         async def execute(self, _stmt):
             return _FakeResult()
 
-    async def _mock_get_async_db_session():
-        yield _FakeSession()
+    def _mock_get_async_db_session():
+        return _SingleSessionAsyncIterator(_FakeSession())
 
     monkeypatch.setattr(service_module, "get_async_db_session", _mock_get_async_db_session)
 

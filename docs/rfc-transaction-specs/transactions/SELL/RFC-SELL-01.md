@@ -1378,8 +1378,7 @@ and must document the expected latency/SLA for visibility.
 | Condition               | Required behavior                                   |
 | ----------------------- | --------------------------------------------------- |
 | `FIFO`                  | Dispose oldest eligible lots first                  |
-| `AVERAGE_COST`          | Dispose pooled average-cost slice                   |
-| `SPECIFIC_LOT`          | Dispose explicitly identified lots                  |
+| `AVCO`                  | Dispose pooled average-cost slice                   |
 | No valid disposal state | Fail or park according to disposal validation rules |
 
 ---

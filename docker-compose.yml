@@ -287,7 +287,6 @@ services:
     volumes:
       - ./src/services/calculators/cost_calculator_service/app:/app/app
       - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
-      - ./src/libs/financial-calculator-engine:/app/src/libs/financial-calculator-engine
     command: ["python", "-m", "app.main"]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8083/health/ready || exit 1"]

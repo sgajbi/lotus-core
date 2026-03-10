@@ -1,12 +1,13 @@
 # services/query-service/app/routers/prices.py
 from datetime import date
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
+from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.db import get_async_db_session
-from ..services.price_service import MarketPriceService
 from ..dtos.price_dto import MarketPriceResponse
+from ..services.price_service import MarketPriceService
 
 router = APIRouter(prefix="/prices", tags=["Market Prices"])
 
@@ -21,12 +22,20 @@ router = APIRouter(prefix="/prices", tags=["Market Prices"])
     ),
 )
 async def get_prices(
-    security_id: str = Query(..., description="The unique identifier for the security to query."),
+    security_id: str = Query(
+        ...,
+        description="Security identifier for the market-price series request.",
+        examples=["SEC-US-AAPL"],
+    ),
     start_date: Optional[date] = Query(
-        None, description="The start date for the date range filter (inclusive)."
+        None,
+        description="The start date for the date range filter (inclusive).",
+        examples=["2026-01-01"],
     ),
     end_date: Optional[date] = Query(
-        None, description="The end date for the date range filter (inclusive)."
+        None,
+        description="The end date for the date range filter (inclusive).",
+        examples=["2026-03-31"],
     ),
     db: AsyncSession = Depends(get_async_db_session),
 ):

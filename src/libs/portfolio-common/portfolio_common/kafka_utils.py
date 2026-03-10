@@ -144,6 +144,11 @@ class KafkaProducer:
             return self.producer.flush(timeout)
         return 0
 
+    def close(self, timeout: int = 10) -> None:
+        if self.producer:
+            self.producer.flush(timeout)
+            self.producer = None
+
 
 _kafka_producer_instance = None
 
@@ -153,3 +158,12 @@ def get_kafka_producer() -> KafkaProducer:
     if _kafka_producer_instance is None:
         _kafka_producer_instance = KafkaProducer()
     return _kafka_producer_instance
+
+
+def reset_kafka_producer(*, timeout: int = 10) -> None:
+    global _kafka_producer_instance
+    if _kafka_producer_instance is not None:
+        try:
+            _kafka_producer_instance.close(timeout=timeout)
+        finally:
+            _kafka_producer_instance = None

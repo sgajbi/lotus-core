@@ -30,13 +30,13 @@ def get_capabilities_service() -> CapabilitiesService:
 async def get_integration_capabilities(
     consumer_system: ConsumerSystem = Query(
         "lotus-gateway",
-        description=(
-            "Consumer requesting capability metadata " "(lotus-gateway, lotus-manage, UI, UNKNOWN)."
-        ),
+        description="Consumer requesting capability metadata.",
+        examples=["lotus-performance"],
     ),
     tenant_id: str = Query(
         "default",
         description="Tenant or client identifier for policy resolution.",
+        examples=["tenant_sg_pb"],
     ),
     service: CapabilitiesService = Depends(get_capabilities_service),
 ) -> IntegrationCapabilitiesResponse:

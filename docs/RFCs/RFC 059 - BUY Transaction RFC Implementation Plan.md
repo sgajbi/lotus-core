@@ -40,7 +40,7 @@ The RFC should now be treated as a delivery record with follow-on enhancements, 
 | Calculation invariants and BUY semantics | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`; slice-3 artifact |
 | Lot and accrued-offset durability | Implemented | `src/services/calculators/cost_calculator_service/app/repository.py`; `tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py` |
 | Query/read-model and supportability | Implemented | `src/services/query_service/app/routers/buy_state.py`; `tests/integration/services/query_service/test_buy_state_router.py` |
-| Dedicated conformance gate | Implemented with accepted residuals | `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-6-CONFORMANCE-REPORT.md`; `scripts/test_manifest.py` (`buy-rfc`) |
+| Dedicated conformance gate | Implemented with accepted residuals | `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-6-CONFORMANCE-REPORT.md`; `scripts/test_manifest.py` (`transaction-buy-contract`) |
 
 ## Design Reasoning and Trade-offs
 1. Slice-first rollout reduced regression risk in core transaction pipelines.

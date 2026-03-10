@@ -32,7 +32,7 @@ Evidence:
 - `tests/e2e/test_concentration_pipeline.py`
 - `docs/RFCs/RFC 056 - Remove Legacy Query Analytics and Reporting Endpoints.md`
 - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
-- query-service legacy endpoint redirection behavior (`legacy_gone.py`)
+- shared disabled-endpoint assertions in `tests/e2e/assertions.py`
 
 ## Requirement-to-Implementation Traceability
 

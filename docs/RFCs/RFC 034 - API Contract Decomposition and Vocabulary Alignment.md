@@ -41,7 +41,6 @@ No longer aligned with current system:
 
 Evidence:
 - `src/services/query_service/app/main.py`
-- `src/services/query_service/app/routers/legacy_gone.py`
 - `tests/integration/services/query_service/test_main_app.py`
 - `tests/e2e/test_review_pipeline.py`
 - `docs/RFCs/RFC 056 - Remove Legacy Query Analytics and Reporting Endpoints.md`

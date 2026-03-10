@@ -19,10 +19,10 @@ This report maps RFC-DIVIDEND-01 requirements to implementation evidence deliver
 
 ## Suite and CI Wiring Evidence
 1. Added `transaction-dividend-contract` suite in `scripts/test_manifest.py`.
-2. Added backward-compatible alias `dividend-rfc` in `scripts/test_manifest.py`.
+2. Added backward-compatible alias `transaction-dividend-contract` in `scripts/test_manifest.py`.
 3. Added `Makefile` targets:
  - `test-transaction-dividend-contract`
- - `test-dividend-rfc`
+ - `test-transaction-dividend-contract`
 4. Added CI matrix execution in `.github/workflows/ci.yml`:
  - `suite: transaction-dividend-contract`
 

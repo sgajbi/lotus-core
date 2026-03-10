@@ -111,6 +111,343 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
 
 
+async def test_openapi_describes_transaction_filters_and_not_found_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    transactions = schema["paths"]["/portfolios/{portfolio_id}/transactions"]["get"]
+
+    portfolio_param = next(
+        parameter for parameter in transactions["parameters"] if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_param["description"] == "Portfolio identifier."
+
+    transaction_type = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "transaction_type"
+    )
+    assert transaction_type["description"] == (
+        "Filter by canonical transaction type, including FX business types."
+    )
+
+    fx_contract_id = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "fx_contract_id"
+    )
+    assert fx_contract_id["description"] == "Filter by FX contract identifier."
+
+    not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"
+
+
+async def test_openapi_describes_position_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    latest_positions = schema["paths"]["/portfolios/{portfolio_id}/positions"]["get"]
+    position_history = schema["paths"]["/portfolios/{portfolio_id}/position-history"]["get"]
+
+    positions_portfolio_id = next(
+        parameter
+        for parameter in latest_positions["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert positions_portfolio_id["description"] == "Portfolio identifier."
+
+    include_projected = next(
+        parameter
+        for parameter in latest_positions["parameters"]
+        if parameter["name"] == "include_projected"
+    )
+    assert include_projected["description"] == (
+        "When true, includes future-dated projected position state "
+        "beyond current business_date."
+    )
+
+    history_security_id = next(
+        parameter
+        for parameter in position_history["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert history_security_id["description"] == (
+        "Security identifier for the position-history drill-down."
+    )
+
+    positions_not_found = latest_positions["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    history_not_found = position_history["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert positions_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+    assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+
+
+async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    projection = schema["paths"]["/portfolios/{portfolio_id}/cashflow-projection"]["get"]
+
+    portfolio_id = next(
+        parameter for parameter in projection["parameters"] if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_id["description"] == "Portfolio identifier."
+
+    horizon_days = next(
+        parameter for parameter in projection["parameters"] if parameter["name"] == "horizon_days"
+    )
+    assert horizon_days["description"] == "Projection window in days from as_of_date."
+
+    include_projected = next(
+        parameter
+        for parameter in projection["parameters"]
+        if parameter["name"] == "include_projected"
+    )
+    assert include_projected["description"] == (
+        "When true, includes projected future-dated cashflows."
+    )
+
+    not_found = projection["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Portfolio with id PORT-CF-001 not found"
+
+
+async def test_openapi_describes_portfolio_discovery_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    portfolio_query = schema["paths"]["/portfolios/"]["get"]
+    single_portfolio = schema["paths"]["/portfolios/{portfolio_id}"]["get"]
+
+    client_id = next(
+        parameter for parameter in portfolio_query["parameters"] if parameter["name"] == "client_id"
+    )
+    assert client_id["description"] == (
+        "Filter by the client grouping ID (CIF) to get all portfolios for a client."
+    )
+
+    booking_center_code = next(
+        parameter
+        for parameter in portfolio_query["parameters"]
+        if parameter["name"] == "booking_center_code"
+    )
+    assert booking_center_code["description"] == (
+        "Filter by booking center to get all portfolios for a business unit."
+    )
+
+    portfolio_id = next(
+        parameter
+        for parameter in single_portfolio["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_id["description"] == "Portfolio identifier."
+
+    not_found = single_portfolio["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Portfolio with id PORT-DISC-001 not found"
+
+
+async def test_openapi_describes_reference_market_data_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    prices = schema["paths"]["/prices/"]["get"]
+    fx_rates = schema["paths"]["/fx-rates/"]["get"]
+
+    security_id = next(
+        parameter for parameter in prices["parameters"] if parameter["name"] == "security_id"
+    )
+    assert security_id["description"] == "Security identifier for the market-price series request."
+
+    from_currency = next(
+        parameter for parameter in fx_rates["parameters"] if parameter["name"] == "from_currency"
+    )
+    assert from_currency["description"] == "Base currency code for the requested FX series."
+
+    to_currency = next(
+        parameter for parameter in fx_rates["parameters"] if parameter["name"] == "to_currency"
+    )
+    assert to_currency["description"] == "Quote currency code for the requested FX series."
+
+
+async def test_openapi_describes_lookup_catalog_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    portfolio_lookups = schema["paths"]["/lookups/portfolios"]["get"]
+    instrument_lookups = schema["paths"]["/lookups/instruments"]["get"]
+    currency_lookups = schema["paths"]["/lookups/currencies"]["get"]
+
+    portfolio_client_id = next(
+        parameter
+        for parameter in portfolio_lookups["parameters"]
+        if parameter["name"] == "client_id"
+    )
+    assert portfolio_client_id["description"] == "Optional CIF filter for tenant/client scoping."
+
+    instrument_product_type = next(
+        parameter
+        for parameter in instrument_lookups["parameters"]
+        if parameter["name"] == "product_type"
+    )
+    assert instrument_product_type["description"] == (
+        "Optional product type filter (for example: Equity, Bond)."
+    )
+
+    currency_source = next(
+        parameter for parameter in currency_lookups["parameters"] if parameter["name"] == "source"
+    )
+    assert currency_source["description"] == (
+        "Currency source scope. Use ALL, PORTFOLIOS, or INSTRUMENTS."
+    )
+
+
+async def test_openapi_describes_instrument_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    instruments = schema["paths"]["/instruments/"]["get"]
+    record = schema["components"]["schemas"]["InstrumentRecord"]
+
+    security_id = next(
+        parameter for parameter in instruments["parameters"] if parameter["name"] == "security_id"
+    )
+    assert security_id["description"] == "Filter by a specific security identifier."
+
+    product_type = next(
+        parameter for parameter in instruments["parameters"] if parameter["name"] == "product_type"
+    )
+    assert product_type["description"] == (
+        "Filter by a specific product type such as Equity or Bond."
+    )
+
+    assert record["properties"]["security_id"]["description"] == "Canonical security identifier."
+    assert record["properties"]["pair_base_currency"]["description"] == (
+        "FX pair base currency when the record represents an FX contract instrument."
+    )
+
+
+async def test_openapi_describes_buy_sell_state_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    buy_lots = schema["paths"]["/portfolios/{portfolio_id}/positions/{security_id}/lots"]["get"]
+    sell_disposals = schema["paths"][
+        "/portfolios/{portfolio_id}/positions/{security_id}/sell-disposals"
+    ]["get"]
+    sell_cash_linkage = schema["paths"][
+        "/portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage"
+    ]["get"]
+
+    buy_security_id = next(
+        parameter for parameter in buy_lots["parameters"] if parameter["name"] == "security_id"
+    )
+    assert buy_security_id["description"] == "Security identifier for the BUY-state position key."
+
+    sell_security_id = next(
+        parameter
+        for parameter in sell_disposals["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert sell_security_id["description"] == "Security identifier for the SELL-state position key."
+
+    sell_transaction_id = next(
+        parameter
+        for parameter in sell_cash_linkage["parameters"]
+        if parameter["name"] == "transaction_id"
+    )
+    assert sell_transaction_id["description"] == "Security-side SELL transaction identifier."
+
+    buy_not_found = buy_lots["responses"]["404"]["content"]["application/json"]["example"]
+    sell_not_found = sell_disposals["responses"]["404"]["content"]["application/json"]["example"]
+    assert buy_not_found["detail"] == (
+        "BUY state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
+    )
+    assert sell_not_found["detail"] == (
+        "SELL state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
+    )
+
+
+async def test_openapi_describes_shared_read_model_field_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+
+    portfolio_record = components["PortfolioRecord"]
+    market_price_record = components["MarketPriceRecord"]
+    fx_rate_record = components["FxRateRecord"]
+    lookup_item = components["LookupItem"]
+
+    assert portfolio_record["properties"]["base_currency"]["description"] == (
+        "ISO base currency code."
+    )
+    assert portfolio_record["properties"]["status"]["description"] == (
+        "Portfolio lifecycle status."
+    )
+
+    assert market_price_record["properties"]["price_date"]["description"] == (
+        "Business date of the market price observation."
+    )
+    assert market_price_record["properties"]["price"]["description"] == (
+        "Observed market price for the security on the given date."
+    )
+
+    assert fx_rate_record["properties"]["rate_date"]["description"] == (
+        "Business date of the FX rate observation."
+    )
+    assert fx_rate_record["properties"]["rate"]["description"] == (
+        "Observed FX rate for the requested currency pair on the given date."
+    )
+
+    assert lookup_item["properties"]["id"]["description"] == (
+        "Canonical identifier used by UI selectors."
+    )
+    assert lookup_item["properties"]["label"]["description"] == (
+        "Display label for UI selector option."
+    )
+
+
+async def test_openapi_describes_position_cashflow_and_valuation_schema_depth(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    cashflow = components["CashflowRecord"]
+    valuation = components["ValuationData"]
+    position_history = components["PositionHistoryRecord"]
+
+    assert cashflow["properties"]["amount"]["description"] == (
+        "Signed cashflow amount expressed in the reported cashflow currency."
+    )
+    assert cashflow["properties"]["classification"]["description"] == (
+        "Canonical cashflow classification used by analytics and reporting."
+    )
+
+    assert valuation["properties"]["market_price"]["description"] == (
+        "Market price used for the position valuation snapshot."
+    )
+    assert valuation["properties"]["unrealized_gain_loss"]["description"] == (
+        "Unrealized gain or loss in portfolio base currency."
+    )
+
+    assert position_history["properties"]["transaction_id"]["description"] == (
+        "Transaction identifier that produced this position-history state."
+    )
+    assert position_history["properties"]["cost_basis_local"]["description"] == (
+        "Total cost basis in the instrument's local currency."
+    )
+
+
 async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
@@ -123,5 +460,3 @@ async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     assert "/portfolios/{portfolio_id}/performance" not in paths
     assert "/portfolios/{portfolio_id}/performance/mwr" not in paths
     assert "/portfolios/{portfolio_id}/positions-analytics" not in paths
-
-

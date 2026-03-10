@@ -476,7 +476,7 @@ If `CASH_LOT_COST_METHOD` enabled:
 
 Lot selection policy:
 
-* `FIFO | LIFO | AVERAGE_COST | SPECIFIC_ID`
+* `FIFO | AVCO`
 
 Realized FX P&L arises from differences between:
 

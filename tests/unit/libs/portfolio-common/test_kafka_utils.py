@@ -2,7 +2,7 @@
 from unittest.mock import ANY, MagicMock, patch
 
 # The module we are testing
-from portfolio_common.kafka_utils import KafkaProducer
+from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer, reset_kafka_producer
 
 
 @patch("portfolio_common.kafka_utils.Producer")
@@ -102,3 +102,17 @@ def test_delivery_report_handles_failure(MockProducer):
         mock_logger.error.assert_called_with(
             "Message delivery failed for topic t key b'k': Mock Kafka Error"
         )
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_reset_kafka_producer_clears_singleton(MockProducer):
+    mock_confluent_producer = MagicMock()
+    MockProducer.return_value = mock_confluent_producer
+
+    producer = get_kafka_producer()
+    assert producer is get_kafka_producer()
+
+    reset_kafka_producer(timeout=0)
+
+    mock_confluent_producer.flush.assert_called()
+    assert get_kafka_producer() is not producer

@@ -212,7 +212,10 @@ class BenchmarkDefinitionResponse(BaseModel):
     )
     classification_labels: dict[str, str] = Field(
         default_factory=dict,
-        description="Canonical benchmark classification labels (asset_class, sector, region, style).",
+        description=(
+            "Canonical benchmark classification labels "
+            "(asset_class, sector, region, style)."
+        ),
         examples=[{"asset_class": "multi_asset", "region": "global"}],
     )
     effective_from: date = Field(
@@ -282,10 +285,15 @@ class BenchmarkCatalogRequest(BaseModel):
 
 
 class BenchmarkCatalogResponse(BaseModel):
-    as_of_date: date = Field(..., description="As-of date used for catalog resolution.")
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for catalog resolution.",
+        examples=["2026-01-31"],
+    )
     records: list[BenchmarkDefinitionResponse] = Field(
         default_factory=list,
         description="Benchmark definition records effective for the requested date.",
+        examples=[[{"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "benchmark_type": "composite"}]],
     )
 
     model_config = ConfigDict()
@@ -317,8 +325,12 @@ class IndexCatalogRequest(BaseModel):
 
 
 class IndexDefinitionResponse(BaseModel):
-    index_id: str = Field(..., description="Canonical index identifier.", examples=["IDX_MSCI_WORLD_TR"])
-    index_name: str = Field(..., description="Display index name.", examples=["MSCI World Total Return"])
+    index_id: str = Field(
+        ..., description="Canonical index identifier.", examples=["IDX_MSCI_WORLD_TR"]
+    )
+    index_name: str = Field(
+        ..., description="Display index name.", examples=["MSCI World Total Return"]
+    )
     index_currency: str = Field(..., description="Index currency.", examples=["USD"])
     index_type: str | None = Field(
         None,
@@ -346,7 +358,9 @@ class IndexDefinitionResponse(BaseModel):
         description="Canonical index classification labels required for attribution.",
         examples=[{"asset_class": "equity", "sector": "technology", "region": "global"}],
     )
-    effective_from: date = Field(..., description="Definition effective start date.", examples=["2025-01-01"])
+    effective_from: date = Field(
+        ..., description="Definition effective start date.", examples=["2025-01-01"]
+    )
     effective_to: date | None = Field(
         None,
         description="Definition effective end date.",
@@ -368,10 +382,15 @@ class IndexDefinitionResponse(BaseModel):
 
 
 class IndexCatalogResponse(BaseModel):
-    as_of_date: date = Field(..., description="As-of date used for catalog resolution.")
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for catalog resolution.",
+        examples=["2026-01-31"],
+    )
     records: list[IndexDefinitionResponse] = Field(
         default_factory=list,
         description="Index definition records effective for the requested date.",
+        examples=[[{"index_id": "IDX_MSCI_WORLD_TR", "index_currency": "USD"}]],
     )
 
     model_config = ConfigDict()
@@ -451,7 +470,9 @@ class SeriesPoint(BaseModel):
 
 
 class ComponentSeriesResponse(BaseModel):
-    index_id: str = Field(..., description="Component index identifier.", examples=["IDX_MSCI_WORLD_TR"])
+    index_id: str = Field(
+        ..., description="Component index identifier.", examples=["IDX_MSCI_WORLD_TR"]
+    )
     points: list[SeriesPoint] = Field(
         default_factory=list,
         description="Time series points for the requested component index.",
@@ -461,10 +482,16 @@ class ComponentSeriesResponse(BaseModel):
 
 
 class BenchmarkMarketSeriesResponse(BaseModel):
-    benchmark_id: str = Field(..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"])
+    benchmark_id: str = Field(
+        ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
+    )
     as_of_date: date = Field(..., description="As-of date used for composition resolution.")
-    resolved_window: IntegrationWindow = Field(..., description="Resolved window returned by query service.")
-    frequency: str = Field(..., description="Frequency label returned by the contract.", examples=["daily"])
+    resolved_window: IntegrationWindow = Field(
+        ..., description="Resolved window returned by query service."
+    )
+    frequency: str = Field(
+        ..., description="Frequency label returned by the contract.", examples=["daily"]
+    )
     component_series: list[ComponentSeriesResponse] = Field(
         default_factory=list,
         description="Component-level benchmark market series records.",
@@ -472,11 +499,18 @@ class BenchmarkMarketSeriesResponse(BaseModel):
     quality_status_summary: dict[str, int] = Field(
         default_factory=dict,
         description="Aggregate quality status counts over all returned points.",
+        examples=[{"accepted": 31, "estimated": 2}],
     )
     lineage: dict[str, str] = Field(
         default_factory=dict,
         description="Lineage metadata (contract_version, source_system, generated_by).",
-        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
+        examples=[
+            {
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core",
+                "generated_by": "query_control_plane_service",
+            }
+        ],
     )
 
     model_config = ConfigDict()
@@ -513,7 +547,9 @@ class RiskFreeSeriesRequest(SeriesRequest):
 
 class IndexPriceSeriesPoint(BaseModel):
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    index_price: Decimal = Field(..., description="Index price value.", examples=["4567.1234000000"])
+    index_price: Decimal = Field(
+        ..., description="Index price value.", examples=["4567.1234000000"]
+    )
     series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
     value_convention: str = Field(
         ...,
@@ -529,7 +565,9 @@ class IndexReturnSeriesPoint(BaseModel):
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
     index_return: Decimal = Field(..., description="Index return value.", examples=["0.0023000000"])
     return_period: str = Field(..., description="Return period label.", examples=["1d"])
-    return_convention: str = Field(..., description="Return convention label.", examples=["total_return_index"])
+    return_convention: str = Field(
+        ..., description="Return convention label.", examples=["total_return_index"]
+    )
     series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
     quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
 
@@ -538,9 +576,13 @@ class IndexReturnSeriesPoint(BaseModel):
 
 class BenchmarkReturnSeriesPoint(BaseModel):
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    benchmark_return: Decimal = Field(..., description="Benchmark return value.", examples=["0.0019000000"])
+    benchmark_return: Decimal = Field(
+        ..., description="Benchmark return value.", examples=["0.0019000000"]
+    )
     return_period: str = Field(..., description="Return period label.", examples=["1d"])
-    return_convention: str = Field(..., description="Return convention label.", examples=["total_return_index"])
+    return_convention: str = Field(
+        ..., description="Return convention label.", examples=["total_return_index"]
+    )
     series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
     quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
 
@@ -551,10 +593,13 @@ class IndexPriceSeriesResponse(BaseModel):
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
-    points: list[IndexPriceSeriesPoint] = Field(default_factory=list, description="Index price points.")
+    points: list[IndexPriceSeriesPoint] = Field(
+        default_factory=list, description="Index price points."
+    )
     lineage: dict[str, str] = Field(
         default_factory=dict,
         description="Lineage metadata for deterministic replay.",
+        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
     )
 
     model_config = ConfigDict()
@@ -564,17 +609,22 @@ class IndexReturnSeriesResponse(BaseModel):
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
-    points: list[IndexReturnSeriesPoint] = Field(default_factory=list, description="Index return points.")
+    points: list[IndexReturnSeriesPoint] = Field(
+        default_factory=list, description="Index return points."
+    )
     lineage: dict[str, str] = Field(
         default_factory=dict,
         description="Lineage metadata for deterministic replay.",
+        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
     )
 
     model_config = ConfigDict()
 
 
 class BenchmarkReturnSeriesResponse(BaseModel):
-    benchmark_id: str = Field(..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"])
+    benchmark_id: str = Field(
+        ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
+    )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
     points: list[BenchmarkReturnSeriesPoint] = Field(
@@ -584,6 +634,7 @@ class BenchmarkReturnSeriesResponse(BaseModel):
     lineage: dict[str, str] = Field(
         default_factory=dict,
         description="Lineage metadata for deterministic replay.",
+        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
     )
 
     model_config = ConfigDict()
@@ -592,7 +643,9 @@ class BenchmarkReturnSeriesResponse(BaseModel):
 class RiskFreeSeriesPoint(BaseModel):
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
     value: Decimal = Field(..., description="Risk-free series value.", examples=["0.0350000000"])
-    value_convention: str = Field(..., description="Value convention label.", examples=["annualized_rate"])
+    value_convention: str = Field(
+        ..., description="Value convention label.", examples=["annualized_rate"]
+    )
     day_count_convention: str | None = Field(
         None,
         description="Day-count convention for annualized rate interpretation.",
@@ -618,8 +671,14 @@ class RiskFreeSeriesResponse(BaseModel):
     )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
-    points: list[RiskFreeSeriesPoint] = Field(default_factory=list, description="Risk-free series points.")
-    lineage: dict[str, str] = Field(default_factory=dict, description="Lineage metadata for returned records.")
+    points: list[RiskFreeSeriesPoint] = Field(
+        default_factory=list, description="Risk-free series points."
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Lineage metadata for returned records.",
+        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
+    )
 
     model_config = ConfigDict()
 
@@ -631,12 +690,36 @@ class CoverageRequest(BaseModel):
 
 
 class CoverageResponse(BaseModel):
-    observed_start_date: date | None = Field(None, description="Observed first date in data window.")
-    observed_end_date: date | None = Field(None, description="Observed last date in data window.")
-    expected_start_date: date = Field(..., description="Expected start date from request window.")
-    expected_end_date: date = Field(..., description="Expected end date from request window.")
-    total_points: int = Field(..., description="Total points available in observed window.", examples=[31])
-    missing_dates_count: int = Field(..., description="Count of missing calendar dates within expected window.", examples=[2])
+    observed_start_date: date | None = Field(
+        None,
+        description="Observed first date in data window.",
+        examples=["2026-01-01"],
+    )
+    observed_end_date: date | None = Field(
+        None,
+        description="Observed last date in data window.",
+        examples=["2026-01-31"],
+    )
+    expected_start_date: date = Field(
+        ...,
+        description="Expected start date from request window.",
+        examples=["2026-01-01"],
+    )
+    expected_end_date: date = Field(
+        ...,
+        description="Expected end date from request window.",
+        examples=["2026-01-31"],
+    )
+    total_points: int = Field(
+        ...,
+        description="Total points available in observed window.",
+        examples=[31],
+    )
+    missing_dates_count: int = Field(
+        ...,
+        description="Count of missing calendar dates within expected window.",
+        examples=[2],
+    )
     missing_dates_sample: list[date] = Field(
         default_factory=list,
         description="Sample of missing dates in the expected window.",
@@ -645,13 +728,16 @@ class CoverageResponse(BaseModel):
     quality_status_distribution: dict[str, int] = Field(
         default_factory=dict,
         description="Quality status distribution over observed points.",
+        examples=[{"accepted": 29, "estimated": 2}],
     )
 
     model_config = ConfigDict()
 
 
 class ClassificationTaxonomyRequest(BaseModel):
-    as_of_date: date = Field(..., description="As-of date for taxonomy resolution.", examples=["2026-01-31"])
+    as_of_date: date = Field(
+        ..., description="As-of date for taxonomy resolution.", examples=["2026-01-31"]
+    )
     taxonomy_scope: str | None = Field(
         None,
         description="Optional taxonomy scope filter.",
@@ -662,10 +748,18 @@ class ClassificationTaxonomyRequest(BaseModel):
 
 
 class ClassificationTaxonomyEntry(BaseModel):
-    classification_set_id: str = Field(..., description="Classification taxonomy set identifier.", examples=["wm_global_taxonomy_v1"])
+    classification_set_id: str = Field(
+        ...,
+        description="Classification taxonomy set identifier.",
+        examples=["wm_global_taxonomy_v1"],
+    )
     taxonomy_scope: str = Field(..., description="Taxonomy scope.", examples=["index"])
-    dimension_name: str = Field(..., description="Classification dimension name.", examples=["sector"])
-    dimension_value: str = Field(..., description="Classification dimension value.", examples=["technology"])
+    dimension_name: str = Field(
+        ..., description="Classification dimension name.", examples=["sector"]
+    )
+    dimension_value: str = Field(
+        ..., description="Classification dimension value.", examples=["technology"]
+    )
     dimension_description: str | None = Field(
         None,
         description="Human-readable dimension description.",
@@ -683,10 +777,15 @@ class ClassificationTaxonomyEntry(BaseModel):
 
 
 class ClassificationTaxonomyResponse(BaseModel):
-    as_of_date: date = Field(..., description="As-of date used for taxonomy response.")
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for taxonomy response.",
+        examples=["2026-01-31"],
+    )
     records: list[ClassificationTaxonomyEntry] = Field(
         default_factory=list,
         description="Classification taxonomy entries effective on the requested date.",
+        examples=[[{"classification_set_id": "wm_global_taxonomy_v1", "dimension_name": "sector"}]],
     )
     taxonomy_version: str = Field(
         "rfc_062_v1",

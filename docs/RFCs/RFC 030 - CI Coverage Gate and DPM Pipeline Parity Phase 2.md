@@ -29,7 +29,7 @@ Original RFC 030 requested:
 ## Current Implementation Reality
 
 Implemented:
-1. CI test matrix runs multiple suites (unit, unit-db, integration-lite, ops-contract, buy-rfc, sell-rfc).
+1. CI test matrix runs multiple suites (unit, unit-db, integration-lite, ops-contract, transaction-buy-contract, transaction-sell-contract).
 2. Coverage artifacts per suite uploaded and merged in dedicated `Coverage Gate (Combined)` job.
 3. Combined coverage gate enforces `--fail-under=99`.
 4. Makefile includes `test-integration-lite`, `coverage-gate`, and `ci-local` commands.

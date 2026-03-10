@@ -76,7 +76,10 @@ class CoreSnapshotRequest(BaseModel):
     )
     reporting_currency: Optional[str] = Field(
         None,
-        description="ISO currency code for reporting conversion. Defaults to portfolio base currency.",
+        description=(
+            "ISO currency code for reporting conversion. "
+            "Defaults to portfolio base currency."
+        ),
         examples=["USD"],
     )
     sections: list[CoreSnapshotSection] = Field(
@@ -182,18 +185,29 @@ class CoreSnapshotGovernanceMetadata(BaseModel):
     requested_sections: list[CoreSnapshotSection] = Field(
         ...,
         description="Original section list requested by caller before policy application.",
+        examples=[["positions_baseline", "positions_projected", "positions_delta"]],
     )
     applied_sections: list[CoreSnapshotSection] = Field(
         ...,
         description="Section list applied after policy evaluation.",
+        examples=[["positions_baseline", "positions_projected", "positions_delta"]],
     )
     dropped_sections: list[CoreSnapshotSection] = Field(
         default_factory=list,
         description="Requested sections removed by policy evaluation.",
+        examples=[["portfolio_totals"]],
     )
     policy_provenance: CoreSnapshotPolicyProvenance = Field(
         ...,
         description="Policy lineage and strict-mode attributes used in this response.",
+        examples=[
+            {
+                "policy_version": "tenant-default-v1",
+                "policy_source": "tenant",
+                "matched_rule_id": "tenant.tenant_sg_pb.consumers.lotus-performance",
+                "strict_mode": True,
+            }
+        ],
     )
     warnings: list[str] = Field(
         default_factory=list,
@@ -212,6 +226,11 @@ class CoreSnapshotFreshnessMetadata(BaseModel):
         ...,
         description="Baseline source used to assemble positions.",
         examples=["position_state"],
+    )
+    snapshot_timestamp: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp of the resolved baseline snapshot when one exists.",
+        examples=["2026-02-27T10:30:00Z"],
     )
 
 
@@ -366,17 +385,45 @@ class CoreSnapshotSections(BaseModel):
     positions_baseline: Optional[list[CoreSnapshotPositionRecord]] = Field(
         None,
         description="Baseline positions resolved for as_of_date.",
-        examples=[[{"security_id": "SEC_AAPL_US", "quantity": "100.0000000000"}]],
+        examples=[
+            [
+                {
+                    "security_id": "SEC_AAPL_US",
+                    "quantity": "100.0000000000",
+                    "market_value_base": "19500.25",
+                    "weight": "0.1245",
+                }
+            ]
+        ],
     )
     positions_projected: Optional[list[CoreSnapshotPositionRecord]] = Field(
         None,
         description="Projected positions after applying simulation changes.",
-        examples=[[{"security_id": "SEC_AAPL_US", "quantity": "120.0000000000"}]],
+        examples=[
+            [
+                {
+                    "security_id": "SEC_AAPL_US",
+                    "quantity": "120.0000000000",
+                    "market_value_base": "23400.30",
+                    "weight": "0.1420",
+                }
+            ]
+        ],
     )
     positions_delta: Optional[list[CoreSnapshotDeltaRecord]] = Field(
         None,
         description="Per-security baseline versus projected deltas.",
-        examples=[[{"security_id": "SEC_AAPL_US", "delta_quantity": "20.0000000000"}]],
+        examples=[
+            [
+                {
+                    "security_id": "SEC_AAPL_US",
+                    "baseline_quantity": "100.0000000000",
+                    "projected_quantity": "120.0000000000",
+                    "delta_quantity": "20.0000000000",
+                    "delta_market_value_base": "3900.05",
+                }
+            ]
+        ],
     )
     portfolio_totals: Optional[CoreSnapshotPortfolioTotals] = Field(
         None,
@@ -392,7 +439,16 @@ class CoreSnapshotSections(BaseModel):
     instrument_enrichment: Optional[list[CoreSnapshotInstrumentEnrichmentRecord]] = Field(
         None,
         description="Reference enrichment for securities included in snapshot sections.",
-        examples=[[{"security_id": "SEC_AAPL_US", "isin": "US0378331005"}]],
+        examples=[
+            [
+                {
+                    "security_id": "SEC_AAPL_US",
+                    "isin": "US0378331005",
+                    "instrument_name": "Apple Inc.",
+                    "issuer_name": "Apple Inc.",
+                }
+            ]
+        ],
     )
 
 
@@ -447,7 +503,9 @@ class CoreSnapshotResponse(BaseModel):
         description="Requested snapshot sections payload.",
         examples=[
             {
-                "positions_baseline": [{"security_id": "SEC_AAPL_US", "quantity": "100.0000000000"}],
+                "positions_baseline": [
+                    {"security_id": "SEC_AAPL_US", "quantity": "100.0000000000"}
+                ],
                 "positions_projected": [
                     {"security_id": "SEC_AAPL_US", "quantity": "120.0000000000"}
                 ],
