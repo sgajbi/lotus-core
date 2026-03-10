@@ -751,8 +751,20 @@ async def get_ingestion_health_lag(
     ),
 )
 async def get_ingestion_consumer_lag(
-    lookback_minutes: int = Query(default=60, ge=5, le=1440),
-    limit: int = Query(default=100, ge=1, le=500),
+    lookback_minutes: int = Query(
+        default=60,
+        ge=5,
+        le=1440,
+        description="Lookback window, in minutes, used to aggregate consumer lag diagnostics.",
+        examples=[60],
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Maximum number of consumer-group/topic lag rows to return.",
+        examples=[100],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_consumer_lag(
@@ -774,10 +786,34 @@ async def get_ingestion_consumer_lag(
     ),
 )
 async def get_ingestion_slo_status(
-    lookback_minutes: int = Query(default=60, ge=5, le=1440),
-    failure_rate_threshold: Decimal = Query(default=Decimal("0.03"), ge=0, le=1),
-    queue_latency_threshold_seconds: float = Query(default=5.0, ge=0.1, le=600),
-    backlog_age_threshold_seconds: float = Query(default=300, ge=1, le=86400),
+    lookback_minutes: int = Query(
+        default=60,
+        ge=5,
+        le=1440,
+        description="Lookback window, in minutes, used to compute ingestion SLO metrics.",
+        examples=[60],
+    ),
+    failure_rate_threshold: Decimal = Query(
+        default=Decimal("0.03"),
+        ge=0,
+        le=1,
+        description="Failure-rate threshold used to flag SLO breaches.",
+        examples=["0.03"],
+    ),
+    queue_latency_threshold_seconds: float = Query(
+        default=5.0,
+        ge=0.1,
+        le=600,
+        description="Queue-latency threshold, in seconds, used for SLO evaluation.",
+        examples=[5.0],
+    ),
+    backlog_age_threshold_seconds: float = Query(
+        default=300,
+        ge=1,
+        le=86400,
+        description="Oldest-backlog-age threshold, in seconds, used for SLO evaluation.",
+        examples=[300.0],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_slo_status(
@@ -801,9 +837,30 @@ async def get_ingestion_slo_status(
     ),
 )
 async def get_ingestion_error_budget_status(
-    lookback_minutes: int = Query(default=60, ge=5, le=1440),
-    failure_rate_threshold: Decimal = Query(default=Decimal("0.03"), ge=0, le=1),
-    backlog_growth_threshold: int = Query(default=5, ge=0, le=10000),
+    lookback_minutes: int = Query(
+        default=60,
+        ge=5,
+        le=1440,
+        description=(
+            "Lookback window, in minutes, used for current-vs-previous "
+            "error-budget comparison."
+        ),
+        examples=[60],
+    ),
+    failure_rate_threshold: Decimal = Query(
+        default=Decimal("0.03"),
+        ge=0,
+        le=1,
+        description="Failure-rate threshold used when computing burn-rate breach state.",
+        examples=["0.03"],
+    ),
+    backlog_growth_threshold: int = Query(
+        default=5,
+        ge=0,
+        le=10000,
+        description="Backlog-growth threshold, in jobs, used for error-budget alerting.",
+        examples=[5],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_error_budget_status(
@@ -828,10 +885,34 @@ async def get_ingestion_error_budget_status(
     ),
 )
 async def get_ingestion_operating_band(
-    lookback_minutes: int = Query(default=60, ge=5, le=1440),
-    failure_rate_threshold: Decimal = Query(default=Decimal("0.03"), ge=0, le=1),
-    queue_latency_threshold_seconds: float = Query(default=5.0, ge=0.1, le=600),
-    backlog_age_threshold_seconds: float = Query(default=300, ge=1, le=86400),
+    lookback_minutes: int = Query(
+        default=60,
+        ge=5,
+        le=1440,
+        description="Lookback window, in minutes, used to compute the operating-band severity.",
+        examples=[60],
+    ),
+    failure_rate_threshold: Decimal = Query(
+        default=Decimal("0.03"),
+        ge=0,
+        le=1,
+        description="Failure-rate threshold used by the operating-band classifier.",
+        examples=["0.03"],
+    ),
+    queue_latency_threshold_seconds: float = Query(
+        default=5.0,
+        ge=0.1,
+        le=600,
+        description="Queue-latency threshold, in seconds, used by the operating-band classifier.",
+        examples=[5.0],
+    ),
+    backlog_age_threshold_seconds: float = Query(
+        default=300,
+        ge=1,
+        le=86400,
+        description="Backlog-age threshold, in seconds, used by the operating-band classifier.",
+        examples=[300.0],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_operating_band(
@@ -894,9 +975,27 @@ async def get_reprocessing_queue_health(
     ),
 )
 async def get_ingestion_capacity_status(
-    lookback_minutes: int = Query(default=60, ge=5, le=1440),
-    limit: int = Query(default=200, ge=1, le=500),
-    assumed_replicas: int = Query(default=1, ge=1, le=500),
+    lookback_minutes: int = Query(
+        default=60,
+        ge=5,
+        le=1440,
+        description="Lookback window, in minutes, used for throughput and saturation metrics.",
+        examples=[60],
+    ),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=500,
+        description="Maximum number of endpoint/entity capacity rows to return.",
+        examples=[200],
+    ),
+    assumed_replicas: int = Query(
+        default=1,
+        ge=1,
+        le=500,
+        description="Replica count assumption used when projecting effective processing capacity.",
+        examples=[1],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_capacity_status(
@@ -920,8 +1019,20 @@ async def get_ingestion_capacity_status(
     ),
 )
 async def get_ingestion_backlog_breakdown(
-    lookback_minutes: int = Query(default=1440, ge=5, le=10080),
-    limit: int = Query(default=200, ge=1, le=500),
+    lookback_minutes: int = Query(
+        default=1440,
+        ge=5,
+        le=10080,
+        description="Lookback window, in minutes, used to assemble backlog breakdown metrics.",
+        examples=[1440],
+    ),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=500,
+        description="Maximum number of backlog rows to return.",
+        examples=[200],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_backlog_breakdown(
@@ -943,8 +1054,20 @@ async def get_ingestion_backlog_breakdown(
     ),
 )
 async def list_ingestion_stalled_jobs(
-    threshold_seconds: int = Query(default=300, ge=30, le=86400),
-    limit: int = Query(default=100, ge=1, le=500),
+    threshold_seconds: int = Query(
+        default=300,
+        ge=30,
+        le=86400,
+        description="Minimum age, in seconds, that qualifies a queued/accepted job as stalled.",
+        examples=[300],
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Maximum number of stalled jobs to return.",
+        examples=[100],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.list_stalled_jobs(
@@ -992,9 +1115,23 @@ async def list_ingestion_stalled_jobs(
     },
 )
 async def list_consumer_dlq_events(
-    limit: int = Query(default=100, ge=1, le=500),
-    original_topic: str | None = Query(default=None),
-    consumer_group: str | None = Query(default=None),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Maximum number of consumer DLQ events to return.",
+        examples=[100],
+    ),
+    original_topic: str | None = Query(
+        default=None,
+        description="Optional original Kafka topic filter.",
+        examples=["raw_transactions"],
+    ),
+    consumer_group: str | None = Query(
+        default=None,
+        description="Optional consumer-group filter.",
+        examples=["persistence-service-group"],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     events = await ingestion_job_service.list_consumer_dlq_events(
@@ -1359,7 +1496,10 @@ async def list_ingestion_replay_audits(
     },
 )
 async def get_ingestion_replay_audit(
-    replay_id: str,
+    replay_id: str = Path(
+        description="Replay audit identifier.",
+        examples=["replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P"],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     audit = await ingestion_job_service.get_replay_audit(replay_id)
@@ -1465,8 +1605,20 @@ async def update_ingestion_ops_control(
     ),
 )
 async def get_ingestion_idempotency_diagnostics(
-    lookback_minutes: int = Query(default=1440, ge=5, le=10080),
-    limit: int = Query(default=200, ge=1, le=500),
+    lookback_minutes: int = Query(
+        default=1440,
+        ge=5,
+        le=10080,
+        description="Lookback window, in minutes, used to aggregate idempotency-key behavior.",
+        examples=[1440],
+    ),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=500,
+        description="Maximum number of idempotency diagnostics rows to return.",
+        examples=[200],
+    ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_idempotency_diagnostics(

@@ -74,6 +74,19 @@ def _has_parameter_examples(operation: dict) -> bool:
     return True
 
 
+def _has_parameter_descriptions(operation: dict) -> bool:
+    parameters = operation.get("parameters", [])
+    if not isinstance(parameters, list):
+        return True
+    for parameter in parameters:
+        if not isinstance(parameter, dict):
+            continue
+        if parameter.get("description"):
+            continue
+        return False
+    return True
+
+
 def _missing_success_response_examples(operation: dict) -> list[str]:
     responses = operation.get("responses", {})
     if not isinstance(responses, dict):
@@ -174,6 +187,8 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
                 missing_docs.append((method_upper, path, "request example"))
             if not _has_parameter_examples(operation):
                 missing_docs.append((method_upper, path, "parameter example"))
+            if not _has_parameter_descriptions(operation):
+                missing_docs.append((method_upper, path, "parameter description"))
 
     schemas = schema.get("components", {}).get("schemas", {})
     for model_name, model_schema in schemas.items():

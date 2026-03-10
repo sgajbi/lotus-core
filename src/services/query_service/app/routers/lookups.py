@@ -56,7 +56,13 @@ async def get_portfolio_lookups(
         description="Optional case-insensitive search text applied to portfolio ID.",
         examples=["PORT-00"],
     ),
-    limit: int = Query(default=500, ge=1, le=1000, examples=[100]),
+    limit: int = Query(
+        default=500,
+        ge=1,
+        le=1000,
+        description="Maximum number of lookup items to return after filtering and sorting.",
+        examples=[100],
+    ),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
     service = PortfolioService(db)
@@ -83,7 +89,13 @@ async def get_portfolio_lookups(
     ),
 )
 async def get_instrument_lookups(
-    limit: int = Query(default=200, ge=1, le=1000, examples=[200]),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=1000,
+        description="Maximum number of instrument lookup items to return.",
+        examples=[200],
+    ),
     product_type: str | None = Query(
         default=None,
         description="Optional product type filter (for example: Equity, Bond).",
@@ -121,7 +133,13 @@ async def get_instrument_lookups(
     ),
 )
 async def get_currency_lookups(
-    instrument_page_limit: int = Query(default=500, ge=50, le=1000, examples=[500]),
+    instrument_page_limit: int = Query(
+        default=500,
+        ge=50,
+        le=1000,
+        description="Page size used when scanning instruments to derive the currency catalog.",
+        examples=[500],
+    ),
     source: str = Query(
         default="ALL",
         pattern="^(ALL|PORTFOLIOS|INSTRUMENTS)$",
@@ -133,7 +151,13 @@ async def get_currency_lookups(
         description="Optional case-insensitive search text applied to currency code.",
         examples=["USD"],
     ),
-    limit: int = Query(default=500, ge=1, le=1000, examples=[100]),
+    limit: int = Query(
+        default=500,
+        ge=1,
+        le=1000,
+        description="Maximum number of currency lookup items to return after filtering.",
+        examples=[100],
+    ),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
     portfolio_service = PortfolioService(db)
