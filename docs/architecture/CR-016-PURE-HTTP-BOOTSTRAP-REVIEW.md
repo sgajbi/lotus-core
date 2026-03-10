@@ -31,35 +31,56 @@ The duplication is already carrying some cost:
 - review and hardening work must be repeated app by app
 - future drift risk is high
 
-## Why this was not refactored in the current slice
+## Actions taken
 
-This bootstrap layer is more sensitive than the worker `main.py` convergence:
+Extracted the shared bootstrap behavior into:
 
-- enterprise middleware differs between some apps
-- dependency-critical startup behavior differs (`ingestion_service` is
-  intentionally fail-fast on Kafka producer init)
-- health dependency sets differ (`db`, `kafka`, or both)
+- `portfolio_common.http_app_bootstrap.configure_standard_http_app(...)`
+- `portfolio_common.http_app_bootstrap.configure_standard_openapi(...)`
+- `portfolio_common.http_app_bootstrap.include_routers(...)`
 
-So while the duplication is real, the correct fix is not a quick mechanical
-helper. It needs a deliberate app-bootstrap design that preserves service-local
-contracts while extracting the genuinely shared middleware and OpenAPI wiring.
+Migrated:
 
-## Recommended next step
+- `query_service`
+- `query_control_plane_service`
+- `event_replay_service`
+- `financial_reconciliation_service`
+- `ingestion_service`
 
-Design a shared HTTP bootstrap utility with explicit hooks for:
+The helper preserves service-local ownership for:
 
-- service name and prefix
-- app title/description/version
-- enterprise middleware inclusion
-- startup dependency policy
+- enterprise middleware
+- startup/lifespan behavior
+- dependency-critical startup policy
 - health dependency set
-- router registration
+- router selection
 
-That should be handled as its own convergence batch, not folded casually into
-the current runtime review.
+## Design boundary
+
+This was safe to refactor because the shared layer is now explicit, while the
+service-specific contracts remain local. The helper is intentionally not an app
+factory.
+
+The service-local code still owns:
+
+- `FastAPI(...)` construction
+- lifespan logic
+- enterprise policy hooks
+- Kafka fail-fast behavior in `ingestion_service`
+- health dependency declaration
+- router inclusion choices
+
+## Follow-up
+
+If future apps need this same pattern, extend the helper only at the shared
+middleware/OpenAPI/router-registration layer.
+
+Do not collapse service-local startup contracts into the helper unless the
+contract is genuinely identical.
 
 ## Evidence
 
+- `src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py`
 - `src/services/query_service/app/main.py`
 - `src/services/query_control_plane_service/app/main.py`
 - `src/services/event_replay_service/app/main.py`
