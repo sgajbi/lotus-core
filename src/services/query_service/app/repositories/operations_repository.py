@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -15,6 +16,16 @@ from portfolio_common.database_models import (
 )
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@dataclass(frozen=True)
+class JobHealthSummary:
+    pending_jobs: int
+    processing_jobs: int
+    stale_processing_jobs: int
+    failed_jobs: int
+    failed_jobs_last_hours: int
+    oldest_open_job_date: Optional[date]
 
 
 class OperationsRepository:
@@ -42,145 +53,89 @@ class OperationsRepository:
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
-    async def get_pending_valuation_jobs_count(self, portfolio_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
-                PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")),
-            )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_processing_valuation_jobs_count(self, portfolio_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
-                PortfolioValuationJob.status == "PROCESSING",
-            )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_stale_processing_valuation_jobs_count(
-        self, portfolio_id: str, stale_minutes: int
-    ) -> int:
+    async def get_valuation_job_health_summary(
+        self,
+        portfolio_id: str,
+        stale_minutes: int,
+        failed_window_hours: int,
+    ) -> JobHealthSummary:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
+        failed_since = datetime.now(timezone.utc) - timedelta(hours=failed_window_hours)
+        stmt = select(
+            func.count()
+            .filter(PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")))
+            .label("pending_jobs"),
+            func.count()
+            .filter(PortfolioValuationJob.status == "PROCESSING")
+            .label("processing_jobs"),
+            func.count()
+            .filter(
                 PortfolioValuationJob.status == "PROCESSING",
                 PortfolioValuationJob.updated_at < stale_threshold,
             )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_oldest_pending_valuation_date(self, portfolio_id: str) -> Optional[date]:
-        stmt = select(func.min(PortfolioValuationJob.valuation_date)).where(
-            PortfolioValuationJob.portfolio_id == portfolio_id,
-            PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")),
-        )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
-
-    async def get_pending_aggregation_jobs_count(self, portfolio_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")),
+            .label("stale_processing_jobs"),
+            func.count().filter(PortfolioValuationJob.status == "FAILED").label("failed_jobs"),
+            func.count()
+            .filter(
+                PortfolioValuationJob.status == "FAILED",
+                PortfolioValuationJob.updated_at >= failed_since,
             )
+            .label("failed_jobs_last_hours"),
+            func.min(PortfolioValuationJob.valuation_date)
+            .filter(PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")))
+            .label("oldest_open_job_date"),
+        ).where(PortfolioValuationJob.portfolio_id == portfolio_id)
+        row = (await self.db.execute(stmt)).one()
+        return JobHealthSummary(
+            pending_jobs=int(row.pending_jobs or 0),
+            processing_jobs=int(row.processing_jobs or 0),
+            stale_processing_jobs=int(row.stale_processing_jobs or 0),
+            failed_jobs=int(row.failed_jobs or 0),
+            failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
+            oldest_open_job_date=row.oldest_open_job_date,
         )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
 
-    async def get_processing_aggregation_jobs_count(self, portfolio_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.status == "PROCESSING",
-            )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_stale_processing_aggregation_jobs_count(
-        self, portfolio_id: str, stale_minutes: int
-    ) -> int:
+    async def get_aggregation_job_health_summary(
+        self,
+        portfolio_id: str,
+        stale_minutes: int,
+        failed_window_hours: int,
+    ) -> JobHealthSummary:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
+        failed_since = datetime.now(timezone.utc) - timedelta(hours=failed_window_hours)
+        stmt = select(
+            func.count()
+            .filter(PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")))
+            .label("pending_jobs"),
+            func.count()
+            .filter(PortfolioAggregationJob.status == "PROCESSING")
+            .label("processing_jobs"),
+            func.count()
+            .filter(
                 PortfolioAggregationJob.status == "PROCESSING",
                 PortfolioAggregationJob.updated_at < stale_threshold,
             )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_valuation_failed_jobs_count(self, portfolio_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
-                PortfolioValuationJob.status == "FAILED",
-            )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_valuation_failed_jobs_last_hours(
-        self, portfolio_id: str, hours: int
-    ) -> int:
-        since = datetime.now(timezone.utc) - timedelta(hours=hours)
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
-                PortfolioValuationJob.status == "FAILED",
-                PortfolioValuationJob.updated_at >= since,
-            )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_aggregation_failed_jobs_count(self, portfolio_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
+            .label("stale_processing_jobs"),
+            func.count().filter(PortfolioAggregationJob.status == "FAILED").label("failed_jobs"),
+            func.count()
+            .filter(
                 PortfolioAggregationJob.status == "FAILED",
+                PortfolioAggregationJob.updated_at >= failed_since,
             )
+            .label("failed_jobs_last_hours"),
+            func.min(PortfolioAggregationJob.aggregation_date)
+            .filter(PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")))
+            .label("oldest_open_job_date"),
+        ).where(PortfolioAggregationJob.portfolio_id == portfolio_id)
+        row = (await self.db.execute(stmt)).one()
+        return JobHealthSummary(
+            pending_jobs=int(row.pending_jobs or 0),
+            processing_jobs=int(row.processing_jobs or 0),
+            stale_processing_jobs=int(row.stale_processing_jobs or 0),
+            failed_jobs=int(row.failed_jobs or 0),
+            failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
+            oldest_open_job_date=row.oldest_open_job_date,
         )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_aggregation_failed_jobs_last_hours(
-        self, portfolio_id: str, hours: int
-    ) -> int:
-        since = datetime.now(timezone.utc) - timedelta(hours=hours)
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.status == "FAILED",
-                PortfolioAggregationJob.updated_at >= since,
-            )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_oldest_pending_aggregation_date(self, portfolio_id: str) -> Optional[date]:
-        stmt = select(func.min(PortfolioAggregationJob.aggregation_date)).where(
-            PortfolioAggregationJob.portfolio_id == portfolio_id,
-            PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")),
-        )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_transaction_date(self, portfolio_id: str) -> Optional[date]:
         stmt = select(func.max(func.date(Transaction.transaction_date))).where(
@@ -275,9 +230,13 @@ class OperationsRepository:
                 latest_history.c.epoch == latest_snapshot.c.epoch,
             ),
         )
-        stmt = select(func.count()).select_from(joined).where(
-            latest_snapshot.c.latest_snapshot_date.is_(None),
-            latest_history.c.latest_history_date.is_not(None),
+        stmt = (
+            select(func.count())
+            .select_from(joined)
+            .where(
+                latest_snapshot.c.latest_snapshot_date.is_(None),
+                latest_history.c.latest_history_date.is_not(None),
+            )
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 

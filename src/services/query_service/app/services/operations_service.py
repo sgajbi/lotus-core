@@ -31,11 +31,8 @@ class OperationsService:
             latest_business_date,
             current_epoch,
             active_reprocessing_keys,
-            pending_valuation_jobs,
-            processing_valuation_jobs,
-            stale_processing_valuation_jobs,
-            oldest_pending_valuation_date,
-            pending_aggregation_jobs,
+            valuation_job_health,
+            aggregation_job_health,
             latest_transaction_date,
             latest_position_snapshot_date_unbounded,
             position_snapshot_history_mismatch_count,
@@ -44,11 +41,12 @@ class OperationsService:
             self.repo.get_latest_business_date(),
             self.repo.get_current_portfolio_epoch(portfolio_id),
             self.repo.get_active_reprocessing_keys_count(portfolio_id),
-            self.repo.get_pending_valuation_jobs_count(portfolio_id),
-            self.repo.get_processing_valuation_jobs_count(portfolio_id),
-            self.repo.get_stale_processing_valuation_jobs_count(portfolio_id, stale_minutes=15),
-            self.repo.get_oldest_pending_valuation_date(portfolio_id),
-            self.repo.get_pending_aggregation_jobs_count(portfolio_id),
+            self.repo.get_valuation_job_health_summary(
+                portfolio_id, stale_minutes=15, failed_window_hours=24
+            ),
+            self.repo.get_aggregation_job_health_summary(
+                portfolio_id, stale_minutes=15, failed_window_hours=24
+            ),
             self.repo.get_latest_transaction_date(portfolio_id),
             self.repo.get_latest_snapshot_date_for_current_epoch(portfolio_id),
             self.repo.get_position_snapshot_history_mismatch_count(portfolio_id),
@@ -62,19 +60,17 @@ class OperationsService:
                 latest_booked_transaction_date,
                 latest_booked_position_snapshot_date,
             ) = await asyncio.gather(
-                self.repo.get_latest_transaction_date_as_of(
-                    portfolio_id, latest_business_date
-                ),
+                self.repo.get_latest_transaction_date_as_of(portfolio_id, latest_business_date),
                 self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
                     portfolio_id, latest_business_date
                 ),
             )
 
         valuation_backlog_age_days = None
-        if oldest_pending_valuation_date:
+        if valuation_job_health.oldest_open_job_date:
             reference_date = latest_business_date or datetime.now(timezone.utc).date()
             valuation_backlog_age_days = max(
-                0, (reference_date - oldest_pending_valuation_date).days
+                0, (reference_date - valuation_job_health.oldest_open_job_date).days
             )
 
         controls_status = latest_control_stage.status if latest_control_stage else None
@@ -85,12 +81,12 @@ class OperationsService:
             business_date=latest_business_date,
             current_epoch=current_epoch,
             active_reprocessing_keys=active_reprocessing_keys,
-            pending_valuation_jobs=pending_valuation_jobs,
-            processing_valuation_jobs=processing_valuation_jobs,
-            stale_processing_valuation_jobs=stale_processing_valuation_jobs,
-            oldest_pending_valuation_date=oldest_pending_valuation_date,
+            pending_valuation_jobs=valuation_job_health.pending_jobs,
+            processing_valuation_jobs=valuation_job_health.processing_jobs,
+            stale_processing_valuation_jobs=valuation_job_health.stale_processing_jobs,
+            oldest_pending_valuation_date=valuation_job_health.oldest_open_job_date,
             valuation_backlog_age_days=valuation_backlog_age_days,
-            pending_aggregation_jobs=pending_aggregation_jobs,
+            pending_aggregation_jobs=aggregation_job_health.pending_jobs,
             latest_transaction_date=latest_transaction_date,
             latest_booked_transaction_date=latest_booked_transaction_date,
             latest_position_snapshot_date=latest_position_snapshot_date_unbounded,
@@ -116,48 +112,32 @@ class OperationsService:
         (
             latest_business_date,
             active_reprocessing_keys,
-            valuation_pending,
-            valuation_processing,
-            valuation_stale_processing,
-            valuation_failed,
-            valuation_failed_last_24h,
-            valuation_oldest_open,
-            aggregation_pending,
-            aggregation_processing,
-            aggregation_stale_processing,
-            aggregation_failed,
-            aggregation_failed_last_24h,
-            aggregation_oldest_open,
+            valuation_job_health,
+            aggregation_job_health,
         ) = await asyncio.gather(
             self.repo.get_latest_business_date(),
             self.repo.get_active_reprocessing_keys_count(portfolio_id),
-            self.repo.get_pending_valuation_jobs_count(portfolio_id),
-            self.repo.get_processing_valuation_jobs_count(portfolio_id),
-            self.repo.get_stale_processing_valuation_jobs_count(
-                portfolio_id, stale_minutes=stale_threshold_minutes
+            self.repo.get_valuation_job_health_summary(
+                portfolio_id,
+                stale_minutes=stale_threshold_minutes,
+                failed_window_hours=24,
             ),
-            self.repo.get_valuation_failed_jobs_count(portfolio_id),
-            self.repo.get_valuation_failed_jobs_last_hours(portfolio_id, hours=24),
-            self.repo.get_oldest_pending_valuation_date(portfolio_id),
-            self.repo.get_pending_aggregation_jobs_count(portfolio_id),
-            self.repo.get_processing_aggregation_jobs_count(portfolio_id),
-            self.repo.get_stale_processing_aggregation_jobs_count(
-                portfolio_id, stale_minutes=stale_threshold_minutes
+            self.repo.get_aggregation_job_health_summary(
+                portfolio_id,
+                stale_minutes=stale_threshold_minutes,
+                failed_window_hours=24,
             ),
-            self.repo.get_aggregation_failed_jobs_count(portfolio_id),
-            self.repo.get_aggregation_failed_jobs_last_hours(portfolio_id, hours=24),
-            self.repo.get_oldest_pending_aggregation_date(portfolio_id),
         )
 
         reference_date = latest_business_date or datetime.now(timezone.utc).date()
         valuation_backlog_age_days = (
-            max(0, (reference_date - valuation_oldest_open).days)
-            if valuation_oldest_open is not None
+            max(0, (reference_date - valuation_job_health.oldest_open_job_date).days)
+            if valuation_job_health.oldest_open_job_date is not None
             else None
         )
         aggregation_backlog_age_days = (
-            max(0, (reference_date - aggregation_oldest_open).days)
-            if aggregation_oldest_open is not None
+            max(0, (reference_date - aggregation_job_health.oldest_open_job_date).days)
+            if aggregation_job_health.oldest_open_job_date is not None
             else None
         )
 
@@ -167,21 +147,21 @@ class OperationsService:
             stale_threshold_minutes=stale_threshold_minutes,
             generated_at_utc=datetime.now(timezone.utc),
             valuation=CalculatorSloBucket(
-                pending_jobs=valuation_pending,
-                processing_jobs=valuation_processing,
-                stale_processing_jobs=valuation_stale_processing,
-                failed_jobs=valuation_failed,
-                failed_jobs_last_24h=valuation_failed_last_24h,
-                oldest_open_job_date=valuation_oldest_open,
+                pending_jobs=valuation_job_health.pending_jobs,
+                processing_jobs=valuation_job_health.processing_jobs,
+                stale_processing_jobs=valuation_job_health.stale_processing_jobs,
+                failed_jobs=valuation_job_health.failed_jobs,
+                failed_jobs_last_24h=valuation_job_health.failed_jobs_last_hours,
+                oldest_open_job_date=valuation_job_health.oldest_open_job_date,
                 backlog_age_days=valuation_backlog_age_days,
             ),
             aggregation=CalculatorSloBucket(
-                pending_jobs=aggregation_pending,
-                processing_jobs=aggregation_processing,
-                stale_processing_jobs=aggregation_stale_processing,
-                failed_jobs=aggregation_failed,
-                failed_jobs_last_24h=aggregation_failed_last_24h,
-                oldest_open_job_date=aggregation_oldest_open,
+                pending_jobs=aggregation_job_health.pending_jobs,
+                processing_jobs=aggregation_job_health.processing_jobs,
+                stale_processing_jobs=aggregation_job_health.stale_processing_jobs,
+                failed_jobs=aggregation_job_health.failed_jobs,
+                failed_jobs_last_24h=aggregation_job_health.failed_jobs_last_hours,
+                oldest_open_job_date=aggregation_job_health.oldest_open_job_date,
                 backlog_age_days=aggregation_backlog_age_days,
             ),
             reprocessing=ReprocessingSloBucket(active_reprocessing_keys=active_reprocessing_keys),
@@ -206,9 +186,7 @@ class OperationsService:
             self.repo.get_latest_daily_snapshot_date(
                 portfolio_id, security_id, position_state.epoch
             ),
-            self.repo.get_latest_valuation_job(
-                portfolio_id, security_id, position_state.epoch
-            ),
+            self.repo.get_latest_valuation_job(portfolio_id, security_id, position_state.epoch),
         )
 
         return LineageResponse(
