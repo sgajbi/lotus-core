@@ -192,3 +192,24 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "example"
     ]
     assert invalid_enrichment["detail"] == "security_ids must contain at least one identifier"
+
+
+async def test_openapi_describes_capabilities_query_parameters(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    capabilities = schema["paths"]["/integration/capabilities"]["get"]
+    consumer_system = next(
+        parameter
+        for parameter in capabilities["parameters"]
+        if parameter["name"] == "consumer_system"
+    )
+    tenant_id = next(
+        parameter for parameter in capabilities["parameters"] if parameter["name"] == "tenant_id"
+    )
+
+    assert consumer_system["description"] == "Consumer requesting capability metadata."
+    assert consumer_system["schema"]["default"] == "lotus-gateway"
+    assert tenant_id["description"] == "Tenant or client identifier for policy resolution."
+    assert tenant_id["schema"]["default"] == "default"
