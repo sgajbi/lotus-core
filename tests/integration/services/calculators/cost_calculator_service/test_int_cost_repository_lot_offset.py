@@ -32,8 +32,10 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
     offset_table_exists = await async_db_session.scalar(
         text("SELECT to_regclass('public.accrued_income_offset_state')")
     )
-    if not lot_table_exists or not offset_table_exists:
-        pytest.skip("Slice 4 schema tables are not available in the active test database.")
+    assert lot_table_exists, "position_lot_state table is required in the active test schema."
+    assert (
+        offset_table_exists
+    ), "accrued_income_offset_state table is required in the active test schema."
 
     async_db_session.add(
         Portfolio(
