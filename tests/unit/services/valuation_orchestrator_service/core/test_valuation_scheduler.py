@@ -190,6 +190,52 @@ async def test_scheduler_advances_watermarks(
     assert update1["expected_epoch"] == 1
 
 
+async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    latest_business_date = date(2025, 8, 15)
+
+    lagging_states = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 8, 10),
+            epoch=1,
+            status="REPROCESSING",
+        ),
+        PositionState(
+            portfolio_id="P2",
+            security_id="S2",
+            watermark_date=date(2025, 8, 10),
+            epoch=2,
+            status="REPROCESSING",
+        ),
+    ]
+    advancable_dates = {
+        ("P1", "S1"): date(2025, 8, 15),
+        ("P2", "S2"): date(2025, 8, 12),
+    }
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_lagging_states.return_value = lagging_states
+    mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
+    mock_state_repo.bulk_update_states.return_value = 1
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+    ) as mock_warning:
+        await scheduler._advance_watermarks(AsyncMock())
+
+    mock_warning.assert_called_once()
+    warning_kwargs = mock_warning.call_args.kwargs
+    assert warning_kwargs["extra"]["prepared_count"] == 2
+    assert warning_kwargs["extra"]["updated_count"] == 1
+    assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+
+
 async def test_scheduler_dispatches_claimed_jobs(
     scheduler: ValuationScheduler,
     mock_kafka_producer: MagicMock,

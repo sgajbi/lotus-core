@@ -134,10 +134,21 @@ class ValuationScheduler:
                 f"({u['portfolio_id']},{u['security_id']})->{u['watermark_date']}"
                 for u in updates_to_commit[:3]
             ]
-            logger.info(
-                f"ValuationScheduler: advanced {updated_count} watermarks.",
-                extra={"examples": log_examples},
-            )
+            if updated_count != len(updates_to_commit):
+                logger.warning(
+                    "ValuationScheduler advanced fewer watermarks than prepared updates.",
+                    extra={
+                        "prepared_count": len(updates_to_commit),
+                        "updated_count": updated_count,
+                        "stale_skipped_count": len(updates_to_commit) - updated_count,
+                        "examples": log_examples,
+                    },
+                )
+            else:
+                logger.info(
+                    f"ValuationScheduler: advanced {updated_count} watermarks.",
+                    extra={"examples": log_examples},
+                )
 
     async def _create_backfill_jobs(self, db):
         """
