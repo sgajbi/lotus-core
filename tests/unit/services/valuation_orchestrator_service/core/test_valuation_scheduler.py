@@ -178,6 +178,7 @@ async def test_scheduler_advances_watermarks(
 
     mock_repo.get_latest_business_date.return_value = latest_business_date
     mock_repo.get_lagging_states.return_value = lagging_states
+    mock_repo.get_terminal_reprocessing_states.return_value = []
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
 
     await scheduler._advance_watermarks(AsyncMock())
@@ -221,6 +222,7 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
 
     mock_repo.get_latest_business_date.return_value = latest_business_date
     mock_repo.get_lagging_states.return_value = lagging_states
+    mock_repo.get_terminal_reprocessing_states.return_value = []
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
     mock_state_repo.bulk_update_states.return_value = 1
 
@@ -234,6 +236,44 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     assert warning_kwargs["extra"]["prepared_count"] == 2
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+
+
+async def test_scheduler_normalizes_terminal_reprocessing_states(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    latest_business_date = date(2025, 8, 15)
+
+    terminal_states = [
+        PositionState(
+            portfolio_id="P9",
+            security_id="S9",
+            watermark_date=latest_business_date,
+            epoch=4,
+            status="REPROCESSING",
+        )
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_lagging_states.return_value = []
+    mock_repo.get_terminal_reprocessing_states.return_value = terminal_states
+    mock_state_repo.bulk_update_states.return_value = 1
+
+    await scheduler._advance_watermarks(AsyncMock())
+
+    mock_state_repo.bulk_update_states.assert_awaited_once_with(
+        [
+            {
+                "portfolio_id": "P9",
+                "security_id": "S9",
+                "expected_epoch": 4,
+                "watermark_date": latest_business_date,
+                "status": "CURRENT",
+            }
+        ]
+    )
 
 
 async def test_scheduler_dispatches_claimed_jobs(

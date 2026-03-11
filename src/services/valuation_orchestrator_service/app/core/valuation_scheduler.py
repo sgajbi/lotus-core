@@ -101,9 +101,39 @@ class ValuationScheduler:
             return
 
         lagging_states = await repo.get_lagging_states(latest_business_date, self._batch_size)
+        terminal_reprocessing_states = await repo.get_terminal_reprocessing_states(
+            latest_business_date, self._batch_size
+        )
 
-        reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING")
+        reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING") + len(
+            terminal_reprocessing_states
+        )
         REPROCESSING_ACTIVE_KEYS_TOTAL.set(reprocessing_count)
+
+        terminal_updates: List[Dict[str, Any]] = [
+            {
+                "portfolio_id": state.portfolio_id,
+                "security_id": state.security_id,
+                "expected_epoch": state.epoch,
+                "watermark_date": state.watermark_date,
+                "status": "CURRENT",
+            }
+            for state in terminal_reprocessing_states
+        ]
+
+        if terminal_updates:
+            normalized_count = await position_state_repo.bulk_update_states(terminal_updates)
+            if normalized_count:
+                logger.info(
+                    "ValuationScheduler normalized terminal reprocessing states.",
+                    extra={
+                        "normalized_count": normalized_count,
+                        "examples": [
+                            f"({u['portfolio_id']},{u['security_id']})->{u['watermark_date']}"
+                            for u in terminal_updates[:3]
+                        ],
+                    },
+                )
 
         if not lagging_states:
             return

@@ -145,6 +145,24 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
+    @async_timed(
+        repository="ValuationRepository", method="get_terminal_reprocessing_states"
+    )
+    async def get_terminal_reprocessing_states(
+        self, latest_business_date: date, limit: int
+    ) -> List[PositionState]:
+        stmt = (
+            select(PositionState)
+            .where(
+                PositionState.status == "REPROCESSING",
+                PositionState.watermark_date >= latest_business_date,
+            )
+            .order_by(PositionState.updated_at.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
     @async_timed(repository="ValuationRepository", method="find_contiguous_snapshot_dates")
     async def find_contiguous_snapshot_dates(
         self, states: List[PositionState]
