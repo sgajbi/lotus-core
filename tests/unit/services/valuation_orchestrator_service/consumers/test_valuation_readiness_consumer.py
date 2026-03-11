@@ -145,3 +145,19 @@ async def test_invalid_payload_is_sent_to_dlq(consumer: ValuationReadinessConsum
     await consumer.process_message(msg)
 
     consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_readiness_event_uses_header_correlation_for_direct_processing(
+    consumer: ValuationReadinessConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_kafka_message.headers.return_value = [("correlation_id", b"test-corr-id")]
+
+    await consumer.process_message(mock_kafka_message)
+
+    assert mock_job_repo.upsert_job.await_args.kwargs["correlation_id"] == "test-corr-id"
+    assert mock_idempotency_repo.mark_event_processed.await_args.args[3] == "test-corr-id"

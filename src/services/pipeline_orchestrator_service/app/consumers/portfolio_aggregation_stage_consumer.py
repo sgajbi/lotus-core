@@ -6,7 +6,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioAggregationDayCompletedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -30,29 +29,30 @@ class PortfolioAggregationStageConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         value = msg.value().decode("utf-8")
         event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
-        correlation_id = correlation_id_var.get()
 
         try:
             event = PortfolioAggregationDayCompletedEvent.model_validate(json.loads(value))
+            with self._message_correlation_context(msg) as correlation_id:
+                async for db in get_async_db_session():
+                    async with db.begin():
+                        idempotency_repo = IdempotencyRepository(db)
+                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                            return
 
-            async for db in get_async_db_session():
-                async with db.begin():
-                    idempotency_repo = IdempotencyRepository(db)
-                    if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
-                        return
+                        service = PipelineOrchestratorService(
+                            repo=PipelineStageRepository(db),
+                            outbox_repo=OutboxRepository(db),
+                        )
+                        await service.register_portfolio_aggregation_completed(
+                            event, correlation_id
+                        )
 
-                    service = PipelineOrchestratorService(
-                        repo=PipelineStageRepository(db),
-                        outbox_repo=OutboxRepository(db),
-                    )
-                    await service.register_portfolio_aggregation_completed(event, correlation_id)
-
-                    await idempotency_repo.mark_event_processed(
-                        event_id,
-                        event.portfolio_id,
-                        SERVICE_NAME,
-                        correlation_id,
-                    )
+                        await idempotency_repo.mark_event_processed(
+                            event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
+                        )
 
         except (json.JSONDecodeError, ValidationError):
             logger.error(
