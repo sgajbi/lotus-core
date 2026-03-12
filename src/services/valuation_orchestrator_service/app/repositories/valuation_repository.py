@@ -1,11 +1,7 @@
-import logging
-from datetime import date
 from typing import List
 
 from portfolio_common.database_models import (
     InstrumentReprocessingState,
-    PositionHistory,
-    PositionState,
 )
 from portfolio_common.monitoring import (
     observe_valuation_worker_jobs_claimed,
@@ -13,9 +9,7 @@ from portfolio_common.monitoring import (
 )
 from portfolio_common.utils import async_timed
 from portfolio_common.valuation_repository_base import ValuationRepositoryBase
-from sqlalchemy import and_, delete, func, select
-
-logger = logging.getLogger(__name__)
+from sqlalchemy import delete, func, select
 
 
 class ValuationRepository(ValuationRepositoryBase):
@@ -60,50 +54,12 @@ class ValuationRepository(ValuationRepositoryBase):
             .returning(InstrumentReprocessingState)
         )
         result = await self.db.execute(stmt)
-        return list(result.scalars().all())
-
-    @async_timed(
-        repository="ValuationRepository", method="find_portfolios_holding_security_on_date"
-    )
-    async def find_portfolios_holding_security_on_date(
-        self, security_id: str, a_date: date
-    ) -> List[str]:
-        latest_history_subquery = (
-            select(
-                PositionHistory.portfolio_id,
-                PositionHistory.quantity,
-                func.row_number()
-                .over(
-                    partition_by=PositionHistory.portfolio_id,
-                    order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
-                )
-                .label("rn"),
-            )
-            .join(
-                PositionState,
-                and_(
-                    PositionState.portfolio_id == PositionHistory.portfolio_id,
-                    PositionState.security_id == PositionHistory.security_id,
-                    PositionState.epoch == PositionHistory.epoch,
-                ),
-            )
-            .where(
-                PositionHistory.security_id == security_id,
-                PositionHistory.position_date <= a_date,
-            )
-            .subquery()
-        )
-
-        stmt = select(latest_history_subquery.c.portfolio_id).where(
-            latest_history_subquery.c.rn == 1, latest_history_subquery.c.quantity > 0
-        )
-
-        result = await self.db.execute(stmt)
-        portfolio_ids = result.scalars().all()
-        logger.info(
-            "Found %s portfolios holding '%s' on or before %s.",
-            len(portfolio_ids),
-            security_id,
-            a_date,
-        )
-        return portfolio_ids
+        claimed_states = list(result.scalars().all())
+        claimed_state_by_security_id = {
+            state.security_id: state for state in claimed_states
+        }
+        return [
+            claimed_state_by_security_id[security_id]
+            for security_id in claimed_security_ids
+            if security_id in claimed_state_by_security_id
+        ]

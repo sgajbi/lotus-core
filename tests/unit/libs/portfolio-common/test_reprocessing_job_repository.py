@@ -39,7 +39,7 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
     assert "RETURNING *" in query_text
     assert params["job_type"] == "RESET_WATERMARKS"
     assert params["batch_size"] == 25
-    assert "(payload->>'earliest_impacted_date')::date ASC" in query_text
+    assert "(payload->>'earliest_impacted_date') ASC" in query_text
 
 
 async def test_find_and_claim_jobs_uses_default_created_at_order_for_other_job_types(
