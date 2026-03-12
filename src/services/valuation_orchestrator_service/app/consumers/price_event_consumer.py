@@ -44,13 +44,15 @@ class PriceEventConsumer(BaseConsumer):
 
         try:
             event_data = json.loads(value)
-            event = MarketPricePersistedEvent.model_validate(event_data)
             price_event_correlation_id = (
-                f"PRICE_EVENT_{event.security_id}_{event.price_date.isoformat()}"
+                "PRICE_EVENT_"
+                f"{event_data.get('security_id', 'unknown')}_"
+                f"{event_data.get('price_date', 'unknown')}"
             )
             with self._message_correlation_context(
                 msg, fallback_correlation_id=price_event_correlation_id
             ) as correlation_id:
+                event = MarketPricePersistedEvent.model_validate(event_data)
                 logger.info(
                     f"Received new market price for {event.security_id} on {event.price_date}."
                 )
@@ -69,10 +71,6 @@ class PriceEventConsumer(BaseConsumer):
 
                         latest_business_date = await valuation_repo.get_latest_business_date()
                         event_correlation_id = correlation_id
-                        if not event_correlation_id or event_correlation_id == "<not-set>":
-                            event_correlation_id = (
-                                f"PRICE_EVENT_{event.security_id}_{event.price_date.isoformat()}"
-                            )
 
                         if latest_business_date and event.price_date <= latest_business_date:
                             open_position_keys = (
