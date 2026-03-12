@@ -32,19 +32,25 @@ class ReprocessingConsumer(BaseConsumer):
         """Processes a single reprocessing request."""
         try:
             event_data = json.loads(msg.value().decode("utf-8"))
-            transaction_id = event_data.get("transaction_id")
+            with self._message_correlation_context(
+                msg,
+                fallback_correlation_id=event_data.get("correlation_id"),
+            ):
+                transaction_id = event_data.get("transaction_id")
 
-            if not transaction_id:
-                logger.warning("Received reprocessing request with no transaction_id. Skipping.")
-                return
+                if not transaction_id:
+                    logger.warning(
+                        "Received reprocessing request with no transaction_id. Skipping."
+                    )
+                    return
 
-            logger.info(f"Processing reprocessing request for transaction_id: {transaction_id}")
+                logger.info(f"Processing reprocessing request for transaction_id: {transaction_id}")
 
-            kafka_producer = get_kafka_producer()
-            async for db_session in get_async_db_session():
-                # The repository handles its own transaction, no need for one here.
-                repo = ReprocessingRepository(db=db_session, kafka_producer=kafka_producer)
-                await repo.reprocess_transactions_by_ids([transaction_id])
+                kafka_producer = get_kafka_producer()
+                async for db_session in get_async_db_session():
+                    # The repository handles its own transaction, no need for one here.
+                    repo = ReprocessingRepository(db=db_session, kafka_producer=kafka_producer)
+                    await repo.reprocess_transactions_by_ids([transaction_id])
 
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error("Failed to parse reprocessing request. Sending to DLQ.", exc_info=True)
