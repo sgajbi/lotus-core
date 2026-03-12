@@ -159,3 +159,70 @@ async def test_reprocessing_is_atomic_on_outbox_failure(
         # 2. No outbox events should have been created
         outbox_result = await new_session.execute(text("SELECT COUNT(*) FROM outbox_events"))
         assert outbox_result.scalar_one() == 0
+
+
+async def test_reprocessing_deduplicates_triggering_transaction_already_in_db(
+    setup_repro_atomicity_data, async_db_session: AsyncSession
+):
+    """
+    GIVEN the triggering back-dated transaction is already persisted
+    WHEN atomic reprocessing is triggered
+    THEN the replay outbox batch should contain each transaction_id only once.
+    """
+    async_db_session.add(
+        DBTransaction(
+            transaction_id="TXN_ATOM_BACKDATED",
+            portfolio_id=PORTFOLIO_ID,
+            instrument_id="ATS",
+            security_id=SECURITY_ID,
+            transaction_date=datetime(2025, 9, 5, 10, tzinfo=timezone.utc),
+            transaction_type="BUY",
+            quantity=10,
+            price=9,
+            gross_transaction_amount=90,
+            trade_currency="USD",
+            currency="USD",
+        )
+    )
+    await async_db_session.commit()
+
+    repo = PositionRepository(async_db_session)
+    position_state_repo = PositionStateRepository(async_db_session)
+    outbox_repo = OutboxRepository(async_db_session)
+
+    back_dated_event = TransactionEvent(
+        transaction_id="TXN_ATOM_BACKDATED",
+        portfolio_id=PORTFOLIO_ID,
+        instrument_id="ATS",
+        security_id=SECURITY_ID,
+        transaction_date=datetime(2025, 9, 5, 10, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity=10,
+        price=9,
+        gross_transaction_amount=90,
+        trade_currency="USD",
+        currency="USD",
+        epoch=None,
+    )
+
+    await PositionCalculator.calculate(
+        event=back_dated_event,
+        db_session=async_db_session,
+        repo=repo,
+        position_state_repo=position_state_repo,
+        outbox_repo=outbox_repo,
+    )
+    await async_db_session.commit()
+
+    outbox_rows = await async_db_session.execute(
+        text(
+            """
+            SELECT payload->>'transaction_id' AS transaction_id
+            FROM outbox_events
+            ORDER BY payload->>'transaction_id'
+            """
+        )
+    )
+    replay_ids = [row.transaction_id for row in outbox_rows.fetchall()]
+
+    assert replay_ids == ["TXN_ATOM_BACKDATED", "TXN_ATOM_CURRENT"]
