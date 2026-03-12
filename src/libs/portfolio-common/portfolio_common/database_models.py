@@ -828,6 +828,16 @@ class PortfolioAggregationJob(Base):
 
     __table_args__ = (
         UniqueConstraint("portfolio_id", "aggregation_date", name="_portfolio_date_uc"),
+        Index(
+            "ix_portfolio_aggregation_jobs_status_aggregation_date",
+            "status",
+            "aggregation_date",
+        ),
+        Index(
+            "ix_portfolio_aggregation_jobs_status_updated_at",
+            "status",
+            "updated_at",
+        ),
     )
 
 
@@ -861,6 +871,16 @@ class PortfolioValuationJob(Base):
             "valuation_date",
             "epoch",
             name="_portfolio_security_valuation_date_epoch_uc",
+        ),
+        Index(
+            "ix_portfolio_valuation_jobs_status_valuation_date",
+            "status",
+            "valuation_date",
+        ),
+        Index(
+            "ix_portfolio_valuation_jobs_status_updated_at",
+            "status",
+            "updated_at",
         ),
     )
 
@@ -1063,6 +1083,18 @@ class ReprocessingJob(Base):
             "created_at",
             "id",
             postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),
+        ),
+        Index(
+            "ix_reprocessing_jobs_job_type_status_created_at_id",
+            "job_type",
+            "status",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_reprocessing_jobs_status_updated_at",
+            "status",
+            "updated_at",
         ),
     )
 
