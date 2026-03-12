@@ -1,0 +1,108 @@
+import pytest
+from portfolio_common.database_models import ReprocessingJob
+from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_find_and_claim_jobs_normalizes_historical_reset_watermarks_duplicates(
+    clean_db, async_db_session: AsyncSession
+):
+    """
+    GIVEN multiple historical pending RESET_WATERMARKS jobs for the same security
+    WHEN the worker-facing claim path runs
+    THEN duplicate pending rows should be normalized away and the claimed job
+    should carry the earliest impacted date.
+    """
+    async_db_session.add_all(
+        [
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "S1", "earliest_impacted_date": "2025-01-07"},
+                status="PENDING",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+                status="PENDING",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "S2", "earliest_impacted_date": "2025-01-06"},
+                status="PENDING",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repository = ReprocessingJobRepository(async_db_session)
+
+    claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
+    await async_db_session.commit()
+
+    assert len(claimed) == 2
+    assert claimed[0].payload["security_id"] == "S1"
+    assert claimed[0].payload["earliest_impacted_date"] == "2025-01-05"
+    assert claimed[1].payload["security_id"] == "S2"
+
+    remaining_rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(remaining_rows) == 2
+    assert {row.payload["security_id"] for row in remaining_rows} == {"S1", "S2"}
+
+
+async def test_find_and_claim_jobs_keeps_other_job_types_untouched(
+    clean_db, async_db_session: AsyncSession
+):
+    """
+    GIVEN duplicate-looking payloads for a non-RESET_WATERMARKS job type
+    WHEN the generic claim path runs
+    THEN the repository should not apply reset-watermarks normalization logic.
+    """
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status)
+            VALUES
+              (
+                'OTHER_JOB',
+                '{"security_id":"S1","earliest_impacted_date":"2025-01-07"}',
+                'PENDING'
+              ),
+              (
+                'OTHER_JOB',
+                '{"security_id":"S1","earliest_impacted_date":"2025-01-05"}',
+                'PENDING'
+              )
+            """
+        )
+    )
+    await async_db_session.commit()
+
+    repository = ReprocessingJobRepository(async_db_session)
+
+    claimed = await repository.find_and_claim_jobs("OTHER_JOB", batch_size=10)
+    await async_db_session.commit()
+
+    assert len(claimed) == 2
+    all_other_jobs = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob).where(ReprocessingJob.job_type == "OTHER_JOB")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(all_other_jobs) == 2
