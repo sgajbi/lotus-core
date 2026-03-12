@@ -201,6 +201,8 @@ class BaseConsumer(ABC):
 
         try:
             correlation_id = correlation_id_var.get()
+            if correlation_id == "<not-set>":
+                correlation_id = None
             error_reason_code = classify_dlq_reason_code(error)
 
             dlq_payload = {
@@ -215,7 +217,8 @@ class BaseConsumer(ABC):
             }
 
             dlq_headers = msg.headers() or []
-            dlq_headers.append(("correlation_id", (correlation_id or "").encode("utf-8")))
+            if correlation_id:
+                dlq_headers.append(("correlation_id", correlation_id.encode("utf-8")))
 
             self._producer.publish_message(
                 topic=self.dlq_topic,
