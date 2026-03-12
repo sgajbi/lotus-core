@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     Instrument,
 )
 from portfolio_common.events import DailyPositionSnapshotPersistedEvent, ValuationDayCompletedEvent
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +54,7 @@ def mock_kafka_message(mock_event: DailyPositionSnapshotPersistedEvent) -> Magic
     """Creates a mock Kafka message from the event."""
     mock_msg = MagicMock()
     mock_msg.value.return_value = mock_event.model_dump_json().encode("utf-8")
-    mock_msg.headers.return_value = []
+    mock_msg.headers.return_value = [("correlation_id", b"ts-corr-id")]
     return mock_msg
 
 
@@ -129,6 +130,9 @@ async def test_process_message_success(
         mock_fencer_instance.check.assert_awaited_once()
         mock_repo.upsert_position_timeseries.assert_awaited_once()
         mock_outbox_repo.create_outbox_event.assert_awaited_once()
+        assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+            "ts-corr-id"
+        )
         created_record = mock_repo.upsert_position_timeseries.call_args[0][0]
         assert created_record.epoch == 1
 
@@ -210,6 +214,52 @@ async def test_process_message_accepts_valuation_day_completed_event(
 
     mock_repo.upsert_position_timeseries.assert_awaited_once()
     mock_outbox_repo.create_outbox_event.assert_awaited_once()
+
+
+async def test_process_message_uses_header_correlation_on_direct_path(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_repo.get_instrument.return_value = Instrument(
+        security_id=mock_event.security_id, currency="USD"
+    )
+    mock_db_session.get.return_value = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal(100),
+        cost_basis_local=Decimal(1000),
+        market_value_local=Decimal(1100),
+    )
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal(1050)
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = None
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        with patch(
+            "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
+        ) as mock_fencer_class:
+            mock_fencer_instance = AsyncMock()
+            mock_fencer_instance.check.return_value = True
+            mock_fencer_class.return_value = mock_fencer_instance
+
+            await consumer._process_message_with_retry(mock_kafka_message)
+    finally:
+        correlation_id_var.reset(token)
+
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+        "ts-corr-id"
+    )
 
 
 async def test_process_message_skips_downstream_fanout_for_identical_timeseries(

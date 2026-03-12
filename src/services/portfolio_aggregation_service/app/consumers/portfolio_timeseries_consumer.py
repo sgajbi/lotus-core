@@ -1,4 +1,4 @@
-# src/services/timeseries_generator_service/app/consumers/portfolio_timeseries_consumer.py
+# src/services/portfolio_aggregation_service/app/consumers/portfolio_timeseries_consumer.py
 import json
 import logging
 from datetime import date
@@ -33,17 +33,21 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         try:
             event_data = json.loads(msg.value().decode("utf-8"))
-            event = PortfolioAggregationRequiredEvent.model_validate(event_data)
-            correlation_id = correlation_id_var.get()
+            with self._message_correlation_context(
+                msg,
+                fallback_correlation_id=event_data.get("correlation_id"),
+            ):
+                event = PortfolioAggregationRequiredEvent.model_validate(event_data)
+                correlation_id = correlation_id_var.get()
 
-            work_key = (event.portfolio_id, event.aggregation_date)
-            logger.info(f"Received aggregation job for {work_key}.")
+                work_key = (event.portfolio_id, event.aggregation_date)
+                logger.info(f"Received aggregation job for {work_key}.")
 
-            await self._perform_aggregation(
-                portfolio_id=event.portfolio_id,
-                a_date=event.aggregation_date,
-                correlation_id=correlation_id,
-            )
+                await self._perform_aggregation(
+                    portfolio_id=event.portfolio_id,
+                    a_date=event.aggregation_date,
+                    correlation_id=correlation_id,
+                )
 
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error(
