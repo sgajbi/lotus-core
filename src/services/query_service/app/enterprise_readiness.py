@@ -168,7 +168,7 @@ def emit_audit_event(
                 "actor_id": actor_id,
                 "tenant_id": tenant_id,
                 "role": role,
-                "correlation_id": correlation_id or "",
+                "correlation_id": correlation_id,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                 "policy_version": enterprise_policy_version(),
                 "metadata": redact_sensitive(metadata),

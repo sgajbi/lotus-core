@@ -10,6 +10,7 @@ from src.services.query_service.app.enterprise_readiness import (
     _load_json_map,
     authorize_write_request,
     build_enterprise_audit_middleware,
+    emit_audit_event,
     is_feature_enabled,
     load_feature_flags,
     redact_sensitive,
@@ -311,3 +312,18 @@ async def test_enterprise_middleware_omits_not_set_correlation_on_write_audit(mo
 
     assert response.status_code == 200
     assert audit.call_args.kwargs["correlation_id"] is None
+
+
+def test_emit_audit_event_preserves_none_correlation():
+    with patch("src.services.query_service.app.enterprise_readiness.logger.info") as logger_info:
+        emit_audit_event(
+            action="WRITE /api/v1/portfolios",
+            actor_id="actor-1",
+            tenant_id="tenant-1",
+            role="ops",
+            correlation_id=None,
+            metadata={"status_code": 202},
+        )
+
+    audit_payload = logger_info.call_args.kwargs["extra"]["audit"]
+    assert audit_payload["correlation_id"] is None
