@@ -13,6 +13,7 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
     DIVIDEND_DEFAULT_POLICY_ID,
@@ -107,7 +108,7 @@ def mock_sell_kafka_message():
     mock_msg.topic.return_value = "raw_transactions_completed"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 1
-    mock_msg.headers.return_value = []
+    mock_msg.headers.return_value = [("correlation_id", b"cost-corr-id")]
     return mock_msg
 
 
@@ -259,8 +260,70 @@ async def test_consumer_integration_with_engine(
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
     assert payload["economic_event_id"] == "EVT-SELL-PORT_COST_01-SELL01"
     assert payload["linked_transaction_group_id"] == "LTG-SELL-PORT_COST_01-SELL01"
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+        "cost-corr-id"
+    )
+    assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "cost-corr-id"
     mock_repo.upsert_buy_lot_state.assert_not_called()
     mock_repo.upsert_accrued_income_offset_state.assert_not_called()
+
+
+async def test_cost_consumer_direct_path_uses_header_correlation(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_sell_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    buy_history = DBTransaction(
+        transaction_id="BUY01",
+        portfolio_id="PORT_COST_01",
+        security_id="SEC_COST_01",
+        instrument_id="AAPL",
+        transaction_type="BUY",
+        transaction_date=datetime(2025, 1, 10),
+        quantity=Decimal("10"),
+        price=Decimal("150.0"),
+        gross_transaction_amount=Decimal("1500.0"),
+        trade_currency="USD",
+        currency="USD",
+        net_cost=Decimal("1500"),
+        net_cost_local=Decimal("1500"),
+        transaction_fx_rate=Decimal("1.0"),
+        trade_fee=Decimal("0.0"),
+    )
+    mock_repo.get_transaction_history.return_value = [buy_history]
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_fx_rate.return_value = None
+    mock_idempotency_repo.is_event_processed.return_value = False
+
+    def create_db_tx(engine_txn: EngineTransaction) -> DBTransaction:
+        data = engine_txn.model_dump(exclude_none=True)
+        data.pop("portfolio_base_currency", None)
+        data.pop("fees", None)
+        data.pop("accrued_interest", None)
+        data.pop("epoch", None)
+        data.pop("net_transaction_amount", None)
+        data.pop("average_price", None)
+        data.pop("error_reason", None)
+        return DBTransaction(**data)
+
+    mock_repo.update_transaction_costs.side_effect = create_db_tx
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        await cost_calculator_consumer.process_message(mock_sell_kafka_message)
+    finally:
+        correlation_id_var.reset(token)
+
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+        "cost-corr-id"
+    )
+    assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "cost-corr-id"
 
 
 async def test_consumer_processes_fx_contract_event_without_generic_engine(

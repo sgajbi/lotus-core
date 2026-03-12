@@ -198,28 +198,32 @@ class CostCalculatorConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         value = msg.value().decode("utf-8")
         event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
-        correlation_id = correlation_id_var.get()
         event = None
 
         try:
             data = json.loads(value)
-            event = TransactionEvent.model_validate(data)
+            with self._message_correlation_context(
+                msg,
+                fallback_correlation_id=data.get("correlation_id"),
+            ):
+                correlation_id = correlation_id_var.get()
+                event = TransactionEvent.model_validate(data)
 
-            async for db in get_async_db_session():
-                async with db.begin():
-                    repo = CostCalculatorRepository(db)
-                    idempotency_repo = IdempotencyRepository(db)
-                    outbox_repo = OutboxRepository(db)
+                async for db in get_async_db_session():
+                    async with db.begin():
+                        repo = CostCalculatorRepository(db)
+                        idempotency_repo = IdempotencyRepository(db)
+                        outbox_repo = OutboxRepository(db)
 
-                    if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
-                        logger.warning("Event already processed. Skipping.")
-                        return
+                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                            logger.warning("Event already processed. Skipping.")
+                            return
 
-                    portfolio = await repo.get_portfolio(event.portfolio_id)
-                    if not portfolio:
-                        raise PortfolioNotFoundError(
-                            f"Portfolio {event.portfolio_id} not found. Retrying..."
-                        )
+                        portfolio = await repo.get_portfolio(event.portfolio_id)
+                        if not portfolio:
+                            raise PortfolioNotFoundError(
+                                f"Portfolio {event.portfolio_id} not found. Retrying..."
+                            )
 
                     cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
                     event = enrich_sell_transaction_metadata(

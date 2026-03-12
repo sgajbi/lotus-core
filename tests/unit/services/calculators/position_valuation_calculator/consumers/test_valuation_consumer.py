@@ -155,7 +155,7 @@ async def test_valuation_consumer_success(
     )
     mock_valuation_repo.upsert_daily_snapshot.return_value = persisted_snapshot
 
-    token = correlation_id_var.set("test-corr-id-123")
+    token = correlation_id_var.set("<not-set>")
     try:
         # ACT
         await consumer.process_message(mock_kafka_message)
@@ -173,6 +173,10 @@ async def test_valuation_consumer_success(
     assert first_payload["epoch"] == mock_event.epoch
     assert second_payload["epoch"] == mock_event.epoch
     assert second_payload["daily_position_snapshot_id"] == persisted_snapshot.id
+    assert mock_outbox_repo.create_outbox_event.call_args_list[0].kwargs["correlation_id"] == (
+        "test-corr-id-123"
+    )
+    assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "test-corr-id-123"
 
 
 async def test_process_message_handles_data_not_found_error(

@@ -59,29 +59,33 @@ class ValuationConsumer(BaseConsumer):
         key = msg.key().decode("utf-8") if msg.key() else "NoKey"
         value = msg.value().decode("utf-8")
         event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
-        correlation_id = correlation_id_var.get()
         event = None
 
         try:
             event_data = json.loads(value)
-            event = PortfolioValuationRequiredEvent.model_validate(event_data)
+            with self._message_correlation_context(
+                msg,
+                fallback_correlation_id=event_data.get("correlation_id"),
+            ):
+                correlation_id = correlation_id_var.get()
+                event = PortfolioValuationRequiredEvent.model_validate(event_data)
 
-            logger.info(
-                "Processing valuation job for "
-                f"{event.security_id} in {event.portfolio_id} "
-                f"on {event.valuation_date} for epoch {event.epoch}"
-            )
+                logger.info(
+                    "Processing valuation job for "
+                    f"{event.security_id} in {event.portfolio_id} "
+                    f"on {event.valuation_date} for epoch {event.epoch}"
+                )
 
-            async for db in get_async_db_session():
-                try:
-                    async with db.begin():
-                        idempotency_repo = IdempotencyRepository(db)
-                        outbox_repo = OutboxRepository(db)
-                        repo = ValuationRepository(db)
+                async for db in get_async_db_session():
+                    try:
+                        async with db.begin():
+                            idempotency_repo = IdempotencyRepository(db)
+                            outbox_repo = OutboxRepository(db)
+                            repo = ValuationRepository(db)
 
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
-                            logger.warning(f"Event {event_id} already processed. Skipping.")
-                            return
+                            if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                                logger.warning(f"Event {event_id} already processed. Skipping.")
+                                return
 
                         # 1. Get the state of the position for the valuation date and epoch
                         position_state = await repo.get_last_position_history_before_date(
@@ -258,35 +262,35 @@ class ValuationConsumer(BaseConsumer):
                             event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                         )
 
-                except DataNotFoundError as e:
-                    # This is a non-retryable, expected error when a job is
-                    # created for a date before a position existed.
-                    VALUATION_JOBS_SKIPPED_TOTAL.labels(
-                        portfolio_id=event.portfolio_id, security_id=event.security_id
-                    ).inc()
-                    logger.warning(
-                        f"Skipping job due to missing position data: {e}",
-                        extra={
-                            "portfolio_id": event.portfolio_id,
-                            "security_id": event.security_id,
-                            "date": event.valuation_date,
-                        },
-                    )
-                    async with db.begin():
-                        repo = ValuationRepository(db)
-                        idempotency_repo = IdempotencyRepository(db)
-                        await repo.update_job_status(
-                            event.portfolio_id,
-                            event.security_id,
-                            event.valuation_date,
-                            event.epoch,
-                            status="SKIPPED_NO_POSITION",
-                            failure_reason=str(e),
+                    except DataNotFoundError as e:
+                        # This is a non-retryable, expected error when a job is
+                        # created for a date before a position existed.
+                        VALUATION_JOBS_SKIPPED_TOTAL.labels(
+                            portfolio_id=event.portfolio_id, security_id=event.security_id
+                        ).inc()
+                        logger.warning(
+                            f"Skipping job due to missing position data: {e}",
+                            extra={
+                                "portfolio_id": event.portfolio_id,
+                                "security_id": event.security_id,
+                                "date": event.valuation_date,
+                            },
                         )
-                        await idempotency_repo.mark_event_processed(
-                            event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                        )
-                    # Do not re-raise, do not send to DLQ.
+                        async with db.begin():
+                            repo = ValuationRepository(db)
+                            idempotency_repo = IdempotencyRepository(db)
+                            await repo.update_job_status(
+                                event.portfolio_id,
+                                event.security_id,
+                                event.valuation_date,
+                                event.epoch,
+                                status="SKIPPED_NO_POSITION",
+                                failure_reason=str(e),
+                            )
+                            await idempotency_repo.mark_event_processed(
+                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                            )
+                        # Do not re-raise, do not send to DLQ.
 
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error(

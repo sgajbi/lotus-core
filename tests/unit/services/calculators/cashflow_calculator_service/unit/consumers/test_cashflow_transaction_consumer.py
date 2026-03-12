@@ -193,8 +193,12 @@ async def test_process_message_success(
 
         outbox_payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
         assert outbox_payload["epoch"] == 1
+        assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+            "test-corr-id"
+        )
 
         mock_idempotency_repo.mark_event_processed.assert_called_once()
+        assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "test-corr-id"
         cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
