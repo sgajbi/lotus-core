@@ -4,6 +4,7 @@ import logging
 from datetime import date, timedelta
 
 from portfolio_common.db import get_async_db_session
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import (
     observe_reprocessing_worker_jobs_claimed,
     observe_reprocessing_worker_jobs_completed,
@@ -57,7 +58,11 @@ class ReprocessingWorker:
                         )
 
                     for job in claimed_jobs:
+                        correlation_token = None
                         try:
+                            if job.correlation_id:
+                                correlation_token = correlation_id_var.set(job.correlation_id)
+
                             security_id = job.payload["security_id"]
                             earliest_date = date.fromisoformat(
                                 job.payload["earliest_impacted_date"]
@@ -121,6 +126,9 @@ class ReprocessingWorker:
                                 job.id, "FAILED", failure_reason=str(e)
                             )
                             observe_reprocessing_worker_jobs_failed("RESET_WATERMARKS")
+                        finally:
+                            if correlation_token is not None:
+                                correlation_id_var.reset(correlation_token)
 
     async def run(self):
         logger.info(f"ReprocessingWorker started. Polling every {self._poll_interval} seconds.")

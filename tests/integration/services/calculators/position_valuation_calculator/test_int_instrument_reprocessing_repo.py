@@ -141,29 +141,6 @@ async def test_get_instrument_reprocessing_triggers_prioritizes_oldest_impacted_
     assert [t.security_id for t in triggers] == ["S_EARLY", "S_MID", "S_LATE"]
 
 
-async def test_find_portfolios_for_security(
-    setup_reprocessing_trigger_data, async_db_session: AsyncSession
-):
-    """
-    GIVEN position state records linking portfolios to securities
-    WHEN find_portfolios_for_security is called
-    THEN it should return all unique portfolio IDs associated with that security.
-    """
-    # ARRANGE
-    repo = ValuationRepository(async_db_session)
-
-    # ACT
-    portfolios_for_s1 = await repo.find_portfolios_for_security("S1")
-    portfolios_for_s2 = await repo.find_portfolios_for_security("S2")
-
-    # ASSERT
-    assert len(portfolios_for_s1) == 2
-    assert set(portfolios_for_s1) == {"P1", "P2"}
-
-    assert len(portfolios_for_s2) == 1
-    assert portfolios_for_s2[0] == "P2"
-
-
 async def test_find_portfolios_holding_security_on_date_excludes_pre_impact_closed_positions(
     async_db_session: AsyncSession, db_engine, clean_db
 ):

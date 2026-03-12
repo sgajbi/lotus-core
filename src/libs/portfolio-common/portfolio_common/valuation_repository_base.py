@@ -62,16 +62,6 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    @async_timed(repository="ValuationRepository", method="find_portfolios_for_security")
-    async def find_portfolios_for_security(self, security_id: str) -> List[str]:
-        stmt = (
-            select(PositionState.portfolio_id)
-            .where(PositionState.security_id == security_id)
-            .distinct()
-        )
-        result = await self.db.execute(stmt)
-        return result.scalars().all()
-
     @async_timed(
         repository="ValuationRepository", method="find_open_position_keys_for_security_on_date"
     )
@@ -333,7 +323,9 @@ class ValuationRepositoryBase:
             await self.db.execute(valuation_job_date_stmt)
         ).scalar_one_or_none()
 
-        candidates = [d for d in (business_date, snapshot_date, valuation_job_date) if d is not None]
+        candidates = [
+            d for d in (business_date, snapshot_date, valuation_job_date) if d is not None
+        ]
         return max(candidates) if candidates else None
 
     @async_timed(repository="ValuationRepository", method="update_job_status")

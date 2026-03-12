@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from portfolio_common.database_models import ReprocessingJob
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -200,3 +201,40 @@ async def test_worker_reads_poll_and_batch_from_environment(monkeypatch: pytest.
 
     assert worker._poll_interval == 7
     assert worker._batch_size == 21
+
+
+async def test_worker_processes_job_under_job_correlation_context(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+
+    observed_correlation_ids: list[str] = []
+
+    async def capture_find_portfolios(*args, **kwargs):
+        observed_correlation_ids.append(correlation_id_var.get())
+        return ["P1"]
+
+    mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
+    mock_repro_job_repo.find_and_claim_jobs.return_value = [
+        ReprocessingJob(
+            id=17,
+            job_type="RESET_WATERMARKS",
+            payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
+            status="PENDING",
+            correlation_id="corr-reset-17",
+        )
+    ]
+    mock_valuation_repo.find_portfolios_holding_security_on_date.side_effect = (
+        capture_find_portfolios
+    )
+    mock_state_repo.update_watermarks_if_older.return_value = 1
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        await worker._process_batch()
+    finally:
+        correlation_id_var.reset(token)
+
+    assert observed_correlation_ids == ["corr-reset-17"]
+    assert correlation_id_var.get() == "<not-set>"
