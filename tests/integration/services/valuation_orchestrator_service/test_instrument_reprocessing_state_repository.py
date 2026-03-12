@@ -1,0 +1,73 @@
+from datetime import date
+
+import pytest
+from portfolio_common.database_models import InstrumentReprocessingState
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.services.valuation_orchestrator_service.app.repositories import (
+    instrument_reprocessing_state_repository as instrument_reprocessing_state_repo,
+)
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_upsert_state_keeps_earliest_impacted_date(clean_db, async_db_session: AsyncSession):
+    """
+    GIVEN repeated back-dated price events for the same security
+    WHEN the trigger repository upserts the instrument reprocessing state
+    THEN one row should remain and it should carry the earliest impacted date.
+    """
+    repo = instrument_reprocessing_state_repo.InstrumentReprocessingStateRepository(
+        async_db_session
+    )
+
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 10))
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 8))
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 12))
+    await async_db_session.commit()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(InstrumentReprocessingState).where(
+                    InstrumentReprocessingState.security_id == "S-TRIGGER-1"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert len(rows) == 1
+    assert rows[0].earliest_impacted_date == date(2025, 8, 8)
+
+
+async def test_upsert_state_preserves_one_row_per_security(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = instrument_reprocessing_state_repo.InstrumentReprocessingStateRepository(
+        async_db_session
+    )
+
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 10))
+    await repo.upsert_state("S-TRIGGER-2", date(2025, 8, 9))
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 7))
+    await async_db_session.commit()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(InstrumentReprocessingState).order_by(
+                    InstrumentReprocessingState.security_id.asc()
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert [(row.security_id, row.earliest_impacted_date) for row in rows] == [
+        ("S-TRIGGER-1", date(2025, 8, 7)),
+        ("S-TRIGGER-2", date(2025, 8, 9)),
+    ]
