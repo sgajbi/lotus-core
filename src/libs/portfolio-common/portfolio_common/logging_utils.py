@@ -14,6 +14,11 @@ request_id_var: ContextVar[str] = ContextVar("request_id", default="<not-set>")
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="<not-set>")
 
 
+def normalize_lineage_value(value: str | None) -> str | None:
+    """Normalize unset lineage sentinel values to ``None``."""
+    return None if value in (None, "", "<not-set>") else value
+
+
 class CorrelationIdFilter(logging.Filter):
     """
     A logging filter that injects the current correlation ID from a ContextVar

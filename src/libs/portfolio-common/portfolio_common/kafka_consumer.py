@@ -18,7 +18,7 @@ from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
 from .kafka_utils import get_kafka_producer
-from .logging_utils import correlation_id_var, generate_correlation_id
+from .logging_utils import correlation_id_var, generate_correlation_id, normalize_lineage_value
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ class BaseConsumer(ABC):
         current = correlation_id_var.get()
         token = None
         resolved = current
-        if current == "<not-set>":
+        if normalize_lineage_value(current) is None:
             header_correlation_id = self._get_message_header_correlation_id(msg)
             if prefer_fallback and fallback_correlation_id:
                 resolved = fallback_correlation_id
@@ -200,9 +200,7 @@ class BaseConsumer(ABC):
             return
 
         try:
-            correlation_id = correlation_id_var.get()
-            if correlation_id == "<not-set>":
-                correlation_id = None
+            correlation_id = normalize_lineage_value(correlation_id_var.get())
             error_reason_code = classify_dlq_reason_code(error)
 
             dlq_payload = {

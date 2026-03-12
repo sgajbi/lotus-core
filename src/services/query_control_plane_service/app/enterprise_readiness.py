@@ -5,7 +5,7 @@ from typing import Any, Awaitable, Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 
 from src.services.query_service.app.settings import (
     env_bool,
@@ -32,7 +32,7 @@ _REDACT_FIELDS = {
 
 
 def _normalized_correlation_id(value: str | None) -> str | None:
-    return None if value in (None, "", "<not-set>") else value
+    return normalize_lineage_value(value)
 
 
 def _env_enabled(name: str, default: str = "true") -> bool:

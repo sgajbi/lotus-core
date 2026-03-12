@@ -11,7 +11,7 @@ from portfolio_common.config import (
     KAFKA_RAW_TRANSACTIONS_TOPIC,
 )
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 from portfolio_common.monitoring import KAFKA_MESSAGES_PUBLISHED_TOTAL
 
 from ..DTOs.business_date_dto import BusinessDate
@@ -35,9 +35,7 @@ class IngestionService:
 
     def _get_headers(self, idempotency_key: str | None = None):
         """Constructs Kafka headers with the current correlation ID."""
-        corr_id = correlation_id_var.get()
-        if corr_id == "<not-set>":
-            corr_id = None
+        corr_id = normalize_lineage_value(correlation_id_var.get())
         headers: list[tuple[str, bytes]] = []
         if corr_id:
             headers.append(("correlation_id", corr_id.encode("utf-8")))

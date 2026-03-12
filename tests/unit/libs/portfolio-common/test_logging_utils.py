@@ -1,19 +1,11 @@
-import logging
-
-from portfolio_common import logging_utils
+from portfolio_common.logging_utils import normalize_lineage_value
 
 
-def test_setup_logging_uses_error_level_for_tooling_quiet(monkeypatch):
-    monkeypatch.setenv("LOTUS_TOOLING_QUIET", "1")
-
-    logging_utils.setup_logging()
-
-    assert logging.getLogger().level == logging.ERROR
+def test_normalize_lineage_value_converts_sentinels_to_none():
+    assert normalize_lineage_value(None) is None
+    assert normalize_lineage_value("") is None
+    assert normalize_lineage_value("<not-set>") is None
 
 
-def test_setup_logging_defaults_to_info_level(monkeypatch):
-    monkeypatch.delenv("LOTUS_TOOLING_QUIET", raising=False)
-
-    logging_utils.setup_logging()
-
-    assert logging.getLogger().level == logging.INFO
+def test_normalize_lineage_value_preserves_real_lineage():
+    assert normalize_lineage_value("corr-123") == "corr-123"

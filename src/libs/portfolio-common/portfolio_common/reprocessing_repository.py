@@ -9,7 +9,7 @@ from .config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
 from .database_models import Transaction as DBTransaction
 from .events import TransactionEvent
 from .kafka_utils import KafkaProducer
-from .logging_utils import correlation_id_var
+from .logging_utils import correlation_id_var, normalize_lineage_value
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,7 @@ class ReprocessingRepository:
             )
             return 0
 
-        correlation_id = correlation_id_var.get()
-        if correlation_id == "<not-set>":
-            correlation_id = None
+        correlation_id = normalize_lineage_value(correlation_id_var.get())
         headers = (
             [("correlation_id", (correlation_id or "").encode("utf-8"))] if correlation_id else []
         )
