@@ -84,7 +84,12 @@ def read_pipeline_last_activity_at(engine: Engine) -> datetime | None:
         }
 
         timestamp_selects: list[str] = []
-        for table_name, _predicate in SNAPSHOT_QUERIES.values():
+        blocking_tables = {
+            table_name
+            for key, (table_name, _predicate) in SNAPSHOT_QUERIES.items()
+            if key in BLOCKING_ACTIVITY_KEYS
+        }
+        for table_name in blocking_tables:
             if table_name not in existing_tables:
                 continue
             for column_name in ACTIVITY_TIMESTAMP_CANDIDATES:

@@ -391,7 +391,7 @@ def poll_db_until(db_engine):
                 result = session.execute(text(query), params).fetchone()
                 last_result = result
                 if validation_func(result):
-                    return
+                    return result
             time.sleep(interval)
 
         pytest.fail(f"{fail_message} after {timeout} seconds. Last result: {last_result}")

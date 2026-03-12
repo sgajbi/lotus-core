@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
 from tests.test_support.pipeline_quiescence import (
     format_pipeline_activity_snapshot,
     is_pipeline_quiescent,
+    read_pipeline_last_activity_at,
     wait_for_pipeline_quiescence,
 )
 
@@ -134,3 +136,36 @@ def test_wait_for_pipeline_quiescence_times_out_with_last_snapshot(monkeypatch) 
             stable_cycles=2,
             snapshot_reader=lambda: snapshots[0] if len(snapshots) == 1 else snapshots.popleft(),
         )
+
+
+def test_read_pipeline_last_activity_at_ignores_non_blocking_tables() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    engine.connect.return_value.__enter__.return_value = connection
+    connection.execute.side_effect = [
+        MagicMock(
+            fetchall=MagicMock(
+                return_value=[
+                    ("outbox_events",),
+                    ("portfolio_aggregation_jobs",),
+                ]
+            )
+        ),
+        MagicMock(
+            fetchall=MagicMock(
+                return_value=[
+                    ("outbox_events", "updated_at"),
+                    ("portfolio_aggregation_jobs", "updated_at"),
+                ]
+            )
+        ),
+        MagicMock(scalar=MagicMock(return_value=datetime(2026, 3, 12, 10, 0))),
+    ]
+
+    last_activity_at = read_pipeline_last_activity_at(engine)
+
+    assert last_activity_at is not None
+    assert last_activity_at.isoformat() == "2026-03-12T10:00:00+00:00"
+    union_sql = str(connection.execute.call_args_list[-1][0][0])
+    assert "outbox_events" in union_sql
+    assert "portfolio_aggregation_jobs" not in union_sql
