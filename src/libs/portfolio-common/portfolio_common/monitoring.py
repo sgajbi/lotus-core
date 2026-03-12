@@ -109,6 +109,16 @@ _OUTBOX_PENDING = Gauge(
     "Total number of PENDING outbox events in the database",
 )
 
+_OUTBOX_FAILED_STORED = Gauge(
+    "outbox_events_failed_stored",
+    "Total number of terminal FAILED outbox events in the database",
+)
+
+_OUTBOX_OLDEST_PENDING_AGE_SECONDS = Gauge(
+    "outbox_events_oldest_pending_age_seconds",
+    "Age in seconds of the oldest PENDING outbox event in the database",
+)
+
 _OUTBOX_BATCH_SECONDS = Histogram(
     "outbox_dispatch_batch_seconds",
     "Time taken to process one outbox dispatch batch (lock, publish, update statuses).",
@@ -130,6 +140,14 @@ def observe_outbox_retried(aggregate_type: str, topic: str, count: int = 1) -> N
 
 def set_outbox_pending(total_pending: int) -> None:
     _OUTBOX_PENDING.set(total_pending)
+
+
+def set_outbox_failed_stored(total_failed: int) -> None:
+    _OUTBOX_FAILED_STORED.set(total_failed)
+
+
+def set_outbox_oldest_pending_age_seconds(age_seconds: float) -> None:
+    _OUTBOX_OLDEST_PENDING_AGE_SECONDS.set(age_seconds)
 
 
 def outbox_batch_timer():
@@ -196,6 +214,18 @@ REPROCESSING_WORKER_BATCH_SECONDS = Histogram(
     "reprocessing_worker_batch_seconds",
     "Time taken to claim and process one reprocessing worker batch.",
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
+)
+
+REPROCESSING_DUPLICATES_NORMALIZED_TOTAL = Counter(
+    "reprocessing_duplicates_normalized_total",
+    "Number of duplicate replay or reprocessing records normalized away on durable paths.",
+    ["scope"],
+)
+
+REPROCESSING_STALE_SKIPS_TOTAL = Counter(
+    "reprocessing_stale_skips_total",
+    "Number of stale epoch-fenced records skipped during replay normalization or fanout.",
+    ["stage"],
 )
 
 POSITION_STATE_WATERMARK_LAG_DAYS = Gauge(
@@ -358,6 +388,14 @@ def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> No
 def reprocessing_worker_batch_timer():
     """Context manager that observes one reprocessing worker batch duration."""
     return REPROCESSING_WORKER_BATCH_SECONDS.time()
+
+
+def observe_reprocessing_duplicates_normalized(scope: str, count: int = 1) -> None:
+    REPROCESSING_DUPLICATES_NORMALIZED_TOTAL.labels(scope).inc(count)
+
+
+def observe_reprocessing_stale_skips(stage: str, count: int = 1) -> None:
+    REPROCESSING_STALE_SKIPS_TOTAL.labels(stage).inc(count)
 
 
 def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:

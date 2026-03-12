@@ -109,7 +109,9 @@ class PriceEventConsumer(BaseConsumer):
                                 },
                             )
                             await reprocessing_repo.upsert_state(
-                                security_id=event.security_id, price_date=event.price_date
+                                security_id=event.security_id,
+                                price_date=event.price_date,
+                                correlation_id=event_correlation_id,
                             )
 
                         await idempotency_repo.mark_event_processed(

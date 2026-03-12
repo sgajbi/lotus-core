@@ -11,6 +11,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from portfolio_common.logging_utils import (
     correlation_id_var,
     generate_correlation_id,
+    normalize_lineage_value,
     request_id_var,
     trace_id_var,
 )
@@ -113,7 +114,8 @@ def configure_standard_http_app(
             or request.headers.get("X-Correlation-ID")
             or correlation_id_var.get()
         )
-        if correlation_id == "<not-set>":
+        correlation_id = normalize_lineage_value(correlation_id)
+        if correlation_id is None:
             correlation_id = id_generator(service_prefix)
         logger.critical(
             f"Unhandled exception for request {request.method} {request.url}",

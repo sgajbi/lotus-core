@@ -5,7 +5,7 @@ from typing import Any, Awaitable, Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 
 from .settings import env_bool, env_int, load_query_service_settings
 
@@ -28,7 +28,7 @@ _REDACT_FIELDS = {
 
 
 def _normalized_correlation_id(value: str | None) -> str | None:
-    return None if value in (None, "", "<not-set>") else value
+    return normalize_lineage_value(value)
 
 
 def _env_enabled(name: str, default: str = "true") -> bool:
@@ -168,7 +168,7 @@ def emit_audit_event(
                 "actor_id": actor_id,
                 "tenant_id": tenant_id,
                 "role": role,
-                "correlation_id": correlation_id or "",
+                "correlation_id": correlation_id,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                 "policy_version": enterprise_policy_version(),
                 "metadata": redact_sensitive(metadata),

@@ -16,6 +16,7 @@ from portfolio_common.monitoring import (
     SCHEDULER_GAP_DAYS,
     SNAPSHOT_LAG_SECONDS,
     VALUATION_JOBS_CREATED_TOTAL,
+    observe_reprocessing_stale_skips,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
@@ -51,6 +52,15 @@ class ValuationScheduler:
         logger.info("Valuation scheduler shutdown signal received.")
         self._running = False
 
+    @staticmethod
+    def _build_backfill_correlation_id(
+        portfolio_id: str, security_id: str, epoch: int, valuation_date
+    ) -> str:
+        return (
+            f"SCHEDULER_BACKFILL:{portfolio_id}:{security_id}:"
+            f"{epoch}:{valuation_date.isoformat()}"
+        )
+
     async def _update_reprocessing_metrics(self, db):
         """Queries for and sets key gauges related to reprocessing workload."""
         repo = ValuationRepository(db)
@@ -65,7 +75,7 @@ class ValuationScheduler:
         repo = ValuationRepository(db)
         repro_job_repo = ReprocessingJobRepository(db)
 
-        triggers = await repo.get_instrument_reprocessing_triggers(self._batch_size)
+        triggers = await repo.claim_instrument_reprocessing_triggers(self._batch_size)
         if not triggers:
             return
 
@@ -73,20 +83,20 @@ class ValuationScheduler:
             f"Found {len(triggers)} instrument-level reprocessing triggers to convert to jobs."
         )
 
-        processed_trigger_fences = []
         for trigger in triggers:
             payload = {
                 "security_id": trigger.security_id,
                 "earliest_impacted_date": trigger.earliest_impacted_date.isoformat(),
             }
-            await repro_job_repo.create_job(job_type="RESET_WATERMARKS", payload=payload)
-            processed_trigger_fences.append((trigger.security_id, trigger.earliest_impacted_date))
-
-        if processed_trigger_fences:
-            await repo.delete_instrument_reprocessing_triggers(processed_trigger_fences)
-            logger.info(
-                f"Consumed and deleted {len(processed_trigger_fences)} instrument-level triggers."
+            await repro_job_repo.create_job(
+                job_type="RESET_WATERMARKS",
+                payload=payload,
+                correlation_id=trigger.correlation_id,
             )
+        logger.info(
+            "Consumed %s instrument-level triggers into durable replay jobs.",
+            len(triggers),
+        )
 
     async def _advance_watermarks(self, db):
         """
@@ -128,6 +138,10 @@ class ValuationScheduler:
                 for u in terminal_updates[:3]
             ]
             if normalized_count != len(terminal_updates):
+                observe_reprocessing_stale_skips(
+                    "terminal_reprocessing_normalization",
+                    len(terminal_updates) - normalized_count,
+                )
                 logger.warning(
                     "ValuationScheduler normalized fewer terminal reprocessing states than "
                     "prepared updates.",
@@ -177,6 +191,10 @@ class ValuationScheduler:
                 for u in updates_to_commit[:3]
             ]
             if updated_count != len(updates_to_commit):
+                observe_reprocessing_stale_skips(
+                    "watermark_advance",
+                    len(updates_to_commit) - updated_count,
+                )
                 logger.warning(
                     "ValuationScheduler advanced fewer watermarks than prepared updates.",
                     extra={
@@ -253,7 +271,12 @@ class ValuationScheduler:
                     security_id=state.security_id,
                     valuation_date=current_date,
                     epoch=state.epoch,
-                    correlation_id=f"SCHEDULER_BACKFILL_{current_date.isoformat()}",
+                    correlation_id=self._build_backfill_correlation_id(
+                        state.portfolio_id,
+                        state.security_id,
+                        state.epoch,
+                        current_date,
+                    ),
                 )
                 job_count += 1
                 current_date += timedelta(days=1)
@@ -284,7 +307,9 @@ class ValuationScheduler:
                 epoch=job.epoch,
                 correlation_id=job.correlation_id,
             )
-            headers = [("correlation_id", (job.correlation_id or "").encode("utf-8"))]
+            headers = []
+            if job.correlation_id:
+                headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
             self._producer.publish_message(
                 topic=KAFKA_VALUATION_REQUIRED_TOPIC,
                 key=job.portfolio_id,

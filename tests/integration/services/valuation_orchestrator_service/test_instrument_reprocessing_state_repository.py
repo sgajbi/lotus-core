@@ -22,9 +22,9 @@ async def test_upsert_state_keeps_earliest_impacted_date(clean_db, async_db_sess
         async_db_session
     )
 
-    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 10))
-    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 8))
-    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 12))
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 10), correlation_id="corr-10")
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 8), correlation_id="corr-08")
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 12), correlation_id="corr-12")
     await async_db_session.commit()
 
     rows = (
@@ -41,6 +41,7 @@ async def test_upsert_state_keeps_earliest_impacted_date(clean_db, async_db_sess
 
     assert len(rows) == 1
     assert rows[0].earliest_impacted_date == date(2025, 8, 8)
+    assert rows[0].correlation_id == "corr-08"
 
 
 async def test_upsert_state_preserves_one_row_per_security(
@@ -50,9 +51,9 @@ async def test_upsert_state_preserves_one_row_per_security(
         async_db_session
     )
 
-    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 10))
-    await repo.upsert_state("S-TRIGGER-2", date(2025, 8, 9))
-    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 7))
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 10), correlation_id="corr-a")
+    await repo.upsert_state("S-TRIGGER-2", date(2025, 8, 9), correlation_id="corr-b")
+    await repo.upsert_state("S-TRIGGER-1", date(2025, 8, 7), correlation_id="corr-c")
     await async_db_session.commit()
 
     rows = (
@@ -71,3 +72,34 @@ async def test_upsert_state_preserves_one_row_per_security(
         ("S-TRIGGER-1", date(2025, 8, 7)),
         ("S-TRIGGER-2", date(2025, 8, 9)),
     ]
+    assert [(row.security_id, row.correlation_id) for row in rows] == [
+        ("S-TRIGGER-1", "corr-c"),
+        ("S-TRIGGER-2", "corr-b"),
+    ]
+
+
+async def test_upsert_state_backfills_missing_correlation_for_same_impacted_date(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = instrument_reprocessing_state_repo.InstrumentReprocessingStateRepository(
+        async_db_session
+    )
+
+    await repo.upsert_state("S-TRIGGER-3", date(2025, 8, 10), correlation_id=None)
+    await repo.upsert_state("S-TRIGGER-3", date(2025, 8, 10), correlation_id="corr-fill")
+    await async_db_session.commit()
+
+    row = (
+        (
+            await async_db_session.execute(
+                select(InstrumentReprocessingState).where(
+                    InstrumentReprocessingState.security_id == "S-TRIGGER-3"
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+
+    assert row.earliest_impacted_date == date(2025, 8, 10)
+    assert row.correlation_id == "corr-fill"

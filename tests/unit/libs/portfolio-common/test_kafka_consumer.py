@@ -178,6 +178,28 @@ async def test_dlq_payload_is_correct(
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
+async def test_dlq_omits_unset_correlation_header(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key4", {"data": "value4"})
+    error = ValueError("Test Error")
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        try:
+            raise error
+        except ValueError as exc:
+            await test_consumer._send_to_dlq_async(mock_msg, exc)
+    finally:
+        correlation_id_var.reset(token)
+
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    assert "correlation_id" not in dict(call_args["headers"])
+    assert call_args["value"]["correlation_id"] is None
+    test_consumer._record_consumer_dlq_event.assert_awaited_once()
+
+
 async def test_classify_dlq_reason_code_deserialization():
     assert (
         classify_dlq_reason_code(ValueError("JSON decode failed at position 13"))

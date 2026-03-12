@@ -269,6 +269,7 @@ async def test_reprocessing_outbox_preserves_correlation_id(
             """
             SELECT DISTINCT correlation_id
             FROM outbox_events
+            WHERE event_type = 'ReprocessTransactionReplay'
             """
         )
     )

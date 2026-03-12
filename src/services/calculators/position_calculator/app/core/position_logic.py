@@ -7,7 +7,7 @@ from typing import List
 from portfolio_common.config import KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC
 from portfolio_common.database_models import PositionHistory
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 from portfolio_common.monitoring import REPROCESSING_EPOCH_BUMPED_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
@@ -87,8 +87,19 @@ class PositionCalculator:
             new_watermark = transaction_date - timedelta(days=1)
 
             new_state = await position_state_repo.increment_epoch_and_reset_watermark(
-                portfolio_id, security_id, new_watermark
+                portfolio_id, security_id, current_state.epoch, new_watermark
             )
+            if new_state is None:
+                logger.warning(
+                    "Skipping back-dated replay because the epoch fence is stale.",
+                    extra={
+                        "portfolio_id": portfolio_id,
+                        "security_id": security_id,
+                        "expected_epoch": current_state.epoch,
+                        "transaction_id": event.transaction_id,
+                    },
+                )
+                return
 
             historical_db_txns = await repo.get_all_transactions_for_security(
                 portfolio_id, security_id
@@ -108,9 +119,7 @@ class PositionCalculator:
                 f"{len(all_events_to_replay)} events for reprocessing replay "
                 f"in Epoch {new_state.epoch}"
             )
-            replay_correlation_id = correlation_id_var.get()
-            if replay_correlation_id == "<not-set>":
-                replay_correlation_id = None
+            replay_correlation_id = normalize_lineage_value(correlation_id_var.get())
             for event_to_publish in all_events_to_replay:
                 event_to_publish.epoch = new_state.epoch
                 await outbox_repo.create_outbox_event(

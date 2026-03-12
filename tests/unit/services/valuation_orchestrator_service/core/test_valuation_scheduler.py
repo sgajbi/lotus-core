@@ -2,6 +2,7 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.config import KAFKA_VALUATION_REQUIRED_TOPIC
 from portfolio_common.database_models import (
     InstrumentReprocessingState,
     PortfolioValuationJob,
@@ -110,6 +111,7 @@ async def test_scheduler_creates_position_aware_backfill_jobs(
         assert mock_job_repo.upsert_job.call_count == 3
         first_call_args = mock_job_repo.upsert_job.call_args_list[0].kwargs
         assert first_call_args["valuation_date"] == date(2025, 8, 10)
+        assert first_call_args["correlation_id"] == "SCHEDULER_BACKFILL:P1:S1:1:2025-08-10"
         mock_gauge_labels.assert_called_once_with(portfolio_id="P1", security_id="S1")
         mock_gauge_labels.return_value.set.assert_called_once_with(expected_lag)
 
@@ -180,6 +182,7 @@ async def test_scheduler_advances_watermarks(
     mock_repo.get_lagging_states.return_value = lagging_states
     mock_repo.get_terminal_reprocessing_states.return_value = []
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
+    mock_state_repo.bulk_update_states.return_value = 2
 
     await scheduler._advance_watermarks(AsyncMock())
 
@@ -226,9 +229,14 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
     mock_state_repo.bulk_update_states.return_value = 1
 
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
-    ) as mock_warning:
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+        ) as mock_warning,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_reprocessing_stale_skips"
+        ) as mock_observe_stale_skips,
+    ):
         await scheduler._advance_watermarks(AsyncMock())
 
     mock_warning.assert_called_once()
@@ -236,6 +244,7 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     assert warning_kwargs["extra"]["prepared_count"] == 2
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+    mock_observe_stale_skips.assert_called_once_with("watermark_advance", 1)
 
 
 async def test_scheduler_normalizes_terminal_reprocessing_states(
@@ -306,9 +315,14 @@ async def test_scheduler_warns_when_terminal_normalization_is_epoch_fenced(
     mock_repo.get_terminal_reprocessing_states.return_value = terminal_states
     mock_state_repo.bulk_update_states.return_value = 1
 
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
-    ) as mock_warning:
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+        ) as mock_warning,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_reprocessing_stale_skips"
+        ) as mock_observe_stale_skips,
+    ):
         await scheduler._advance_watermarks(AsyncMock())
 
     mock_warning.assert_called_once()
@@ -316,6 +330,10 @@ async def test_scheduler_warns_when_terminal_normalization_is_epoch_fenced(
     assert warning_kwargs["extra"]["prepared_count"] == 2
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+    mock_observe_stale_skips.assert_called_once_with(
+        "terminal_reprocessing_normalization",
+        1,
+    )
 
 
 async def test_scheduler_dispatches_claimed_jobs(
@@ -334,7 +352,49 @@ async def test_scheduler_dispatches_claimed_jobs(
 
     await scheduler._dispatch_jobs(claimed_jobs)
 
-    mock_kafka_producer.publish_message.assert_called_once()
+    mock_kafka_producer.publish_message.assert_called_once_with(
+        topic=KAFKA_VALUATION_REQUIRED_TOPIC,
+        key="P1",
+        value={
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "valuation_date": "2025-08-11",
+            "epoch": 1,
+            "correlation_id": "corr-1",
+        },
+        headers=[("correlation_id", b"corr-1")],
+    )
+    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_scheduler_omits_empty_correlation_header(
+    scheduler: ValuationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioValuationJob(
+            portfolio_id="P2",
+            security_id="S2",
+            valuation_date=date(2025, 8, 12),
+            epoch=3,
+            correlation_id=None,
+        ),
+    ]
+
+    await scheduler._dispatch_jobs(claimed_jobs)
+
+    mock_kafka_producer.publish_message.assert_called_once_with(
+        topic=KAFKA_VALUATION_REQUIRED_TOPIC,
+        key="P2",
+        value={
+            "portfolio_id": "P2",
+            "security_id": "S2",
+            "valuation_date": "2025-08-12",
+            "epoch": 3,
+            "correlation_id": None,
+        },
+        headers=[],
+    )
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
 
 
@@ -361,13 +421,19 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
     mock_repro_job_repo = mock_dependencies["repro_job_repo"]
 
     triggers = [
-        InstrumentReprocessingState(security_id="S1", earliest_impacted_date=date(2025, 8, 5))
+        InstrumentReprocessingState(
+            security_id="S1",
+            earliest_impacted_date=date(2025, 8, 5),
+            correlation_id="corr-trigger-1",
+        )
     ]
-    mock_repo.get_instrument_reprocessing_triggers.return_value = triggers
+    mock_repo.claim_instrument_reprocessing_triggers.return_value = triggers
 
     await scheduler._process_instrument_level_triggers(AsyncMock())
 
-    mock_repro_job_repo.create_job.assert_awaited_once()
-    mock_repo.delete_instrument_reprocessing_triggers.assert_awaited_once_with(
-        [("S1", date(2025, 8, 5))]
+    mock_repro_job_repo.create_job.assert_awaited_once_with(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-08-05"},
+        correlation_id="corr-trigger-1",
     )
+    mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(scheduler._batch_size)

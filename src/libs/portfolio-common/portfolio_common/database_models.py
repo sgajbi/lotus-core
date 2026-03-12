@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -116,6 +117,14 @@ class PositionHistory(Base):
             "security_id",
             "epoch",
             "position_date",
+        ),
+        Index(
+            "ix_position_history_security_epoch_date_id_portfolio",
+            "security_id",
+            "epoch",
+            position_date.desc(),
+            id.desc(),
+            "portfolio_id",
         ),
     )
 
@@ -797,6 +806,18 @@ class OutboxEvent(Base):
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        Index(
+            "ix_outbox_events_status_created_at",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_outbox_events_status_last_attempted_at",
+            "status",
+            "last_attempted_at",
+        ),
+    )
 
 
 class PortfolioAggregationJob(Base):
@@ -819,6 +840,16 @@ class PortfolioAggregationJob(Base):
 
     __table_args__ = (
         UniqueConstraint("portfolio_id", "aggregation_date", name="_portfolio_date_uc"),
+        Index(
+            "ix_portfolio_aggregation_jobs_status_aggregation_date",
+            "status",
+            "aggregation_date",
+        ),
+        Index(
+            "ix_portfolio_aggregation_jobs_status_updated_at",
+            "status",
+            "updated_at",
+        ),
     )
 
 
@@ -852,6 +883,16 @@ class PortfolioValuationJob(Base):
             "valuation_date",
             "epoch",
             name="_portfolio_security_valuation_date_epoch_uc",
+        ),
+        Index(
+            "ix_portfolio_valuation_jobs_status_valuation_date",
+            "status",
+            "valuation_date",
+        ),
+        Index(
+            "ix_portfolio_valuation_jobs_status_updated_at",
+            "status",
+            "updated_at",
         ),
     )
 
@@ -996,6 +1037,20 @@ class PositionState(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (
+        Index(
+            "ix_position_state_status_watermark_updated",
+            "status",
+            "watermark_date",
+            "updated_at",
+        ),
+        Index(
+            "ix_position_state_watermark_updated",
+            "watermark_date",
+            "updated_at",
+        ),
+    )
+
 
 class InstrumentReprocessingState(Base):
     """
@@ -1008,9 +1063,19 @@ class InstrumentReprocessingState(Base):
 
     security_id = Column(String, primary_key=True)
     earliest_impacted_date = Column(Date, nullable=False)
+    correlation_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_instrument_reprocessing_state_impact_updated_security",
+            "earliest_impacted_date",
+            "updated_at",
+            "security_id",
+        ),
     )
 
 
@@ -1026,6 +1091,7 @@ class ReprocessingJob(Base):
     job_type = Column(String, nullable=False, index=True)
     payload = Column(JSON, nullable=False)
     status = Column(String, nullable=False, default="PENDING", index=True)
+    correlation_id = Column(String, nullable=True)
 
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
@@ -1034,6 +1100,28 @@ class ReprocessingJob(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_reprocessing_jobs_pending_resetwatermarks_priority",
+            text("((payload->>'earliest_impacted_date')::date)"),
+            "created_at",
+            "id",
+            postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),
+        ),
+        Index(
+            "ix_reprocessing_jobs_job_type_status_created_at_id",
+            "job_type",
+            "status",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_reprocessing_jobs_status_updated_at",
+            "status",
+            "updated_at",
+        ),
     )
 
 

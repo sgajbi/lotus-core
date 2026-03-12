@@ -7,6 +7,7 @@ from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
+from .monitoring import observe_reprocessing_duplicates_normalized
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
@@ -68,10 +69,17 @@ class ReprocessingJobRepository:
         )
         result = await self.db.execute(normalize_stmt)
         deleted_count = int(result.scalar_one())
+        if deleted_count:
+            observe_reprocessing_duplicates_normalized(
+                "reset_watermarks_pending_jobs",
+                deleted_count,
+            )
         return deleted_count
 
     @async_timed(repository="ReprocessingJobRepository", method="create_job")
-    async def create_job(self, job_type: str, payload: Dict[str, Any]) -> ReprocessingJob:
+    async def create_job(
+        self, job_type: str, payload: Dict[str, Any], correlation_id: str | None = None
+    ) -> ReprocessingJob:
         if (
             job_type == "RESET_WATERMARKS"
             and payload.get("security_id")
@@ -83,7 +91,8 @@ class ReprocessingJobRepository:
                     job_type,
                     payload,
                     status,
-                    attempt_count
+                    attempt_count,
+                    correlation_id
                 )
                 VALUES (
                     'RESET_WATERMARKS',
@@ -92,7 +101,8 @@ class ReprocessingJobRepository:
                         'earliest_impacted_date', :earliest_impacted_date
                     )::json,
                     'PENDING',
-                    0
+                    0,
+                    :correlation_id
                 )
                 ON CONFLICT ((payload->>'security_id'))
                 WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
@@ -107,20 +117,28 @@ class ReprocessingJobRepository:
                             )::text
                         )
                     )::json,
+                    correlation_id = CASE
+                        WHEN CAST(:earliest_impacted_date AS date)
+                             < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
+                        THEN :correlation_id
+                        WHEN reprocessing_jobs.correlation_id IS NULL
+                        THEN :correlation_id
+                        ELSE reprocessing_jobs.correlation_id
+                    END,
                     updated_at = now()
                 RETURNING *;
                 """
             ).bindparams(
                 bindparam("security_id", type_=String()),
                 bindparam("earliest_impacted_date", type_=Date()),
+                bindparam("correlation_id", type_=String()),
             )
             result = await self.db.execute(
                 stmt,
                 {
                     "security_id": payload["security_id"],
-                    "earliest_impacted_date": date.fromisoformat(
-                        payload["earliest_impacted_date"]
-                    ),
+                    "earliest_impacted_date": date.fromisoformat(payload["earliest_impacted_date"]),
+                    "correlation_id": correlation_id,
                 },
             )
             job = ReprocessingJob(**result.mappings().one())
@@ -133,7 +151,12 @@ class ReprocessingJobRepository:
             )
             return job
 
-        job = ReprocessingJob(job_type=job_type, payload=payload, status="PENDING")
+        job = ReprocessingJob(
+            job_type=job_type,
+            payload=payload,
+            status="PENDING",
+            correlation_id=correlation_id,
+        )
         self.db.add(job)
         await self.db.flush()
         await self.db.refresh(job)
@@ -154,9 +177,7 @@ class ReprocessingJobRepository:
                     "Normalized duplicate pending reset-watermarks jobs before claim.",
                     extra={"deleted_count": normalized_count},
                 )
-            order_clause = (
-                "(payload->>'earliest_impacted_date')::date ASC, " "created_at ASC, id ASC"
-            )
+            order_clause = "(payload->>'earliest_impacted_date') ASC, " "created_at ASC, id ASC"
 
         query = text(
             f"""
