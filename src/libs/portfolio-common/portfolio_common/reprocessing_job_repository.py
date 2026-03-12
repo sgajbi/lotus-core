@@ -169,7 +169,18 @@ class ReprocessingJobRepository:
             },
         )
         claimed_jobs = result.mappings().all()
-        return [ReprocessingJob(**job) for job in claimed_jobs]
+        jobs = [ReprocessingJob(**job) for job in claimed_jobs]
+        if job_type == "RESET_WATERMARKS":
+            jobs.sort(
+                key=lambda job: (
+                    date.fromisoformat(job.payload["earliest_impacted_date"]),
+                    job.created_at,
+                    job.id,
+                )
+            )
+        else:
+            jobs.sort(key=lambda job: (job.created_at, job.id))
+        return jobs
 
     @async_timed(repository="ReprocessingJobRepository", method="find_and_reset_stale_jobs")
     async def find_and_reset_stale_jobs(self, timeout_minutes: int = 15) -> int:

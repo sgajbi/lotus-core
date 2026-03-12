@@ -2,19 +2,19 @@ import pytest
 from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_find_and_claim_jobs_normalizes_historical_reset_watermarks_duplicates(
+async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     clean_db, async_db_session: AsyncSession
 ):
     """
-    GIVEN multiple historical pending RESET_WATERMARKS jobs for the same security
+    GIVEN multiple pending RESET_WATERMARKS jobs for different securities
     WHEN the worker-facing claim path runs
-    THEN duplicate pending rows should be normalized away and the claimed job
-    should carry the earliest impacted date.
+    THEN jobs should be claimed by the oldest impacted date first.
     """
     async_db_session.add_all(
         [
@@ -25,12 +25,12 @@ async def test_find_and_claim_jobs_normalizes_historical_reset_watermarks_duplic
             ),
             ReprocessingJob(
                 job_type="RESET_WATERMARKS",
-                payload={"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+                payload={"security_id": "S2", "earliest_impacted_date": "2025-01-05"},
                 status="PENDING",
             ),
             ReprocessingJob(
                 job_type="RESET_WATERMARKS",
-                payload={"security_id": "S2", "earliest_impacted_date": "2025-01-06"},
+                payload={"security_id": "S3", "earliest_impacted_date": "2025-01-06"},
                 status="PENDING",
             ),
         ]
@@ -42,10 +42,11 @@ async def test_find_and_claim_jobs_normalizes_historical_reset_watermarks_duplic
     claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
     await async_db_session.commit()
 
-    assert len(claimed) == 2
-    assert claimed[0].payload["security_id"] == "S1"
+    assert len(claimed) == 3
+    assert claimed[0].payload["security_id"] == "S2"
     assert claimed[0].payload["earliest_impacted_date"] == "2025-01-05"
-    assert claimed[1].payload["security_id"] == "S2"
+    assert claimed[1].payload["security_id"] == "S3"
+    assert claimed[2].payload["security_id"] == "S1"
 
     remaining_rows = (
         (
@@ -58,8 +59,8 @@ async def test_find_and_claim_jobs_normalizes_historical_reset_watermarks_duplic
         .scalars()
         .all()
     )
-    assert len(remaining_rows) == 2
-    assert {row.payload["security_id"] for row in remaining_rows} == {"S1", "S2"}
+    assert len(remaining_rows) == 3
+    assert {row.payload["security_id"] for row in remaining_rows} == {"S1", "S2", "S3"}
 
 
 async def test_find_and_claim_jobs_keeps_other_job_types_untouched(
@@ -106,3 +107,43 @@ async def test_find_and_claim_jobs_keeps_other_job_types_untouched(
         .all()
     )
     assert len(all_other_jobs) == 2
+
+
+async def test_pending_reset_watermarks_uniqueness_is_enforced_by_db(
+    clean_db, async_db_session: AsyncSession
+):
+    """
+    GIVEN a pending RESET_WATERMARKS job already exists for a security
+    WHEN a second pending RESET_WATERMARKS row for the same security is inserted directly
+    THEN the database should reject it via the partial unique index.
+    """
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status)
+            VALUES (
+              'RESET_WATERMARKS',
+              '{"security_id":"S1","earliest_impacted_date":"2025-01-07"}',
+              'PENDING'
+            )
+            """
+        )
+    )
+    await async_db_session.commit()
+
+    with pytest.raises(IntegrityError):
+        await async_db_session.execute(
+            text(
+                """
+                INSERT INTO reprocessing_jobs (job_type, payload, status)
+                VALUES (
+                  'RESET_WATERMARKS',
+                  '{"security_id":"S1","earliest_impacted_date":"2025-01-05"}',
+                  'PENDING'
+                )
+                """
+            )
+        )
+        await async_db_session.commit()
+
+    await async_db_session.rollback()

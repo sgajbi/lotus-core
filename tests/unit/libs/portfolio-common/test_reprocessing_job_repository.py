@@ -106,7 +106,7 @@ async def test_find_and_claim_jobs_maps_rows_to_models(
         {
             "id": 10,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "AAPL"},
+            "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -122,6 +122,44 @@ async def test_find_and_claim_jobs_maps_rows_to_models(
     assert len(claimed) == 1
     assert claimed[0].id == 10
     assert claimed[0].status == "PROCESSING"
+
+
+async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 0
+    claim_result = MagicMock()
+    claim_result.mappings.return_value.all.return_value = [
+        {
+            "id": 30,
+            "job_type": "RESET_WATERMARKS",
+            "payload": {"security_id": "S1", "earliest_impacted_date": "2025-01-07"},
+            "status": "PROCESSING",
+            "attempt_count": 1,
+            "last_attempted_at": None,
+            "failure_reason": None,
+            "created_at": None,
+            "updated_at": None,
+        },
+        {
+            "id": 20,
+            "job_type": "RESET_WATERMARKS",
+            "payload": {"security_id": "S2", "earliest_impacted_date": "2025-01-05"},
+            "status": "PROCESSING",
+            "attempt_count": 1,
+            "last_attempted_at": None,
+            "failure_reason": None,
+            "created_at": None,
+            "updated_at": None,
+        },
+    ]
+    mock_db_session.execute.side_effect = [normalize_result, claim_result]
+
+    claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
+
+    assert [job.payload["security_id"] for job in claimed] == ["S2", "S1"]
 
 
 async def test_find_and_reset_stale_jobs_resets_processing_rows(
