@@ -1,10 +1,10 @@
-# src/services/calculators/position_valuation_calculator/app/repositories/
+# src/services/valuation_orchestrator_service/app/repositories/
 # instrument_reprocessing_state_repository.py
 import logging
 from datetime import date
 
 from portfolio_common.database_models import InstrumentReprocessingState
-from sqlalchemy import text
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,16 +32,14 @@ class InstrumentReprocessingStateRepository:
                 security_id=security_id, earliest_impacted_date=price_date
             )
 
-            # The LEAST function is specific to PostgreSQL.
-            # Using text() is a reliable way to execute this database-specific function.
             update_stmt = stmt.on_conflict_do_update(
                 index_elements=["security_id"],
                 set_={
-                    "earliest_impacted_date": text(
-                        "LEAST(instrument_reprocessing_state.earliest_impacted_date, "
-                        f"'{price_date.isoformat()}')"
+                    "earliest_impacted_date": func.least(
+                        InstrumentReprocessingState.earliest_impacted_date,
+                        stmt.excluded.earliest_impacted_date,
                     ),
-                    "updated_at": text("now()"),
+                    "updated_at": func.now(),
                 },
             )
 

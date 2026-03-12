@@ -42,7 +42,7 @@ Implemented:
 5. Subsequent RFCs hardened freshness/lineage and ownership boundaries for analytics sections.
 
 Evidence:
-- `src/services/query_service/app/routers/integration.py`
+- `src/services/query_control_plane_service/app/routers/integration.py`
 - `src/services/query_service/app/dtos/core_snapshot_dto.py`
 - `src/services/query_service/app/services/core_snapshot_service.py`
 - `tests/unit/services/query_service/routers/test_integration_router.py`

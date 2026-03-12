@@ -35,6 +35,8 @@ BLOCKING_ACTIVITY_KEYS = frozenset(
         "valuation_jobs_active",
         "reprocessing_jobs_active",
         "reconciliation_runs_active",
+        "position_state_reprocessing",
+        "instrument_reprocessing_active",
     }
 )
 
@@ -84,13 +86,18 @@ def read_pipeline_last_activity_at(engine: Engine) -> datetime | None:
         }
 
         timestamp_selects: list[str] = []
-        for table_name, _predicate in SNAPSHOT_QUERIES.values():
+        blocking_entries = [
+            (table_name, predicate)
+            for key, (table_name, predicate) in SNAPSHOT_QUERIES.items()
+            if key in BLOCKING_ACTIVITY_KEYS and table_name in existing_tables
+        ]
+        for table_name, predicate in blocking_entries:
             if table_name not in existing_tables:
                 continue
             for column_name in ACTIVITY_TIMESTAMP_CANDIDATES:
                 if (table_name, column_name) in timestamp_columns:
                     timestamp_selects.append(
-                        f"SELECT MAX({column_name}) AS ts FROM {table_name}"
+                        f"SELECT MAX({column_name}) AS ts FROM {table_name} WHERE {predicate}"
                     )
                     break
 

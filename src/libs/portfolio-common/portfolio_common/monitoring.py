@@ -1,5 +1,6 @@
 # src/libs/portfolio-common/portfolio_common/monitoring.py
 import logging
+from collections import Counter as CollectionsCounter
 
 from prometheus_client import Counter, Gauge, Histogram
 
@@ -322,6 +323,25 @@ ANALYTICS_EXPORT_PAGE_DEPTH = Histogram(
     buckets=(1, 2, 5, 10, 20, 50, 100, 200),
 )
 
+FINANCIAL_RECONCILIATION_RUNS_TOTAL = Counter(
+    "financial_reconciliation_runs_total",
+    "Number of reconciliation runs completed by reconciliation type and terminal status.",
+    ["reconciliation_type", "status"],
+)
+
+FINANCIAL_RECONCILIATION_FINDINGS_TOTAL = Counter(
+    "financial_reconciliation_findings_total",
+    "Number of reconciliation findings recorded by reconciliation type and severity.",
+    ["reconciliation_type", "severity"],
+)
+
+FINANCIAL_RECONCILIATION_RUN_DURATION_SECONDS = Histogram(
+    "financial_reconciliation_run_duration_seconds",
+    "Duration of reconciliation runs in seconds.",
+    labelnames=("reconciliation_type", "status"),
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
+)
+
 
 def observe_reprocessing_worker_jobs_claimed(job_type: str, count: int = 1) -> None:
     REPROCESSING_WORKER_JOBS_CLAIMED_TOTAL.labels(job_type).inc(count)
@@ -368,3 +388,23 @@ HTTP_REQUEST_LATENCY_SECONDS = Histogram(
 def http_request_timer(service: str, method: str, path: str):
     """Context manager for timing an HTTP request handler."""
     return HTTP_REQUEST_LATENCY_SECONDS.labels(service, method, path).time()
+
+
+def observe_financial_reconciliation_run(
+    reconciliation_type: str,
+    status: str,
+    duration_seconds: float,
+    findings: list[object] | None = None,
+) -> None:
+    FINANCIAL_RECONCILIATION_RUNS_TOTAL.labels(reconciliation_type, status).inc()
+    FINANCIAL_RECONCILIATION_RUN_DURATION_SECONDS.labels(
+        reconciliation_type,
+        status,
+    ).observe(duration_seconds)
+    if not findings:
+        return
+    severity_counts = CollectionsCounter(
+        str(getattr(finding, "severity", "UNKNOWN")).upper() for finding in findings
+    )
+    for severity, count in severity_counts.items():
+        FINANCIAL_RECONCILIATION_FINDINGS_TOTAL.labels(reconciliation_type, severity).inc(count)

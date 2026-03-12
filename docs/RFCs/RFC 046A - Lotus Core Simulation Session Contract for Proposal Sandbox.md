@@ -44,7 +44,7 @@ Implemented:
 5. Unit and integration tests cover lifecycle, guardrails, and router status mappings.
 
 Evidence:
-- `src/services/query_service/app/routers/simulation.py`
+- `src/services/query_control_plane_service/app/routers/simulation.py`
 - `src/services/query_service/app/services/simulation_service.py`
 - `src/services/query_service/app/repositories/simulation_repository.py`
 - `src/services/query_service/app/dtos/simulation_dto.py`

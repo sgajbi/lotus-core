@@ -10,8 +10,11 @@ from portfolio_common.database_models import (
     Portfolio,
     PortfolioValuationJob,
     PositionHistory,
+    PositionState,
     Transaction,
 )
+from portfolio_common.valuation_job_repository import ValuationJobRepository
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
@@ -522,6 +525,90 @@ async def test_find_portfolios_holding_security_on_date(
     assert portfolio_ids[0] == "P1"
 
 
+async def test_find_open_position_keys_for_security_on_date_uses_current_epoch_only(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P-CURRENT-1",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add_all(
+        [
+            Transaction(
+                transaction_id="T-CURRENT-0",
+                portfolio_id="P-CURRENT-1",
+                instrument_id="I-CURRENT-1",
+                security_id="S-CURRENT-1",
+                transaction_date=datetime(2025, 8, 1, 9, 0, 0),
+                transaction_type="BUY",
+                quantity=1,
+                price=1,
+                gross_transaction_amount=1,
+                trade_currency="USD",
+                currency="USD",
+            ),
+            Transaction(
+                transaction_id="T-CURRENT-1",
+                portfolio_id="P-CURRENT-1",
+                instrument_id="I-CURRENT-1",
+                security_id="S-CURRENT-1",
+                transaction_date=datetime(2025, 8, 2, 9, 0, 0),
+                transaction_type="BUY",
+                quantity=1,
+                price=1,
+                gross_transaction_amount=1,
+                trade_currency="USD",
+                currency="USD",
+            ),
+            PositionState(
+                portfolio_id="P-CURRENT-1",
+                security_id="S-CURRENT-1",
+                epoch=1,
+                watermark_date=date(2025, 8, 2),
+                status="CURRENT",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    async_db_session.add_all(
+        [
+            PositionHistory(
+                transaction_id="T-CURRENT-0",
+                portfolio_id="P-CURRENT-1",
+                security_id="S-CURRENT-1",
+                position_date=date(2025, 8, 1),
+                epoch=0,
+                quantity=Decimal("10"),
+                cost_basis=Decimal("10"),
+            ),
+            PositionHistory(
+                transaction_id="T-CURRENT-1",
+                portfolio_id="P-CURRENT-1",
+                security_id="S-CURRENT-1",
+                position_date=date(2025, 8, 2),
+                epoch=1,
+                quantity=Decimal("12"),
+                cost_basis=Decimal("12"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    keys = await repo.find_open_position_keys_for_security_on_date("S-CURRENT-1", date(2025, 8, 2))
+
+    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
+
+
 async def test_find_and_reset_stale_jobs(
     clean_db, setup_stale_job_data, session_factory: async_sessionmaker
 ):
@@ -531,20 +618,50 @@ async def test_find_and_reset_stale_jobs(
     THEN it should only reset the single stale 'PROCESSING' job to 'PENDING'.
     """
     async with session_factory() as session:
+        initial_states = {
+            row.portfolio_id: row.status
+            for row in (
+                await session.execute(
+                    select(PortfolioValuationJob).where(
+                        PortfolioValuationJob.portfolio_id.in_(["P1", "P2", "P3", "P4"])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
+
+    async with session_factory() as session:
         repo = ValuationRepository(session)
         reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15)
         await session.commit()
     assert reset_count == 1
 
     async with session_factory() as session:
-        job1 = await session.get(PortfolioValuationJob, 1)
+        job1 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P1")
+            )
+        ).scalar_one()
         assert job1.status == "PENDING"
-        job2 = await session.get(PortfolioValuationJob, 2)
-        assert job2.status == "PROCESSING"
-        job3 = await session.get(PortfolioValuationJob, 3)
-        assert job3.status == "PENDING"
-        job4 = await session.get(PortfolioValuationJob, 4)
-        assert job4.status == "COMPLETE"
+        job2 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P2")
+            )
+        ).scalar_one()
+        assert job2.status == initial_states["P2"]
+        job3 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P3")
+            )
+        ).scalar_one()
+        assert job3.status == initial_states["P3"]
+        job4 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P4")
+            )
+        ).scalar_one()
+        assert job4.status == initial_states["P4"]
 
 
 async def test_get_first_open_dates_for_keys(
@@ -565,3 +682,90 @@ async def test_get_first_open_dates_for_keys(
     assert first_open_dates[("P1", "S2", 0)] == date(2025, 2, 10)
     assert first_open_dates[("P2", "S1", 1)] == date(2025, 6, 6)
     assert ("P99", "S99", 0) not in first_open_dates
+
+
+async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = ValuationJobRepository(async_db_session)
+
+    await repo.upsert_job(
+        portfolio_id="P-STAGE-1",
+        security_id="S-STAGE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=3,
+        correlation_id="corr-newer",
+    )
+    await async_db_session.commit()
+
+    await repo.upsert_job(
+        portfolio_id="P-STAGE-1",
+        security_id="S-STAGE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=2,
+        correlation_id="corr-stale",
+    )
+    await async_db_session.commit()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob).where(
+                    PortfolioValuationJob.portfolio_id == "P-STAGE-1",
+                    PortfolioValuationJob.security_id == "S-STAGE-1",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 11),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].epoch == 3
+    assert jobs[0].correlation_id == "corr-newer"
+
+
+async def test_get_latest_business_date_falls_back_to_processing_dates_when_calendar_is_empty(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = ValuationRepository(async_db_session)
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P-FALLBACK-1",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-FALLBACK-1",
+                security_id="S-FALLBACK-1",
+                valuation_date=date(2025, 8, 10),
+                epoch=0,
+                status="COMPLETE",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P-FALLBACK-1",
+                security_id="S-FALLBACK-1",
+                date=date(2025, 8, 5),
+                quantity=Decimal("1"),
+                cost_basis=Decimal("1"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    latest_date = await repo.get_latest_business_date()
+
+    assert latest_date == date(2025, 8, 10)

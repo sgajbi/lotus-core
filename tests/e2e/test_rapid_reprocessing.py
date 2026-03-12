@@ -100,16 +100,38 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     ]
     e2e_api_client.ingest("/ingest/transactions", {"transactions": transactions})
 
-    # 3. Poll until the initial state is CURRENT with epoch 0
-    poll_db_until(
-        query="SELECT epoch, status FROM position_state WHERE portfolio_id = :pid AND security_id = :sid",  # noqa: E501
+    initial_state = poll_db_until(
+        query=(
+            "SELECT epoch, status FROM position_state "
+            "WHERE portfolio_id = :pid AND security_id = :sid"
+        ),
         params={"pid": portfolio_id, "sid": security_id},
-        validation_func=lambda r: r is not None and r.epoch == 0 and r.status == "CURRENT",
+        validation_func=lambda r: r is not None and r.status == "CURRENT",
         timeout=120,
-        fail_message="Initial position_state (epoch 0) was not created or did not become CURRENT.",
+        fail_message="Initial position_state was not created or did not become CURRENT.",
     )
 
-    return {"portfolio_id": portfolio_id, "security_id": security_id}
+    def _has_initial_position(data: dict) -> bool:
+        positions = data.get("positions", [])
+        if len(positions) != 1:
+            return False
+        position = positions[0]
+        quantity = Decimal(str(position["quantity"])).quantize(Decimal("0.01"))
+        cost_basis = Decimal(str(position["cost_basis"])).quantize(Decimal("0.01"))
+        return quantity == Decimal("150.00") and cost_basis == Decimal("1600.00")
+
+    e2e_api_client.poll_for_data(
+        f"/portfolios/{portfolio_id}/positions",
+        _has_initial_position,
+        timeout=180,
+        fail_message="Initial seeded position did not converge to the expected business state.",
+    )
+
+    return {
+        "portfolio_id": portfolio_id,
+        "security_id": security_id,
+        "initial_epoch": int(initial_state.epoch),
+    }
 
 
 def test_rapid_back_to_back_reprocessing(
@@ -123,6 +145,7 @@ def test_rapid_back_to_back_reprocessing(
     # ARRANGE
     portfolio_id = setup_rapid_repro_data["portfolio_id"]
     security_id = setup_rapid_repro_data["security_id"]
+    initial_epoch = setup_rapid_repro_data["initial_epoch"]
     day2, day3 = "2025-09-12", "2025-09-13"
 
     back_dated_payload_1 = {
@@ -163,13 +186,13 @@ def test_rapid_back_to_back_reprocessing(
     # ACT 1: Ingest the first back-dated event
     e2e_api_client.ingest("/ingest/transactions", back_dated_payload_1)
 
-    # ASSERT 1: The epoch must increment to 1. We wait for this to confirm the first reprocessing has started.  # noqa: E501
+    # ASSERT 1: The epoch must increment relative to the converged baseline.
     poll_db_until(
         query="SELECT epoch FROM position_state WHERE portfolio_id = :pid AND security_id = :sid",
         params={"pid": portfolio_id, "sid": security_id},
-        validation_func=lambda r: r is not None and r.epoch == 1,
+        validation_func=lambda r: r is not None and r.epoch >= initial_epoch + 1,
         timeout=60,
-        fail_message="First reprocessing (epoch 1) was not triggered.",
+        fail_message="First reprocessing epoch increment was not triggered.",
     )
 
     # ACT 2: Immediately ingest the second back-dated event
@@ -181,7 +204,9 @@ def test_rapid_back_to_back_reprocessing(
     poll_db_until(
         query="SELECT epoch, status FROM position_state WHERE portfolio_id = :pid AND security_id = :sid",  # noqa: E501
         params={"pid": portfolio_id, "sid": security_id},
-        validation_func=lambda r: r is not None and r.epoch >= 1 and r.status == "CURRENT",
+        validation_func=(
+            lambda r: r is not None and r.epoch >= initial_epoch + 1 and r.status == "CURRENT"
+        ),
         timeout=180,
         fail_message="Reprocessing did not converge to a CURRENT state.",
     )

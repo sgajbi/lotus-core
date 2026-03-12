@@ -35,12 +35,12 @@ Remaining alignment work is governance and policy-provenance integration: snapsh
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
-| Generic snapshot endpoint | Implemented | `src/services/query_service/app/routers/integration.py` |
+| Generic snapshot endpoint | Implemented | `src/services/query_control_plane_service/app/routers/integration.py` |
 | Mode and sectioned contract | Implemented | `src/services/query_service/app/dtos/core_snapshot_dto.py` |
 | Simulation consistency (`session_id`, portfolio match, expected_version) | Implemented | `src/services/query_service/app/services/core_snapshot_service.py`; `tests/unit/services/query_service/services/test_core_snapshot_service.py` |
 | Baseline/projected/delta/totals/enrichment generation | Implemented | `src/services/query_service/app/services/core_snapshot_service.py` |
-| Error contract coverage | Implemented | `src/services/query_service/app/routers/integration.py`; `tests/integration/services/query_service/test_main_app.py` |
-| Policy provenance and strict section governance in snapshot payload | Partially implemented | `src/services/query_service/app/routers/integration.py` (`/integration/policy/effective` split model); `docs/RFCs/RFC-DELTA-BACKLOG.md` (`RFC-043-D01`, `RFC-044-D01`) |
+| Error contract coverage | Implemented | `src/services/query_control_plane_service/app/routers/integration.py`; `tests/integration/services/query_service/test_main_app.py` |
+| Policy provenance and strict section governance in snapshot payload | Partially implemented | `src/services/query_control_plane_service/app/routers/integration.py` (`/integration/policy/effective` split model); `docs/RFCs/RFC-DELTA-BACKLOG.md` (`RFC-043-D01`, `RFC-044-D01`) |
 
 ## Design Reasoning and Trade-offs
 1. One shared snapshot contract reduces duplicated orchestration in downstream apps.
@@ -62,7 +62,7 @@ Remaining alignment work is governance and policy-provenance integration: snapsh
 ## Test and Validation Evidence
 1. `tests/unit/services/query_service/services/test_core_snapshot_service.py`
 2. `tests/integration/services/query_service/test_main_app.py`
-3. `src/services/query_service/app/routers/integration.py`
+3. `src/services/query_control_plane_service/app/routers/integration.py`
 4. `src/services/query_service/app/dtos/core_snapshot_dto.py`
 
 ## Original Acceptance Criteria Alignment

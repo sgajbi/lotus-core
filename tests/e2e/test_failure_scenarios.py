@@ -10,6 +10,8 @@ from confluent_kafka import Consumer
 from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_DLQ_TOPIC
 from sqlalchemy import exc, text
 
+from tests.test_support.output_control import emit_test_output
+
 from .api_client import E2EApiClient
 
 
@@ -38,7 +40,7 @@ def wait_for_postgres_ready(db_engine, timeout=30):
         try:
             with db_engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
-            print("\n--- PostgreSQL is ready ---")
+            emit_test_output("\n--- PostgreSQL is ready ---", verbose_only=True)
             return
         except (exc.OperationalError, exc.DBAPIError):
             time.sleep(1)
@@ -52,7 +54,10 @@ def wait_for_service_ready(service_url: str, timeout: int = 60):
         try:
             response = requests.get(service_url, timeout=2)
             if response.status_code == 200:
-                print(f"\n--- Service at {service_url} is healthy ---")
+                emit_test_output(
+                    f"\n--- Service at {service_url} is healthy ---",
+                    verbose_only=True,
+                )
                 return
         except requests.ConnectionError:
             pass  # Service is not up yet, ignore and retry
@@ -128,17 +133,17 @@ def test_db_outage_recovery(
     )
 
     # 5. ACT: Simulate database outage.
-    print("\n--- Stopping PostgreSQL container ---")
+    emit_test_output("\n--- Stopping PostgreSQL container ---")
     subprocess.run(_compose_args("stop", "postgres"), check=True, capture_output=True)
 
     # Give a moment for persistence-service to observe the outage.
     time.sleep(5)
 
-    print("\n--- Starting PostgreSQL container ---")
+    emit_test_output("\n--- Starting PostgreSQL container ---")
     subprocess.run(_compose_args("start", "postgres"), check=True, capture_output=True)
     wait_for_postgres_ready(db_engine)
 
-    print("\n--- Restarting persistence_service to ensure DB reconnection ---")
+    emit_test_output("\n--- Restarting persistence_service to ensure DB reconnection ---")
     subprocess.run(
         _compose_args("restart", "persistence_service"), check=True, capture_output=True
     )
@@ -172,20 +177,23 @@ def test_db_outage_recovery(
         timeout=60,  # The service should recover and process well within this time.
         fail_message=f"Transaction '{transaction_id_after}' was not persisted after DB recovery.",
     )
-    print(f"\n--- Transaction '{transaction_id_after}' successfully persisted after recovery ---")
+    emit_test_output(
+        f"\n--- Transaction '{transaction_id_after}' successfully persisted after recovery ---",
+        verbose_only=True,
+    )
 
     # 8. ASSERT: Verify the DLQ is empty
-    print("\n--- Verifying DLQ is empty ---")
+    emit_test_output("\n--- Verifying DLQ is empty ---", verbose_only=True)
     msg = dlq_consumer.poll(timeout=10)
     dlq_consumer.close()
 
     assert (
         msg is None
     ), f"A message was unexpectedly found in the DLQ: {msg.value() if msg else 'None'}"
-    print("\n--- DLQ verified to be empty ---")
+    emit_test_output("\n--- DLQ verified to be empty ---", verbose_only=True)
 
     # 9. RECOVERY BARRIER: restart all core services and wait for end-to-end readiness
-    print("\n--- Restarting all core services after DB outage scenario ---")
+    emit_test_output("\n--- Restarting all core services after DB outage scenario ---")
     subprocess.run(
         _compose_args(
             "restart",
@@ -203,4 +211,4 @@ def test_db_outage_recovery(
     )
     for health_url in _core_service_health_urls():
         wait_for_service_ready(health_url, timeout=120)
-    print("\n--- Core services fully recovered after outage test ---")
+    emit_test_output("\n--- Core services fully recovered after outage test ---")

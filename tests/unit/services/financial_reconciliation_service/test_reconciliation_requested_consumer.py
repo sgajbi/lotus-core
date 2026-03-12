@@ -197,3 +197,31 @@ async def test_invalid_reconciliation_request_payload_is_sent_to_dlq(
     await consumer.process_message(msg)
 
     consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_reconciliation_request_preserves_payload_correlation_over_header_override(
+    consumer: consumer_module.ReconciliationRequestedConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_service = mock_dependencies["service"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_service.run_automatic_bundle.return_value = {}
+    mock_service.determine_automatic_bundle_outcome = MagicMock(
+        return_value=SimpleNamespace(
+            outcome_status="COMPLETED",
+            blocking_reconciliation_types=[],
+            run_ids={},
+            error_count=0,
+            warning_count=0,
+        )
+    )
+    mock_kafka_message.headers.return_value = [("correlation_id", b"header-corr")]
+
+    await consumer.process_message(mock_kafka_message)
+
+    assert mock_service.run_automatic_bundle.await_args.kwargs["correlation_id"] == "corr-recon"
+    assert mock_outbox_repo.create_outbox_event.await_args.kwargs["correlation_id"] == "corr-recon"
+    assert mock_idempotency_repo.mark_event_processed.await_args.args[3] == "corr-recon"

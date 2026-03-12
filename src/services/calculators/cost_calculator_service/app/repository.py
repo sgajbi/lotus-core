@@ -6,6 +6,7 @@ from typing import List, Optional
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     FxRate,
+    Instrument,
     Portfolio,
     PositionLotState,
     TransactionCost,
@@ -28,6 +29,11 @@ class CostCalculatorRepository:
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
         """Fetches a portfolio by its portfolio_id string."""
         stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
+    async def get_instrument(self, security_id: str) -> Optional[Instrument]:
+        stmt = select(Instrument).where(Instrument.security_id == security_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 

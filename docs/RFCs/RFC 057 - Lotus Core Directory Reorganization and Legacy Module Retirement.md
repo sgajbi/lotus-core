@@ -38,8 +38,8 @@ The implementation is substantially complete and aligned with the target role of
 | Remove legacy analytics modules/docs | Implemented | Missing paths: `src/libs/risk-analytics-engine`, `src/libs/performance-calculator-engine`, `src/libs/concentration-analytics-engine`, `docs/features/risk_analytics`, `docs/features/performance_analytics`, `docs/features/concentration_analytics`, `docs/features/portfolio_review`, `docs/features/portfolio_summary` |
 | Remove `positions-analytics` parallel surface | Implemented | `tests/integration/services/query_service/test_main_app.py` asserts `/portfolios/{portfolio_id}/positions-analytics` absent |
 | Harden adapter-mode ingestion boundaries | Implemented | `src/services/ingestion_service/app/adapter_mode.py`; `src/services/ingestion_service/app/routers/portfolio_bundle.py`; `src/services/ingestion_service/app/routers/uploads.py` |
-| Keep simulation contracts first class | Implemented | `src/services/query_service/app/routers/simulation.py`; `tests/integration/services/query_service/test_simulation_router_dependency.py` |
-| Keep integration policy/capability contracts | Implemented | `src/services/query_service/app/routers/capabilities.py`; `src/services/query_service/app/routers/integration.py`; capabilities tests |
+| Keep simulation contracts first class | Implemented | `src/services/query_control_plane_service/app/routers/simulation.py`; `tests/integration/services/query_service/test_simulation_router_dependency.py` |
+| Keep integration policy/capability contracts | Implemented | `src/services/query_control_plane_service/app/routers/capabilities.py`; `src/services/query_control_plane_service/app/routers/integration.py`; capabilities tests |
 
 ## Design Reasoning and Trade-offs
 1. Strict ownership separation reduces drift and duplicate business logic.

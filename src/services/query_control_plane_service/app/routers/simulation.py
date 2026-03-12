@@ -1,4 +1,4 @@
-# src/services/query_service/app/routers/simulation.py
+# src/services/query_control_plane_service/app/routers/simulation.py
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -214,3 +214,4 @@ async def get_projected_summary(
         return await service.get_projected_summary(session_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+

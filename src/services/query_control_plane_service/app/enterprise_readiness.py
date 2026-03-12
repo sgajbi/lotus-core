@@ -31,6 +31,10 @@ _REDACT_FIELDS = {
 }
 
 
+def _normalized_correlation_id(value: str | None) -> str | None:
+    return None if value in (None, "", "<not-set>") else value
+
+
 def _env_enabled(name: str, default: str = "true") -> bool:
     return env_bool(name, default.strip().lower() in {"1", "true", "yes", "on"})
 
@@ -196,6 +200,7 @@ def build_enterprise_audit_middleware() -> MiddlewareCallable:
                 or request.headers.get("X-Correlation-ID")
                 or correlation_id_var.get()
             )
+            deny_correlation_id = _normalized_correlation_id(deny_correlation_id)
             emit_audit_event(
                 action=f"DENY {request.method} {request.url.path}",
                 actor_id=request.headers.get("X-Actor-Id", "unknown"),
@@ -217,6 +222,7 @@ def build_enterprise_audit_middleware() -> MiddlewareCallable:
                 or response.headers.get("X-Correlation-ID")
                 or correlation_id_var.get()
             )
+            write_correlation_id = _normalized_correlation_id(write_correlation_id)
             emit_audit_event(
                 action=f"{request.method} {request.url.path}",
                 actor_id=request.headers.get("X-Actor-Id", "unknown"),

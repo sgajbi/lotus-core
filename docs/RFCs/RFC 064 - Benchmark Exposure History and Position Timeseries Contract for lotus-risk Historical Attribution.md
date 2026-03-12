@@ -62,10 +62,10 @@ Legacy/ambiguous phrasing has been replaced with current contract terminology:
 ## Current Implementation Traceability
 | Requirement | State | Evidence |
 | --- | --- | --- |
-| Portfolio and position timeseries reuse | Implemented | `src/services/query_service/app/routers/analytics_inputs.py` |
-| Benchmark assignment/definition contracts | Implemented | `src/services/query_service/app/routers/integration.py`; `src/services/query_service/app/services/integration_service.py` |
-| Benchmark market/reference series contracts | Implemented | `src/services/query_service/app/routers/integration.py`; `src/services/query_service/app/dtos/reference_integration_dto.py` |
-| Taxonomy and coverage diagnostics | Implemented | `src/services/query_service/app/routers/integration.py` |
+| Portfolio and position timeseries reuse | Implemented | `src/services/query_control_plane_service/app/routers/analytics_inputs.py` |
+| Benchmark assignment/definition contracts | Implemented | `src/services/query_control_plane_service/app/routers/integration.py`; `src/services/query_service/app/services/integration_service.py` |
+| Benchmark market/reference series contracts | Implemented | `src/services/query_control_plane_service/app/routers/integration.py`; `src/services/query_service/app/dtos/reference_integration_dto.py` |
+| Taxonomy and coverage diagnostics | Implemented | `src/services/query_control_plane_service/app/routers/integration.py` |
 | Contract/service test coverage | Implemented | `tests/unit/services/query_service/routers/test_integration_router.py`; `tests/unit/services/query_service/services/test_integration_service.py`; `tests/unit/services/query_service/repositories/test_reference_data_repository.py` |
 
 ## Contract Semantics for Historical Attribution

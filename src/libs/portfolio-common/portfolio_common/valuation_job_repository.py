@@ -3,7 +3,7 @@ import logging
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import and_, func, not_
+from sqlalchemy import and_, func, not_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,24 @@ class ValuationJobRepository:
         different correlation id.
         """
         try:
+            latest_epoch = await self.get_latest_epoch_for_scope(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                valuation_date=valuation_date,
+            )
+            if latest_epoch is not None and latest_epoch > epoch:
+                logger.info(
+                    "Skipping stale valuation job upsert because a newer epoch already exists",
+                    extra={
+                        "portfolio_id": portfolio_id,
+                        "security_id": security_id,
+                        "valuation_date": valuation_date,
+                        "incoming_epoch": epoch,
+                        "latest_epoch": latest_epoch,
+                    },
+                )
+                return
+
             job_data = {
                 "portfolio_id": portfolio_id,
                 "security_id": security_id,
@@ -86,3 +104,19 @@ class ValuationJobRepository:
                 exc_info=True,
             )
             raise
+
+    async def get_latest_epoch_for_scope(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+        valuation_date: date,
+    ) -> int | None:
+        result = await self.db.execute(
+            select(func.max(PortfolioValuationJob.epoch)).where(
+                PortfolioValuationJob.portfolio_id == portfolio_id,
+                PortfolioValuationJob.security_id == security_id,
+                PortfolioValuationJob.valuation_date == valuation_date,
+            )
+        )
+        return result.scalar_one_or_none()

@@ -34,6 +34,14 @@ async def _transactions_table_has_column(async_db_session: AsyncSession, column_
     return bool(scalar)
 
 
+async def _assert_transactions_table_has_column(
+    async_db_session: AsyncSession, column_name: str
+) -> None:
+    assert await _transactions_table_has_column(
+        async_db_session, column_name
+    ), f"transactions table is missing required column: {column_name}"
+
+
 # --- Fixtures for reusable data ---
 @pytest.fixture
 def instrument_event_buy():
@@ -448,8 +456,9 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
 async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
     clean_db, async_db_session: AsyncSession
 ):
-    if not await _transactions_table_has_column(async_db_session, "settlement_cash_account_id"):
-        pytest.skip("transactions table is missing dual-leg metadata columns in this DB schema.")
+    await _assert_transactions_table_has_column(
+        async_db_session, "settlement_cash_account_id"
+    )
 
     repo = TransactionDBRepository(async_db_session)
 
@@ -510,8 +519,7 @@ async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
 async def test_transaction_repository_persists_fx_metadata(
     clean_db, async_db_session: AsyncSession
 ):
-    if not await _transactions_table_has_column(async_db_session, "component_type"):
-        pytest.skip("transactions table is missing FX metadata columns in this DB schema.")
+    await _assert_transactions_table_has_column(async_db_session, "component_type")
 
     repo = TransactionDBRepository(async_db_session)
 

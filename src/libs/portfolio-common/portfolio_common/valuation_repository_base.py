@@ -1,6 +1,6 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy import cast, delete, func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -52,7 +52,11 @@ class ValuationRepositoryBase:
     ) -> List[InstrumentReprocessingState]:
         stmt = (
             select(InstrumentReprocessingState)
-            .order_by(InstrumentReprocessingState.updated_at.asc())
+            .order_by(
+                InstrumentReprocessingState.earliest_impacted_date.asc(),
+                InstrumentReprocessingState.updated_at.asc(),
+                InstrumentReprocessingState.security_id.asc(),
+            )
             .limit(batch_size)
         )
         result = await self.db.execute(stmt)
@@ -94,24 +98,39 @@ class ValuationRepositoryBase:
             .subquery()
         )
 
-        stmt = select(
-            latest_history_subquery.c.portfolio_id,
-            latest_history_subquery.c.security_id,
-            latest_history_subquery.c.epoch,
-        ).where(
-            latest_history_subquery.c.rn == 1,
-            latest_history_subquery.c.quantity > 0,
+        stmt = (
+            select(
+                latest_history_subquery.c.portfolio_id,
+                latest_history_subquery.c.security_id,
+                latest_history_subquery.c.epoch,
+            )
+            .join(
+                PositionState,
+                (PositionState.portfolio_id == latest_history_subquery.c.portfolio_id)
+                & (PositionState.security_id == latest_history_subquery.c.security_id)
+                & (PositionState.epoch == latest_history_subquery.c.epoch),
+            )
+            .where(
+                latest_history_subquery.c.rn == 1,
+                latest_history_subquery.c.quantity > 0,
+            )
         )
 
         result = await self.db.execute(stmt)
         return [(row.portfolio_id, row.security_id, row.epoch) for row in result.all()]
 
     @async_timed(repository="ValuationRepository", method="delete_instrument_reprocessing_triggers")
-    async def delete_instrument_reprocessing_triggers(self, security_ids: List[str]) -> None:
-        if not security_ids:
+    async def delete_instrument_reprocessing_triggers(
+        self,
+        trigger_fences: Sequence[Tuple[str, date]],
+    ) -> None:
+        if not trigger_fences:
             return
         stmt = delete(InstrumentReprocessingState).where(
-            InstrumentReprocessingState.security_id.in_(security_ids)
+            tuple_(
+                InstrumentReprocessingState.security_id,
+                InstrumentReprocessingState.earliest_impacted_date,
+            ).in_(list(trigger_fences))
         )
         await self.db.execute(stmt)
 
@@ -130,6 +149,22 @@ class ValuationRepositoryBase:
         stmt = (
             select(PositionState)
             .where(PositionState.watermark_date < latest_business_date)
+            .order_by(PositionState.updated_at.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
+    @async_timed(repository="ValuationRepository", method="get_terminal_reprocessing_states")
+    async def get_terminal_reprocessing_states(
+        self, latest_business_date: date, limit: int
+    ) -> List[PositionState]:
+        stmt = (
+            select(PositionState)
+            .where(
+                PositionState.status == "REPROCESSING",
+                PositionState.watermark_date >= latest_business_date,
+            )
             .order_by(PositionState.updated_at.asc())
             .limit(limit)
         )
@@ -285,10 +320,21 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_latest_business_date")
     async def get_latest_business_date(self) -> Optional[date]:
-        stmt = select(func.max(BusinessDate.date))
-        stmt = stmt.where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        business_date_stmt = (
+            select(func.max(BusinessDate.date))
+            .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
+        )
+        snapshot_date_stmt = select(func.max(DailyPositionSnapshot.date))
+        valuation_job_date_stmt = select(func.max(PortfolioValuationJob.valuation_date))
+
+        business_date = (await self.db.execute(business_date_stmt)).scalar_one_or_none()
+        snapshot_date = (await self.db.execute(snapshot_date_stmt)).scalar_one_or_none()
+        valuation_job_date = (
+            await self.db.execute(valuation_job_date_stmt)
+        ).scalar_one_or_none()
+
+        candidates = [d for d in (business_date, snapshot_date, valuation_job_date) if d is not None]
+        return max(candidates) if candidates else None
 
     @async_timed(repository="ValuationRepository", method="update_job_status")
     async def update_job_status(

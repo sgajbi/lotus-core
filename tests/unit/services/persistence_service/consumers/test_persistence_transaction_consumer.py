@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.events import TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,7 +131,45 @@ async def test_process_message_success(
         # ASSERT
         mock_repo.create_or_update_transaction.assert_called_once()
         mock_outbox_repo.create_outbox_event.assert_called_once()
+        assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+            "test-corr-id"
+        )
+        mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+            event_id="UNIT_TEST_01",
+            portfolio_id="PORT_UT_01",
+            service_name="persistence-transactions",
+            correlation_id="test-corr-id",
+        )
         mock_send_to_dlq.assert_not_called()
+
+
+async def test_process_message_uses_header_correlation_on_direct_path(
+    transaction_consumer: TransactionPersistenceConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+
+    mock_repo.check_portfolio_exists.return_value = True
+    mock_idempotency_repo.is_event_processed.return_value = False
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        await transaction_consumer.process_message(mock_kafka_message)
+    finally:
+        correlation_id_var.reset(token)
+
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+        "test-corr-id"
+    )
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+        event_id="UNIT_TEST_01",
+        portfolio_id="PORT_UT_01",
+        service_name="persistence-transactions",
+        correlation_id="test-corr-id",
+    )
 
 
 # --- REVISED TEST ---

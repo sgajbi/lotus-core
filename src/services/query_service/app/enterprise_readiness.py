@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from portfolio_common.logging_utils import correlation_id_var
+
 from .settings import env_bool, env_int, load_query_service_settings
 
 logger = logging.getLogger("enterprise_readiness")
@@ -24,6 +25,10 @@ _REDACT_FIELDS = {
     "account_number",
     "client_email",
 }
+
+
+def _normalized_correlation_id(value: str | None) -> str | None:
+    return None if value in (None, "", "<not-set>") else value
 
 
 def _env_enabled(name: str, default: str = "true") -> bool:
@@ -191,6 +196,7 @@ def build_enterprise_audit_middleware() -> MiddlewareCallable:
                 or request.headers.get("X-Correlation-ID")
                 or correlation_id_var.get()
             )
+            deny_correlation_id = _normalized_correlation_id(deny_correlation_id)
             emit_audit_event(
                 action=f"DENY {request.method} {request.url.path}",
                 actor_id=request.headers.get("X-Actor-Id", "unknown"),
@@ -212,6 +218,7 @@ def build_enterprise_audit_middleware() -> MiddlewareCallable:
                 or response.headers.get("X-Correlation-ID")
                 or correlation_id_var.get()
             )
+            write_correlation_id = _normalized_correlation_id(write_correlation_id)
             emit_audit_event(
                 action=f"{request.method} {request.url.path}",
                 actor_id=request.headers.get("X-Actor-Id", "unknown"),

@@ -419,6 +419,95 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     assert len(response.rows[0].cash_flows) == 3
 
 
+@pytest.mark.asyncio
+async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="E2E_TS_PORT",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            side_effect=[
+                [
+                    SimpleNamespace(
+                        security_id="SEC_EUR_STOCK",
+                        valuation_date=date(2025, 8, 28),
+                        bod_market_value=Decimal("0"),
+                        eod_market_value=Decimal("5720"),
+                        bod_cashflow_position=Decimal("0"),
+                        eod_cashflow_position=Decimal("0"),
+                        bod_cashflow_portfolio=Decimal("0"),
+                        eod_cashflow_portfolio=Decimal("0"),
+                        fees=Decimal("0"),
+                        quantity=Decimal("100"),
+                        epoch=0,
+                        asset_class="Equity",
+                        sector=None,
+                        country=None,
+                        position_currency="EUR",
+                    )
+                ],
+                [
+                    SimpleNamespace(
+                        security_id="SEC_EUR_STOCK",
+                        valuation_date=date(2025, 8, 29),
+                        bod_market_value=Decimal("5720"),
+                        eod_market_value=Decimal("6600"),
+                        bod_cashflow_position=Decimal("0"),
+                        eod_cashflow_position=Decimal("0"),
+                        bod_cashflow_portfolio=Decimal("0"),
+                        eod_cashflow_portfolio=Decimal("0"),
+                        fees=Decimal("0"),
+                        quantity=Decimal("100"),
+                        epoch=0,
+                        asset_class="Equity",
+                        sector=None,
+                        country=None,
+                        position_currency="EUR",
+                    )
+                ],
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    day_1 = await service.get_position_timeseries(
+        portfolio_id="E2E_TS_PORT",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-08-28",
+            window=AnalyticsWindow(start_date="2025-08-28", end_date="2025-08-28"),
+            page=PageRequest(page_size=50),
+        ),
+    )
+    day_2 = await service.get_position_timeseries(
+        portfolio_id="E2E_TS_PORT",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-08-29",
+            window=AnalyticsWindow(start_date="2025-08-29", end_date="2025-08-29"),
+            page=PageRequest(page_size=50),
+        ),
+    )
+
+    assert len(day_1.rows) == 1
+    assert day_1.rows[0].security_id == "SEC_EUR_STOCK"
+    assert day_1.rows[0].quantity == Decimal("100")
+    assert day_1.rows[0].ending_market_value_portfolio_currency == Decimal("5720")
+
+    assert len(day_2.rows) == 1
+    assert day_2.rows[0].security_id == "SEC_EUR_STOCK"
+    assert day_2.rows[0].quantity == Decimal("100")
+    assert (
+        day_2.rows[0].ending_market_value_portfolio_currency
+        > day_1.rows[0].ending_market_value_portfolio_currency
+    )
+
+
 def test_decode_page_token_invalid_signature() -> None:
     service = make_service()
     token = service._encode_page_token({"valuation_date": "2025-01-01"})  # pylint: disable=protected-access

@@ -146,3 +146,23 @@ async def test_completion_consumer_sends_invalid_payload_to_dlq(
     await consumer.process_message(msg)
 
     consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_completion_consumer_preserves_payload_correlation_over_header_override(
+    consumer: consumer_module.FinancialReconciliationCompletionConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: FinancialReconciliationCompletedEvent,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_service = mock_dependencies["service"]
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_kafka_message.headers.return_value = [("correlation_id", b"header-corr")]
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_service.register_financial_reconciliation_completed.assert_awaited_once_with(
+        mock_event,
+        "corr-ctrl",
+    )
+    assert mock_idempotency_repo.mark_event_processed.await_args.args[3] == "corr-ctrl"

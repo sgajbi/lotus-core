@@ -2,7 +2,7 @@
 import logging
 from typing import List
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
@@ -34,23 +34,35 @@ class ReprocessingRepository:
         Returns:
             The number of transactions that were found and republished.
         """
-        if not transaction_ids:
+        ordered_unique_ids = list(dict.fromkeys(transaction_ids))
+
+        if not ordered_unique_ids:
             return 0
 
-        logger.info(f"Beginning reprocessing for {len(transaction_ids)} transaction(s).")
+        logger.info(f"Beginning reprocessing for {len(ordered_unique_ids)} transaction(s).")
 
-        stmt = select(DBTransaction).where(DBTransaction.transaction_id.in_(transaction_ids))
+        ordering = case(
+            {transaction_id: index for index, transaction_id in enumerate(ordered_unique_ids)},
+            value=DBTransaction.transaction_id,
+        )
+        stmt = (
+            select(DBTransaction)
+            .where(DBTransaction.transaction_id.in_(ordered_unique_ids))
+            .order_by(ordering)
+        )
         result = await self.db.execute(stmt)
         transactions_to_replay = result.scalars().all()
 
         if not transactions_to_replay:
             logger.warning(
                 "No matching transactions found in the database for the given IDs.",
-                extra={"transaction_ids": transaction_ids},
+                extra={"transaction_ids": ordered_unique_ids},
             )
             return 0
 
         correlation_id = correlation_id_var.get()
+        if correlation_id == "<not-set>":
+            correlation_id = None
         headers = (
             [("correlation_id", (correlation_id or "").encode("utf-8"))] if correlation_id else []
         )

@@ -104,7 +104,9 @@ class PositionTimeseriesConsumer(BaseConsumer):
     def _has_material_change(cls, existing_record, new_record) -> bool:
         if existing_record is None:
             return True
-        return asdict(cls._material_state(existing_record)) != asdict(cls._material_state(new_record))
+        return asdict(cls._material_state(existing_record)) != asdict(
+            cls._material_state(new_record)
+        )
 
     async def _stage_aggregation_job(
         self, db_session, portfolio_id: str, a_date: date, correlation_id: str
@@ -143,93 +145,102 @@ class PositionTimeseriesConsumer(BaseConsumer):
     async def _process_message_with_retry(self, msg: Message):
         try:
             event_data = json.loads(msg.value().decode("utf-8"))
-            event = self._parse_supported_event(event_data)
-            correlation_id = correlation_id_var.get()
+            with self._message_correlation_context(
+                msg,
+                fallback_correlation_id=event_data.get("correlation_id"),
+            ):
+                event = self._parse_supported_event(event_data)
+                correlation_id = correlation_id_var.get()
 
-            logger.info(
-                "Processing position snapshot for %s on %s for epoch %s",
-                event.security_id,
-                event.date,
-                event.epoch,
-            )
+                logger.info(
+                    "Processing position snapshot for %s on %s for epoch %s",
+                    event.security_id,
+                    event.date,
+                    event.epoch,
+                )
 
-            async for db in get_async_db_session():
-                async with db.begin():
-                    repo = TimeseriesRepository(db)
-                    outbox_repo = OutboxRepository(db)
+                async for db in get_async_db_session():
+                    async with db.begin():
+                        repo = TimeseriesRepository(db)
+                        outbox_repo = OutboxRepository(db)
 
-                    # --- REFACTORED: Use EpochFencer ---
-                    fencer = EpochFencer(db, service_name=SERVICE_NAME)
-                    if not await fencer.check(event):
-                        return  # Acknowledge message without processing
-                    # --- END REFACTOR ---
+                        # --- REFACTORED: Use EpochFencer ---
+                        fencer = EpochFencer(db, service_name=SERVICE_NAME)
+                        if not await fencer.check(event):
+                            return  # Acknowledge message without processing
+                        # --- END REFACTOR ---
 
-                    instrument = await repo.get_instrument(event.security_id)
-                    if not instrument:
-                        raise InstrumentNotFoundError(
-                            f"Instrument '{event.security_id}' not found. Will retry."
+                        instrument = await repo.get_instrument(event.security_id)
+                        if not instrument:
+                            raise InstrumentNotFoundError(
+                                f"Instrument '{event.security_id}' not found. Will retry."
+                            )
+
+                        current_snapshot = await db.get(DailyPositionSnapshot, event.id)
+                        if not current_snapshot:
+                            logger.warning(
+                                "DailyPositionSnapshot record with id %s not found. Skipping.",
+                                event.id,
+                            )
+                            return
+
+                        previous_snapshot = await repo.get_last_snapshot_before(
+                            portfolio_id=event.portfolio_id,
+                            security_id=event.security_id,
+                            a_date=event.date,
+                            epoch=event.epoch,
                         )
 
-                    current_snapshot = await db.get(DailyPositionSnapshot, event.id)
-                    if not current_snapshot:
-                        logger.warning(
-                            "DailyPositionSnapshot record with id %s not found. Skipping.",
-                            event.id,
+                        cashflows = await repo.get_all_cashflows_for_security_date(
+                            event.portfolio_id, event.security_id, event.date
                         )
-                        return
 
-                    previous_snapshot = await repo.get_last_snapshot_before(
-                        portfolio_id=event.portfolio_id,
-                        security_id=event.security_id,
-                        a_date=event.date,
-                        epoch=event.epoch,
-                    )
-
-                    cashflows = await repo.get_all_cashflows_for_security_date(
-                        event.portfolio_id, event.security_id, event.date
-                    )
-
-                    existing_timeseries = await repo.get_position_timeseries(
-                        event.portfolio_id, event.security_id, event.date, event.epoch
-                    )
-
-                    new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
-                        current_snapshot=current_snapshot,
-                        previous_snapshot=previous_snapshot,
-                        cashflows=cashflows,
-                        epoch=event.epoch,
-                    )
-
-                    if not self._has_material_change(existing_timeseries, new_timeseries_record):
-                        logger.info(
-                            "Position timeseries already up to date for %s on %s epoch %s. Skipping downstream fan-out.",
-                            event.security_id,
-                            event.date,
-                            event.epoch,
+                        existing_timeseries = await repo.get_position_timeseries(
+                            event.portfolio_id, event.security_id, event.date, event.epoch
                         )
-                        return
 
-                    await repo.upsert_position_timeseries(new_timeseries_record)
-                    await self._stage_aggregation_job(
-                        db, event.portfolio_id, event.date, correlation_id
-                    )
-                    position_completion_event = PositionTimeseriesDayCompletedEvent(
-                        portfolio_id=event.portfolio_id,
-                        security_id=event.security_id,
-                        timeseries_date=event.date,
-                        epoch=event.epoch,
-                        correlation_id=correlation_id,
-                    )
-                    await outbox_repo.create_outbox_event(
-                        aggregate_type="PositionTimeseriesStage",
-                        aggregate_id=(
-                            f"{event.portfolio_id}:{event.security_id}:{event.date}:{event.epoch}"
-                        ),
-                        event_type="PositionTimeseriesDayCompleted",
-                        topic=KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC,
-                        payload=position_completion_event.model_dump(mode="json"),
-                        correlation_id=correlation_id,
-                    )
+                        new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
+                            current_snapshot=current_snapshot,
+                            previous_snapshot=previous_snapshot,
+                            cashflows=cashflows,
+                            epoch=event.epoch,
+                        )
+
+                        if not self._has_material_change(
+                            existing_timeseries, new_timeseries_record
+                        ):
+                            logger.info(
+                                (
+                                    "Position timeseries already up to date for %s on %s epoch %s. "
+                                    "Skipping downstream fan-out."
+                                ),
+                                event.security_id,
+                                event.date,
+                                event.epoch,
+                            )
+                            return
+
+                        await repo.upsert_position_timeseries(new_timeseries_record)
+                        await self._stage_aggregation_job(
+                            db, event.portfolio_id, event.date, correlation_id
+                        )
+                        position_completion_event = PositionTimeseriesDayCompletedEvent(
+                            portfolio_id=event.portfolio_id,
+                            security_id=event.security_id,
+                            timeseries_date=event.date,
+                            epoch=event.epoch,
+                            correlation_id=correlation_id,
+                        )
+                        await outbox_repo.create_outbox_event(
+                            aggregate_type="PositionTimeseriesStage",
+                            aggregate_id=(
+                                f"{event.portfolio_id}:{event.security_id}:{event.date}:{event.epoch}"
+                            ),
+                            event_type="PositionTimeseriesDayCompleted",
+                            topic=KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC,
+                            payload=position_completion_event.model_dump(mode="json"),
+                            correlation_id=correlation_id,
+                        )
 
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error("Message validation failed: %s. Sending to DLQ.", e, exc_info=True)

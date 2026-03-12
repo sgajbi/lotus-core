@@ -40,7 +40,7 @@ Implemented:
 5. Unit and integration tests validate happy paths and override behavior.
 
 Evidence:
-- `src/services/query_service/app/routers/capabilities.py`
+- `src/services/query_control_plane_service/app/routers/capabilities.py`
 - `src/services/query_service/app/services/capabilities_service.py`
 - `src/services/query_service/app/dtos/capabilities_dto.py`
 - `tests/unit/services/query_service/services/test_capabilities_service.py`

@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from time import perf_counter
 from uuid import uuid4
 
 from portfolio_common.database_models import FinancialReconciliationFinding
+from portfolio_common.monitoring import observe_financial_reconciliation_run
 
 from ..dtos import ReconciliationRunRequest
 from ..repositories import ReconciliationRepository
@@ -97,6 +99,7 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
+        started_at = perf_counter()
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="transaction_cashflow",
             request=request,
@@ -181,6 +184,12 @@ class ReconciliationService:
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
         await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        observe_financial_reconciliation_run(
+            "transaction_cashflow",
+            "COMPLETED",
+            perf_counter() - started_at,
+            findings,
+        )
         return run
 
     async def run_position_valuation(
@@ -189,6 +198,7 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
+        started_at = perf_counter()
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="position_valuation",
@@ -274,6 +284,12 @@ class ReconciliationService:
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
         await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        observe_financial_reconciliation_run(
+            "position_valuation",
+            "COMPLETED",
+            perf_counter() - started_at,
+            findings,
+        )
         return run
 
     async def run_timeseries_integrity(
@@ -282,6 +298,7 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
+        started_at = perf_counter()
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="timeseries_integrity",
@@ -453,6 +470,12 @@ class ReconciliationService:
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
         await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        observe_financial_reconciliation_run(
+            "timeseries_integrity",
+            "COMPLETED",
+            perf_counter() - started_at,
+            findings,
+        )
         return run
 
     async def run_automatic_bundle(

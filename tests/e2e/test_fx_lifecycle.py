@@ -660,7 +660,7 @@ def test_fx_lifecycle_cash_positions_reflect_settlement_pairs(
     def _has_expected_cash_state(data: dict) -> bool:
         by_security = {position["security_id"]: position for position in data.get("positions", [])}
         required = {cash_usd, cash_eur, cash_gbp}
-        if set(by_security) < required:
+        if not required.issubset(set(by_security)):
             return False
 
         return (

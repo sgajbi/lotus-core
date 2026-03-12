@@ -47,7 +47,7 @@ Not implemented as originally written:
 4. No in-core concentration/risk diff report generation from this RFC's proposed schema.
 
 Evidence:
-- `src/services/query_service/app/routers/simulation.py`
+- `src/services/query_control_plane_service/app/routers/simulation.py`
 - `src/services/query_service/app/services/simulation_service.py`
 - `src/services/query_service/app/repositories/simulation_repository.py`
 - `src/services/query_service/app/dtos/simulation_dto.py`

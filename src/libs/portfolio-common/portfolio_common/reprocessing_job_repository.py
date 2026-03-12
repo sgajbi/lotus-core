@@ -1,12 +1,13 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import text, update
+from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
+from .utils import async_timed
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,123 @@ class ReprocessingJobRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def normalize_pending_reset_watermarks_duplicates(self) -> int:
+        """
+        Coalesces any historically duplicated pending RESET_WATERMARKS jobs so that
+        one pending job remains per security_id with the earliest impacted date.
+        Returns the number of redundant rows removed.
+        """
+        normalize_stmt = text(
+            """
+            WITH ranked AS (
+                SELECT
+                    id,
+                    payload->>'security_id' AS security_id,
+                    (payload->>'earliest_impacted_date')::date AS earliest_impacted_date,
+                    row_number() OVER (
+                        PARTITION BY payload->>'security_id'
+                        ORDER BY
+                            (payload->>'earliest_impacted_date')::date ASC,
+                            created_at ASC,
+                            id ASC
+                    ) AS rn,
+                    min((payload->>'earliest_impacted_date')::date) OVER (
+                        PARTITION BY payload->>'security_id'
+                    ) AS min_impacted_date
+                FROM reprocessing_jobs
+                WHERE status = 'PENDING' AND job_type = 'RESET_WATERMARKS'
+            ),
+            keepers AS (
+                UPDATE reprocessing_jobs j
+                SET payload = jsonb_set(
+                        j.payload::jsonb,
+                        '{earliest_impacted_date}',
+                        to_jsonb(r.min_impacted_date::text)
+                    )::json,
+                    updated_at = now()
+                FROM ranked r
+                WHERE j.id = r.id
+                  AND r.rn = 1
+                  AND (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
+                RETURNING j.id
+            ),
+            deleted AS (
+                DELETE FROM reprocessing_jobs j
+                USING ranked r
+                WHERE j.id = r.id
+                  AND r.rn > 1
+                RETURNING j.id
+            )
+            SELECT count(*) FROM deleted;
+            """
+        )
+        result = await self.db.execute(normalize_stmt)
+        deleted_count = int(result.scalar_one())
+        return deleted_count
+
+    @async_timed(repository="ReprocessingJobRepository", method="create_job")
     async def create_job(self, job_type: str, payload: Dict[str, Any]) -> ReprocessingJob:
+        if (
+            job_type == "RESET_WATERMARKS"
+            and payload.get("security_id")
+            and payload.get("earliest_impacted_date")
+        ):
+            stmt = text(
+                """
+                INSERT INTO reprocessing_jobs (
+                    job_type,
+                    payload,
+                    status,
+                    attempt_count
+                )
+                VALUES (
+                    'RESET_WATERMARKS',
+                    json_build_object(
+                        'security_id', :security_id,
+                        'earliest_impacted_date', :earliest_impacted_date
+                    )::json,
+                    'PENDING',
+                    0
+                )
+                ON CONFLICT ((payload->>'security_id'))
+                WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
+                DO UPDATE
+                SET payload = jsonb_set(
+                        reprocessing_jobs.payload::jsonb,
+                        '{earliest_impacted_date}',
+                        to_jsonb(
+                            LEAST(
+                                (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
+                                CAST(:earliest_impacted_date AS date)
+                            )::text
+                        )
+                    )::json,
+                    updated_at = now()
+                RETURNING *;
+                """
+            ).bindparams(
+                bindparam("security_id", type_=String()),
+                bindparam("earliest_impacted_date", type_=Date()),
+            )
+            result = await self.db.execute(
+                stmt,
+                {
+                    "security_id": payload["security_id"],
+                    "earliest_impacted_date": date.fromisoformat(
+                        payload["earliest_impacted_date"]
+                    ),
+                },
+            )
+            job = ReprocessingJob(**result.mappings().one())
+            logger.info(
+                "Coalesced reset-watermarks reprocessing job.",
+                extra={
+                    "job_id": job.id,
+                    "security_id": payload["security_id"],
+                },
+            )
+            return job
+
         job = ReprocessingJob(job_type=job_type, payload=payload, status="PENDING")
         self.db.add(job)
         await self.db.flush()
@@ -23,13 +140,26 @@ class ReprocessingJobRepository:
         logger.info("Created new reprocessing job.", extra={"job_id": job.id, "job_type": job_type})
         return job
 
+    @async_timed(repository="ReprocessingJobRepository", method="find_and_claim_jobs")
     async def find_and_claim_jobs(self, job_type: str, batch_size: int) -> List[ReprocessingJob]:
         """
         Finds PENDING jobs, atomically claims them by updating their
         status to PROCESSING, and returns the claimed jobs.
         """
+        order_clause = "created_at ASC, id ASC"
+        if job_type == "RESET_WATERMARKS":
+            normalized_count = await self.normalize_pending_reset_watermarks_duplicates()
+            if normalized_count:
+                logger.info(
+                    "Normalized duplicate pending reset-watermarks jobs before claim.",
+                    extra={"deleted_count": normalized_count},
+                )
+            order_clause = (
+                "(payload->>'earliest_impacted_date')::date ASC, " "created_at ASC, id ASC"
+            )
+
         query = text(
-            """
+            f"""
             UPDATE reprocessing_jobs
             SET status = 'PROCESSING',
                 updated_at = now(),
@@ -39,7 +169,7 @@ class ReprocessingJobRepository:
                 SELECT id
                 FROM reprocessing_jobs
                 WHERE status = 'PENDING' AND job_type = :job_type
-                ORDER BY created_at ASC, id ASC
+                ORDER BY {order_clause}
                 LIMIT :batch_size
                 FOR UPDATE SKIP LOCKED
             )
@@ -54,8 +184,40 @@ class ReprocessingJobRepository:
             },
         )
         claimed_jobs = result.mappings().all()
-        return [ReprocessingJob(**job) for job in claimed_jobs]
+        jobs = [ReprocessingJob(**job) for job in claimed_jobs]
+        if job_type == "RESET_WATERMARKS":
+            jobs.sort(
+                key=lambda job: (
+                    date.fromisoformat(job.payload["earliest_impacted_date"]),
+                    job.created_at,
+                    job.id,
+                )
+            )
+        else:
+            jobs.sort(key=lambda job: (job.created_at, job.id))
+        return jobs
 
+    @async_timed(repository="ReprocessingJobRepository", method="find_and_reset_stale_jobs")
+    async def find_and_reset_stale_jobs(self, timeout_minutes: int = 15) -> int:
+        stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+        stale_job_ids_stmt = select(ReprocessingJob.id).where(
+            ReprocessingJob.status == "PROCESSING",
+            ReprocessingJob.updated_at < stale_cutoff,
+        )
+        stale_job_ids = list((await self.db.execute(stale_job_ids_stmt)).scalars())
+        if not stale_job_ids:
+            return 0
+
+        stmt = (
+            update(ReprocessingJob)
+            .where(ReprocessingJob.id.in_(stale_job_ids))
+            .values(status="PENDING", updated_at=func.now())
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.db.execute(stmt)
+        return result.rowcount
+
+    @async_timed(repository="ReprocessingJobRepository", method="update_job_status")
     async def update_job_status(
         self, job_id: int, status: str, failure_reason: Optional[str] = None
     ) -> None:

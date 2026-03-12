@@ -1,4 +1,4 @@
-# src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py
+# src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py
 import asyncio
 import logging
 from datetime import timedelta
@@ -73,19 +73,19 @@ class ValuationScheduler:
             f"Found {len(triggers)} instrument-level reprocessing triggers to convert to jobs."
         )
 
-        processed_security_ids = []
+        processed_trigger_fences = []
         for trigger in triggers:
             payload = {
                 "security_id": trigger.security_id,
                 "earliest_impacted_date": trigger.earliest_impacted_date.isoformat(),
             }
             await repro_job_repo.create_job(job_type="RESET_WATERMARKS", payload=payload)
-            processed_security_ids.append(trigger.security_id)
+            processed_trigger_fences.append((trigger.security_id, trigger.earliest_impacted_date))
 
-        if processed_security_ids:
-            await repo.delete_instrument_reprocessing_triggers(processed_security_ids)
+        if processed_trigger_fences:
+            await repo.delete_instrument_reprocessing_triggers(processed_trigger_fences)
             logger.info(
-                f"Consumed and deleted {len(processed_security_ids)} instrument-level triggers."
+                f"Consumed and deleted {len(processed_trigger_fences)} instrument-level triggers."
             )
 
     async def _advance_watermarks(self, db):
@@ -101,9 +101,51 @@ class ValuationScheduler:
             return
 
         lagging_states = await repo.get_lagging_states(latest_business_date, self._batch_size)
+        terminal_reprocessing_states = await repo.get_terminal_reprocessing_states(
+            latest_business_date, self._batch_size
+        )
 
-        reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING")
+        reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING") + len(
+            terminal_reprocessing_states
+        )
         REPROCESSING_ACTIVE_KEYS_TOTAL.set(reprocessing_count)
+
+        terminal_updates: List[Dict[str, Any]] = [
+            {
+                "portfolio_id": state.portfolio_id,
+                "security_id": state.security_id,
+                "expected_epoch": state.epoch,
+                "watermark_date": state.watermark_date,
+                "status": "CURRENT",
+            }
+            for state in terminal_reprocessing_states
+        ]
+
+        if terminal_updates:
+            normalized_count = await position_state_repo.bulk_update_states(terminal_updates)
+            examples = [
+                f"({u['portfolio_id']},{u['security_id']})->{u['watermark_date']}"
+                for u in terminal_updates[:3]
+            ]
+            if normalized_count != len(terminal_updates):
+                logger.warning(
+                    "ValuationScheduler normalized fewer terminal reprocessing states than "
+                    "prepared updates.",
+                    extra={
+                        "prepared_count": len(terminal_updates),
+                        "updated_count": normalized_count,
+                        "stale_skipped_count": len(terminal_updates) - normalized_count,
+                        "examples": examples,
+                    },
+                )
+            elif normalized_count:
+                logger.info(
+                    "ValuationScheduler normalized terminal reprocessing states.",
+                    extra={
+                        "normalized_count": normalized_count,
+                        "examples": examples,
+                    },
+                )
 
         if not lagging_states:
             return
@@ -122,6 +164,7 @@ class ValuationScheduler:
                     {
                         "portfolio_id": state.portfolio_id,
                         "security_id": state.security_id,
+                        "expected_epoch": state.epoch,
                         "watermark_date": new_watermark,
                         "status": new_status,
                     }
@@ -133,10 +176,21 @@ class ValuationScheduler:
                 f"({u['portfolio_id']},{u['security_id']})->{u['watermark_date']}"
                 for u in updates_to_commit[:3]
             ]
-            logger.info(
-                f"ValuationScheduler: advanced {updated_count} watermarks.",
-                extra={"examples": log_examples},
-            )
+            if updated_count != len(updates_to_commit):
+                logger.warning(
+                    "ValuationScheduler advanced fewer watermarks than prepared updates.",
+                    extra={
+                        "prepared_count": len(updates_to_commit),
+                        "updated_count": updated_count,
+                        "stale_skipped_count": len(updates_to_commit) - updated_count,
+                        "examples": log_examples,
+                    },
+                )
+            else:
+                logger.info(
+                    f"ValuationScheduler: advanced {updated_count} watermarks.",
+                    extra={"examples": log_examples},
+                )
 
     async def _create_backfill_jobs(self, db):
         """

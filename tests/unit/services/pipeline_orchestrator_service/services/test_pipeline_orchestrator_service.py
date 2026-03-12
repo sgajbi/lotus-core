@@ -33,6 +33,7 @@ class _RepoStub:
         self._stage: _Stage | None = None
         self.force_claim_result: bool | None = None
         self.control_stage = None
+        self.latest_control_epoch: int | None = None
 
     async def upsert_stage_flags(self, **kwargs):
         if self._stage is None:
@@ -62,6 +63,9 @@ class _RepoStub:
         return True
 
     async def upsert_portfolio_control_stage_status(self, **kwargs):
+        self.latest_control_epoch = max(
+            self.latest_control_epoch or kwargs["epoch"], kwargs["epoch"]
+        )
         if self.control_stage is None:
             self.control_stage = _Stage(
                 transaction_id=f"portfolio-stage:{kwargs['stage_name']}:{kwargs['portfolio_id']}",
@@ -80,6 +84,9 @@ class _RepoStub:
             self.control_stage.business_date = kwargs["business_date"]
             self.control_stage.epoch = kwargs["epoch"]
         return self.control_stage
+
+    async def get_latest_portfolio_control_stage_epoch(self, **kwargs):
+        return self.latest_control_epoch
 
 
 def _txn_event() -> TransactionEvent:
@@ -303,3 +310,45 @@ async def test_stale_completed_reconciliation_does_not_downgrade_blocking_stage(
     assert call.kwargs["payload"]["status"] == "REQUIRES_REPLAY"
     assert call.kwargs["payload"]["controls_blocking"] is True
     assert call.kwargs["payload"]["publish_allowed"] is False
+
+
+@pytest.mark.asyncio
+async def test_older_epoch_reconciliation_completion_does_not_emit_controls_event():
+    repo = _RepoStub()
+    outbox_repo = AsyncMock()
+    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
+
+    await service.register_financial_reconciliation_completed(
+        FinancialReconciliationCompletedEvent(
+            portfolio_id="PORT-1",
+            business_date=date(2026, 3, 7),
+            epoch=3,
+            outcome_status="COMPLETED",
+            reconciliation_types=["transaction_cashflow"],
+            blocking_reconciliation_types=[],
+            run_ids={"transaction_cashflow": "recon-latest"},
+            error_count=0,
+            warning_count=0,
+            correlation_id="corr-9",
+        ),
+        correlation_id="corr-9",
+    )
+    outbox_repo.create_outbox_event.reset_mock()
+
+    await service.register_financial_reconciliation_completed(
+        FinancialReconciliationCompletedEvent(
+            portfolio_id="PORT-1",
+            business_date=date(2026, 3, 7),
+            epoch=2,
+            outcome_status="REQUIRES_REPLAY",
+            reconciliation_types=["transaction_cashflow"],
+            blocking_reconciliation_types=["transaction_cashflow"],
+            run_ids={"transaction_cashflow": "recon-stale"},
+            error_count=1,
+            warning_count=0,
+            correlation_id="corr-10",
+        ),
+        correlation_id="corr-10",
+    )
+
+    outbox_repo.create_outbox_event.assert_not_called()

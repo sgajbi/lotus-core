@@ -88,6 +88,7 @@ async def test_increment_epoch_and_reset_watermark(clean_db, async_db_session: A
     # Verify the change was persisted
     fetched_state = await async_db_session.get(PositionState, (portfolio_id, security_id))
     assert fetched_state.epoch == 1
+    assert fetched_state.updated_at is not None
 
 
 async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSession):
@@ -142,6 +143,7 @@ async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSessi
     p1_state = await async_db_session.get(PositionState, ("P1", "S1"))
     assert p1_state.watermark_date == new_watermark
     assert p1_state.status == "REPROCESSING"
+    assert p1_state.updated_at is not None
 
     p2_state = await async_db_session.get(PositionState, ("P2", "S2"))
     assert p2_state.watermark_date == date(2025, 5, 1)  # Unchanged
@@ -150,6 +152,7 @@ async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSessi
     p3_state = await async_db_session.get(PositionState, ("P3", "S3"))
     assert p3_state.watermark_date == new_watermark
     assert p3_state.status == "REPROCESSING"
+    assert p3_state.updated_at is not None
 
 
 async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
@@ -182,12 +185,14 @@ async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
         {
             "portfolio_id": "P1",
             "security_id": "S1",
+            "expected_epoch": 1,
             "watermark_date": date(2025, 6, 15),
             "status": "CURRENT",
         },
         {
             "portfolio_id": "P2",
             "security_id": "S2",
+            "expected_epoch": 2,
             "watermark_date": date(2025, 6, 20),
             "status": "REPROCESSING",
         },
@@ -210,3 +215,94 @@ async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
     p2_state = await async_db_session.get(PositionState, ("P2", "S2"))
     assert p2_state.watermark_date == date(2025, 6, 20)
     assert p2_state.status == "REPROCESSING"
+
+
+async def test_bulk_update_states_does_not_overwrite_newer_epoch(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = PositionStateRepository(async_db_session)
+
+    async_db_session.add(
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 6, 1),
+            epoch=2,
+            status="REPROCESSING",
+        )
+    )
+    await async_db_session.commit()
+
+    updates = [
+        {
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "expected_epoch": 1,
+            "watermark_date": date(2025, 6, 15),
+            "status": "CURRENT",
+        }
+    ]
+
+    updated_count = await repo.bulk_update_states(updates)
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    assert updated_count == 0
+    state = await async_db_session.get(PositionState, ("P1", "S1"))
+    assert state is not None
+    assert state.epoch == 2
+    assert state.watermark_date == date(2025, 6, 1)
+    assert state.status == "REPROCESSING"
+
+
+async def test_bulk_update_states_updates_updated_at_for_all_mutated_rows(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = PositionStateRepository(async_db_session)
+
+    async_db_session.add_all(
+        [
+            PositionState(
+                portfolio_id="P3",
+                security_id="S3",
+                watermark_date=date(2025, 6, 1),
+                epoch=1,
+                status="REPROCESSING",
+            ),
+            PositionState(
+                portfolio_id="P4",
+                security_id="S4",
+                watermark_date=date(2025, 6, 1),
+                epoch=1,
+                status="REPROCESSING",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    updates = [
+        {
+            "portfolio_id": "P3",
+            "security_id": "S3",
+            "expected_epoch": 1,
+            "watermark_date": date(2025, 6, 2),
+            "status": "CURRENT",
+        },
+        {
+            "portfolio_id": "P4",
+            "security_id": "S4",
+            "expected_epoch": 1,
+            "watermark_date": date(2025, 6, 3),
+            "status": "CURRENT",
+        },
+    ]
+
+    updated_count = await repo.bulk_update_states(updates)
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    assert updated_count == 2
+    p3_state = await async_db_session.get(PositionState, ("P3", "S3"))
+    p4_state = await async_db_session.get(PositionState, ("P4", "S4"))
+    assert p3_state.updated_at is not None
+    assert p4_state.updated_at is not None

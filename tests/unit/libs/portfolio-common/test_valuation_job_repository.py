@@ -37,6 +37,9 @@ async def test_upsert_job_builds_correct_statement(
     mock_pg_insert.return_value.values.return_value.on_conflict_do_update.return_value = (
         mock_final_statement
     )
+    latest_epoch_result = MagicMock()
+    latest_epoch_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.side_effect = [latest_epoch_result, None]
 
     job_details = {
         "portfolio_id": "PORT_VJR_01",
@@ -62,4 +65,25 @@ async def test_upsert_job_builds_correct_statement(
         where=ANY,
     )
 
-    mock_db_session.execute.assert_awaited_once_with(mock_final_statement)
+    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_args_list[-1].args[0] == mock_final_statement
+
+
+@patch("portfolio_common.valuation_job_repository.pg_insert")
+async def test_upsert_job_skips_when_newer_epoch_already_exists(
+    mock_pg_insert, repository: ValuationJobRepository, mock_db_session: AsyncMock
+):
+    latest_epoch_result = MagicMock()
+    latest_epoch_result.scalar_one_or_none.return_value = 3
+    mock_db_session.execute.return_value = latest_epoch_result
+
+    await repository.upsert_job(
+        portfolio_id="PORT_VJR_02",
+        security_id="SEC_VJR_02",
+        valuation_date=date(2025, 8, 12),
+        epoch=2,
+        correlation_id="corr-vjr-stale",
+    )
+
+    mock_pg_insert.assert_not_called()
+    mock_db_session.execute.assert_awaited_once()

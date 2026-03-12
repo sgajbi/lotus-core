@@ -41,7 +41,7 @@ Superseded details from original text:
 
 Evidence:
 - `src/services/query_service/app/dtos/core_snapshot_dto.py`
-- `src/services/query_service/app/routers/analytics_inputs.py`
+- `src/services/query_control_plane_service/app/routers/analytics_inputs.py`
 - `src/services/query_service/app/dtos/analytics_input_dto.py`
 - `src/services/query_service/app/services/analytics_timeseries_service.py`
 - `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py`
@@ -52,7 +52,7 @@ Evidence:
 | --- | --- | --- |
 | Remove analytics sections from core-snapshot | Implemented | `CoreSnapshotSection` enum |
 | Provide raw analytics input contract | Implemented with evolved endpoint family and schema | analytics inputs router/DTO/service |
-| Snapshot governance semantics when analytics sections are requested | Implemented through strict policy enforcement and governance metadata in core-snapshot | `src/services/query_service/app/routers/integration.py`; `src/services/query_service/app/dtos/core_snapshot_dto.py`; RFC-043 evidence |
+| Snapshot governance semantics when analytics sections are requested | Implemented through strict policy enforcement and governance metadata in core-snapshot | `src/services/query_control_plane_service/app/routers/integration.py`; `src/services/query_service/app/dtos/core_snapshot_dto.py`; RFC-043 evidence |
 
 ## Design Reasoning and Trade-offs
 

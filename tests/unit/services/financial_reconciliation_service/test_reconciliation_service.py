@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -33,10 +33,13 @@ async def test_run_transaction_cashflow_records_missing_cashflow_finding():
     repository.fetch_transaction_cashflow_rows.return_value = [(transaction, rule, None)]
 
     service = ReconciliationService(repository)
-    result = await service.run_transaction_cashflow(
-        request=ReconciliationRunRequest(portfolio_id="PORT-1", business_date=date(2026, 3, 8)),
-        correlation_id="corr-1",
-    )
+    with patch(
+        "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
+    ) as observe_metric:
+        result = await service.run_transaction_cashflow(
+            request=ReconciliationRunRequest(portfolio_id="PORT-1", business_date=date(2026, 3, 8)),
+            correlation_id="corr-1",
+        )
 
     assert result is run
     findings = repository.add_findings.await_args.args[0]
@@ -45,6 +48,8 @@ async def test_run_transaction_cashflow_records_missing_cashflow_finding():
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
     assert summary["passed"] is False
     assert summary["error_count"] == 1
+    observe_metric.assert_called_once()
+    assert observe_metric.call_args.args[:2] == ("transaction_cashflow", "COMPLETED")
 
 
 @pytest.mark.asyncio
@@ -66,10 +71,13 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
     repository.fetch_position_valuation_rows.return_value = [snapshot]
 
     service = ReconciliationService(repository)
-    await service.run_position_valuation(
-        request=ReconciliationRunRequest(portfolio_id="PORT-2", business_date=date(2026, 3, 8)),
-        correlation_id="corr-2",
-    )
+    with patch(
+        "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
+    ) as observe_metric:
+        await service.run_position_valuation(
+            request=ReconciliationRunRequest(portfolio_id="PORT-2", business_date=date(2026, 3, 8)),
+            correlation_id="corr-2",
+        )
 
     findings = repository.add_findings.await_args.args[0]
     assert {finding.finding_type for finding in findings} == {
@@ -78,6 +86,8 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
     }
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
     assert summary["finding_count"] == 2
+    observe_metric.assert_called_once()
+    assert observe_metric.call_args.args[:2] == ("position_valuation", "COMPLETED")
 
 
 @pytest.mark.asyncio

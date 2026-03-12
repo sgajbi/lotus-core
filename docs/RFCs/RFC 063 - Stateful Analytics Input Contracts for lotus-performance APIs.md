@@ -32,7 +32,7 @@ The implemented shape aligns closely with the RFC goals, including deterministic
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
-| Portfolio timeseries input endpoint | Implemented | `src/services/query_service/app/routers/analytics_inputs.py`; `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py` |
+| Portfolio timeseries input endpoint | Implemented | `src/services/query_control_plane_service/app/routers/analytics_inputs.py`; `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py` |
 | Position timeseries input endpoint | Implemented | same router/service path |
 | Analytics reference metadata endpoint | Implemented | `analytics_inputs.py` |
 | Async export create/status/result endpoints | Implemented | `analytics_inputs.py` (`/exports/analytics-timeseries/jobs*`) |
@@ -57,7 +57,7 @@ The implemented shape aligns closely with the RFC goals, including deterministic
 2. Keep performance-scale hardening under RFC 065/066 operational gates.
 
 ## Test and Validation Evidence
-1. `src/services/query_service/app/routers/analytics_inputs.py`
+1. `src/services/query_control_plane_service/app/routers/analytics_inputs.py`
 2. `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py`
 3. `src/services/query_service/app/services/analytics_timeseries_service.py`
 

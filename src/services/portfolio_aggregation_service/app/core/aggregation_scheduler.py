@@ -1,14 +1,16 @@
-# services/timeseries-generator-service/app/core/aggregation_scheduler.py
-import logging
 import asyncio
+import logging
 from typing import List
 
-from portfolio_common.db import get_async_db_session
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.config import KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC
-from portfolio_common.events import PortfolioAggregationRequiredEvent
 from portfolio_common.database_models import PortfolioAggregationJob
+from portfolio_common.db import get_async_db_session
+from portfolio_common.events import PortfolioAggregationRequiredEvent
+from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+
 from ..repositories.timeseries_repository import TimeseriesRepository
+
+# src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py
 
 
 logger = logging.getLogger(__name__)

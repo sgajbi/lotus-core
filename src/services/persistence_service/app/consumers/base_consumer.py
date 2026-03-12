@@ -63,40 +63,44 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
         - For unexpected errors, raises them to be handled by the BaseConsumer.
         """
         event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
-        correlation_id = correlation_id_var.get()
         event = None
 
         try:
             event_data = json.loads(msg.value().decode("utf-8"))
-            event = self.event_model.model_validate(event_data)
+            with self._message_correlation_context(
+                msg,
+                fallback_correlation_id=event_data.get("correlation_id"),
+            ):
+                correlation_id = correlation_id_var.get()
+                event = self.event_model.model_validate(event_data)
 
-            idempotency_key = getattr(event, "transaction_id", event_id)
+                idempotency_key = getattr(event, "transaction_id", event_id)
 
-            async for db in get_async_db_session():
-                async with db.begin():
-                    idempotency_repo = IdempotencyRepository(db)
+                async for db in get_async_db_session():
+                    async with db.begin():
+                        idempotency_repo = IdempotencyRepository(db)
 
-                    if await idempotency_repo.is_event_processed(
-                        idempotency_key, self.service_name
-                    ):
-                        logger.warning(f"Event {idempotency_key} already processed. Skipping.")
-                        return
+                        if await idempotency_repo.is_event_processed(
+                            idempotency_key, self.service_name
+                        ):
+                            logger.warning(f"Event {idempotency_key} already processed. Skipping.")
+                            return
 
-                    persisted_object = await self.handle_persistence(db, event)
+                        persisted_object = await self.handle_persistence(db, event)
 
-                    outbox_details = self.get_outbox_event(persisted_object)
-                    if outbox_details:
-                        outbox_repo = OutboxRepository(db)
-                        await outbox_repo.create_outbox_event(
-                            correlation_id=correlation_id, **outbox_details
+                        outbox_details = self.get_outbox_event(persisted_object)
+                        if outbox_details:
+                            outbox_repo = OutboxRepository(db)
+                            await outbox_repo.create_outbox_event(
+                                correlation_id=correlation_id, **outbox_details
+                            )
+
+                        await idempotency_repo.mark_event_processed(
+                            event_id=idempotency_key,
+                            portfolio_id=getattr(event, "portfolio_id", None) or "N/A",
+                            service_name=self.service_name,
+                            correlation_id=correlation_id,
                         )
-
-                    await idempotency_repo.mark_event_processed(
-                        event_id=idempotency_key,
-                        portfolio_id=getattr(event, "portfolio_id", None) or "N/A",
-                        service_name=self.service_name,
-                        correlation_id=correlation_id,
-                    )
 
         except (json.JSONDecodeError, ValidationError) as e:
             # This is a non-retryable "poison pill" message. Send to DLQ.

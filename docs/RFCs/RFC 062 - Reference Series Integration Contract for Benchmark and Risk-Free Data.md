@@ -32,7 +32,7 @@ Core query contracts, ingestion contracts, and reference-data coverage endpoints
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
-| Benchmark assignment + definition query contracts | Implemented | `src/services/query_service/app/routers/integration.py`; `tests/unit/services/query_service/routers/test_integration_router.py` |
+| Benchmark assignment + definition query contracts | Implemented | `src/services/query_control_plane_service/app/routers/integration.py`; `tests/unit/services/query_service/routers/test_integration_router.py` |
 | Benchmark/index catalog + series query contracts | Implemented | same integration router + integration router unit tests |
 | Risk-free query + coverage contracts | Implemented | `integration.py` (`/reference/risk-free-series`, `/reference/risk-free-series/coverage`) |
 | Reference ingestion endpoints | Implemented | `src/services/ingestion_service/app/routers/reference_data.py` |
@@ -57,7 +57,7 @@ Core query contracts, ingestion contracts, and reference-data coverage endpoints
 2. Maintain contract regression tests and vocabulary sync in CI for future schema changes.
 
 ## Test and Validation Evidence
-1. `src/services/query_service/app/routers/integration.py`
+1. `src/services/query_control_plane_service/app/routers/integration.py`
 2. `tests/unit/services/query_service/routers/test_integration_router.py`
 3. `src/services/ingestion_service/app/routers/reference_data.py`
 4. `docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json`

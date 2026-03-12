@@ -210,3 +210,40 @@ def test_sort_rights_lifecycle_dependency_ordering(sorter):
         "t_delivery",
         "t_refund",
     ]
+
+
+def test_sort_cash_inflow_before_cash_outflow_on_same_timestamp(sorter):
+    same_day = datetime(2025, 8, 28)
+    deposit = Transaction(
+        transaction_id="TS_DEP_01",
+        transaction_date=same_day,
+        quantity=Decimal("5500"),
+        portfolio_id="P1",
+        instrument_id="CASH",
+        security_id="CASH",
+        transaction_type="DEPOSIT",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("5500"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        product_type="Cash",
+        asset_class="Cash",
+    )
+    settlement_sell = Transaction(
+        transaction_id="TS_CASH_SETTLE_BUY_01",
+        transaction_date=same_day,
+        quantity=Decimal("5500"),
+        portfolio_id="P1",
+        instrument_id="CASH",
+        security_id="CASH",
+        transaction_type="SELL",
+        settlement_date=same_day,
+        gross_transaction_amount=Decimal("5500"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        product_type="Cash",
+        asset_class="Cash",
+    )
+
+    sorted_list = sorter.sort_transactions([], [settlement_sell, deposit])
+    assert [t.transaction_id for t in sorted_list] == ["TS_DEP_01", "TS_CASH_SETTLE_BUY_01"]

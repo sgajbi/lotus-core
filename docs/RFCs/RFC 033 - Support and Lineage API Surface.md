@@ -45,7 +45,7 @@ Implemented via ingestion-service operational surface (not query-service route f
 1. DLQ state and replay-audit APIs were delivered under ingestion operations contracts.
 
 Evidence:
-- `src/services/query_service/app/routers/operations.py`
+- `src/services/query_control_plane_service/app/routers/operations.py`
 - `src/services/query_service/app/services/operations_service.py`
 - `src/services/query_service/app/repositories/operations_repository.py`
 - `tests/integration/services/query_service/test_operations_router_dependency.py`

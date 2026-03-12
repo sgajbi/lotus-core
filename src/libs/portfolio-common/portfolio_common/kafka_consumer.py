@@ -6,8 +6,9 @@ import logging
 import time
 import traceback
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Iterator, Optional
 from uuid import uuid4
 
 from confluent_kafka import Consumer, Message
@@ -127,6 +128,65 @@ class BaseConsumer(ABC):
         self._consumer.subscribe([self.topic])
         logger.info(f"Consumer successfully subscribed to topic '{self.topic}'.")
 
+    def _resolve_message_correlation_id(self, msg: Message) -> str:
+        """
+        Resolve the message correlation id from Kafka headers, falling back to a
+        generated service-scoped id when no header is present.
+        """
+        corr_id = self._get_message_header_correlation_id(msg)
+        if not corr_id:
+            corr_id = generate_correlation_id(self.service_prefix)
+            logger.warning(
+                "No correlation ID in message from topic "
+                f"'{msg.topic()}'. Generated new ID: {corr_id}"
+            )
+
+        return corr_id
+
+    def _get_message_header_correlation_id(self, msg: Message) -> Optional[str]:
+        """Return the Kafka header correlation id when present."""
+        corr_id = None
+        if msg.headers():
+            for key, value in msg.headers():
+                if key == "correlation_id":
+                    corr_id = value.decode("utf-8") if value else None
+                    break
+
+        return corr_id
+
+    @contextmanager
+    def _message_correlation_context(
+        self,
+        msg: Message,
+        fallback_correlation_id: Optional[str] = None,
+        *,
+        prefer_fallback: bool = False,
+    ) -> Iterator[str]:
+        """
+        Ensure a message-scoped correlation id is present for direct
+        ``process_message(...)`` invocation paths that bypass ``run()``.
+        """
+        current = correlation_id_var.get()
+        token = None
+        resolved = current
+        if current == "<not-set>":
+            header_correlation_id = self._get_message_header_correlation_id(msg)
+            if prefer_fallback and fallback_correlation_id:
+                resolved = fallback_correlation_id
+            elif header_correlation_id:
+                resolved = header_correlation_id
+            elif fallback_correlation_id:
+                resolved = fallback_correlation_id
+            else:
+                resolved = self._resolve_message_correlation_id(msg)
+            token = correlation_id_var.set(resolved)
+
+        try:
+            yield resolved
+        finally:
+            if token is not None:
+                correlation_id_var.reset(token)
+
     async def _send_to_dlq_async(self, msg: Message, error: Exception):
         """
         Sends a message that failed processing to the Dead-Letter Queue.
@@ -243,20 +303,7 @@ class BaseConsumer(ABC):
             start_time = time.monotonic()
             processed_successfully = False
             try:
-                corr_id = None
-                if msg.headers():
-                    for key, value in msg.headers():
-                        if key == "correlation_id":
-                            corr_id = value.decode("utf-8") if value else None
-                            break
-
-                if not corr_id:
-                    corr_id = generate_correlation_id(self.service_prefix)
-                    logger.warning(
-                        "No correlation ID in message from topic "
-                        f"'{msg.topic()}'. Generated new ID: {corr_id}"
-                    )
-
+                corr_id = self._resolve_message_correlation_id(msg)
                 token = correlation_id_var.set(corr_id)
 
                 if inspect.iscoroutinefunction(self.process_message):
