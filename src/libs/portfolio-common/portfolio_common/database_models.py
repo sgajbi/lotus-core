@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -1022,6 +1023,15 @@ class InstrumentReprocessingState(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (
+        Index(
+            "ix_instrument_reprocessing_state_impact_updated_security",
+            "earliest_impacted_date",
+            "updated_at",
+            "security_id",
+        ),
+    )
+
 
 class ReprocessingJob(Base):
     """
@@ -1044,6 +1054,16 @@ class ReprocessingJob(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_reprocessing_jobs_pending_resetwatermarks_priority",
+            text("((payload->>'earliest_impacted_date')::date)"),
+            "created_at",
+            "id",
+            postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),
+        ),
     )
 
 
