@@ -61,6 +61,8 @@ class ReprocessingRepository:
             return 0
 
         correlation_id = correlation_id_var.get()
+        if correlation_id == "<not-set>":
+            correlation_id = None
         headers = (
             [("correlation_id", (correlation_id or "").encode("utf-8"))] if correlation_id else []
         )

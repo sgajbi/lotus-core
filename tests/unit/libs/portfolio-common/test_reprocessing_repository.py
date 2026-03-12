@@ -7,6 +7,7 @@ import pytest
 from portfolio_common.config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.kafka_utils import KafkaProducer
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -209,3 +210,37 @@ async def test_reprocess_transactions_deduplicates_requested_ids(
         for call in mock_kafka_producer.publish_message.call_args_list
     ]
     assert published_ids == ["TXN_B", "TXN_A"]
+
+
+async def test_reprocess_transactions_omits_not_set_correlation_header(
+    repository: ReprocessingRepository, mock_db_session: AsyncMock, mock_kafka_producer: MagicMock
+):
+    mock_transactions = [
+        DBTransaction(
+            transaction_id="TXN1",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        )
+    ]
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_db_session.execute.return_value = mock_result
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        count = await repository.reprocess_transactions_by_ids(transaction_ids=["TXN1"])
+    finally:
+        correlation_id_var.reset(token)
+
+    assert count == 1
+    assert mock_kafka_producer.publish_message.call_args.kwargs["headers"] == []
