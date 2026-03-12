@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from portfolio_common.database_models import Portfolio, PortfolioAggregationJob
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -72,24 +73,40 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
                 portfolio_id="P1_STALE",
                 aggregation_date=date(2025, 8, 1),
                 status="PROCESSING",
-                updated_at=stale_time,
             ),
             # 2. Recent and PROCESSING -> Should NOT be touched
             PortfolioAggregationJob(
                 portfolio_id="P2_RECENT",
                 aggregation_date=date(2025, 8, 1),
                 status="PROCESSING",
-                updated_at=now,
             ),
             # 3. Stale and PENDING -> Should NOT be touched
             PortfolioAggregationJob(
                 portfolio_id="P3_PENDING",
                 aggregation_date=date(2025, 8, 1),
                 status="PENDING",
-                updated_at=stale_time,
             ),
         ]
         session.add_all(jobs)
+        session.flush()
+
+        # Force deterministic staleness at the database layer instead of relying on
+        # ORM constructor-time timestamp persistence across dialect/runtime differences.
+        session.execute(
+            update(PortfolioAggregationJob)
+            .where(PortfolioAggregationJob.portfolio_id == "P1_STALE")
+            .values(updated_at=stale_time)
+        )
+        session.execute(
+            update(PortfolioAggregationJob)
+            .where(PortfolioAggregationJob.portfolio_id == "P2_RECENT")
+            .values(updated_at=now)
+        )
+        session.execute(
+            update(PortfolioAggregationJob)
+            .where(PortfolioAggregationJob.portfolio_id == "P3_PENDING")
+            .values(updated_at=stale_time)
+        )
         session.commit()
 
 
