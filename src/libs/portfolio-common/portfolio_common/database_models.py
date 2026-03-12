@@ -1025,6 +1025,20 @@ class PositionState(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (
+        Index(
+            "ix_position_state_status_watermark_updated",
+            "status",
+            "watermark_date",
+            "updated_at",
+        ),
+        Index(
+            "ix_position_state_watermark_updated",
+            "watermark_date",
+            "updated_at",
+        ),
+    )
+
 
 class InstrumentReprocessingState(Base):
     """
