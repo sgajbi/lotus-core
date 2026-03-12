@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,3 +99,55 @@ async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
 
     assert reset_count == 0
     assert mock_db_session.execute.await_count == 1
+
+
+async def test_create_job_coalesces_pending_reset_watermarks_job(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    pending_job = ReprocessingJob(
+        id=10,
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        status="PENDING",
+    )
+    select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = pending_job
+    mock_db_session.execute.return_value = select_result
+
+    result = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "AAPL", "earliest_impacted_date": "2025-01-07"},
+    )
+
+    assert result is pending_job
+    mock_db_session.add.assert_not_called()
+    mock_db_session.flush.assert_not_awaited()
+    assert mock_db_session.execute.await_count == 1
+
+
+async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    pending_job = ReprocessingJob(
+        id=10,
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "AAPL", "earliest_impacted_date": "2025-01-07"},
+        status="PENDING",
+    )
+    select_result = MagicMock()
+    select_result.scalar_one_or_none.return_value = pending_job
+    update_result = MagicMock()
+    mock_db_session.execute.side_effect = [select_result, update_result]
+
+    result = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+    )
+
+    assert result is pending_job
+    assert result.payload["earliest_impacted_date"] == "2025-01-05"
+    mock_db_session.add.assert_not_called()
+    mock_db_session.flush.assert_not_awaited()
+    assert mock_db_session.execute.await_count == 2

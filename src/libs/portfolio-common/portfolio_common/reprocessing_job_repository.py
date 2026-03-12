@@ -1,6 +1,6 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func, select, text, update
@@ -16,8 +16,54 @@ class ReprocessingJobRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def _find_pending_reset_watermarks_job(
+        self, security_id: str
+    ) -> Optional[ReprocessingJob]:
+        stmt = (
+            select(ReprocessingJob)
+            .where(
+                ReprocessingJob.job_type == "RESET_WATERMARKS",
+                ReprocessingJob.status == "PENDING",
+                text("payload->>'security_id' = :security_id"),
+            )
+            .order_by(ReprocessingJob.created_at.asc(), ReprocessingJob.id.asc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt, {"security_id": security_id})
+        return result.scalar_one_or_none()
+
     @async_timed(repository="ReprocessingJobRepository", method="create_job")
     async def create_job(self, job_type: str, payload: Dict[str, Any]) -> ReprocessingJob:
+        if (
+            job_type == "RESET_WATERMARKS"
+            and payload.get("security_id")
+            and payload.get("earliest_impacted_date")
+        ):
+            pending_job = await self._find_pending_reset_watermarks_job(payload["security_id"])
+            if pending_job is not None:
+                existing_date = date.fromisoformat(pending_job.payload["earliest_impacted_date"])
+                requested_date = date.fromisoformat(payload["earliest_impacted_date"])
+                if requested_date < existing_date:
+                    merged_payload = {
+                        **pending_job.payload,
+                        "earliest_impacted_date": requested_date.isoformat(),
+                    }
+                    stmt = (
+                        update(ReprocessingJob)
+                        .where(ReprocessingJob.id == pending_job.id)
+                        .values(payload=merged_payload, updated_at=func.now())
+                    )
+                    await self.db.execute(stmt)
+                    pending_job.payload = merged_payload
+                logger.info(
+                    "Coalesced reset-watermarks reprocessing job.",
+                    extra={
+                        "job_id": pending_job.id,
+                        "security_id": payload["security_id"],
+                    },
+                )
+                return pending_job
+
         job = ReprocessingJob(job_type=job_type, payload=payload, status="PENDING")
         self.db.add(job)
         await self.db.flush()
