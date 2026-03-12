@@ -276,6 +276,48 @@ async def test_scheduler_normalizes_terminal_reprocessing_states(
     )
 
 
+async def test_scheduler_warns_when_terminal_normalization_is_epoch_fenced(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    latest_business_date = date(2025, 8, 15)
+
+    terminal_states = [
+        PositionState(
+            portfolio_id="P9",
+            security_id="S9",
+            watermark_date=latest_business_date,
+            epoch=4,
+            status="REPROCESSING",
+        ),
+        PositionState(
+            portfolio_id="P8",
+            security_id="S8",
+            watermark_date=latest_business_date,
+            epoch=7,
+            status="REPROCESSING",
+        ),
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_lagging_states.return_value = []
+    mock_repo.get_terminal_reprocessing_states.return_value = terminal_states
+    mock_state_repo.bulk_update_states.return_value = 1
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+    ) as mock_warning:
+        await scheduler._advance_watermarks(AsyncMock())
+
+    mock_warning.assert_called_once()
+    warning_kwargs = mock_warning.call_args.kwargs
+    assert warning_kwargs["extra"]["prepared_count"] == 2
+    assert warning_kwargs["extra"]["updated_count"] == 1
+    assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+
+
 async def test_scheduler_dispatches_claimed_jobs(
     scheduler: ValuationScheduler,
     mock_kafka_producer: MagicMock,

@@ -123,15 +123,27 @@ class ValuationScheduler:
 
         if terminal_updates:
             normalized_count = await position_state_repo.bulk_update_states(terminal_updates)
-            if normalized_count:
+            examples = [
+                f"({u['portfolio_id']},{u['security_id']})->{u['watermark_date']}"
+                for u in terminal_updates[:3]
+            ]
+            if normalized_count != len(terminal_updates):
+                logger.warning(
+                    "ValuationScheduler normalized fewer terminal reprocessing states than "
+                    "prepared updates.",
+                    extra={
+                        "prepared_count": len(terminal_updates),
+                        "updated_count": normalized_count,
+                        "stale_skipped_count": len(terminal_updates) - normalized_count,
+                        "examples": examples,
+                    },
+                )
+            elif normalized_count:
                 logger.info(
                     "ValuationScheduler normalized terminal reprocessing states.",
                     extra={
                         "normalized_count": normalized_count,
-                        "examples": [
-                            f"({u['portfolio_id']},{u['security_id']})->{u['watermark_date']}"
-                            for u in terminal_updates[:3]
-                        ],
+                        "examples": examples,
                     },
                 )
 
