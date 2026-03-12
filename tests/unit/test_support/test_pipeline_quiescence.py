@@ -37,7 +37,7 @@ def test_is_pipeline_quiescent_requires_all_zero_counts() -> None:
                 "instrument_reprocessing_active": 2,
             }
         )
-        is True
+        is False
     )
 
 
@@ -148,6 +148,7 @@ def test_read_pipeline_last_activity_at_ignores_non_blocking_tables() -> None:
                 return_value=[
                     ("outbox_events",),
                     ("portfolio_aggregation_jobs",),
+                    ("position_state",),
                 ]
             )
         ),
@@ -156,6 +157,7 @@ def test_read_pipeline_last_activity_at_ignores_non_blocking_tables() -> None:
                 return_value=[
                     ("outbox_events", "updated_at"),
                     ("portfolio_aggregation_jobs", "updated_at"),
+                    ("position_state", "updated_at"),
                 ]
             )
         ),
@@ -169,3 +171,5 @@ def test_read_pipeline_last_activity_at_ignores_non_blocking_tables() -> None:
     union_sql = str(connection.execute.call_args_list[-1][0][0])
     assert "outbox_events" in union_sql
     assert "portfolio_aggregation_jobs" not in union_sql
+    assert "position_state" in union_sql
+    assert "status = 'PENDING'" in union_sql or "status = 'REPROCESSING'" in union_sql

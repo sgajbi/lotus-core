@@ -3,7 +3,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
@@ -110,12 +110,17 @@ class ReprocessingJobRepository:
                     updated_at = now()
                 RETURNING *;
                 """
+            ).bindparams(
+                bindparam("security_id", type_=String()),
+                bindparam("earliest_impacted_date", type_=Date()),
             )
             result = await self.db.execute(
                 stmt,
                 {
                     "security_id": payload["security_id"],
-                    "earliest_impacted_date": payload["earliest_impacted_date"],
+                    "earliest_impacted_date": date.fromisoformat(
+                        payload["earliest_impacted_date"]
+                    ),
                 },
             )
             job = ReprocessingJob(**result.mappings().one())

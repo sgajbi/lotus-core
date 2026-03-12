@@ -618,20 +618,50 @@ async def test_find_and_reset_stale_jobs(
     THEN it should only reset the single stale 'PROCESSING' job to 'PENDING'.
     """
     async with session_factory() as session:
+        initial_states = {
+            row.portfolio_id: row.status
+            for row in (
+                await session.execute(
+                    select(PortfolioValuationJob).where(
+                        PortfolioValuationJob.portfolio_id.in_(["P1", "P2", "P3", "P4"])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
+
+    async with session_factory() as session:
         repo = ValuationRepository(session)
         reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15)
         await session.commit()
     assert reset_count == 1
 
     async with session_factory() as session:
-        job1 = await session.get(PortfolioValuationJob, 1)
+        job1 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P1")
+            )
+        ).scalar_one()
         assert job1.status == "PENDING"
-        job2 = await session.get(PortfolioValuationJob, 2)
-        assert job2.status == "PROCESSING"
-        job3 = await session.get(PortfolioValuationJob, 3)
-        assert job3.status == "PENDING"
-        job4 = await session.get(PortfolioValuationJob, 4)
-        assert job4.status == "COMPLETE"
+        job2 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P2")
+            )
+        ).scalar_one()
+        assert job2.status == initial_states["P2"]
+        job3 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P3")
+            )
+        ).scalar_one()
+        assert job3.status == initial_states["P3"]
+        job4 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P4")
+            )
+        ).scalar_one()
+        assert job4.status == initial_states["P4"]
 
 
 async def test_get_first_open_dates_for_keys(

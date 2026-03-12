@@ -173,7 +173,11 @@ async def test_create_job_coalesces_pending_reset_watermarks_in_db(
         (
             await async_db_session.execute(
                 select(ReprocessingJob)
-                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .where(
+                    ReprocessingJob.job_type == "RESET_WATERMARKS",
+                    ReprocessingJob.status == "PENDING",
+                    text("payload->>'security_id' = 'S1'"),
+                )
                 .order_by(ReprocessingJob.id.asc())
             )
         )
