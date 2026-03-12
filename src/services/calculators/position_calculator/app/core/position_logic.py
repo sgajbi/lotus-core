@@ -7,6 +7,7 @@ from typing import List
 from portfolio_common.config import KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC
 from portfolio_common.database_models import PositionHistory
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import REPROCESSING_EPOCH_BUMPED_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
@@ -107,6 +108,9 @@ class PositionCalculator:
                 f"{len(all_events_to_replay)} events for reprocessing replay "
                 f"in Epoch {new_state.epoch}"
             )
+            replay_correlation_id = correlation_id_var.get()
+            if replay_correlation_id == "<not-set>":
+                replay_correlation_id = None
             for event_to_publish in all_events_to_replay:
                 event_to_publish.epoch = new_state.epoch
                 await outbox_repo.create_outbox_event(
@@ -115,6 +119,7 @@ class PositionCalculator:
                     event_type="ReprocessTransactionReplay",
                     topic=KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
                     payload=event_to_publish.model_dump(mode="json"),
+                    correlation_id=replay_correlation_id,
                 )
             return
 

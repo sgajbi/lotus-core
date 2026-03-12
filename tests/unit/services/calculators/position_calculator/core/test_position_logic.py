@@ -7,6 +7,7 @@ import pytest
 from portfolio_common.database_models import PositionState
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 
@@ -374,6 +375,38 @@ async def test_calculate_backdated_replay_deduplicates_triggering_transaction_if
         for call in mock_outbox_repo.create_outbox_event.call_args_list
     ]
     assert replay_ids == ["TXN_OLDER", "TXN_DUP"]
+
+
+@pytest.mark.asyncio
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_backdated_replay_preserves_outbox_correlation_id(
+    mock_fencer_class: MagicMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_outbox_repo: AsyncMock,
+    sample_event: TransactionEvent,
+):
+    mock_fencer_instance = mock_fencer_class.return_value
+    mock_fencer_instance.check = AsyncMock(return_value=True)
+    sample_event.epoch = None
+
+    mock_state_repo.get_or_create_state.return_value = PositionState(
+        watermark_date=date(2025, 8, 25), epoch=0
+    )
+    mock_state_repo.increment_epoch_and_reset_watermark.return_value = PositionState(epoch=1)
+    mock_repo.get_all_transactions_for_security.return_value = []
+
+    token = correlation_id_var.set("corr-replay-001")
+    try:
+        await PositionCalculator.calculate(
+            sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
+        )
+    finally:
+        correlation_id_var.reset(token)
+
+    assert mock_outbox_repo.create_outbox_event.await_count == 1
+    first_call = mock_outbox_repo.create_outbox_event.call_args_list[0].kwargs
+    assert first_call["correlation_id"] == "corr-replay-001"
 
 
 def test_calculate_next_position_for_sell_uses_net_cost():
