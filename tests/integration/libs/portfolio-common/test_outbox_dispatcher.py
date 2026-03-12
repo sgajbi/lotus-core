@@ -2,6 +2,7 @@
 import asyncio
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,6 +11,7 @@ from portfolio_common.database_models import OutboxEvent
 # Import async session tools
 from portfolio_common.db import AsyncSessionLocal
 from portfolio_common.kafka_utils import KafkaProducer
+from portfolio_common import outbox_dispatcher as outbox_dispatcher_module
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy import text
@@ -300,6 +302,76 @@ def test_dispatcher_marks_terminal_failures_as_failed(db_engine, clean_db):
         ).one()
         assert status == "FAILED"
         assert retry_count == 3
+
+
+def test_dispatcher_reads_pending_failed_and_oldest_age_gauges(db_engine, clean_db, monkeypatch):
+    """
+    GIVEN pending and terminal FAILED outbox rows with different ages
+    WHEN the dispatcher refreshes its gauges
+    THEN it should publish pending count, failed count, and oldest pending age.
+    """
+    TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    now = datetime.now(timezone.utc)
+    with TestSessionFactory() as session:
+        with session.begin():
+            session.add_all(
+                [
+                    OutboxEvent(
+                        aggregate_type="GaugeTest",
+                        aggregate_id=f"pending-old-{uuid.uuid4()}",
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload="{}",
+                        topic="gauge.topic",
+                        created_at=now - timedelta(minutes=10),
+                    ),
+                    OutboxEvent(
+                        aggregate_type="GaugeTest",
+                        aggregate_id=f"pending-new-{uuid.uuid4()}",
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload="{}",
+                        topic="gauge.topic",
+                        created_at=now - timedelta(minutes=1),
+                    ),
+                    OutboxEvent(
+                        aggregate_type="GaugeTest",
+                        aggregate_id=f"failed-{uuid.uuid4()}",
+                        status="FAILED",
+                        event_type="TestEvent",
+                        payload="{}",
+                        topic="gauge.topic",
+                        created_at=now - timedelta(minutes=20),
+                    ),
+                ]
+            )
+
+    observed: dict[str, float] = {}
+    monkeypatch.setattr(
+        outbox_dispatcher_module,
+        "set_outbox_pending",
+        lambda value: observed.__setitem__("pending", float(value)),
+    )
+    monkeypatch.setattr(
+        outbox_dispatcher_module,
+        "set_outbox_failed_stored",
+        lambda value: observed.__setitem__("failed", float(value)),
+    )
+    monkeypatch.setattr(
+        outbox_dispatcher_module,
+        "set_outbox_oldest_pending_age_seconds",
+        lambda value: observed.__setitem__("oldest_age", float(value)),
+    )
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        db_session_factory=TestSessionFactory,
+    )
+    dispatcher._read_pending_gauge()
+
+    assert observed["pending"] == 2.0
+    assert observed["failed"] == 1.0
+    assert 540.0 <= observed["oldest_age"] <= 660.0
 
 
 @pytest.mark.asyncio

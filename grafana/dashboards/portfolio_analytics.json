@@ -606,6 +606,28 @@
           "legendFormat": "retried_per_second",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "outbox_events_failed_stored",
+          "legendFormat": "failed_stored",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "outbox_events_oldest_pending_age_seconds",
+          "legendFormat": "oldest_pending_age_seconds",
+          "range": true,
+          "refId": "F"
         }
       ],
       "title": "Outbox Backlog and Publish Pressure",

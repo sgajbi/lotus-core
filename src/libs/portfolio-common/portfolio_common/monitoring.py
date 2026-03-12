@@ -109,6 +109,16 @@ _OUTBOX_PENDING = Gauge(
     "Total number of PENDING outbox events in the database",
 )
 
+_OUTBOX_FAILED_STORED = Gauge(
+    "outbox_events_failed_stored",
+    "Total number of terminal FAILED outbox events in the database",
+)
+
+_OUTBOX_OLDEST_PENDING_AGE_SECONDS = Gauge(
+    "outbox_events_oldest_pending_age_seconds",
+    "Age in seconds of the oldest PENDING outbox event in the database",
+)
+
 _OUTBOX_BATCH_SECONDS = Histogram(
     "outbox_dispatch_batch_seconds",
     "Time taken to process one outbox dispatch batch (lock, publish, update statuses).",
@@ -130,6 +140,14 @@ def observe_outbox_retried(aggregate_type: str, topic: str, count: int = 1) -> N
 
 def set_outbox_pending(total_pending: int) -> None:
     _OUTBOX_PENDING.set(total_pending)
+
+
+def set_outbox_failed_stored(total_failed: int) -> None:
+    _OUTBOX_FAILED_STORED.set(total_failed)
+
+
+def set_outbox_oldest_pending_age_seconds(age_seconds: float) -> None:
+    _OUTBOX_OLDEST_PENDING_AGE_SECONDS.set(age_seconds)
 
 
 def outbox_batch_timer():

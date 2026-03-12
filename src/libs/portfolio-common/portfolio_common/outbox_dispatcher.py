@@ -16,6 +16,8 @@ from portfolio_common.monitoring import (
     observe_outbox_published,
     observe_outbox_retried,
     outbox_batch_timer,
+    set_outbox_failed_stored,
+    set_outbox_oldest_pending_age_seconds,
     set_outbox_pending,
 )
 
@@ -54,11 +56,30 @@ class OutboxDispatcher:
     def _read_pending_gauge(self) -> None:
         """Reads PENDING count in a short-lived session to avoid interfering with the batch tx."""
         with self._session_factory() as s:  # type: Session
-            pending_total = (
-                s.query(func.count(OutboxEvent.id)).filter(OutboxEvent.status == "PENDING").scalar()
+            pending_total, oldest_pending_created_at = (
+                s.query(
+                    func.count(OutboxEvent.id),
+                    func.min(OutboxEvent.created_at),
+                )
+                .filter(OutboxEvent.status == "PENDING")
+                .one()
+            )
+            failed_total = (
+                s.query(func.count(OutboxEvent.id))
+                .filter(OutboxEvent.status == TERMINAL_FAILURE_STATUS)
+                .scalar()
                 or 0
             )
             set_outbox_pending(int(pending_total))
+            set_outbox_failed_stored(int(failed_total))
+            if oldest_pending_created_at is None:
+                set_outbox_oldest_pending_age_seconds(0.0)
+            else:
+                age_seconds = max(
+                    0.0,
+                    (datetime.now(timezone.utc) - oldest_pending_created_at).total_seconds(),
+                )
+                set_outbox_oldest_pending_age_seconds(age_seconds)
 
     def _process_batch_sync(self) -> None:
         """
