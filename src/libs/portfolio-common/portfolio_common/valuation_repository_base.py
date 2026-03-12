@@ -52,7 +52,11 @@ class ValuationRepositoryBase:
     ) -> List[InstrumentReprocessingState]:
         stmt = (
             select(InstrumentReprocessingState)
-            .order_by(InstrumentReprocessingState.updated_at.asc())
+            .order_by(
+                InstrumentReprocessingState.earliest_impacted_date.asc(),
+                InstrumentReprocessingState.updated_at.asc(),
+                InstrumentReprocessingState.security_id.asc(),
+            )
             .limit(batch_size)
         )
         result = await self.db.execute(stmt)
@@ -145,9 +149,7 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    @async_timed(
-        repository="ValuationRepository", method="get_terminal_reprocessing_states"
-    )
+    @async_timed(repository="ValuationRepository", method="get_terminal_reprocessing_states")
     async def get_terminal_reprocessing_states(
         self, latest_business_date: date, limit: int
     ) -> List[PositionState]:

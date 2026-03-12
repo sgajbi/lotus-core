@@ -83,7 +83,7 @@ async def test_get_instrument_reprocessing_triggers(
     """
     GIVEN pending instrument reprocessing triggers in the database
     WHEN get_instrument_reprocessing_triggers is called
-    THEN it should fetch the triggers ordered by their update time.
+    THEN it should fetch the triggers ordered by earliest impacted date first.
     """
     # ARRANGE
     repo = ValuationRepository(async_db_session)
@@ -96,6 +96,42 @@ async def test_get_instrument_reprocessing_triggers(
     security_ids = {t.security_id for t in triggers}
     assert "S1" in security_ids
     assert "S2" in security_ids
+    assert [t.security_id for t in triggers] == ["S1", "S2"]
+
+
+async def test_get_instrument_reprocessing_triggers_prioritizes_oldest_impacted_date(
+    async_db_session: AsyncSession, db_engine, clean_db
+):
+    """
+    GIVEN multiple pending instrument reprocessing triggers
+    WHEN get_instrument_reprocessing_triggers is called
+    THEN the scheduler-facing order should prioritize the oldest impacted date,
+    with updated_at and security_id only acting as tie-breakers.
+    """
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                InstrumentReprocessingState(
+                    security_id="S_LATE",
+                    earliest_impacted_date=date(2025, 8, 11),
+                ),
+                InstrumentReprocessingState(
+                    security_id="S_EARLY",
+                    earliest_impacted_date=date(2025, 8, 9),
+                ),
+                InstrumentReprocessingState(
+                    security_id="S_MID",
+                    earliest_impacted_date=date(2025, 8, 10),
+                ),
+            ]
+        )
+        session.commit()
+
+    repo = ValuationRepository(async_db_session)
+
+    triggers = await repo.get_instrument_reprocessing_triggers(batch_size=10)
+
+    assert [t.security_id for t in triggers] == ["S_EARLY", "S_MID", "S_LATE"]
 
 
 async def test_find_portfolios_for_security(
