@@ -76,3 +76,30 @@ async def test_upsert_state_preserves_one_row_per_security(
         ("S-TRIGGER-1", "corr-c"),
         ("S-TRIGGER-2", "corr-b"),
     ]
+
+
+async def test_upsert_state_backfills_missing_correlation_for_same_impacted_date(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = instrument_reprocessing_state_repo.InstrumentReprocessingStateRepository(
+        async_db_session
+    )
+
+    await repo.upsert_state("S-TRIGGER-3", date(2025, 8, 10), correlation_id=None)
+    await repo.upsert_state("S-TRIGGER-3", date(2025, 8, 10), correlation_id="corr-fill")
+    await async_db_session.commit()
+
+    row = (
+        (
+            await async_db_session.execute(
+                select(InstrumentReprocessingState).where(
+                    InstrumentReprocessingState.security_id == "S-TRIGGER-3"
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+
+    assert row.earliest_impacted_date == date(2025, 8, 10)
+    assert row.correlation_id == "corr-fill"

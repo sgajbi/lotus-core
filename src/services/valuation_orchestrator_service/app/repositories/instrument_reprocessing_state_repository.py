@@ -49,6 +49,10 @@ class InstrumentReprocessingStateRepository:
                             < InstrumentReprocessingState.earliest_impacted_date,
                             stmt.excluded.correlation_id,
                         ),
+                        (
+                            InstrumentReprocessingState.correlation_id.is_(None),
+                            stmt.excluded.correlation_id,
+                        ),
                         else_=InstrumentReprocessingState.correlation_id,
                     ),
                     "updated_at": func.now(),

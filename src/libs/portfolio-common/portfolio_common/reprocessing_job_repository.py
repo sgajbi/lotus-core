@@ -115,6 +115,8 @@ class ReprocessingJobRepository:
                         WHEN CAST(:earliest_impacted_date AS date)
                              < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
                         THEN :correlation_id
+                        WHEN reprocessing_jobs.correlation_id IS NULL
+                        THEN :correlation_id
                         ELSE reprocessing_jobs.correlation_id
                     END,
                     updated_at = now()
