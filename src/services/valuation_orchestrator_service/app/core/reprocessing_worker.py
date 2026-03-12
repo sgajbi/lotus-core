@@ -64,8 +64,11 @@ class ReprocessingWorker:
                             )
                             new_watermark = earliest_date - timedelta(days=1)
 
-                            affected_portfolios = await valuation_repo.find_portfolios_for_security(
-                                security_id
+                            affected_portfolios = (
+                                await valuation_repo.find_portfolios_holding_security_on_date(
+                                    security_id,
+                                    earliest_date,
+                                )
                             )
 
                             if affected_portfolios:

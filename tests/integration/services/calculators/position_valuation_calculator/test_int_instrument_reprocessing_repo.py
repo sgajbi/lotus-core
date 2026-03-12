@@ -1,8 +1,15 @@
 # tests/integration/services/calculators/position_valuation_calculator/test_int_instrument_reprocessing_repo.py  # noqa: E501
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import InstrumentReprocessingState, Portfolio, PositionState
+from portfolio_common.database_models import (
+    InstrumentReprocessingState,
+    Portfolio,
+    PositionHistory,
+    PositionState,
+    Transaction,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -155,6 +162,159 @@ async def test_find_portfolios_for_security(
 
     assert len(portfolios_for_s2) == 1
     assert portfolios_for_s2[0] == "P2"
+
+
+async def test_find_portfolios_holding_security_on_date_excludes_pre_impact_closed_positions(
+    async_db_session: AsyncSession, db_engine, clean_db
+):
+    """
+    GIVEN portfolios that held a security at different times
+    WHEN find_portfolios_holding_security_on_date is called for an impacted date
+    THEN only portfolios holding the security on or before that date should be returned.
+    """
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                Portfolio(
+                    portfolio_id="P_HELD",
+                    base_currency="USD",
+                    open_date=date(2024, 1, 1),
+                    risk_exposure="a",
+                    investment_time_horizon="b",
+                    portfolio_type="c",
+                    booking_center_code="d",
+                    client_id="e",
+                    status="f",
+                ),
+                Portfolio(
+                    portfolio_id="P_CLOSED_BEFORE",
+                    base_currency="USD",
+                    open_date=date(2024, 1, 1),
+                    risk_exposure="a",
+                    investment_time_horizon="b",
+                    portfolio_type="c",
+                    booking_center_code="d",
+                    client_id="e",
+                    status="f",
+                ),
+                Portfolio(
+                    portfolio_id="P_NOT_YET_OPEN",
+                    base_currency="USD",
+                    open_date=date(2024, 1, 1),
+                    risk_exposure="a",
+                    investment_time_horizon="b",
+                    portfolio_type="c",
+                    booking_center_code="d",
+                    client_id="e",
+                    status="f",
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                Transaction(
+                    transaction_id="TX-P-HELD-1",
+                    portfolio_id="P_HELD",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="BUY",
+                    quantity=Decimal("100"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("100"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 9, 9, 0, 0),
+                ),
+                Transaction(
+                    transaction_id="TX-P-CLOSED-1",
+                    portfolio_id="P_CLOSED_BEFORE",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="BUY",
+                    quantity=Decimal("100"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("100"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 1, 9, 0, 0),
+                ),
+                Transaction(
+                    transaction_id="TX-P-CLOSED-2",
+                    portfolio_id="P_CLOSED_BEFORE",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="SELL",
+                    quantity=Decimal("100"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("100"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 8, 9, 0, 0),
+                ),
+                Transaction(
+                    transaction_id="TX-P-NOTYET-1",
+                    portfolio_id="P_NOT_YET_OPEN",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="BUY",
+                    quantity=Decimal("100"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("100"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 11, 9, 0, 0),
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                PositionHistory(
+                    portfolio_id="P_HELD",
+                    security_id="S1",
+                    transaction_id="TX-P-HELD-1",
+                    epoch=0,
+                    position_date=date(2025, 8, 9),
+                    quantity=100,
+                    cost_basis=Decimal("100"),
+                ),
+                PositionHistory(
+                    portfolio_id="P_CLOSED_BEFORE",
+                    security_id="S1",
+                    transaction_id="TX-P-CLOSED-1",
+                    epoch=0,
+                    position_date=date(2025, 8, 1),
+                    quantity=100,
+                    cost_basis=Decimal("100"),
+                ),
+                PositionHistory(
+                    portfolio_id="P_CLOSED_BEFORE",
+                    security_id="S1",
+                    transaction_id="TX-P-CLOSED-2",
+                    epoch=0,
+                    position_date=date(2025, 8, 8),
+                    quantity=0,
+                    cost_basis=Decimal("0"),
+                ),
+                PositionHistory(
+                    portfolio_id="P_NOT_YET_OPEN",
+                    security_id="S1",
+                    transaction_id="TX-P-NOTYET-1",
+                    epoch=0,
+                    position_date=date(2025, 8, 11),
+                    quantity=100,
+                    cost_basis=Decimal("100"),
+                ),
+            ]
+        )
+        session.commit()
+
+    repo = ValuationRepository(async_db_session)
+
+    portfolios = await repo.find_portfolios_holding_security_on_date("S1", date(2025, 8, 10))
+
+    assert portfolios == ["P_HELD"]
 
 
 async def test_delete_instrument_reprocessing_triggers(

@@ -92,7 +92,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_valuation_repo.find_portfolios_for_security.return_value = ["P1", "P2"]
+    mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P1", "P2"]
     mock_state_repo.update_watermarks_if_older.return_value = 2
 
     await worker._process_batch()
@@ -103,7 +103,10 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     mock_observe_failed.assert_not_called()
     mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with()
     mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with("RESET_WATERMARKS", 10)
-    mock_valuation_repo.find_portfolios_for_security.assert_awaited_once_with("S1")
+    mock_valuation_repo.find_portfolios_holding_security_on_date.assert_awaited_once_with(
+        "S1",
+        date(2025, 8, 10),
+    )
     mock_state_repo.update_watermarks_if_older.assert_awaited_once_with(
         keys=[("P1", "S1"), ("P2", "S1")],
         new_watermark_date=date(2025, 8, 9),
@@ -127,7 +130,7 @@ async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dep
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_valuation_repo.find_portfolios_for_security.return_value = ["P1", "P2"]
+    mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P1", "P2"]
     mock_state_repo.update_watermarks_if_older.return_value = 1
 
     with patch(
@@ -162,7 +165,7 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_valuation_repo.find_portfolios_for_security.return_value = ["P1"]
+    mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P1"]
     mock_state_repo.update_watermarks_if_older.side_effect = RuntimeError("db write failed")
 
     await worker._process_batch()
