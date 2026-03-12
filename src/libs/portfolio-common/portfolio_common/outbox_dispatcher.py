@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 BASE_RETRY_DELAY = 2  # seconds
+TERMINAL_FAILURE_STATUS = "FAILED"
 
 
 class OutboxDispatcher:
@@ -134,6 +135,16 @@ class OutboxDispatcher:
 
                     success_ids = [oid for oid, ok in delivery_ack.items() if ok]
                     failure_ids = [oid for oid, ok in delivery_ack.items() if not ok]
+                    terminal_failure_ids = [
+                        e.id
+                        for e in events_to_process
+                        if e.id in failure_ids and (e.retry_count or 0) + 1 >= MAX_RETRIES
+                    ]
+                    retryable_failure_ids = [
+                        failure_id
+                        for failure_id in failure_ids
+                        if failure_id not in terminal_failure_ids
+                    ]
 
                     if success_ids:
                         db.execute(
@@ -149,10 +160,10 @@ class OutboxDispatcher:
                             f"{len(success_ids)} events as PROCESSED in DB."
                         )
 
-                    if failure_ids:
+                    if retryable_failure_ids:
                         db.execute(
                             update(OutboxEvent)
-                            .where(OutboxEvent.id.in_(failure_ids))
+                            .where(OutboxEvent.id.in_(retryable_failure_ids))
                             .values(
                                 # Use COALESCE to treat NULL as 0 before incrementing
                                 retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
@@ -160,15 +171,43 @@ class OutboxDispatcher:
                             )
                         )
                         for e in events_to_process:
-                            if e.id in failure_ids:
+                            if e.id in retryable_failure_ids:
                                 observe_outbox_failed(e.aggregate_type, e.topic)
                                 observe_outbox_retried(e.aggregate_type, e.topic)
 
-                        for fid in failure_ids:
+                        for fid in retryable_failure_ids:
                             reason = delivery_errs.get(fid, "unknown error")
                             logger.warning(
                                 "OutboxDispatcher: Kafka delivery failed; will retry later.",
                                 extra={"outbox_id": fid, "reason": reason},
+                            )
+
+                    if terminal_failure_ids:
+                        db.execute(
+                            update(OutboxEvent)
+                            .where(OutboxEvent.id.in_(terminal_failure_ids))
+                            .values(
+                                status=TERMINAL_FAILURE_STATUS,
+                                retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
+                                last_attempted_at=datetime.now(timezone.utc),
+                            )
+                        )
+                        for e in events_to_process:
+                            if e.id in terminal_failure_ids:
+                                observe_outbox_failed(e.aggregate_type, e.topic)
+
+                        for fid in terminal_failure_ids:
+                            reason = delivery_errs.get(fid, "unknown error")
+                            logger.error(
+                                (
+                                    "OutboxDispatcher: Kafka delivery reached terminal "
+                                    "failure threshold."
+                                ),
+                                extra={
+                                    "outbox_id": fid,
+                                    "reason": reason,
+                                    "max_retries": MAX_RETRIES,
+                                },
                             )
 
     async def run(self):

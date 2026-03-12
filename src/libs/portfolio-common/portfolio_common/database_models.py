@@ -806,6 +806,18 @@ class OutboxEvent(Base):
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        Index(
+            "ix_outbox_events_status_created_at",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_outbox_events_status_last_attempted_at",
+            "status",
+            "last_attempted_at",
+        ),
+    )
 
 
 class PortfolioAggregationJob(Base):

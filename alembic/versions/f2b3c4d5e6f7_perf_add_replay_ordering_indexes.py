@@ -29,7 +29,7 @@ def upgrade() -> None:
         "ix_reprocessing_jobs_pending_resetwatermarks_priority",
         "reprocessing_jobs",
         [
-            sa.text("((payload->>'earliest_impacted_date')::date)"),
+            sa.text("(payload->>'earliest_impacted_date')"),
             sa.text("created_at"),
             sa.text("id"),
         ],

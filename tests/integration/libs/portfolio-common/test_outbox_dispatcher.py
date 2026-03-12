@@ -253,6 +253,55 @@ def test_dispatcher_recovers_after_failure(db_engine, clean_db, smart_mock_kafka
         assert status == "PROCESSED"
 
 
+def test_dispatcher_marks_terminal_failures_as_failed(db_engine, clean_db):
+    """
+    GIVEN a pending outbox event already at MAX_RETRIES - 1
+    WHEN delivery fails again
+    THEN the dispatcher should mark it FAILED and stop leaving it PENDING.
+    """
+    failing_producer = MagicMock(spec=KafkaProducer)
+
+    def _failing_flush(timeout=10):
+        for call in failing_producer.publish_message.call_args_list:
+            kwargs = call.kwargs
+            cb = kwargs.get("on_delivery")
+            outbox_id = kwargs.get("outbox_id")
+            if cb and outbox_id:
+                cb(outbox_id, False, "terminal failure")
+
+    failing_producer.flush.side_effect = _failing_flush
+
+    TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    aggregate_id = f"terminal-agg-{uuid.uuid4()}"
+    with TestSessionFactory() as session:
+        with session.begin():
+            session.add(
+                OutboxEvent(
+                    aggregate_type="TerminalFailureTest",
+                    aggregate_id=aggregate_id,
+                    status="PENDING",
+                    event_type="TestEvent",
+                    payload="{}",
+                    topic="terminal.topic",
+                    retry_count=2,
+                )
+            )
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=failing_producer,
+        db_session_factory=TestSessionFactory,
+    )
+    dispatcher._process_batch_sync()
+
+    with TestSessionFactory() as session:
+        status, retry_count = session.execute(
+            text("SELECT status, retry_count FROM outbox_events WHERE aggregate_id = :id"),
+            {"id": aggregate_id},
+        ).one()
+        assert status == "FAILED"
+        assert retry_count == 3
+
+
 @pytest.mark.asyncio
 async def test_dispatcher_is_concurrent_safe(db_engine, clean_db, smart_mock_kafka_producer):
     # ARRANGE
