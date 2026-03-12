@@ -63,6 +63,19 @@ def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
         raise ValueError(f"invalid decimal for {field_name}: {value!r}") from exc
 
 
+def _is_cash_instrument(transaction: Transaction) -> bool:
+    product_type = str(getattr(transaction, "product_type", "") or "").upper()
+    asset_class = str(getattr(transaction, "asset_class", "") or "").upper()
+    instrument_id = str(getattr(transaction, "instrument_id", "") or "").upper()
+    security_id = str(getattr(transaction, "security_id", "") or "").upper()
+    return (
+        product_type == "CASH"
+        or asset_class == "CASH"
+        or instrument_id.startswith("CASH")
+        or security_id.startswith("CASH")
+    )
+
+
 class BuyStrategy:
     def calculate_costs(
         self,
@@ -212,6 +225,21 @@ class CashInflowStrategy:
         cash_buy_equivalent.quantity = transaction.gross_transaction_amount
 
         disposition_engine.add_buy_lot(cash_buy_equivalent)
+
+
+class CashOutflowStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        transaction.net_cost_local = -transaction.gross_transaction_amount
+        transaction.net_cost = transaction.net_cost_local * fx_rate
+        transaction.gross_cost = transaction.net_cost
+        transaction.realized_gain_loss = None
+        transaction.realized_gain_loss_local = None
 
 
 class SecurityInflowStrategy:
@@ -552,5 +580,21 @@ class CostCalculator:
                 f"Unknown transaction type '{transaction.transaction_type}'.",
             )
             return
-        strategy = self._strategies.get(transaction_type_enum, self._default_strategy)
+        strategy = self._resolve_strategy(transaction_type_enum, transaction)
         strategy.calculate_costs(transaction, self._disposition_engine, self._error_reporter)
+
+    def _resolve_strategy(
+        self, transaction_type: TransactionType, transaction: Transaction
+    ) -> TransactionCostStrategy:
+        if _is_cash_instrument(transaction):
+            if transaction_type in {
+                TransactionType.SELL,
+                TransactionType.WITHDRAWAL,
+                TransactionType.TRANSFER_OUT,
+                TransactionType.MERGER_OUT,
+                TransactionType.EXCHANGE_OUT,
+                TransactionType.REPLACEMENT_OUT,
+            }:
+                return CashOutflowStrategy()
+
+        return self._strategies.get(transaction_type, self._default_strategy)

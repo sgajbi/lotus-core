@@ -696,11 +696,41 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
     cost_calculator.calculate_transaction_costs(withdrawal_transaction)
 
     # Assert
-    # It should have called the disposition engine to "consume" the cash lot
-    mock_disposition_engine.consume_sell_quantity.assert_called_once_with(withdrawal_transaction)
-
-    # Crucially, it should NOT have calculated a realized gain/loss
+    # Cash outflow is handled with cash semantics rather than strict security-lot disposal.
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
     assert withdrawal_transaction.realized_gain_loss is None
+    assert withdrawal_transaction.net_cost == Decimal("-500")
+    assert withdrawal_transaction.net_cost_local == Decimal("-500")
+
+
+def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    cash_sell = Transaction(
+        transaction_id="CASH_SELL_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="SELL",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("500"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("500"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
+    )
+    mock_disposition_engine.get_available_quantity.return_value = Decimal("0")
+
+    cost_calculator.calculate_transaction_costs(cash_sell)
+
+    assert not error_reporter.has_errors_for("CASH_SELL_01")
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert cash_sell.realized_gain_loss is None
+    assert cash_sell.net_cost == Decimal("-500")
+    assert cash_sell.net_cost_local == Decimal("-500")
 
 
 def test_spin_off_basis_only_strategy_reduces_cost_without_lot_consumption(

@@ -79,6 +79,7 @@ def mock_dependencies():
             return_value=mock_outbox_repo,
         ),
     ):
+        mock_repo.get_instrument.return_value = None
         yield {
             "repo": mock_repo,
             "idempotency_repo": mock_idempotency_repo,
