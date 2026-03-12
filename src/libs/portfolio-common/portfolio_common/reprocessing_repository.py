@@ -2,7 +2,7 @@
 import logging
 from typing import List
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
@@ -39,7 +39,15 @@ class ReprocessingRepository:
 
         logger.info(f"Beginning reprocessing for {len(transaction_ids)} transaction(s).")
 
-        stmt = select(DBTransaction).where(DBTransaction.transaction_id.in_(transaction_ids))
+        ordering = case(
+            {transaction_id: index for index, transaction_id in enumerate(transaction_ids)},
+            value=DBTransaction.transaction_id,
+        )
+        stmt = (
+            select(DBTransaction)
+            .where(DBTransaction.transaction_id.in_(transaction_ids))
+            .order_by(ordering)
+        )
         result = await self.db.execute(stmt)
         transactions_to_replay = result.scalars().all()
 

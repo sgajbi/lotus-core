@@ -100,3 +100,57 @@ async def test_reprocess_no_transactions_found(
     assert count == 0
     mock_db_session.execute.assert_awaited_once()
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_reprocess_transactions_preserves_requested_input_order(
+    repository: ReprocessingRepository, mock_db_session: AsyncMock, mock_kafka_producer: MagicMock
+):
+    """
+    GIVEN multiple matching transactions
+    WHEN reprocess_transactions_by_ids is called
+    THEN the repository should republish them in the same deterministic order
+    requested by the caller.
+    """
+    mock_transactions = [
+        DBTransaction(
+            transaction_id="TXN_B",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        ),
+        DBTransaction(
+            transaction_id="TXN_A",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        ),
+    ]
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_db_session.execute.return_value = mock_result
+
+    count = await repository.reprocess_transactions_by_ids(transaction_ids=["TXN_B", "TXN_A"])
+
+    assert count == 2
+    published_ids = [
+        call.kwargs["value"]["transaction_id"]
+        for call in mock_kafka_producer.publish_message.call_args_list
+    ]
+    assert published_ids == ["TXN_B", "TXN_A"]
