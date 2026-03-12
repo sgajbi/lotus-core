@@ -294,6 +294,120 @@ async def test_find_portfolios_holding_security_on_date_excludes_pre_impact_clos
     assert portfolios == ["P_HELD"]
 
 
+async def test_find_portfolios_holding_security_on_date_uses_latest_history_on_or_before_date(
+    async_db_session: AsyncSession, db_engine, clean_db
+):
+    """
+    GIVEN a portfolio with multiple history rows before the impacted date
+    WHEN the worker-facing lookup runs
+    THEN the decision should be based on the latest history row on or before the date,
+    not an older positive row.
+    """
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id="P_MIXED",
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.flush()
+        session.add_all(
+            [
+                Transaction(
+                    transaction_id="TX-OPEN",
+                    portfolio_id="P_MIXED",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="BUY",
+                    quantity=Decimal("100"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("100"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 5, 9, 0, 0),
+                ),
+                Transaction(
+                    transaction_id="TX-CLOSE",
+                    portfolio_id="P_MIXED",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="SELL",
+                    quantity=Decimal("100"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("100"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 9, 9, 0, 0),
+                ),
+                Transaction(
+                    transaction_id="TX-REOPEN",
+                    portfolio_id="P_MIXED",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="BUY",
+                    quantity=Decimal("50"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("50"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 11, 9, 0, 0),
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                PositionHistory(
+                    portfolio_id="P_MIXED",
+                    security_id="S1",
+                    transaction_id="TX-OPEN",
+                    epoch=0,
+                    position_date=date(2025, 8, 5),
+                    quantity=100,
+                    cost_basis=Decimal("100"),
+                ),
+                PositionHistory(
+                    portfolio_id="P_MIXED",
+                    security_id="S1",
+                    transaction_id="TX-CLOSE",
+                    epoch=0,
+                    position_date=date(2025, 8, 9),
+                    quantity=0,
+                    cost_basis=Decimal("0"),
+                ),
+                PositionHistory(
+                    portfolio_id="P_MIXED",
+                    security_id="S1",
+                    transaction_id="TX-REOPEN",
+                    epoch=0,
+                    position_date=date(2025, 8, 11),
+                    quantity=50,
+                    cost_basis=Decimal("50"),
+                ),
+            ]
+        )
+        session.commit()
+
+    repo = ValuationRepository(async_db_session)
+
+    portfolios_on_impact = await repo.find_portfolios_holding_security_on_date(
+        "S1", date(2025, 8, 10)
+    )
+    portfolios_after_reopen = await repo.find_portfolios_holding_security_on_date(
+        "S1", date(2025, 8, 11)
+    )
+
+    assert portfolios_on_impact == []
+    assert portfolios_after_reopen == ["P_MIXED"]
+
+
 async def test_delete_instrument_reprocessing_triggers(
     setup_reprocessing_trigger_data, async_db_session: AsyncSession
 ):
