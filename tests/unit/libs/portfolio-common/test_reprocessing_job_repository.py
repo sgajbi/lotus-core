@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -217,10 +216,12 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
     result = await repository.create_job(
         "RESET_WATERMARKS",
         {"security_id": "AAPL", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-07",
     )
 
     assert result.id == 10
     assert result.payload["earliest_impacted_date"] == "2025-01-05"
+    assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
     assert mock_db_session.execute.await_count == 1
@@ -247,9 +248,56 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
     result = await repository.create_job(
         "RESET_WATERMARKS",
         {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-05",
     )
 
     assert result.payload["earliest_impacted_date"] == "2025-01-05"
+    assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
     assert mock_db_session.execute.await_count == 1
+
+
+async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    upsert_result = MagicMock()
+    upsert_result.mappings.return_value.one.return_value = {
+        "id": 11,
+        "job_type": "RESET_WATERMARKS",
+        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "status": "PENDING",
+        "correlation_id": "corr-05",
+        "attempt_count": 0,
+        "last_attempted_at": None,
+        "failure_reason": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    mock_db_session.execute.return_value = upsert_result
+
+    result = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-05",
+    )
+
+    assert result.correlation_id == "corr-05"
+
+
+async def test_create_job_sets_correlation_for_generic_jobs(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.refresh.return_value = None
+
+    result = await repository.create_job(
+        "OTHER_JOB",
+        {"transaction_ids": ["T1"]},
+        correlation_id="corr-generic",
+    )
+
+    assert result.correlation_id == "corr-generic"
+    mock_db_session.add.assert_called_once()
+    mock_db_session.flush.assert_awaited_once()

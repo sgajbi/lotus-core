@@ -1008,6 +1008,7 @@ class InstrumentReprocessingState(Base):
 
     security_id = Column(String, primary_key=True)
     earliest_impacted_date = Column(Date, nullable=False)
+    correlation_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -1026,6 +1027,7 @@ class ReprocessingJob(Base):
     job_type = Column(String, nullable=False, index=True)
     payload = Column(JSON, nullable=False)
     status = Column(String, nullable=False, default="PENDING", index=True)
+    correlation_id = Column(String, nullable=True)
 
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)

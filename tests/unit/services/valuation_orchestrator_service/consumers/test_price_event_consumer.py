@@ -118,6 +118,7 @@ async def test_backdated_price_flags_instrument_for_reprocessing(
     mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
         security_id=mock_event.security_id,
         price_date=mock_event.price_date,
+        correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
     )
     mock_idempotency_repo.mark_event_processed.assert_awaited_once()
 
@@ -208,6 +209,7 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
     mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
         security_id=mock_event.security_id,
         price_date=mock_event.price_date,
+        correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
     )
 
 

@@ -361,13 +361,21 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
     mock_repro_job_repo = mock_dependencies["repro_job_repo"]
 
     triggers = [
-        InstrumentReprocessingState(security_id="S1", earliest_impacted_date=date(2025, 8, 5))
+        InstrumentReprocessingState(
+            security_id="S1",
+            earliest_impacted_date=date(2025, 8, 5),
+            correlation_id="corr-trigger-1",
+        )
     ]
     mock_repo.get_instrument_reprocessing_triggers.return_value = triggers
 
     await scheduler._process_instrument_level_triggers(AsyncMock())
 
-    mock_repro_job_repo.create_job.assert_awaited_once()
+    mock_repro_job_repo.create_job.assert_awaited_once_with(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-08-05"},
+        correlation_id="corr-trigger-1",
+    )
     mock_repo.delete_instrument_reprocessing_triggers.assert_awaited_once_with(
         [("S1", date(2025, 8, 5))]
     )

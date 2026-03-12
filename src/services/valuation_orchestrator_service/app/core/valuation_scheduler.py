@@ -79,7 +79,11 @@ class ValuationScheduler:
                 "security_id": trigger.security_id,
                 "earliest_impacted_date": trigger.earliest_impacted_date.isoformat(),
             }
-            await repro_job_repo.create_job(job_type="RESET_WATERMARKS", payload=payload)
+            await repro_job_repo.create_job(
+                job_type="RESET_WATERMARKS",
+                payload=payload,
+                correlation_id=trigger.correlation_id,
+            )
             processed_trigger_fences.append((trigger.security_id, trigger.earliest_impacted_date))
 
         if processed_trigger_fences:

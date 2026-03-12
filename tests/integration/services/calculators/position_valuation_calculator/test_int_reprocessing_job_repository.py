@@ -162,10 +162,12 @@ async def test_create_job_coalesces_pending_reset_watermarks_in_db(
     first = await repository.create_job(
         "RESET_WATERMARKS",
         {"security_id": "S1", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-late",
     )
     second = await repository.create_job(
         "RESET_WATERMARKS",
         {"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-early",
     )
     await async_db_session.commit()
 
@@ -189,3 +191,4 @@ async def test_create_job_coalesces_pending_reset_watermarks_in_db(
     assert len(rows) == 1
     assert rows[0].payload["security_id"] == "S1"
     assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"
+    assert rows[0].correlation_id == "corr-early"
