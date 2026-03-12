@@ -1,5 +1,5 @@
-# tests/e2e/test_timeseries_pipeline.py
 import time
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -13,7 +13,16 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
     """
     Seed a deterministic 2-day scenario used by analytics input timeseries contracts.
     """
-    portfolio_id = "E2E_TS_PORT"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_TS_{suffix}"
+    stock_security_id = f"SEC_EUR_STOCK_{suffix}"
+    cash_security_id = f"CASH_{suffix}"
+    stock_isin = f"EU{suffix}"
+    cash_isin = f"USD_CASH_{suffix}"
+    deposit_tx_id = f"TS_DEP_{suffix}"
+    buy_tx_id = f"TS_BUY_{suffix}"
+    settle_tx_id = f"TS_CASH_SETTLE_BUY_{suffix}"
+    fee_tx_id = f"TS_FEE_{suffix}"
 
     e2e_api_client.ingest(
         "/ingest/portfolios",
@@ -38,16 +47,16 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "instruments": [
                 {
-                    "security_id": "SEC_EUR_STOCK",
+                    "security_id": stock_security_id,
                     "name": "Euro Stock",
-                    "isin": "EU123",
+                    "isin": stock_isin,
                     "currency": "EUR",
                     "product_type": "Equity",
                 },
                 {
-                    "security_id": "CASH",
+                    "security_id": cash_security_id,
                     "name": "US Dollar",
-                    "isin": "USD_CASH",
+                    "isin": cash_isin,
                     "currency": "USD",
                     "product_type": "Cash",
                 },
@@ -84,10 +93,10 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "transactions": [
                 {
-                    "transaction_id": "TS_DEP_01",
+                    "transaction_id": deposit_tx_id,
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "CASH",
-                    "security_id": "CASH",
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
                     "transaction_date": "2025-08-28T00:00:00Z",
                     "transaction_type": "DEPOSIT",
                     "quantity": 5500,
@@ -97,10 +106,10 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
                     "currency": "USD",
                 },
                 {
-                    "transaction_id": "TS_BUY_01",
+                    "transaction_id": buy_tx_id,
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "SEC_EUR_STOCK",
-                    "security_id": "SEC_EUR_STOCK",
+                    "instrument_id": stock_security_id,
+                    "security_id": stock_security_id,
                     "transaction_date": "2025-08-28T00:00:00Z",
                     "transaction_type": "BUY",
                     "quantity": 100,
@@ -110,10 +119,10 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
                     "currency": "EUR",
                 },
                 {
-                    "transaction_id": "TS_CASH_SETTLE_BUY_01",
+                    "transaction_id": settle_tx_id,
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "CASH",
-                    "security_id": "CASH",
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
                     "transaction_date": "2025-08-28T00:00:00Z",
                     "transaction_type": "SELL",
                     "quantity": 5500,
@@ -130,7 +139,7 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "market_prices": [
                 {
-                    "security_id": "SEC_EUR_STOCK",
+                    "security_id": stock_security_id,
                     "price_date": "2025-08-28",
                     "price": 52,
                     "currency": "EUR",
@@ -145,10 +154,10 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "transactions": [
                 {
-                    "transaction_id": "TS_FEE_01",
+                    "transaction_id": fee_tx_id,
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "CASH",
-                    "security_id": "CASH",
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
                     "transaction_date": "2025-08-29T00:00:00Z",
                     "transaction_type": "FEE",
                     "quantity": 1,
@@ -165,12 +174,17 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "market_prices": [
                 {
-                    "security_id": "SEC_EUR_STOCK",
+                    "security_id": stock_security_id,
                     "price_date": "2025-08-29",
                     "price": 55,
                     "currency": "EUR",
                 },
-                {"security_id": "CASH", "price_date": "2025-08-29", "price": 1, "currency": "USD"},
+                {
+                    "security_id": cash_security_id,
+                    "price_date": "2025-08-29",
+                    "price": 1,
+                    "currency": "USD",
+                },
             ]
         },
     )
@@ -202,7 +216,11 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
                 "Pipeline did not produce analytics position-timeseries rows for "
                 f"{valuation_date}. Last response: {last_response}"
             )
-    return {"portfolio_id": portfolio_id}
+    return {
+        "portfolio_id": portfolio_id,
+        "stock_security_id": stock_security_id,
+        "cash_security_id": cash_security_id,
+    }
 
 
 def _position_timeseries_request(day: str) -> dict:
@@ -228,7 +246,7 @@ def _sum_portfolio_currency(rows: list[dict]) -> Decimal:
 def _has_stock_timeseries_row(payload: dict, *, valuation_date: str) -> bool:
     for row in payload.get("rows", []):
         if (
-            row.get("security_id") == "SEC_EUR_STOCK"
+            row.get("security_id", "").startswith("SEC_EUR_STOCK_")
             and row.get("valuation_date") == valuation_date
         ):
             return True
@@ -247,7 +265,11 @@ def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(
     assert payload["portfolio_id"] == portfolio_id
     assert "rows" in payload
     assert payload["rows"]
-    stock_row = next(row for row in payload["rows"] if row["security_id"] == "SEC_EUR_STOCK")
+    stock_row = next(
+        row
+        for row in payload["rows"]
+        if row["security_id"] == setup_timeseries_data["stock_security_id"]
+    )
     assert as_decimal(stock_row["quantity"]) == Decimal("100")
     assert as_decimal(stock_row["ending_market_value_portfolio_currency"]) > Decimal("0")
     assert stock_row["valuation_date"] == "2025-08-28"
@@ -266,7 +288,11 @@ def test_analytics_input_timeseries_contract_day_2_returns_expected_rows(
     assert payload["portfolio_id"] == portfolio_id
     assert "rows" in payload
     assert payload["rows"]
-    stock_row = next(row for row in payload["rows"] if row["security_id"] == "SEC_EUR_STOCK")
+    stock_row = next(
+        row
+        for row in payload["rows"]
+        if row["security_id"] == setup_timeseries_data["stock_security_id"]
+    )
     assert as_decimal(stock_row["quantity"]) == Decimal("100")
     assert as_decimal(stock_row["ending_market_value_portfolio_currency"]) > Decimal("0")
     assert stock_row["valuation_date"] == "2025-08-29"
@@ -290,9 +316,15 @@ def test_analytics_input_position_timeseries_contract_day_2_returns_expected_row
     assert payload["portfolio_id"] == portfolio_id
     assert payload["rows"]
     day_1_stock = next(
-        row for row in day_1_payload["rows"] if row["security_id"] == "SEC_EUR_STOCK"
+        row
+        for row in day_1_payload["rows"]
+        if row["security_id"] == setup_timeseries_data["stock_security_id"]
     )
-    day_2_stock = next(row for row in payload["rows"] if row["security_id"] == "SEC_EUR_STOCK")
+    day_2_stock = next(
+        row
+        for row in payload["rows"]
+        if row["security_id"] == setup_timeseries_data["stock_security_id"]
+    )
     assert as_decimal(day_2_stock["ending_market_value_portfolio_currency"]) > as_decimal(
         day_1_stock["ending_market_value_portfolio_currency"]
     )
