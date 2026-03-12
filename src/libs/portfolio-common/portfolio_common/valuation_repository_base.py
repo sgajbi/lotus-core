@@ -1,6 +1,6 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy import cast, delete, func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -120,11 +120,17 @@ class ValuationRepositoryBase:
         return [(row.portfolio_id, row.security_id, row.epoch) for row in result.all()]
 
     @async_timed(repository="ValuationRepository", method="delete_instrument_reprocessing_triggers")
-    async def delete_instrument_reprocessing_triggers(self, security_ids: List[str]) -> None:
-        if not security_ids:
+    async def delete_instrument_reprocessing_triggers(
+        self,
+        trigger_fences: Sequence[Tuple[str, date]],
+    ) -> None:
+        if not trigger_fences:
             return
         stmt = delete(InstrumentReprocessingState).where(
-            InstrumentReprocessingState.security_id.in_(security_ids)
+            tuple_(
+                InstrumentReprocessingState.security_id,
+                InstrumentReprocessingState.earliest_impacted_date,
+            ).in_(list(trigger_fences))
         )
         await self.db.execute(stmt)
 

@@ -368,4 +368,6 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
     await scheduler._process_instrument_level_triggers(AsyncMock())
 
     mock_repro_job_repo.create_job.assert_awaited_once()
-    mock_repo.delete_instrument_reprocessing_triggers.assert_awaited_once_with(["S1"])
+    mock_repo.delete_instrument_reprocessing_triggers.assert_awaited_once_with(
+        [("S1", date(2025, 8, 5))]
+    )

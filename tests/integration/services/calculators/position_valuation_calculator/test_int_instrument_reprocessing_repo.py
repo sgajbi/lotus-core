@@ -170,7 +170,7 @@ async def test_delete_instrument_reprocessing_triggers(
     security_id_to_delete = "S1"
 
     # ACT
-    await repo.delete_instrument_reprocessing_triggers([security_id_to_delete])
+    await repo.delete_instrument_reprocessing_triggers([(security_id_to_delete, date(2025, 8, 10))])
     await async_db_session.commit()
 
     # ASSERT
@@ -178,3 +178,39 @@ async def test_delete_instrument_reprocessing_triggers(
 
     assert len(remaining_triggers) == 1
     assert remaining_triggers[0].security_id == "S2"
+
+
+async def test_delete_instrument_reprocessing_triggers_is_fenced_by_impacted_date(
+    async_db_session: AsyncSession, db_engine, clean_db
+):
+    """
+    GIVEN a scheduler fetched a trigger for a security at one impacted date
+    AND a newer back-dated event lowered the impacted date before delete
+    WHEN delete_instrument_reprocessing_triggers is called with the stale fence
+    THEN the newer trigger row must survive the delete.
+    """
+    with Session(db_engine) as session:
+        session.add(
+            InstrumentReprocessingState(
+                security_id="S1",
+                earliest_impacted_date=date(2025, 8, 10),
+            )
+        )
+        session.commit()
+
+    repo = ValuationRepository(async_db_session)
+
+    # Simulate a newer trigger arriving between scheduler fetch and delete.
+    with Session(db_engine) as session:
+        trigger = session.get(InstrumentReprocessingState, "S1")
+        trigger.earliest_impacted_date = date(2025, 8, 8)
+        session.commit()
+
+    await repo.delete_instrument_reprocessing_triggers([("S1", date(2025, 8, 10))])
+    await async_db_session.commit()
+
+    remaining_triggers = await repo.get_instrument_reprocessing_triggers(batch_size=5)
+
+    assert len(remaining_triggers) == 1
+    assert remaining_triggers[0].security_id == "S1"
+    assert remaining_triggers[0].earliest_impacted_date == date(2025, 8, 8)

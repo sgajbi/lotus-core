@@ -73,19 +73,19 @@ class ValuationScheduler:
             f"Found {len(triggers)} instrument-level reprocessing triggers to convert to jobs."
         )
 
-        processed_security_ids = []
+        processed_trigger_fences = []
         for trigger in triggers:
             payload = {
                 "security_id": trigger.security_id,
                 "earliest_impacted_date": trigger.earliest_impacted_date.isoformat(),
             }
             await repro_job_repo.create_job(job_type="RESET_WATERMARKS", payload=payload)
-            processed_security_ids.append(trigger.security_id)
+            processed_trigger_fences.append((trigger.security_id, trigger.earliest_impacted_date))
 
-        if processed_security_ids:
-            await repo.delete_instrument_reprocessing_triggers(processed_security_ids)
+        if processed_trigger_fences:
+            await repo.delete_instrument_reprocessing_triggers(processed_trigger_fences)
             logger.info(
-                f"Consumed and deleted {len(processed_security_ids)} instrument-level triggers."
+                f"Consumed and deleted {len(processed_trigger_fences)} instrument-level triggers."
             )
 
     async def _advance_watermarks(self, db):
