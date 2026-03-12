@@ -1,4 +1,5 @@
 # tests/e2e/test_timeseries_pipeline.py
+import time
 from decimal import Decimal
 
 import pytest
@@ -181,6 +182,26 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         timeout=180,
         fail_message="Pipeline did not produce queryable positions for timeseries setup.",
     )
+    for valuation_date in ("2025-08-28", "2025-08-29"):
+        payload = _position_timeseries_request(valuation_date)
+        start = time.time()
+        last_response = None
+        while time.time() - start < 180:
+            response = e2e_api_client.post_query(
+                f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+                payload,
+                raise_for_status=False,
+            )
+            if response.status_code == 200:
+                last_response = response.json()
+                if _has_stock_timeseries_row(last_response, valuation_date=valuation_date):
+                    break
+            time.sleep(2)
+        else:
+            pytest.fail(
+                "Pipeline did not produce analytics position-timeseries rows for "
+                f"{valuation_date}. Last response: {last_response}"
+            )
     return {"portfolio_id": portfolio_id}
 
 
@@ -204,6 +225,16 @@ def _sum_portfolio_currency(rows: list[dict]) -> Decimal:
     return total
 
 
+def _has_stock_timeseries_row(payload: dict, *, valuation_date: str) -> bool:
+    for row in payload.get("rows", []):
+        if (
+            row.get("security_id") == "SEC_EUR_STOCK"
+            and row.get("valuation_date") == valuation_date
+        ):
+            return True
+    return False
+
+
 def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(
     setup_timeseries_data, e2e_api_client: E2EApiClient
 ):
@@ -215,7 +246,11 @@ def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(
     payload = response.json()
     assert payload["portfolio_id"] == portfolio_id
     assert "rows" in payload
-    assert payload["rows"] == []
+    assert payload["rows"]
+    stock_row = next(row for row in payload["rows"] if row["security_id"] == "SEC_EUR_STOCK")
+    assert as_decimal(stock_row["quantity"]) == Decimal("100")
+    assert as_decimal(stock_row["ending_market_value_portfolio_currency"]) > Decimal("0")
+    assert stock_row["valuation_date"] == "2025-08-28"
     assert "diagnostics" in payload
 
 
@@ -230,7 +265,11 @@ def test_analytics_input_timeseries_contract_day_2_returns_expected_rows(
     payload = response.json()
     assert payload["portfolio_id"] == portfolio_id
     assert "rows" in payload
-    assert payload["rows"] == []
+    assert payload["rows"]
+    stock_row = next(row for row in payload["rows"] if row["security_id"] == "SEC_EUR_STOCK")
+    assert as_decimal(stock_row["quantity"]) == Decimal("100")
+    assert as_decimal(stock_row["ending_market_value_portfolio_currency"]) > Decimal("0")
+    assert stock_row["valuation_date"] == "2025-08-29"
     assert "diagnostics" in payload
 
 
@@ -238,11 +277,23 @@ def test_analytics_input_position_timeseries_contract_day_2_returns_expected_row
     setup_timeseries_data, e2e_api_client: E2EApiClient
 ):
     portfolio_id = setup_timeseries_data["portfolio_id"]
+    day_1_response = e2e_api_client.post_query(
+        f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+        _position_timeseries_request("2025-08-28"),
+    )
+    day_1_payload = day_1_response.json()
     response = e2e_api_client.post_query(
         f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
         _position_timeseries_request("2025-08-29"),
     )
     payload = response.json()
     assert payload["portfolio_id"] == portfolio_id
-    assert payload["rows"] == []
+    assert payload["rows"]
+    day_1_stock = next(
+        row for row in day_1_payload["rows"] if row["security_id"] == "SEC_EUR_STOCK"
+    )
+    day_2_stock = next(row for row in payload["rows"] if row["security_id"] == "SEC_EUR_STOCK")
+    assert as_decimal(day_2_stock["ending_market_value_portfolio_currency"]) > as_decimal(
+        day_1_stock["ending_market_value_portfolio_currency"]
+    )
     assert "diagnostics" in payload
