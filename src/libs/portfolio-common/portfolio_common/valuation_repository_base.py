@@ -2,7 +2,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, cast, func, select, text, tuple_, update
+from sqlalchemy import cast, func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -199,52 +199,6 @@ class ValuationRepositoryBase:
 
         result = await self.db.execute(stmt)
         return {(row.portfolio_id, row.security_id): row.contiguous_date for row in result}
-
-    @async_timed(
-        repository="ValuationRepository", method="find_portfolios_holding_security_on_date"
-    )
-    async def find_portfolios_holding_security_on_date(
-        self, security_id: str, a_date: date
-    ) -> List[str]:
-        latest_history_subquery = (
-            select(
-                PositionHistory.portfolio_id,
-                PositionHistory.quantity,
-                func.row_number()
-                .over(
-                    partition_by=PositionHistory.portfolio_id,
-                    order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
-                )
-                .label("rn"),
-            )
-            .join(
-                PositionState,
-                and_(
-                    PositionState.portfolio_id == PositionHistory.portfolio_id,
-                    PositionState.security_id == PositionHistory.security_id,
-                    PositionState.epoch == PositionHistory.epoch,
-                ),
-            )
-            .where(
-                PositionHistory.security_id == security_id,
-                PositionHistory.position_date <= a_date,
-            )
-            .subquery()
-        )
-
-        stmt = select(latest_history_subquery.c.portfolio_id).where(
-            latest_history_subquery.c.rn == 1, latest_history_subquery.c.quantity > 0
-        )
-
-        result = await self.db.execute(stmt)
-        portfolio_ids = result.scalars().all()
-        logger.info(
-            "Found %s portfolios holding '%s' on or before %s.",
-            len(portfolio_ids),
-            security_id,
-            a_date,
-        )
-        return portfolio_ids
 
     @async_timed(repository="ValuationRepository", method="get_states_needing_backfill")
     async def get_states_needing_backfill(
