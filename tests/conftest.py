@@ -226,6 +226,7 @@ def db_engine(docker_services):
 # List of all tables to be cleaned. Centralized here.
 TABLES_TO_TRUNCATE = [
     "instrument_reprocessing_state",  # <-- ADD NEW TABLE HERE
+    "reprocessing_jobs",
     "accrued_income_offset_state",
     "position_lot_state",
     "position_state",
