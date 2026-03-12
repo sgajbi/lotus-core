@@ -93,9 +93,12 @@ class PositionCalculator:
                 portfolio_id, security_id
             )
 
-            # Combine historical events with the current triggering event
             all_events_to_replay = [TransactionEvent.model_validate(t) for t in historical_db_txns]
-            all_events_to_replay.append(event)
+            if not any(
+                historical_event.transaction_id == event.transaction_id
+                for historical_event in all_events_to_replay
+            ):
+                all_events_to_replay.append(event)
             # Ensure replay order is deterministic even when timestamps collide.
             all_events_to_replay.sort(key=transaction_event_ordering_key)
 
