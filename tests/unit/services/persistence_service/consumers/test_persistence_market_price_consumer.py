@@ -8,6 +8,7 @@ from portfolio_common.config import KAFKA_MARKET_PRICE_PERSISTED_TOPIC
 from portfolio_common.database_models import MarketPrice as DBMarketPrice
 from portfolio_common.events import MarketPriceEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -133,6 +134,44 @@ async def test_process_message_success(
         assert call_args["topic"] == KAFKA_MARKET_PRICE_PERSISTED_TOPIC
         assert call_args["aggregate_id"] == valid_market_price_event.security_id
         assert call_args["payload"]["security_id"] == valid_market_price_event.security_id
+        assert call_args["correlation_id"] == "test-corr-id"
 
-        mock_idempotency_repo.mark_event_processed.assert_called_once()
+        mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+            event_id="market_prices-0-1",
+            portfolio_id="N/A",
+            service_name="persistence-market-prices",
+            correlation_id="test-corr-id",
+        )
         mock_send_to_dlq.assert_not_called()
+
+
+async def test_process_message_uses_header_correlation_on_direct_path(
+    market_price_consumer: MarketPriceConsumer,
+    mock_kafka_message: MagicMock,
+    valid_market_price_event: MarketPriceEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.create_market_price.return_value = DBMarketPrice(
+        **valid_market_price_event.model_dump()
+    )
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        await market_price_consumer.process_message(mock_kafka_message)
+    finally:
+        correlation_id_var.reset(token)
+
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+        "test-corr-id"
+    )
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+        event_id="market_prices-0-1",
+        portfolio_id="N/A",
+        service_name="persistence-market-prices",
+        correlation_id="test-corr-id",
+    )

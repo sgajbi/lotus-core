@@ -5,6 +5,7 @@ import pytest
 from portfolio_common.database_models import Instrument as DBInstrument
 from portfolio_common.events import InstrumentEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -136,6 +137,49 @@ async def test_process_message_success_without_portfolio_id(
         event_id="instruments-0-1",
         portfolio_id="N/A",
         service_name="persistence-instruments",
-        correlation_id="<not-set>",
+        correlation_id="test-corr-id",
     )
     mock_send_to_dlq.assert_not_called()
+
+
+async def test_process_message_uses_header_correlation_on_direct_path(
+    instrument_consumer: InstrumentConsumer,
+    mock_kafka_message: MagicMock,
+    valid_instrument_event: InstrumentEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_repo.create_or_update_instrument.return_value = DBInstrument(
+        security_id=valid_instrument_event.security_id,
+        name=valid_instrument_event.name,
+        isin=valid_instrument_event.isin,
+        currency=valid_instrument_event.currency,
+        product_type=valid_instrument_event.product_type,
+        asset_class=valid_instrument_event.asset_class,
+        portfolio_id=None,
+        trade_date=valid_instrument_event.trade_date,
+        maturity_date=None,
+        pair_base_currency=None,
+        pair_quote_currency=None,
+        buy_currency=None,
+        sell_currency=None,
+        buy_amount=None,
+        sell_amount=None,
+        contract_rate=None,
+    )
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        await instrument_consumer.process_message(mock_kafka_message)
+    finally:
+        correlation_id_var.reset(token)
+
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+        event_id="instruments-0-1",
+        portfolio_id="N/A",
+        service_name="persistence-instruments",
+        correlation_id="test-corr-id",
+    )
