@@ -38,7 +38,9 @@ class AggregationScheduler:
                 aggregation_date=job.aggregation_date,
                 correlation_id=job.correlation_id,
             )
-            headers = [("correlation_id", (job.correlation_id or "").encode("utf-8"))]
+            headers = []
+            if job.correlation_id:
+                headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
             self._producer.publish_message(
                 topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
                 key=job.portfolio_id,
