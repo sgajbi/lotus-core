@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
+from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
 
