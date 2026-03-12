@@ -190,6 +190,31 @@ async def test_find_portfolios_holding_security_on_date_excludes_pre_impact_clos
         session.flush()
         session.add_all(
             [
+                PositionState(
+                    portfolio_id="P_HELD",
+                    security_id="S1",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id="P_CLOSED_BEFORE",
+                    security_id="S1",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id="P_NOT_YET_OPEN",
+                    security_id="S1",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+            ]
+        )
+        session.add_all(
+            [
                 Transaction(
                     transaction_id="TX-P-HELD-1",
                     portfolio_id="P_HELD",
@@ -318,6 +343,15 @@ async def test_find_portfolios_holding_security_on_date_uses_latest_history_on_o
             )
         )
         session.flush()
+        session.add(
+            PositionState(
+                portfolio_id="P_MIXED",
+                security_id="S1",
+                epoch=0,
+                watermark_date=date(2025, 8, 11),
+                status="CURRENT",
+            )
+        )
         session.add_all(
             [
                 Transaction(
@@ -406,6 +440,100 @@ async def test_find_portfolios_holding_security_on_date_uses_latest_history_on_o
 
     assert portfolios_on_impact == []
     assert portfolios_after_reopen == ["P_MIXED"]
+
+
+async def test_find_portfolios_holding_security_on_date_ignores_stale_epochs(
+    async_db_session: AsyncSession, db_engine, clean_db
+):
+    """
+    GIVEN a portfolio with stale historical rows from an older epoch
+    WHEN the worker-facing lookup runs
+    THEN it must evaluate only the history attached to the current PositionState epoch.
+    """
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id="P_EPOCH",
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.flush()
+        session.add(
+            PositionState(
+                portfolio_id="P_EPOCH",
+                security_id="S1",
+                epoch=1,
+                watermark_date=date(2025, 8, 10),
+                status="CURRENT",
+            )
+        )
+        session.add_all(
+            [
+                Transaction(
+                    transaction_id="TX-EPOCH-OLD",
+                    portfolio_id="P_EPOCH",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="BUY",
+                    quantity=Decimal("100"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("100"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 9, 9, 0, 0),
+                ),
+                Transaction(
+                    transaction_id="TX-EPOCH-CURRENT",
+                    portfolio_id="P_EPOCH",
+                    instrument_id="I-S1",
+                    security_id="S1",
+                    transaction_type="SELL",
+                    quantity=Decimal("0"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("0"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2025, 8, 8, 9, 0, 0),
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                PositionHistory(
+                    portfolio_id="P_EPOCH",
+                    security_id="S1",
+                    transaction_id="TX-EPOCH-OLD",
+                    epoch=0,
+                    position_date=date(2025, 8, 9),
+                    quantity=100,
+                    cost_basis=Decimal("100"),
+                ),
+                PositionHistory(
+                    portfolio_id="P_EPOCH",
+                    security_id="S1",
+                    transaction_id="TX-EPOCH-CURRENT",
+                    epoch=1,
+                    position_date=date(2025, 8, 8),
+                    quantity=0,
+                    cost_basis=Decimal("0"),
+                ),
+            ]
+        )
+        session.commit()
+
+    repo = ValuationRepository(async_db_session)
+
+    portfolios = await repo.find_portfolios_holding_security_on_date("S1", date(2025, 8, 10))
+
+    assert portfolios == []
 
 
 async def test_delete_instrument_reprocessing_triggers(

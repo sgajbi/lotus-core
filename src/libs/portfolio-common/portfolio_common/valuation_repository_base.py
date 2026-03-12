@@ -2,7 +2,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import cast, delete, func, select, text, tuple_, update
+from sqlalchemy import and_, cast, delete, func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -257,8 +257,17 @@ class ValuationRepositoryBase:
                 )
                 .label("rn"),
             )
+            .join(
+                PositionState,
+                and_(
+                    PositionState.portfolio_id == PositionHistory.portfolio_id,
+                    PositionState.security_id == PositionHistory.security_id,
+                    PositionState.epoch == PositionHistory.epoch,
+                ),
+            )
             .where(
-                PositionHistory.security_id == security_id, PositionHistory.position_date <= a_date
+                PositionHistory.security_id == security_id,
+                PositionHistory.position_date <= a_date,
             )
             .subquery()
         )
