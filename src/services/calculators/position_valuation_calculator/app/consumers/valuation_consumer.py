@@ -87,180 +87,185 @@ class ValuationConsumer(BaseConsumer):
                                 logger.warning(f"Event {event_id} already processed. Skipping.")
                                 return
 
-                        # 1. Get the state of the position for the valuation date and epoch
-                        position_state = await repo.get_last_position_history_before_date(
-                            event.portfolio_id, event.security_id, event.valuation_date, event.epoch
-                        )
-                        if not position_state:
-                            raise DataNotFoundError(
-                                "Position history not found for "
-                                f"epoch {event.epoch} of {event.security_id} "
-                                f"on or before {event.valuation_date}"
+                            # 1. Get the state of the position for the valuation date and epoch
+                            position_state = await repo.get_last_position_history_before_date(
+                                event.portfolio_id,
+                                event.security_id,
+                                event.valuation_date,
+                                event.epoch,
+                            )
+                            if not position_state:
+                                raise DataNotFoundError(
+                                    "Position history not found for "
+                                    f"epoch {event.epoch} of {event.security_id} "
+                                    f"on or before {event.valuation_date}"
+                                )
+
+                            # 2. Fetch all necessary reference data
+                            instrument = await repo.get_instrument(event.security_id)
+                            portfolio = await repo.get_portfolio(event.portfolio_id)
+                            price = await repo.get_latest_price_for_position(
+                                event.security_id, event.valuation_date
                             )
 
-                        # 2. Fetch all necessary reference data
-                        instrument = await repo.get_instrument(event.security_id)
-                        portfolio = await repo.get_portfolio(event.portfolio_id)
-                        price = await repo.get_latest_price_for_position(
-                            event.security_id, event.valuation_date
-                        )
+                            if not instrument or not portfolio:
+                                error_msg = "Missing critical data. "
+                                if not instrument:
+                                    error_msg += f"Instrument '{event.security_id}' not found. "
+                                if not portfolio:
+                                    error_msg += f"Portfolio '{event.portfolio_id}' not found."
 
-                        if not instrument or not portfolio:
-                            error_msg = "Missing critical data. "
-                            if not instrument:
-                                error_msg += f"Instrument '{event.security_id}' not found. "
-                            if not portfolio:
-                                error_msg += f"Portfolio '{event.portfolio_id}' not found."
+                                VALUATION_JOBS_FAILED_TOTAL.labels(
+                                    portfolio_id=event.portfolio_id,
+                                    security_id=event.security_id,
+                                    reason="missing_ref_data",
+                                ).inc()
+                                logger.error(f"{error_msg} Job will be marked FAILED.")
+                                await repo.update_job_status(
+                                    event.portfolio_id,
+                                    event.security_id,
+                                    event.valuation_date,
+                                    event.epoch,
+                                    "FAILED",
+                                    failure_reason=error_msg,
+                                )
+                                await idempotency_repo.mark_event_processed(
+                                    event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                                )
+                                return
 
-                            VALUATION_JOBS_FAILED_TOTAL.labels(
+                            # 3. Build the initial snapshot from the position state
+                            snapshot = DailyPositionSnapshot(
                                 portfolio_id=event.portfolio_id,
                                 security_id=event.security_id,
-                                reason="missing_ref_data",
-                            ).inc()
-                            logger.error(f"{error_msg} Job will be marked FAILED.")
+                                date=event.valuation_date,
+                                epoch=event.epoch,
+                                quantity=position_state.quantity,
+                                cost_basis=position_state.cost_basis,
+                                cost_basis_local=position_state.cost_basis_local,
+                            )
+
+                            # 4. Perform valuation if price is available
+                            job_failure_reason = None
+                            if price:
+                                fx_rate = await repo.get_fx_rate(
+                                    instrument.currency,
+                                    portfolio.base_currency,
+                                    event.valuation_date,
+                                )
+                                if instrument.currency != portfolio.base_currency and not fx_rate:
+                                    snapshot.valuation_status = VALUATION_FAILED
+                                    job_failure_reason = (
+                                        "Missing FX rate for "
+                                        f"{instrument.currency}->{portfolio.base_currency} "
+                                        f"on or before {event.valuation_date}"
+                                    )
+                                    VALUATION_JOBS_FAILED_TOTAL.labels(
+                                        portfolio_id=event.portfolio_id,
+                                        security_id=event.security_id,
+                                        reason="missing_fx_rate",
+                                    ).inc()
+                                    logger.error(
+                                        "Missing required FX rate for valuation. "
+                                        "Job will be marked FAILED.",
+                                        extra={
+                                            "portfolio_id": event.portfolio_id,
+                                            "security_id": event.security_id,
+                                            "valuation_date": str(event.valuation_date),
+                                        },
+                                    )
+                                else:
+                                    valuation_result = ValuationLogic.calculate_valuation(
+                                        quantity=snapshot.quantity,
+                                        market_price=price.price,
+                                        cost_basis_base=snapshot.cost_basis,
+                                        cost_basis_local=snapshot.cost_basis_local,
+                                        price_currency=price.currency,
+                                        instrument_currency=instrument.currency,
+                                        portfolio_currency=portfolio.base_currency,
+                                        price_to_instrument_fx_rate=None,
+                                        instrument_to_portfolio_fx_rate=fx_rate.rate
+                                        if fx_rate
+                                        else None,
+                                    )
+                                    if valuation_result:
+                                        snapshot.market_price = price.price
+                                        (
+                                            snapshot.market_value,
+                                            snapshot.market_value_local,
+                                            snapshot.unrealized_gain_loss,
+                                            snapshot.unrealized_gain_loss_local,
+                                        ) = valuation_result
+                                        snapshot.valuation_status = (
+                                            VALUATION_VALUED_CURRENT
+                                            if price.price_date == event.valuation_date
+                                            else VALUATION_VALUED_STALE
+                                        )
+                                    else:
+                                        snapshot.valuation_status = VALUATION_FAILED
+                                        job_failure_reason = (
+                                            "Valuation logic returned no result for "
+                                            f"{event.security_id} "
+                                            f"on {event.valuation_date}"
+                                        )
+                                        VALUATION_JOBS_FAILED_TOTAL.labels(
+                                            portfolio_id=event.portfolio_id,
+                                            security_id=event.security_id,
+                                            reason="valuation_logic_failed",
+                                        ).inc()
+                            else:
+                                snapshot.valuation_status = VALUATION_UNVALUED
+
+                            # 5. Persist the snapshot and create completion event
+                            persisted_snapshot = await repo.upsert_daily_snapshot(snapshot)
+                            completion_event = DailyPositionSnapshotPersistedEvent.model_validate(
+                                persisted_snapshot
+                            )
+
+                            await outbox_repo.create_outbox_event(
+                                aggregate_type="DailyPositionSnapshot",
+                                aggregate_id=persisted_snapshot.portfolio_id,
+                                event_type="DailyPositionSnapshotPersisted",
+                                topic=KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
+                                payload=completion_event.model_dump(mode="json"),
+                                correlation_id=correlation_id,
+                            )
+                            valuation_completion_event = ValuationDayCompletedEvent(
+                                daily_position_snapshot_id=persisted_snapshot.id,
+                                portfolio_id=persisted_snapshot.portfolio_id,
+                                security_id=persisted_snapshot.security_id,
+                                valuation_date=persisted_snapshot.date,
+                                epoch=persisted_snapshot.epoch,
+                                valuation_status=persisted_snapshot.valuation_status,
+                                correlation_id=correlation_id,
+                            )
+                            await outbox_repo.create_outbox_event(
+                                aggregate_type="ValuationStage",
+                                aggregate_id=(
+                                    f"{persisted_snapshot.portfolio_id}:"
+                                    f"{persisted_snapshot.security_id}:"
+                                    f"{persisted_snapshot.date}:"
+                                    f"{persisted_snapshot.epoch}"
+                                ),
+                                event_type="ValuationDayCompleted",
+                                topic=KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
+                                payload=valuation_completion_event.model_dump(mode="json"),
+                                correlation_id=correlation_id,
+                            )
+
                             await repo.update_job_status(
                                 event.portfolio_id,
                                 event.security_id,
                                 event.valuation_date,
                                 event.epoch,
-                                "FAILED",
-                                failure_reason=error_msg,
+                                "FAILED"
+                                if snapshot.valuation_status in FAILED_JOB_STATUSES
+                                else "COMPLETE",
+                                failure_reason=job_failure_reason,
                             )
                             await idempotency_repo.mark_event_processed(
                                 event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                             )
-                            return
-
-                        # 3. Build the initial snapshot from the position state
-                        snapshot = DailyPositionSnapshot(
-                            portfolio_id=event.portfolio_id,
-                            security_id=event.security_id,
-                            date=event.valuation_date,
-                            epoch=event.epoch,
-                            quantity=position_state.quantity,
-                            cost_basis=position_state.cost_basis,
-                            cost_basis_local=position_state.cost_basis_local,
-                        )
-
-                        # 4. Perform valuation if price is available
-                        job_failure_reason = None
-                        if price:
-                            fx_rate = await repo.get_fx_rate(
-                                instrument.currency, portfolio.base_currency, event.valuation_date
-                            )
-                            if instrument.currency != portfolio.base_currency and not fx_rate:
-                                snapshot.valuation_status = VALUATION_FAILED
-                                job_failure_reason = (
-                                    "Missing FX rate for "
-                                    f"{instrument.currency}->{portfolio.base_currency} "
-                                    f"on or before {event.valuation_date}"
-                                )
-                                VALUATION_JOBS_FAILED_TOTAL.labels(
-                                    portfolio_id=event.portfolio_id,
-                                    security_id=event.security_id,
-                                    reason="missing_fx_rate",
-                                ).inc()
-                                logger.error(
-                                    "Missing required FX rate for valuation. "
-                                    "Job will be marked FAILED.",
-                                    extra={
-                                        "portfolio_id": event.portfolio_id,
-                                        "security_id": event.security_id,
-                                        "valuation_date": str(event.valuation_date),
-                                    },
-                                )
-                            else:
-                                valuation_result = ValuationLogic.calculate_valuation(
-                                    quantity=snapshot.quantity,
-                                    market_price=price.price,
-                                    cost_basis_base=snapshot.cost_basis,
-                                    cost_basis_local=snapshot.cost_basis_local,
-                                    price_currency=price.currency,
-                                    instrument_currency=instrument.currency,
-                                    portfolio_currency=portfolio.base_currency,
-                                    price_to_instrument_fx_rate=None,
-                                    instrument_to_portfolio_fx_rate=fx_rate.rate
-                                    if fx_rate
-                                    else None,
-                                )
-                                if valuation_result:
-                                    snapshot.market_price = price.price
-                                    (
-                                        snapshot.market_value,
-                                        snapshot.market_value_local,
-                                        snapshot.unrealized_gain_loss,
-                                        snapshot.unrealized_gain_loss_local,
-                                    ) = valuation_result
-                                    snapshot.valuation_status = (
-                                        VALUATION_VALUED_CURRENT
-                                        if price.price_date == event.valuation_date
-                                        else VALUATION_VALUED_STALE
-                                    )
-                                else:
-                                    snapshot.valuation_status = VALUATION_FAILED
-                                    job_failure_reason = (
-                                        "Valuation logic returned no result for "
-                                        f"{event.security_id} "
-                                        f"on {event.valuation_date}"
-                                    )
-                                    VALUATION_JOBS_FAILED_TOTAL.labels(
-                                        portfolio_id=event.portfolio_id,
-                                        security_id=event.security_id,
-                                        reason="valuation_logic_failed",
-                                    ).inc()
-                        else:
-                            snapshot.valuation_status = VALUATION_UNVALUED
-
-                        # 5. Persist the snapshot and create completion event
-                        persisted_snapshot = await repo.upsert_daily_snapshot(snapshot)
-                        completion_event = DailyPositionSnapshotPersistedEvent.model_validate(
-                            persisted_snapshot
-                        )
-
-                        await outbox_repo.create_outbox_event(
-                            aggregate_type="DailyPositionSnapshot",
-                            aggregate_id=persisted_snapshot.portfolio_id,
-                            event_type="DailyPositionSnapshotPersisted",
-                            topic=KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
-                            payload=completion_event.model_dump(mode="json"),
-                            correlation_id=correlation_id,
-                        )
-                        valuation_completion_event = ValuationDayCompletedEvent(
-                            daily_position_snapshot_id=persisted_snapshot.id,
-                            portfolio_id=persisted_snapshot.portfolio_id,
-                            security_id=persisted_snapshot.security_id,
-                            valuation_date=persisted_snapshot.date,
-                            epoch=persisted_snapshot.epoch,
-                            valuation_status=persisted_snapshot.valuation_status,
-                            correlation_id=correlation_id,
-                        )
-                        await outbox_repo.create_outbox_event(
-                            aggregate_type="ValuationStage",
-                            aggregate_id=(
-                                f"{persisted_snapshot.portfolio_id}:"
-                                f"{persisted_snapshot.security_id}:"
-                                f"{persisted_snapshot.date}:"
-                                f"{persisted_snapshot.epoch}"
-                            ),
-                            event_type="ValuationDayCompleted",
-                            topic=KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
-                            payload=valuation_completion_event.model_dump(mode="json"),
-                            correlation_id=correlation_id,
-                        )
-
-                        await repo.update_job_status(
-                            event.portfolio_id,
-                            event.security_id,
-                            event.valuation_date,
-                            event.epoch,
-                            "FAILED"
-                            if snapshot.valuation_status in FAILED_JOB_STATUSES
-                            else "COMPLETE",
-                            failure_reason=job_failure_reason,
-                        )
-                        await idempotency_repo.mark_event_processed(
-                            event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                        )
 
                     except DataNotFoundError as e:
                         # This is a non-retryable, expected error when a job is
