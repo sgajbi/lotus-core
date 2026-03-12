@@ -1,13 +1,6 @@
 # services/ingestion_service/app/services/ingestion_service.py
 from typing import List
 
-from ..DTOs.business_date_dto import BusinessDate
-from ..DTOs.fx_rate_dto import FxRate
-from ..DTOs.instrument_dto import Instrument
-from ..DTOs.market_price_dto import MarketPrice
-from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
-from ..DTOs.portfolio_dto import Portfolio
-from ..DTOs.transaction_dto import Transaction
 from fastapi import Depends
 from portfolio_common.config import (
     KAFKA_FX_RATES_TOPIC,
@@ -20,6 +13,14 @@ from portfolio_common.config import (
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import KAFKA_MESSAGES_PUBLISHED_TOTAL
+
+from ..DTOs.business_date_dto import BusinessDate
+from ..DTOs.fx_rate_dto import FxRate
+from ..DTOs.instrument_dto import Instrument
+from ..DTOs.market_price_dto import MarketPrice
+from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
+from ..DTOs.portfolio_dto import Portfolio
+from ..DTOs.transaction_dto import Transaction
 
 
 class IngestionPublishError(RuntimeError):
@@ -35,6 +36,8 @@ class IngestionService:
     def _get_headers(self, idempotency_key: str | None = None):
         """Constructs Kafka headers with the current correlation ID."""
         corr_id = correlation_id_var.get()
+        if corr_id == "<not-set>":
+            corr_id = None
         headers: list[tuple[str, bytes]] = []
         if corr_id:
             headers.append(("correlation_id", corr_id.encode("utf-8")))

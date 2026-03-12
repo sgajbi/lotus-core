@@ -202,6 +202,32 @@ async def test_publish_with_idempotency_key(
     assert headers["idempotency_key"] == b"portfolio-batch-key-001"
 
 
+async def test_publish_omits_not_set_correlation_header(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    portfolios = [
+        Portfolio(
+            portfolio_id="P1",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="f",
+        )
+    ]
+    token = correlation_id_var.set("<not-set>")
+    try:
+        await ingestion_service.publish_portfolios(portfolios)
+    finally:
+        correlation_id_var.reset(token)
+
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    assert call_args["headers"] is None
+
+
 async def test_publish_portfolio_bundle(ingestion_service: IngestionService):
     """Verifies mixed bundle fan-out returns correct published counts."""
     bundle = PortfolioBundleIngestionRequest.model_validate(
