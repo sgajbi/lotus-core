@@ -34,18 +34,20 @@ class ReprocessingRepository:
         Returns:
             The number of transactions that were found and republished.
         """
-        if not transaction_ids:
+        ordered_unique_ids = list(dict.fromkeys(transaction_ids))
+
+        if not ordered_unique_ids:
             return 0
 
-        logger.info(f"Beginning reprocessing for {len(transaction_ids)} transaction(s).")
+        logger.info(f"Beginning reprocessing for {len(ordered_unique_ids)} transaction(s).")
 
         ordering = case(
-            {transaction_id: index for index, transaction_id in enumerate(transaction_ids)},
+            {transaction_id: index for index, transaction_id in enumerate(ordered_unique_ids)},
             value=DBTransaction.transaction_id,
         )
         stmt = (
             select(DBTransaction)
-            .where(DBTransaction.transaction_id.in_(transaction_ids))
+            .where(DBTransaction.transaction_id.in_(ordered_unique_ids))
             .order_by(ordering)
         )
         result = await self.db.execute(stmt)
@@ -54,7 +56,7 @@ class ReprocessingRepository:
         if not transactions_to_replay:
             logger.warning(
                 "No matching transactions found in the database for the given IDs.",
-                extra={"transaction_ids": transaction_ids},
+                extra={"transaction_ids": ordered_unique_ids},
             )
             return 0
 
