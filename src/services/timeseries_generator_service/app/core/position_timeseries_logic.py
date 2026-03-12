@@ -1,12 +1,13 @@
-# src/services/timeseries_generator_service/app/core/position_timeseries_logic.py
 from decimal import Decimal
 from typing import List
 
 from portfolio_common.database_models import (
-    PositionTimeseries,
-    DailyPositionSnapshot,
     Cashflow,
+    DailyPositionSnapshot,
+    PositionTimeseries,
 )
+
+# src/services/timeseries_generator_service/app/core/position_timeseries_logic.py
 
 
 class PositionTimeseriesLogic:

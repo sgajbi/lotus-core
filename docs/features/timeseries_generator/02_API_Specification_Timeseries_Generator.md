@@ -39,7 +39,7 @@ The service listens to two topics:
 #### Topic: `portfolio_aggregation_required`
 
 * **Purpose:** This is the work queue for the portfolio-level aggregation. Each message is a job to aggregate all of a portfolio's position time-series records for a single day.
-* **Producer:** `AggregationScheduler` (within this same service).
+* **Producer:** `AggregationScheduler` (within `portfolio_aggregation_service`).
 * **Key:** `portfolio_id`
 * **Payload (`PortfolioAggregationRequiredEvent`):**
     ```json
@@ -56,6 +56,6 @@ The service's components produce events to orchestrate the aggregation workflow.
 
 #### Topic: `portfolio_aggregation_required`
 
-* **Purpose:** The `AggregationScheduler` component of this service produces messages to this topic. This creates a closed loop where the scheduler assigns work to its own service's consumers.
+* **Purpose:** The `AggregationScheduler` component of `portfolio_aggregation_service` produces messages to this topic. `timeseries_generator_service` consumes those work assignments but does not own the scheduler.
 * **Key:** `portfolio_id`
 * **Payload (`PortfolioAggregationRequiredEvent`):** (Same as the consumed event).

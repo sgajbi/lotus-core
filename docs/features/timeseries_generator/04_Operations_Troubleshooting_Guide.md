@@ -19,7 +19,7 @@ The health of this service is critical for the availability of all performance a
 All logs are structured JSON and are tagged with the `correlation_id`. Key log messages can help diagnose issues:
 
 * **`"Processing position snapshot for..."`**: Confirms the `PositionTimeseriesConsumer` is running.
-* **`"Scheduler claimed ... jobs for processing"`**: Confirms the `AggregationScheduler` is active and dispatching position-timeseries work.
+* **`"Scheduler claimed ... jobs for processing"`**: Confirms the `AggregationScheduler` in `portfolio_aggregation_service` is active and dispatching aggregation work.
 * **`"Found and claimed ... eligible aggregation jobs"`**: Confirms the portfolio aggregation scheduler in `portfolio_aggregation_service` is claiming portfolio-date jobs.
 * **`"Missing FX rate from..."`**: A critical error from the portfolio aggregation logic that will cause the job to fail and the message to be sent to the DLQ.
 

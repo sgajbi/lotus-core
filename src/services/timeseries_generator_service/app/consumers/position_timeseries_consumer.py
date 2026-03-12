@@ -104,7 +104,9 @@ class PositionTimeseriesConsumer(BaseConsumer):
     def _has_material_change(cls, existing_record, new_record) -> bool:
         if existing_record is None:
             return True
-        return asdict(cls._material_state(existing_record)) != asdict(cls._material_state(new_record))
+        return asdict(cls._material_state(existing_record)) != asdict(
+            cls._material_state(new_record)
+        )
 
     async def _stage_aggregation_job(
         self, db_session, portfolio_id: str, a_date: date, correlation_id: str
@@ -202,7 +204,10 @@ class PositionTimeseriesConsumer(BaseConsumer):
 
                     if not self._has_material_change(existing_timeseries, new_timeseries_record):
                         logger.info(
-                            "Position timeseries already up to date for %s on %s epoch %s. Skipping downstream fan-out.",
+                            (
+                                "Position timeseries already up to date for %s on %s epoch %s. "
+                                "Skipping downstream fan-out."
+                            ),
                             event.security_id,
                             event.date,
                             event.epoch,
