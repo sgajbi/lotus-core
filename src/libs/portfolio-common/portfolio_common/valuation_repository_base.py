@@ -320,10 +320,21 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_latest_business_date")
     async def get_latest_business_date(self) -> Optional[date]:
-        stmt = select(func.max(BusinessDate.date))
-        stmt = stmt.where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        business_date_stmt = (
+            select(func.max(BusinessDate.date))
+            .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
+        )
+        snapshot_date_stmt = select(func.max(DailyPositionSnapshot.date))
+        valuation_job_date_stmt = select(func.max(PortfolioValuationJob.valuation_date))
+
+        business_date = (await self.db.execute(business_date_stmt)).scalar_one_or_none()
+        snapshot_date = (await self.db.execute(snapshot_date_stmt)).scalar_one_or_none()
+        valuation_job_date = (
+            await self.db.execute(valuation_job_date_stmt)
+        ).scalar_one_or_none()
+
+        candidates = [d for d in (business_date, snapshot_date, valuation_job_date) if d is not None]
+        return max(candidates) if candidates else None
 
     @async_timed(repository="ValuationRepository", method="update_job_status")
     async def update_job_status(

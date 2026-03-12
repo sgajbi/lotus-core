@@ -694,3 +694,48 @@ async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
     assert len(jobs) == 1
     assert jobs[0].epoch == 3
     assert jobs[0].correlation_id == "corr-newer"
+
+
+async def test_get_latest_business_date_falls_back_to_processing_dates_when_calendar_is_empty(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = ValuationRepository(async_db_session)
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P-FALLBACK-1",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-FALLBACK-1",
+                security_id="S-FALLBACK-1",
+                valuation_date=date(2025, 8, 10),
+                epoch=0,
+                status="COMPLETE",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P-FALLBACK-1",
+                security_id="S-FALLBACK-1",
+                date=date(2025, 8, 5),
+                quantity=Decimal("1"),
+                cost_basis=Decimal("1"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    latest_date = await repo.get_latest_business_date()
+
+    assert latest_date == date(2025, 8, 10)
