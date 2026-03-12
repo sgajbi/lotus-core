@@ -77,8 +77,14 @@ class ReprocessingJobRepository:
         Finds PENDING jobs, atomically claims them by updating their
         status to PROCESSING, and returns the claimed jobs.
         """
+        order_clause = "created_at ASC, id ASC"
+        if job_type == "RESET_WATERMARKS":
+            order_clause = (
+                "(payload->>'earliest_impacted_date')::date ASC, " "created_at ASC, id ASC"
+            )
+
         query = text(
-            """
+            f"""
             UPDATE reprocessing_jobs
             SET status = 'PROCESSING',
                 updated_at = now(),
@@ -88,7 +94,7 @@ class ReprocessingJobRepository:
                 SELECT id
                 FROM reprocessing_jobs
                 WHERE status = 'PENDING' AND job_type = :job_type
-                ORDER BY created_at ASC, id ASC
+                ORDER BY {order_clause}
                 LIMIT :batch_size
                 FOR UPDATE SKIP LOCKED
             )
