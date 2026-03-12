@@ -26,103 +26,69 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "gnetId": null,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": 1,
   "links": [],
   "panels": [
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
+      "collapsed": false,
       "gridPos": {
-        "h": 9,
-        "w": 12,
         "x": 0,
-        "y": 0
+        "y": 0,
+        "w": 24,
+        "h": 1
       },
-      "id": 2,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (repository, method) (rate(db_operation_latency_seconds_sum[5m])) / sum by (repository, method) (rate(db_operation_latency_seconds_count[5m]))",
-          "legendFormat": "{{repository}} - {{method}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Average DB Operation Latency",
-      "type": "timeseries"
+      "id": 100,
+      "panels": [],
+      "title": "Executive Summary",
+      "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
+      "description": "Count of healthy Lotus Core services currently being scraped by Prometheus.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
           },
-          "editorMode": "code",
-          "expr": "sum by (topic) (rate(outbox_events_published_total[5m]))",
-          "legendFormat": "{{topic}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Outbox Events Published per Second",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 14
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
         "x": 0,
-        "y": 9
+        "y": 1,
+        "w": 4,
+        "h": 5
       },
-      "id": 6,
+      "id": 101,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -130,9 +96,10 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "10.4.1",
       "targets": [
         {
           "datasource": {
@@ -140,13 +107,13 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(http_requests_total)",
-          "legendFormat": "__auto",
-          "range": true,
+          "expr": "sum(up{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|position_calculator_service|pipeline_orchestrator_service|valuation_orchestrator_service|cashflow_calculator_service|cost_calculator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"})",
+          "instant": true,
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Total HTTP Requests",
+      "title": "Healthy Services",
       "type": "stat"
     },
     {
@@ -154,18 +121,40 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 9
+      "description": "Current aggregate API throughput across active HTTP services.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps",
+          "decimals": 2
+        },
+        "overrides": []
       },
-      "id": 8,
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "id": 102,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -173,9 +162,83 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "10.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(http_requests_total{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|position_calculator_service|pipeline_orchestrator_service|valuation_orchestrator_service|cashflow_calculator_service|cost_calculator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}[5m]))",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "API Request Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Durable events waiting to be published. Persistent elevation indicates transport lag or downstream pressure.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "id": 103,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
       "targets": [
         {
           "datasource": {
@@ -184,12 +247,12 @@
           },
           "editorMode": "code",
           "expr": "sum(outbox_events_pending)",
-          "legendFormat": "__auto",
-          "range": true,
+          "instant": true,
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Pending Outbox Events",
+      "title": "Pending Outbox",
       "type": "stat"
     },
     {
@@ -197,13 +260,299 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 18
+      "description": "Age of the oldest still-pending outbox event.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          },
+          "unit": "s",
+          "decimals": 0
+        },
+        "overrides": []
       },
-      "id": 10,
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "id": 104,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(outbox_events_oldest_pending_age_seconds)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Oldest Outbox Age",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Current number of portfolio/security keys actively under replay or reset-watermark processing.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "id": 105,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(reprocessing_active_keys_total)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Reprocessing Keys",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Age of the oldest unprocessed ingestion backlog item.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 180
+              }
+            ]
+          },
+          "unit": "s",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "id": 106,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(ingestion_backlog_age_seconds)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Ingestion Backlog Age",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "id": 107,
+      "panels": [],
+      "title": "API and Service Health",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Service-level API throughput. Use with availability to spot silent traffic drops or overload concentration.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 8
+      },
+      "id": 108,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -211,7 +560,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -221,9 +570,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
+          "range": true,
           "expr": "sum by (job) (rate(http_requests_total{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|position_calculator_service|pipeline_orchestrator_service|valuation_orchestrator_service|cashflow_calculator_service|cost_calculator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}[5m]))",
           "legendFormat": "{{job}}",
-          "range": true,
           "refId": "A"
         }
       ],
@@ -235,12 +584,65 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 18
+      "description": "Binary health of each scraped service. Any value below 1 indicates an unhealthy or unreachable instance.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 8
+      },
+      "id": 109,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -248,10 +650,9 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
-      "id": 12,
       "targets": [
         {
           "datasource": {
@@ -259,9 +660,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
+          "range": true,
           "expr": "up{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|position_calculator_service|pipeline_orchestrator_service|valuation_orchestrator_service|cashflow_calculator_service|cost_calculator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}",
           "legendFormat": "{{job}}",
-          "range": true,
           "refId": "A"
         }
       ],
@@ -273,13 +674,65 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 27
+      "description": "Repository-level average latency for database operations. Use to spot hot methods and inefficient query paths.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
       },
-      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 8
+      },
+      "id": 110,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -287,7 +740,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -297,65 +750,92 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (reconciliation_type, status) (rate(financial_reconciliation_runs_total[5m]))",
-          "legendFormat": "{{reconciliation_type}} - {{status}}",
           "range": true,
+          "expr": "sum by (repository, method) (rate(db_operation_latency_seconds_sum[5m])) / sum by (repository, method) (rate(db_operation_latency_seconds_count[5m]))",
+          "legendFormat": "{{repository}} - {{method}}",
           "refId": "A"
         }
       ],
-      "title": "Reconciliation Run Outcomes per Second",
+      "title": "Average DB Operation Latency",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "id": 111,
+      "panels": [],
+      "title": "Replay, Recovery, and Outbox",
+      "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 27
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "id": 16,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
+      "description": "Observed replay outcomes split by recovery path and status.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
           },
-          "editorMode": "code",
-          "expr": "sum by (reconciliation_type, severity) (rate(financial_reconciliation_findings_total[5m]))",
-          "legendFormat": "{{reconciliation_type}} - {{severity}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Reconciliation Findings per Second",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
         "x": 0,
-        "y": 36
+        "y": 24,
+        "w": 8,
+        "h": 8
       },
-      "id": 18,
+      "id": 112,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -363,7 +843,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -373,13 +853,13 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
+          "range": true,
           "expr": "sum by (recovery_path, replay_status) (rate(ingestion_replay_audit_total[5m]))",
-          "legendFormat": "{{recovery_path}} - {{replay_status}}",
-          "range": true,
+          "legendFormat": "{{recovery_path}} / {{replay_status}}",
           "refId": "A"
         }
       ],
-      "title": "Replay Audit Outcomes per Second",
+      "title": "Replay Audit Outcomes",
       "type": "timeseries"
     },
     {
@@ -387,12 +867,65 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 36
+      "description": "Replay duplicates, stale-skip pressure, and failure signals. Persistent elevation indicates replay turbulence rather than healthy throughput.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "x": 8,
+        "y": 24,
+        "w": 8,
+        "h": 8
+      },
+      "id": 113,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -400,10 +933,9 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
-      "id": 20,
       "targets": [
         {
           "datasource": {
@@ -411,9 +943,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
+          "range": true,
           "expr": "sum by (recovery_path) (rate(ingestion_replay_duplicate_blocked_total[5m]))",
-          "legendFormat": "{{recovery_path}} - duplicate_blocked",
-          "range": true,
+          "legendFormat": "duplicates {{recovery_path}}",
           "refId": "A"
         },
         {
@@ -422,107 +954,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
+          "range": true,
           "expr": "sum by (recovery_path, replay_status) (rate(ingestion_replay_failure_total[5m]))",
-          "legendFormat": "{{recovery_path}} - {{replay_status}}",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Replay Duplicate and Failure Pressure",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 45
-      },
-      "id": 22,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "ingestion_backlog_age_seconds",
-          "legendFormat": "backlog_age_seconds",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "reprocessing_active_keys_total",
-          "legendFormat": "active_reprocessing_keys",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Ingestion Backlog and Active Reprocessing",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 45
-      },
-      "id": 24,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_claimed_total[5m]))",
-          "legendFormat": "{{job_type}} - claimed",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_completed_total[5m]))",
-          "legendFormat": "{{job_type}} - completed",
-          "range": true,
+          "legendFormat": "failures {{recovery_path}} / {{replay_status}}",
           "refId": "B"
         },
         {
@@ -531,13 +965,24 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_failed_total[5m]))",
-          "legendFormat": "{{job_type}} - failed",
           "range": true,
+          "expr": "sum by (scope) (rate(reprocessing_duplicates_normalized_total[5m]))",
+          "legendFormat": "normalized {{scope}}",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (stage) (rate(reprocessing_stale_skips_total[5m]))",
+          "legendFormat": "stale skips {{stage}}",
+          "refId": "D"
         }
       ],
-      "title": "Reprocessing Worker Throughput and Failures",
+      "title": "Replay Pressure",
       "type": "timeseries"
     },
     {
@@ -545,13 +990,65 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 54
+      "description": "Durable event backlog, publish rate, retry pressure, and terminal failure accumulation.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
       },
-      "id": 26,
+      "gridPos": {
+        "x": 16,
+        "y": 24,
+        "w": 8,
+        "h": 8
+      },
+      "id": 114,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -559,7 +1056,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -569,9 +1066,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
+          "range": true,
           "expr": "outbox_events_pending",
           "legendFormat": "pending",
-          "range": true,
           "refId": "A"
         },
         {
@@ -580,9 +1077,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(outbox_events_published_total[5m]))",
-          "legendFormat": "published_per_second",
           "range": true,
+          "expr": "sum(rate(outbox_events_published_total[5m]))",
+          "legendFormat": "published/s",
           "refId": "B"
         },
         {
@@ -591,9 +1088,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(outbox_events_failed_total[5m]))",
-          "legendFormat": "failed_per_second",
           "range": true,
+          "expr": "sum(rate(outbox_events_failed_total[5m]))",
+          "legendFormat": "failed/s",
           "refId": "C"
         },
         {
@@ -602,9 +1099,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(outbox_events_retried_total[5m]))",
-          "legendFormat": "retried_per_second",
           "range": true,
+          "expr": "sum(rate(outbox_events_retried_total[5m]))",
+          "legendFormat": "retried/s",
           "refId": "D"
         },
         {
@@ -613,9 +1110,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "outbox_events_failed_stored",
-          "legendFormat": "failed_stored",
           "range": true,
+          "expr": "outbox_events_failed_stored",
+          "legendFormat": "failed stored",
           "refId": "E"
         },
         {
@@ -624,9 +1121,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "outbox_events_oldest_pending_age_seconds",
-          "legendFormat": "oldest_pending_age_seconds",
           "range": true,
+          "expr": "outbox_events_oldest_pending_age_seconds",
+          "legendFormat": "oldest pending age",
           "refId": "F"
         }
       ],
@@ -638,13 +1135,65 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 54
+      "description": "Replay work-in-flight, backlog aging, and worker claim/completion/failure balance.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
       },
-      "id": 28,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 8
+      },
+      "id": 115,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -652,7 +1201,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -662,9 +1211,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(valuation_jobs_created_total[5m]))",
-          "legendFormat": "created_per_second",
           "range": true,
+          "expr": "ingestion_backlog_age_seconds",
+          "legendFormat": "ingestion backlog age",
           "refId": "A"
         },
         {
@@ -673,9 +1222,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(valuation_jobs_failed_total[5m]))",
-          "legendFormat": "terminal_failed_per_second",
           "range": true,
+          "expr": "reprocessing_active_keys_total",
+          "legendFormat": "active reprocessing keys",
           "refId": "B"
         },
         {
@@ -684,9 +1233,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(valuation_worker_jobs_claimed_total[5m]))",
-          "legendFormat": "worker_claimed_per_second",
           "range": true,
+          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_claimed_total[5m]))",
+          "legendFormat": "claimed {{job_type}}",
           "refId": "C"
         },
         {
@@ -695,9 +1244,156 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(valuation_worker_stale_resets_total[5m]))",
-          "legendFormat": "stale_resets_per_second",
           "range": true,
+          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_completed_total[5m]))",
+          "legendFormat": "completed {{job_type}}",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_failed_total[5m]))",
+          "legendFormat": "failed {{job_type}}",
+          "refId": "E"
+        }
+      ],
+      "title": "Reprocessing Worker Throughput and Backlog",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 1
+      },
+      "id": 116,
+      "panels": [],
+      "title": "Valuation and Timeseries",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Valuation scheduler creation/failure rates and worker claim/reset activity.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 12,
+        "h": 8
+      },
+      "id": 117,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum(rate(valuation_jobs_created_total[5m]))",
+          "legendFormat": "jobs created/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum(rate(valuation_jobs_failed_total[5m]))",
+          "legendFormat": "jobs failed/s",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum(rate(valuation_worker_jobs_claimed_total[5m]))",
+          "legendFormat": "worker claimed/s",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum(rate(valuation_worker_stale_resets_total[5m]))",
+          "legendFormat": "stale resets/s",
           "refId": "D"
         }
       ],
@@ -709,13 +1405,65 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 63
+      "description": "Publication distribution across durable transport topics. Useful for spotting suppressed or starving workflow stages.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
       },
-      "id": 30,
+      "gridPos": {
+        "x": 12,
+        "y": 41,
+        "w": 12,
+        "h": 8
+      },
+      "id": 118,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -723,7 +1471,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -733,13 +1481,127 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (dataset_type, status) (rate(analytics_export_jobs_total[5m]))",
-          "legendFormat": "{{dataset_type}} - {{status}}",
           "range": true,
+          "expr": "sum by (topic) (rate(outbox_events_published_total[5m]))",
+          "legendFormat": "{{topic}}",
           "refId": "A"
         }
       ],
-      "title": "Analytics Export Job Outcomes per Second",
+      "title": "Outbox Publication by Topic",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 24,
+        "h": 1
+      },
+      "id": 119,
+      "panels": [],
+      "title": "Reconciliation and Analytics",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Financial reconciliation throughput and finding severity pressure.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 12,
+        "h": 8
+      },
+      "id": 120,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (reconciliation_type, status) (rate(financial_reconciliation_runs_total[5m]))",
+          "legendFormat": "runs {{reconciliation_type}} / {{status}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (reconciliation_type, severity) (rate(financial_reconciliation_findings_total[5m]))",
+          "legendFormat": "findings {{reconciliation_type}} / {{severity}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Reconciliation Outcomes and Findings",
       "type": "timeseries"
     },
     {
@@ -747,13 +1609,65 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 63
+      "description": "Analytics export job outcomes by dataset type.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
       },
-      "id": 32,
+      "gridPos": {
+        "x": 12,
+        "y": 50,
+        "w": 12,
+        "h": 8
+      },
+      "id": 121,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -761,7 +1675,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -771,9 +1685,99 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, dataset_type) (rate(analytics_export_job_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{dataset_type}} - p95_duration_seconds",
           "range": true,
+          "expr": "sum by (dataset_type, status) (rate(analytics_export_jobs_total[5m]))",
+          "legendFormat": "{{dataset_type}} / {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Analytics Export Outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "p95 export latency, payload size, and page depth by dataset type.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 24,
+        "h": 8
+      },
+      "id": 122,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "histogram_quantile(0.95, sum by (le, dataset_type) (rate(analytics_export_job_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 duration {{dataset_type}}",
           "refId": "A"
         },
         {
@@ -782,9 +1786,9 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, dataset_type) (rate(analytics_export_result_bytes_bucket[5m])))",
-          "legendFormat": "{{dataset_type}} - p95_result_bytes",
           "range": true,
+          "expr": "histogram_quantile(0.95, sum by (le, dataset_type) (rate(analytics_export_result_bytes_bucket[5m])))",
+          "legendFormat": "p95 bytes {{dataset_type}}",
           "refId": "B"
         },
         {
@@ -793,89 +1797,13 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, dataset_type) (rate(analytics_export_page_depth_bucket[5m])))",
-          "legendFormat": "{{dataset_type}} - p95_page_depth",
           "range": true,
+          "expr": "histogram_quantile(0.95, sum by (le, dataset_type) (rate(analytics_export_page_depth_bucket[5m])))",
+          "legendFormat": "p95 page depth {{dataset_type}}",
           "refId": "C"
         }
       ],
-      "title": "Analytics Export Depth and Latency",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 72
-      },
-      "id": 34,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (scope) (rate(reprocessing_duplicates_normalized_total[5m]))",
-          "legendFormat": "{{scope}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Replay Duplicate Normalization Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 72
-      },
-      "id": 36,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (stage) (rate(reprocessing_stale_skips_total[5m]))",
-          "legendFormat": "{{stage}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Replay Stale-Skip Pressure",
+      "title": "Analytics Export Latency and Payload Depth",
       "type": "timeseries"
     }
   ],
@@ -889,10 +1817,28 @@
     "from": "now-1h",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ],
+    "time_options": [
+      "15m",
+      "30m",
+      "1h",
+      "3h",
+      "6h",
+      "12h",
+      "24h"
+    ]
+  },
   "timezone": "browser",
-  "title": "Portfolio Analytics Overview",
+  "title": "Lotus Core Operational Overview",
   "uid": "portfolio-analytics-overview",
-  "version": 6,
-  "weekStart": ""
+  "version": 7,
+  "weekStart": "",
+  "description": "Operational dashboard for Lotus Core. Organized around platform health, replay recovery, durable event flow, valuation/timeseries processing, and reconciliation/export observability."
 }
