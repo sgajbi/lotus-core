@@ -147,3 +147,41 @@ async def test_pending_reset_watermarks_uniqueness_is_enforced_by_db(
         await async_db_session.commit()
 
     await async_db_session.rollback()
+
+
+async def test_create_job_coalesces_pending_reset_watermarks_in_db(
+    clean_db, async_db_session: AsyncSession
+):
+    """
+    GIVEN repeated repository create_job calls for the same security
+    WHEN RESET_WATERMARKS work is created with a later then earlier impacted date
+    THEN one pending row should remain and it should preserve the earliest date.
+    """
+    repository = ReprocessingJobRepository(async_db_session)
+
+    first = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S1", "earliest_impacted_date": "2025-01-07"},
+    )
+    second = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+    )
+    await async_db_session.commit()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert first.id == second.id
+    assert len(rows) == 1
+    assert rows[0].payload["security_id"] == "S1"
+    assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"

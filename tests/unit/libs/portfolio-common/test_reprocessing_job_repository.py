@@ -200,22 +200,27 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    pending_job = ReprocessingJob(
-        id=10,
-        job_type="RESET_WATERMARKS",
-        payload={"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
-        status="PENDING",
-    )
-    select_result = MagicMock()
-    select_result.scalar_one_or_none.return_value = pending_job
-    mock_db_session.execute.return_value = select_result
+    upsert_result = MagicMock()
+    upsert_result.mappings.return_value.one.return_value = {
+        "id": 10,
+        "job_type": "RESET_WATERMARKS",
+        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "status": "PENDING",
+        "attempt_count": 0,
+        "last_attempted_at": None,
+        "failure_reason": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    mock_db_session.execute.return_value = upsert_result
 
     result = await repository.create_job(
         "RESET_WATERMARKS",
         {"security_id": "AAPL", "earliest_impacted_date": "2025-01-07"},
     )
 
-    assert result is pending_job
+    assert result.id == 10
+    assert result.payload["earliest_impacted_date"] == "2025-01-05"
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
     assert mock_db_session.execute.await_count == 1
@@ -225,24 +230,26 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    pending_job = ReprocessingJob(
-        id=10,
-        job_type="RESET_WATERMARKS",
-        payload={"security_id": "AAPL", "earliest_impacted_date": "2025-01-07"},
-        status="PENDING",
-    )
-    select_result = MagicMock()
-    select_result.scalar_one_or_none.return_value = pending_job
-    update_result = MagicMock()
-    mock_db_session.execute.side_effect = [select_result, update_result]
+    upsert_result = MagicMock()
+    upsert_result.mappings.return_value.one.return_value = {
+        "id": 10,
+        "job_type": "RESET_WATERMARKS",
+        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "status": "PENDING",
+        "attempt_count": 0,
+        "last_attempted_at": None,
+        "failure_reason": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    mock_db_session.execute.return_value = upsert_result
 
     result = await repository.create_job(
         "RESET_WATERMARKS",
         {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
     )
 
-    assert result is pending_job
     assert result.payload["earliest_impacted_date"] == "2025-01-05"
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
-    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_count == 1

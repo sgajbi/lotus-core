@@ -70,22 +70,6 @@ class ReprocessingJobRepository:
         deleted_count = int(result.scalar_one())
         return deleted_count
 
-    async def _find_pending_reset_watermarks_job(
-        self, security_id: str
-    ) -> Optional[ReprocessingJob]:
-        stmt = (
-            select(ReprocessingJob)
-            .where(
-                ReprocessingJob.job_type == "RESET_WATERMARKS",
-                ReprocessingJob.status == "PENDING",
-                text("payload->>'security_id' = :security_id"),
-            )
-            .order_by(ReprocessingJob.created_at.asc(), ReprocessingJob.id.asc())
-            .limit(1)
-        )
-        result = await self.db.execute(stmt, {"security_id": security_id})
-        return result.scalar_one_or_none()
-
     @async_timed(repository="ReprocessingJobRepository", method="create_job")
     async def create_job(self, job_type: str, payload: Dict[str, Any]) -> ReprocessingJob:
         if (
@@ -93,30 +77,56 @@ class ReprocessingJobRepository:
             and payload.get("security_id")
             and payload.get("earliest_impacted_date")
         ):
-            pending_job = await self._find_pending_reset_watermarks_job(payload["security_id"])
-            if pending_job is not None:
-                existing_date = date.fromisoformat(pending_job.payload["earliest_impacted_date"])
-                requested_date = date.fromisoformat(payload["earliest_impacted_date"])
-                if requested_date < existing_date:
-                    merged_payload = {
-                        **pending_job.payload,
-                        "earliest_impacted_date": requested_date.isoformat(),
-                    }
-                    stmt = (
-                        update(ReprocessingJob)
-                        .where(ReprocessingJob.id == pending_job.id)
-                        .values(payload=merged_payload, updated_at=func.now())
-                    )
-                    await self.db.execute(stmt)
-                    pending_job.payload = merged_payload
-                logger.info(
-                    "Coalesced reset-watermarks reprocessing job.",
-                    extra={
-                        "job_id": pending_job.id,
-                        "security_id": payload["security_id"],
-                    },
+            stmt = text(
+                """
+                INSERT INTO reprocessing_jobs (
+                    job_type,
+                    payload,
+                    status,
+                    attempt_count
                 )
-                return pending_job
+                VALUES (
+                    'RESET_WATERMARKS',
+                    json_build_object(
+                        'security_id', :security_id,
+                        'earliest_impacted_date', :earliest_impacted_date
+                    )::json,
+                    'PENDING',
+                    0
+                )
+                ON CONFLICT ((payload->>'security_id'))
+                WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
+                DO UPDATE
+                SET payload = jsonb_set(
+                        reprocessing_jobs.payload::jsonb,
+                        '{earliest_impacted_date}',
+                        to_jsonb(
+                            LEAST(
+                                (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
+                                CAST(:earliest_impacted_date AS date)
+                            )::text
+                        )
+                    )::json,
+                    updated_at = now()
+                RETURNING *;
+                """
+            )
+            result = await self.db.execute(
+                stmt,
+                {
+                    "security_id": payload["security_id"],
+                    "earliest_impacted_date": payload["earliest_impacted_date"],
+                },
+            )
+            job = ReprocessingJob(**result.mappings().one())
+            logger.info(
+                "Coalesced reset-watermarks reprocessing job.",
+                extra={
+                    "job_id": job.id,
+                    "security_id": payload["security_id"],
+                },
+            )
+            return job
 
         job = ReprocessingJob(job_type=job_type, payload=payload, status="PENDING")
         self.db.add(job)
