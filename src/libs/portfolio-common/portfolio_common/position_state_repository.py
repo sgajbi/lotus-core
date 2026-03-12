@@ -3,7 +3,7 @@ import logging
 from datetime import date
 from typing import Any, Dict, List, Tuple
 
-from sqlalchemy import func, select, tuple_, update
+from sqlalchemy import Date, Integer, String, column, func, select, tuple_, update, values
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,26 +38,46 @@ class PositionStateRepository:
         if not updates:
             return 0
 
-        total_updated = 0
-        for update_item in updates:
-            stmt = (
-                update(PositionState)
-                .where(
-                    PositionState.portfolio_id == update_item["portfolio_id"],
-                    PositionState.security_id == update_item["security_id"],
-                    PositionState.epoch == update_item["expected_epoch"],
-                )
-                .values(
-                    watermark_date=update_item["watermark_date"],
-                    status=update_item["status"],
-                    updated_at=func.now(),
-                )
-                .execution_options(synchronize_session=False)
+        updates_table = (
+            values(
+                column("portfolio_id", String),
+                column("security_id", String),
+                column("expected_epoch", Integer),
+                column("watermark_date", Date),
+                column("status", String),
+                name="position_state_updates",
             )
-            result = await self.db.execute(stmt)
-            total_updated += result.rowcount
+            .data(
+                [
+                    (
+                        update_item["portfolio_id"],
+                        update_item["security_id"],
+                        update_item["expected_epoch"],
+                        update_item["watermark_date"],
+                        update_item["status"],
+                    )
+                    for update_item in updates
+                ]
+            )
+            .alias("position_state_updates")
+        )
 
-        return total_updated
+        stmt = (
+            update(PositionState)
+            .where(
+                PositionState.portfolio_id == updates_table.c.portfolio_id,
+                PositionState.security_id == updates_table.c.security_id,
+                PositionState.epoch == updates_table.c.expected_epoch,
+            )
+            .values(
+                watermark_date=updates_table.c.watermark_date,
+                status=updates_table.c.status,
+                updated_at=func.now(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.db.execute(stmt)
+        return result.rowcount or 0
 
     @async_timed(repository="PositionStateRepository", method="get_or_create_state")
     async def get_or_create_state(self, portfolio_id: str, security_id: str) -> PositionState:
