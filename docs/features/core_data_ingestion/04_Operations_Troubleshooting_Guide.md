@@ -6,6 +6,8 @@ This guide provides operational instructions for monitoring and troubleshooting 
 
 The service is instrumented with Prometheus and provides metrics at the `/metrics` endpoint. A pre-built Grafana dashboard is available for visualization.
 
+For the local platform-wide Grafana operations dashboard and usage guide, see [Grafana Dashboard Guide](../../operations/Grafana-Dashboard-Guide.md).
+
 ### Key Metrics to Watch
 
 * **API Request Rate & Latency (`http_requests_total`, `http_request_latency_seconds`):**

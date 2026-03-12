@@ -479,8 +479,317 @@
     {
       "collapsed": false,
       "gridPos": {
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 6,
+        "y": 6
+      },
+      "id": 200,
+      "panels": [],
+      "title": "Critical Signals",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Terminally failed outbox rows stored in the database. Any non-zero value means manual investigation is required.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 7
+      },
+      "id": 201,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(outbox_events_failed_stored)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Durable Outbox Failures",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Rate of replay or scheduler updates skipped by epoch fencing. Sustained elevation means stale work is still reaching active paths.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 7
+      },
+      "id": 202,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(reprocessing_stale_skips_total[5m]))",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Replay Stale Skip Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Rate of valuation jobs reaching terminal failure. Any persistent value above zero is abnormal for steady-state operation.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 7
+      },
+      "id": 203,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(valuation_jobs_failed_total[5m]))",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Valuation Failure Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Rate of reconciliation runs ending in a blocking state. Sustained non-zero values indicate control-plane intervention is required.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
+      "id": 204,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(financial_reconciliation_runs_total{status=~\"FAILED|REQUIRES_REPLAY\"}[5m]))",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Blocking Reconciliation Outcomes",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 12,
         "w": 24,
         "h": 1
       },
@@ -548,7 +857,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 13,
         "w": 12,
         "h": 8
       },
@@ -638,7 +947,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 7,
+        "y": 13,
         "w": 12,
         "h": 8
       },
@@ -728,7 +1037,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 21,
         "w": 24,
         "h": 8
       },
@@ -763,7 +1072,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 29,
         "w": 24,
         "h": 1
       },
@@ -831,7 +1140,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 30,
         "w": 8,
         "h": 8
       },
@@ -921,7 +1230,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 24,
+        "y": 30,
         "w": 8,
         "h": 8
       },
@@ -1044,7 +1353,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 24,
+        "y": 30,
         "w": 8,
         "h": 8
       },
@@ -1189,7 +1498,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 38,
         "w": 24,
         "h": 8
       },
@@ -1268,7 +1577,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 46,
         "w": 24,
         "h": 1
       },
@@ -1336,7 +1645,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 47,
         "w": 12,
         "h": 8
       },
@@ -1459,7 +1768,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 41,
+        "y": 47,
         "w": 12,
         "h": 8
       },
@@ -1494,7 +1803,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 49,
+        "y": 55,
         "w": 24,
         "h": 1
       },
@@ -1562,7 +1871,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 50,
+        "y": 56,
         "w": 12,
         "h": 8
       },
@@ -1663,7 +1972,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 50,
+        "y": 56,
         "w": 12,
         "h": 8
       },
@@ -1753,7 +2062,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 58,
+        "y": 64,
         "w": 24,
         "h": 8
       },
@@ -1838,7 +2147,7 @@
   "timezone": "browser",
   "title": "Lotus Core Operational Overview",
   "uid": "portfolio-analytics-overview",
-  "version": 7,
+  "version": 8,
   "weekStart": "",
   "description": "Operational dashboard for Lotus Core. Organized around platform health, replay recovery, durable event flow, valuation/timeseries processing, and reconciliation/export observability."
 }
