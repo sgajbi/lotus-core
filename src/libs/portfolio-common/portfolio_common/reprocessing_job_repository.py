@@ -7,6 +7,7 @@ from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
+from .monitoring import observe_reprocessing_duplicates_normalized
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,11 @@ class ReprocessingJobRepository:
         )
         result = await self.db.execute(normalize_stmt)
         deleted_count = int(result.scalar_one())
+        if deleted_count:
+            observe_reprocessing_duplicates_normalized(
+                "reset_watermarks_pending_jobs",
+                deleted_count,
+            )
         return deleted_count
 
     @async_timed(repository="ReprocessingJobRepository", method="create_job")

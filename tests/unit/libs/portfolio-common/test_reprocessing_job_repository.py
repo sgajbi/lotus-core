@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
@@ -75,6 +75,23 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
     assert "WITH ranked AS" in stmt_text
     assert "DELETE FROM reprocessing_jobs" in stmt_text
     assert "jsonb_set" in stmt_text
+
+
+async def test_normalize_pending_reset_watermarks_duplicates_emits_metric(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_result = MagicMock()
+    mock_result.scalar_one.return_value = 3
+    mock_db_session.execute.return_value = mock_result
+
+    with patch(
+        "portfolio_common.reprocessing_job_repository.observe_reprocessing_duplicates_normalized"
+    ) as mock_observe:
+        deleted_count = await repository.normalize_pending_reset_watermarks_duplicates()
+
+    assert deleted_count == 3
+    mock_observe.assert_called_once_with("reset_watermarks_pending_jobs", 3)
 
 
 async def test_find_and_claim_jobs_normalizes_reset_watermarks_duplicates_before_claim(

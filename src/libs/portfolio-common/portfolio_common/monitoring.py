@@ -198,6 +198,18 @@ REPROCESSING_WORKER_BATCH_SECONDS = Histogram(
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
 )
 
+REPROCESSING_DUPLICATES_NORMALIZED_TOTAL = Counter(
+    "reprocessing_duplicates_normalized_total",
+    "Number of duplicate replay or reprocessing records normalized away on durable paths.",
+    ["scope"],
+)
+
+REPROCESSING_STALE_SKIPS_TOTAL = Counter(
+    "reprocessing_stale_skips_total",
+    "Number of stale epoch-fenced records skipped during replay normalization or fanout.",
+    ["stage"],
+)
+
 POSITION_STATE_WATERMARK_LAG_DAYS = Gauge(
     "position_state_watermark_lag_days",
     "The current lag in days between the latest business date and a key's watermark.",
@@ -358,6 +370,14 @@ def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> No
 def reprocessing_worker_batch_timer():
     """Context manager that observes one reprocessing worker batch duration."""
     return REPROCESSING_WORKER_BATCH_SECONDS.time()
+
+
+def observe_reprocessing_duplicates_normalized(scope: str, count: int = 1) -> None:
+    REPROCESSING_DUPLICATES_NORMALIZED_TOTAL.labels(scope).inc(count)
+
+
+def observe_reprocessing_stale_skips(stage: str, count: int = 1) -> None:
+    REPROCESSING_STALE_SKIPS_TOTAL.labels(stage).inc(count)
 
 
 def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:

@@ -57,6 +57,9 @@ def mock_dependencies():
             "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_failed"
         ) as mock_observe_failed,
         patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_stale_skips"
+        ) as mock_observe_stale_skips,
+        patch(
             "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.reprocessing_worker_batch_timer"
         ) as mock_batch_timer,
     ):
@@ -69,6 +72,7 @@ def mock_dependencies():
             "observe_claimed": mock_observe_claimed,
             "observe_completed": mock_observe_completed,
             "observe_failed": mock_observe_failed,
+            "observe_stale_skips": mock_observe_stale_skips,
             "batch_timer": mock_batch_timer,
         }
 
@@ -120,6 +124,7 @@ async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dep
     mock_repro_job_repo = mock_dependencies["repro_job_repo"]
     mock_valuation_repo = mock_dependencies["valuation_repo"]
     mock_state_repo = mock_dependencies["state_repo"]
+    mock_observe_stale_skips = mock_dependencies["observe_stale_skips"]
 
     job_payload = {"security_id": "S1", "earliest_impacted_date": "2025-08-10"}
     pending_job = ReprocessingJob(
@@ -144,6 +149,7 @@ async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dep
     assert warning_kwargs["extra"]["targeted_count"] == 2
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+    mock_observe_stale_skips.assert_called_once_with("reset_watermarks_fanout", 1)
     mock_repro_job_repo.update_job_status.assert_awaited_once_with(11, "COMPLETE")
 
 

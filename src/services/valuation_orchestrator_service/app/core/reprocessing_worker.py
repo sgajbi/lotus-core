@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from portfolio_common.db import get_async_db_session
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import (
+    observe_reprocessing_stale_skips,
     observe_reprocessing_worker_jobs_claimed,
     observe_reprocessing_worker_jobs_completed,
     observe_reprocessing_worker_jobs_failed,
@@ -85,6 +86,10 @@ class ReprocessingWorker:
                                     new_watermark_date=new_watermark,
                                 )
                                 if updated_count != len(keys_to_update):
+                                    observe_reprocessing_stale_skips(
+                                        "reset_watermarks_fanout",
+                                        len(keys_to_update) - updated_count,
+                                    )
                                     logger.warning(
                                         "Job %s: Reset fewer watermarks than targeted for "
                                         "security %s.",

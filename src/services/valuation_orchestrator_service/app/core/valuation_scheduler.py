@@ -16,6 +16,7 @@ from portfolio_common.monitoring import (
     SCHEDULER_GAP_DAYS,
     SNAPSHOT_LAG_SECONDS,
     VALUATION_JOBS_CREATED_TOTAL,
+    observe_reprocessing_stale_skips,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
@@ -137,6 +138,10 @@ class ValuationScheduler:
                 for u in terminal_updates[:3]
             ]
             if normalized_count != len(terminal_updates):
+                observe_reprocessing_stale_skips(
+                    "terminal_reprocessing_normalization",
+                    len(terminal_updates) - normalized_count,
+                )
                 logger.warning(
                     "ValuationScheduler normalized fewer terminal reprocessing states than "
                     "prepared updates.",
@@ -186,6 +191,10 @@ class ValuationScheduler:
                 for u in updates_to_commit[:3]
             ]
             if updated_count != len(updates_to_commit):
+                observe_reprocessing_stale_skips(
+                    "watermark_advance",
+                    len(updates_to_commit) - updated_count,
+                )
                 logger.warning(
                     "ValuationScheduler advanced fewer watermarks than prepared updates.",
                     extra={

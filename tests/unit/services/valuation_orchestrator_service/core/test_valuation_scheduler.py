@@ -182,6 +182,7 @@ async def test_scheduler_advances_watermarks(
     mock_repo.get_lagging_states.return_value = lagging_states
     mock_repo.get_terminal_reprocessing_states.return_value = []
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
+    mock_state_repo.bulk_update_states.return_value = 2
 
     await scheduler._advance_watermarks(AsyncMock())
 
@@ -228,9 +229,14 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
     mock_state_repo.bulk_update_states.return_value = 1
 
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
-    ) as mock_warning:
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+        ) as mock_warning,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_reprocessing_stale_skips"
+        ) as mock_observe_stale_skips,
+    ):
         await scheduler._advance_watermarks(AsyncMock())
 
     mock_warning.assert_called_once()
@@ -238,6 +244,7 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     assert warning_kwargs["extra"]["prepared_count"] == 2
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+    mock_observe_stale_skips.assert_called_once_with("watermark_advance", 1)
 
 
 async def test_scheduler_normalizes_terminal_reprocessing_states(
@@ -308,9 +315,14 @@ async def test_scheduler_warns_when_terminal_normalization_is_epoch_fenced(
     mock_repo.get_terminal_reprocessing_states.return_value = terminal_states
     mock_state_repo.bulk_update_states.return_value = 1
 
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
-    ) as mock_warning:
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+        ) as mock_warning,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_reprocessing_stale_skips"
+        ) as mock_observe_stale_skips,
+    ):
         await scheduler._advance_watermarks(AsyncMock())
 
     mock_warning.assert_called_once()
@@ -318,6 +330,10 @@ async def test_scheduler_warns_when_terminal_normalization_is_epoch_fenced(
     assert warning_kwargs["extra"]["prepared_count"] == 2
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+    mock_observe_stale_skips.assert_called_once_with(
+        "terminal_reprocessing_normalization",
+        1,
+    )
 
 
 async def test_scheduler_dispatches_claimed_jobs(
