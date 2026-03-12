@@ -298,7 +298,9 @@ class ValuationScheduler:
                 epoch=job.epoch,
                 correlation_id=job.correlation_id,
             )
-            headers = [("correlation_id", (job.correlation_id or "").encode("utf-8"))]
+            headers = []
+            if job.correlation_id:
+                headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
             self._producer.publish_message(
                 topic=KAFKA_VALUATION_REQUIRED_TOPIC,
                 key=job.portfolio_id,

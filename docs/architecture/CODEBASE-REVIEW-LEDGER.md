@@ -161,3 +161,4 @@ inancial-calculator-engine/src/engine/ package. | If the remaining shared librar
 3. Review remaining replay/watermark terminal-state invariants adjacent to CR-087 through CR-111
 
 
+| CR-146 | Scheduler Dispatch Correlation Header Review | Observability / valuation lineage | Hardened | Scheduler dispatch no longer emits empty Kafka correlation_id headers; unit coverage now proves both present and absent lineage cases. | src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py; 	ests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py; docs/architecture/CR-146-SCHEDULER-DISPATCH-CORRELATION-HEADER-REVIEW.md |
