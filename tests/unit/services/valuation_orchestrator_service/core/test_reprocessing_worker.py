@@ -111,6 +111,38 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     mock_repro_job_repo.update_job_status.assert_awaited_once_with(1, "COMPLETE")
 
 
+async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+
+    job_payload = {"security_id": "S1", "earliest_impacted_date": "2025-08-10"}
+    pending_job = ReprocessingJob(
+        id=11,
+        job_type="RESET_WATERMARKS",
+        payload=job_payload,
+        status="PENDING",
+    )
+
+    mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
+    mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
+    mock_valuation_repo.find_portfolios_for_security.return_value = ["P1", "P2"]
+    mock_state_repo.update_watermarks_if_older.return_value = 1
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.logger.warning"
+    ) as mock_warning:
+        await worker._process_batch()
+
+    mock_warning.assert_called_once()
+    warning_kwargs = mock_warning.call_args.kwargs
+    assert warning_kwargs["extra"]["targeted_count"] == 2
+    assert warning_kwargs["extra"]["updated_count"] == 1
+    assert warning_kwargs["extra"]["stale_skipped_count"] == 1
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(11, "COMPLETE")
+
+
 async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     mock_repro_job_repo = mock_dependencies["repro_job_repo"]

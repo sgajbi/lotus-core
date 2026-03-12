@@ -76,11 +76,30 @@ class ReprocessingWorker:
                                     keys=keys_to_update,
                                     new_watermark_date=new_watermark,
                                 )
-                                logger.info(
-                                    f"Job {job.id}: Fanned out watermark reset "
-                                    f"to {updated_count} portfolios for "
-                                    f"security {security_id}."
-                                )
+                                if updated_count != len(keys_to_update):
+                                    logger.warning(
+                                        "Job %s: Reset fewer watermarks than targeted for "
+                                        "security %s.",
+                                        job.id,
+                                        security_id,
+                                        extra={
+                                            "targeted_count": len(keys_to_update),
+                                            "updated_count": updated_count,
+                                            "stale_skipped_count": len(keys_to_update)
+                                            - updated_count,
+                                            "security_id": security_id,
+                                            "examples": [
+                                                f"({p_id},{security_id})"
+                                                for p_id in affected_portfolios[:3]
+                                            ],
+                                        },
+                                    )
+                                else:
+                                    logger.info(
+                                        f"Job {job.id}: Fanned out watermark reset "
+                                        f"to {updated_count} portfolios for "
+                                        f"security {security_id}."
+                                    )
                             else:
                                 logger.info(
                                     f"Job {job.id}: No portfolios found for "
