@@ -51,6 +51,15 @@ class ValuationScheduler:
         logger.info("Valuation scheduler shutdown signal received.")
         self._running = False
 
+    @staticmethod
+    def _build_backfill_correlation_id(
+        portfolio_id: str, security_id: str, epoch: int, valuation_date
+    ) -> str:
+        return (
+            f"SCHEDULER_BACKFILL:{portfolio_id}:{security_id}:"
+            f"{epoch}:{valuation_date.isoformat()}"
+        )
+
     async def _update_reprocessing_metrics(self, db):
         """Queries for and sets key gauges related to reprocessing workload."""
         repo = ValuationRepository(db)
@@ -253,7 +262,12 @@ class ValuationScheduler:
                     security_id=state.security_id,
                     valuation_date=current_date,
                     epoch=state.epoch,
-                    correlation_id=f"SCHEDULER_BACKFILL_{current_date.isoformat()}",
+                    correlation_id=self._build_backfill_correlation_id(
+                        state.portfolio_id,
+                        state.security_id,
+                        state.epoch,
+                        current_date,
+                    ),
                 )
                 job_count += 1
                 current_date += timedelta(days=1)

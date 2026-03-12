@@ -110,6 +110,7 @@ async def test_scheduler_creates_position_aware_backfill_jobs(
         assert mock_job_repo.upsert_job.call_count == 3
         first_call_args = mock_job_repo.upsert_job.call_args_list[0].kwargs
         assert first_call_args["valuation_date"] == date(2025, 8, 10)
+        assert first_call_args["correlation_id"] == "SCHEDULER_BACKFILL:P1:S1:1:2025-08-10"
         mock_gauge_labels.assert_called_once_with(portfolio_id="P1", security_id="S1")
         mock_gauge_labels.return_value.set.assert_called_once_with(expected_lag)
 
