@@ -16,6 +16,60 @@ class ReprocessingJobRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def normalize_pending_reset_watermarks_duplicates(self) -> int:
+        """
+        Coalesces any historically duplicated pending RESET_WATERMARKS jobs so that
+        one pending job remains per security_id with the earliest impacted date.
+        Returns the number of redundant rows removed.
+        """
+        normalize_stmt = text(
+            """
+            WITH ranked AS (
+                SELECT
+                    id,
+                    payload->>'security_id' AS security_id,
+                    (payload->>'earliest_impacted_date')::date AS earliest_impacted_date,
+                    row_number() OVER (
+                        PARTITION BY payload->>'security_id'
+                        ORDER BY
+                            (payload->>'earliest_impacted_date')::date ASC,
+                            created_at ASC,
+                            id ASC
+                    ) AS rn,
+                    min((payload->>'earliest_impacted_date')::date) OVER (
+                        PARTITION BY payload->>'security_id'
+                    ) AS min_impacted_date
+                FROM reprocessing_jobs
+                WHERE status = 'PENDING' AND job_type = 'RESET_WATERMARKS'
+            ),
+            keepers AS (
+                UPDATE reprocessing_jobs j
+                SET payload = jsonb_set(
+                        j.payload::jsonb,
+                        '{earliest_impacted_date}',
+                        to_jsonb(r.min_impacted_date::text)
+                    )::json,
+                    updated_at = now()
+                FROM ranked r
+                WHERE j.id = r.id
+                  AND r.rn = 1
+                  AND (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
+                RETURNING j.id
+            ),
+            deleted AS (
+                DELETE FROM reprocessing_jobs j
+                USING ranked r
+                WHERE j.id = r.id
+                  AND r.rn > 1
+                RETURNING j.id
+            )
+            SELECT count(*) FROM deleted;
+            """
+        )
+        result = await self.db.execute(normalize_stmt)
+        deleted_count = int(result.scalar_one())
+        return deleted_count
+
     async def _find_pending_reset_watermarks_job(
         self, security_id: str
     ) -> Optional[ReprocessingJob]:
@@ -79,6 +133,12 @@ class ReprocessingJobRepository:
         """
         order_clause = "created_at ASC, id ASC"
         if job_type == "RESET_WATERMARKS":
+            normalized_count = await self.normalize_pending_reset_watermarks_duplicates()
+            if normalized_count:
+                logger.info(
+                    "Normalized duplicate pending reset-watermarks jobs before claim.",
+                    extra={"deleted_count": normalized_count},
+                )
             order_clause = (
                 "(payload->>'earliest_impacted_date')::date ASC, " "created_at ASC, id ASC"
             )

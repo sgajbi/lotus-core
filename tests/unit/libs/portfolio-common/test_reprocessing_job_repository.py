@@ -24,13 +24,15 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
 ) -> None:
     mock_result = MagicMock()
     mock_result.mappings.return_value.all.return_value = []
-    mock_db_session.execute.return_value = mock_result
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 0
+    mock_db_session.execute.side_effect = [normalize_result, mock_result]
 
     await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=25)
 
-    mock_db_session.execute.assert_awaited_once()
-    query = mock_db_session.execute.await_args.args[0]
-    params = mock_db_session.execute.await_args.args[1]
+    assert mock_db_session.execute.await_count == 2
+    query = mock_db_session.execute.await_args_list[1].args[0]
+    params = mock_db_session.execute.await_args_list[1].args[1]
     query_text = str(query)
 
     assert "UPDATE reprocessing_jobs" in query_text
@@ -56,6 +58,43 @@ async def test_find_and_claim_jobs_uses_default_created_at_order_for_other_job_t
 
     assert "ORDER BY created_at ASC, id ASC" in query_text
     assert "(payload->>'earliest_impacted_date')::date ASC" not in query_text
+
+
+async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_cleanup(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_result = MagicMock()
+    mock_result.scalar_one.return_value = 2
+    mock_db_session.execute.return_value = mock_result
+
+    deleted_count = await repository.normalize_pending_reset_watermarks_duplicates()
+
+    assert deleted_count == 2
+    stmt = mock_db_session.execute.await_args.args[0]
+    stmt_text = str(stmt)
+    assert "WITH ranked AS" in stmt_text
+    assert "DELETE FROM reprocessing_jobs" in stmt_text
+    assert "jsonb_set" in stmt_text
+
+
+async def test_find_and_claim_jobs_normalizes_reset_watermarks_duplicates_before_claim(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 1
+    claim_result = MagicMock()
+    claim_result.mappings.return_value.all.return_value = []
+    mock_db_session.execute.side_effect = [normalize_result, claim_result]
+
+    await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
+
+    assert mock_db_session.execute.await_count == 2
+    normalize_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    claim_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    assert "WITH ranked AS" in str(normalize_stmt)
+    assert "UPDATE reprocessing_jobs" in str(claim_stmt)
 
 
 async def test_find_and_claim_jobs_maps_rows_to_models(
