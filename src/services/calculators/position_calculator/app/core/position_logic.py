@@ -87,8 +87,19 @@ class PositionCalculator:
             new_watermark = transaction_date - timedelta(days=1)
 
             new_state = await position_state_repo.increment_epoch_and_reset_watermark(
-                portfolio_id, security_id, new_watermark
+                portfolio_id, security_id, current_state.epoch, new_watermark
             )
+            if new_state is None:
+                logger.warning(
+                    "Skipping back-dated replay because the epoch fence is stale.",
+                    extra={
+                        "portfolio_id": portfolio_id,
+                        "security_id": security_id,
+                        "expected_epoch": current_state.epoch,
+                        "transaction_id": event.transaction_id,
+                    },
+                )
+                return
 
             historical_db_txns = await repo.get_all_transactions_for_security(
                 portfolio_id, security_id

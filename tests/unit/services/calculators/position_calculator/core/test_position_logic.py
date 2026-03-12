@@ -186,7 +186,7 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
 
     # ASSERT
     mock_state_repo.increment_epoch_and_reset_watermark.assert_awaited_once_with(
-        "P1", "S1", date(2025, 8, 19)
+        "P1", "S1", 0, date(2025, 8, 19)
     )
 
     # Assert that the metric was instrumented correctly
@@ -237,9 +237,45 @@ async def test_calculate_treats_existing_position_history_as_backdated_boundary(
     )
 
     mock_state_repo.increment_epoch_and_reset_watermark.assert_awaited_once_with(
-        "P1", "S1", date(2025, 8, 19)
+        "P1", "S1", 0, date(2025, 8, 19)
     )
     assert mock_outbox_repo.create_outbox_event.await_count == 1
+
+
+@pytest.mark.asyncio
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
+    mock_fencer_class: MagicMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_outbox_repo: AsyncMock,
+    sample_event: TransactionEvent,
+):
+    """
+    GIVEN a back-dated original event
+    WHEN the epoch bump loses its fence because another worker already advanced state
+    THEN no replay outbox events should be staged from the stale loser path.
+    """
+    mock_fencer_instance = mock_fencer_class.return_value
+    mock_fencer_instance.check = AsyncMock(return_value=True)
+    sample_event.epoch = None
+
+    mock_state_repo.get_or_create_state.return_value = PositionState(
+        watermark_date=date(2025, 8, 25), epoch=0
+    )
+    mock_repo.get_latest_completed_snapshot_date.return_value = None
+    mock_repo.get_latest_position_history_date.return_value = None
+    mock_state_repo.increment_epoch_and_reset_watermark.return_value = None
+
+    await PositionCalculator.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
+    )
+
+    mock_state_repo.increment_epoch_and_reset_watermark.assert_awaited_once_with(
+        "P1", "S1", 0, date(2025, 8, 19)
+    )
+    mock_repo.get_all_transactions_for_security.assert_not_awaited()
+    mock_outbox_repo.create_outbox_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio

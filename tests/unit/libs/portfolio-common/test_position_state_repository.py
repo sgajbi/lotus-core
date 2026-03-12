@@ -76,7 +76,7 @@ async def test_increment_epoch_and_reset_watermark(clean_db, async_db_session: A
 
     # ACT
     updated_state = await repo.increment_epoch_and_reset_watermark(
-        portfolio_id, security_id, new_watermark
+        portfolio_id, security_id, 0, new_watermark
     )
     await async_db_session.commit()
 
@@ -89,6 +89,28 @@ async def test_increment_epoch_and_reset_watermark(clean_db, async_db_session: A
     fetched_state = await async_db_session.get(PositionState, (portfolio_id, security_id))
     assert fetched_state.epoch == 1
     assert fetched_state.updated_at is not None
+
+
+async def test_increment_epoch_and_reset_watermark_returns_none_for_stale_epoch(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = PositionStateRepository(async_db_session)
+    portfolio_id = "STATE_P2"
+    security_id = "STATE_S2"
+
+    await repo.get_or_create_state(portfolio_id, security_id)
+    await async_db_session.commit()
+
+    updated_state = await repo.increment_epoch_and_reset_watermark(
+        portfolio_id, security_id, 1, date(2025, 5, 9)
+    )
+    await async_db_session.commit()
+
+    assert updated_state is None
+
+    fetched_state = await async_db_session.get(PositionState, (portfolio_id, security_id))
+    assert fetched_state.epoch == 0
+    assert fetched_state.status == "CURRENT"
 
 
 async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSession):

@@ -107,16 +107,23 @@ class PositionStateRepository:
 
     @async_timed(repository="PositionStateRepository", method="increment_epoch_and_reset_watermark")
     async def increment_epoch_and_reset_watermark(
-        self, portfolio_id: str, security_id: str, new_watermark_date: date
-    ) -> PositionState:
+        self,
+        portfolio_id: str,
+        security_id: str,
+        expected_epoch: int,
+        new_watermark_date: date,
+    ) -> PositionState | None:
         """
         Atomically increments the epoch, resets the watermark date, and sets the
-        status to 'REPROCESSING' for a given key. Returns the updated state.
+        status to 'REPROCESSING' for a given key if the caller still owns the
+        current epoch. Returns the updated state or None if the epoch fence is stale.
         """
         stmt = (
             update(PositionState)
             .where(
-                PositionState.portfolio_id == portfolio_id, PositionState.security_id == security_id
+                PositionState.portfolio_id == portfolio_id,
+                PositionState.security_id == security_id,
+                PositionState.epoch == expected_epoch,
             )
             .values(
                 epoch=PositionState.epoch + 1,
@@ -127,7 +134,7 @@ class PositionStateRepository:
             .returning(PositionState)
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one()
+        return result.scalar_one_or_none()
 
     @async_timed(repository="PositionStateRepository", method="update_watermarks_if_older")
     async def update_watermarks_if_older(
