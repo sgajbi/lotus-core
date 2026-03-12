@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     Portfolio,
     PortfolioValuationJob,
     PositionHistory,
+    PositionState,
     Transaction,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -183,6 +184,38 @@ def setup_holdings_data(db_engine):
             ]
         )
         session.flush()
+        session.add_all(
+            [
+                PositionState(
+                    portfolio_id="P1",
+                    security_id="S1",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id="P2",
+                    security_id="S1",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id="P3",
+                    security_id="S1",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id="P4",
+                    security_id="S2",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+            ]
+        )
 
         history_records = [
             PositionHistory(
@@ -341,6 +374,27 @@ def setup_first_open_date_data(db_engine):
         session.commit()
         session.add_all(
             [
+                PositionState(
+                    portfolio_id="P1",
+                    security_id="S1",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id="P1",
+                    security_id="S2",
+                    epoch=0,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id="P2",
+                    security_id="S1",
+                    epoch=1,
+                    watermark_date=date(2025, 8, 10),
+                    status="CURRENT",
+                ),
                 PositionHistory(
                     transaction_id="T1",
                     portfolio_id="P1",
