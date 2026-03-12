@@ -117,6 +117,14 @@ class PositionHistory(Base):
             "epoch",
             "position_date",
         ),
+        Index(
+            "ix_position_history_security_epoch_date_id_portfolio",
+            "security_id",
+            "epoch",
+            position_date.desc(),
+            id.desc(),
+            "portfolio_id",
+        ),
     )
 
 

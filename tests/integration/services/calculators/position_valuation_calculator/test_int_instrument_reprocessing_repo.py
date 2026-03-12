@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -84,34 +85,42 @@ def setup_reprocessing_trigger_data(db_engine, clean_db):
         session.commit()
 
 
-async def test_get_instrument_reprocessing_triggers(
+async def test_claim_instrument_reprocessing_triggers(
     setup_reprocessing_trigger_data, async_db_session: AsyncSession
 ):
     """
     GIVEN pending instrument reprocessing triggers in the database
-    WHEN get_instrument_reprocessing_triggers is called
-    THEN it should fetch the triggers ordered by earliest impacted date first.
+    WHEN claim_instrument_reprocessing_triggers is called
+    THEN it should atomically consume the triggers ordered by earliest impacted date first.
     """
-    # ARRANGE
     repo = ValuationRepository(async_db_session)
 
-    # ACT
-    triggers = await repo.get_instrument_reprocessing_triggers(batch_size=5)
+    triggers = await repo.claim_instrument_reprocessing_triggers(batch_size=5)
+    await async_db_session.commit()
 
-    # ASSERT
     assert len(triggers) == 2
-    security_ids = {t.security_id for t in triggers}
-    assert "S1" in security_ids
-    assert "S2" in security_ids
     assert [t.security_id for t in triggers] == ["S1", "S2"]
 
+    remaining_triggers = (
+        (
+            await async_db_session.execute(
+                select(InstrumentReprocessingState).order_by(
+                    InstrumentReprocessingState.security_id.asc()
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert remaining_triggers == []
 
-async def test_get_instrument_reprocessing_triggers_prioritizes_oldest_impacted_date(
+
+async def test_claim_instrument_reprocessing_triggers_prioritizes_oldest_impacted_date(
     async_db_session: AsyncSession, db_engine, clean_db
 ):
     """
     GIVEN multiple pending instrument reprocessing triggers
-    WHEN get_instrument_reprocessing_triggers is called
+    WHEN claim_instrument_reprocessing_triggers is called
     THEN the scheduler-facing order should prioritize the oldest impacted date,
     with updated_at and security_id only acting as tie-breakers.
     """
@@ -136,7 +145,8 @@ async def test_get_instrument_reprocessing_triggers_prioritizes_oldest_impacted_
 
     repo = ValuationRepository(async_db_session)
 
-    triggers = await repo.get_instrument_reprocessing_triggers(batch_size=10)
+    triggers = await repo.claim_instrument_reprocessing_triggers(batch_size=10)
+    await async_db_session.commit()
 
     assert [t.security_id for t in triggers] == ["S_EARLY", "S_MID", "S_LATE"]
 
@@ -534,62 +544,3 @@ async def test_find_portfolios_holding_security_on_date_ignores_stale_epochs(
     portfolios = await repo.find_portfolios_holding_security_on_date("S1", date(2025, 8, 10))
 
     assert portfolios == []
-
-
-async def test_delete_instrument_reprocessing_triggers(
-    setup_reprocessing_trigger_data, async_db_session: AsyncSession
-):
-    """
-    GIVEN existing instrument reprocessing triggers
-    WHEN delete_instrument_reprocessing_triggers is called
-    THEN the specified records should be removed from the database.
-    """
-    # ARRANGE
-    repo = ValuationRepository(async_db_session)
-    security_id_to_delete = "S1"
-
-    # ACT
-    await repo.delete_instrument_reprocessing_triggers([(security_id_to_delete, date(2025, 8, 10))])
-    await async_db_session.commit()
-
-    # ASSERT
-    remaining_triggers = await repo.get_instrument_reprocessing_triggers(batch_size=5)
-
-    assert len(remaining_triggers) == 1
-    assert remaining_triggers[0].security_id == "S2"
-
-
-async def test_delete_instrument_reprocessing_triggers_is_fenced_by_impacted_date(
-    async_db_session: AsyncSession, db_engine, clean_db
-):
-    """
-    GIVEN a scheduler fetched a trigger for a security at one impacted date
-    AND a newer back-dated event lowered the impacted date before delete
-    WHEN delete_instrument_reprocessing_triggers is called with the stale fence
-    THEN the newer trigger row must survive the delete.
-    """
-    with Session(db_engine) as session:
-        session.add(
-            InstrumentReprocessingState(
-                security_id="S1",
-                earliest_impacted_date=date(2025, 8, 10),
-            )
-        )
-        session.commit()
-
-    repo = ValuationRepository(async_db_session)
-
-    # Simulate a newer trigger arriving between scheduler fetch and delete.
-    with Session(db_engine) as session:
-        trigger = session.get(InstrumentReprocessingState, "S1")
-        trigger.earliest_impacted_date = date(2025, 8, 8)
-        session.commit()
-
-    await repo.delete_instrument_reprocessing_triggers([("S1", date(2025, 8, 10))])
-    await async_db_session.commit()
-
-    remaining_triggers = await repo.get_instrument_reprocessing_triggers(batch_size=5)
-
-    assert len(remaining_triggers) == 1
-    assert remaining_triggers[0].security_id == "S1"
-    assert remaining_triggers[0].earliest_impacted_date == date(2025, 8, 8)

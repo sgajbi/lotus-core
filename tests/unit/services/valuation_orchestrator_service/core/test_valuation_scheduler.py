@@ -367,7 +367,7 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
             correlation_id="corr-trigger-1",
         )
     ]
-    mock_repo.get_instrument_reprocessing_triggers.return_value = triggers
+    mock_repo.claim_instrument_reprocessing_triggers.return_value = triggers
 
     await scheduler._process_instrument_level_triggers(AsyncMock())
 
@@ -376,6 +376,6 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
         payload={"security_id": "S1", "earliest_impacted_date": "2025-08-05"},
         correlation_id="corr-trigger-1",
     )
-    mock_repo.delete_instrument_reprocessing_triggers.assert_awaited_once_with(
-        [("S1", date(2025, 8, 5))]
+    mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(
+        scheduler._batch_size
     )

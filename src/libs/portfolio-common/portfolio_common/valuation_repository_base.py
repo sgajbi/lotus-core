@@ -1,6 +1,6 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, cast, delete, func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -46,21 +46,32 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
-    @async_timed(repository="ValuationRepository", method="get_instrument_reprocessing_triggers")
-    async def get_instrument_reprocessing_triggers(
+    @async_timed(repository="ValuationRepository", method="claim_instrument_reprocessing_triggers")
+    async def claim_instrument_reprocessing_triggers(
         self, batch_size: int
     ) -> List[InstrumentReprocessingState]:
-        stmt = (
-            select(InstrumentReprocessingState)
+        ranked_trigger_ids = (
+            select(InstrumentReprocessingState.security_id)
             .order_by(
                 InstrumentReprocessingState.earliest_impacted_date.asc(),
                 InstrumentReprocessingState.updated_at.asc(),
                 InstrumentReprocessingState.security_id.asc(),
             )
             .limit(batch_size)
+            .with_for_update(skip_locked=True)
+        )
+
+        claimed_security_ids = list((await self.db.execute(ranked_trigger_ids)).scalars().all())
+        if not claimed_security_ids:
+            return []
+
+        stmt = (
+            delete(InstrumentReprocessingState)
+            .where(InstrumentReprocessingState.security_id.in_(claimed_security_ids))
+            .returning(InstrumentReprocessingState)
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     @async_timed(
         repository="ValuationRepository", method="find_open_position_keys_for_security_on_date"
@@ -108,21 +119,6 @@ class ValuationRepositoryBase:
 
         result = await self.db.execute(stmt)
         return [(row.portfolio_id, row.security_id, row.epoch) for row in result.all()]
-
-    @async_timed(repository="ValuationRepository", method="delete_instrument_reprocessing_triggers")
-    async def delete_instrument_reprocessing_triggers(
-        self,
-        trigger_fences: Sequence[Tuple[str, date]],
-    ) -> None:
-        if not trigger_fences:
-            return
-        stmt = delete(InstrumentReprocessingState).where(
-            tuple_(
-                InstrumentReprocessingState.security_id,
-                InstrumentReprocessingState.earliest_impacted_date,
-            ).in_(list(trigger_fences))
-        )
-        await self.db.execute(stmt)
 
     @async_timed(repository="ValuationRepository", method="get_portfolios_by_ids")
     async def get_portfolios_by_ids(self, portfolio_ids: List[str]) -> List[Portfolio]:

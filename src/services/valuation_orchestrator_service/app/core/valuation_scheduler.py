@@ -65,7 +65,7 @@ class ValuationScheduler:
         repo = ValuationRepository(db)
         repro_job_repo = ReprocessingJobRepository(db)
 
-        triggers = await repo.get_instrument_reprocessing_triggers(self._batch_size)
+        triggers = await repo.claim_instrument_reprocessing_triggers(self._batch_size)
         if not triggers:
             return
 
@@ -73,7 +73,6 @@ class ValuationScheduler:
             f"Found {len(triggers)} instrument-level reprocessing triggers to convert to jobs."
         )
 
-        processed_trigger_fences = []
         for trigger in triggers:
             payload = {
                 "security_id": trigger.security_id,
@@ -84,13 +83,10 @@ class ValuationScheduler:
                 payload=payload,
                 correlation_id=trigger.correlation_id,
             )
-            processed_trigger_fences.append((trigger.security_id, trigger.earliest_impacted_date))
-
-        if processed_trigger_fences:
-            await repo.delete_instrument_reprocessing_triggers(processed_trigger_fences)
-            logger.info(
-                f"Consumed and deleted {len(processed_trigger_fences)} instrument-level triggers."
-            )
+        logger.info(
+            "Consumed %s instrument-level triggers into durable replay jobs.",
+            len(triggers),
+        )
 
     async def _advance_watermarks(self, db):
         """
