@@ -1758,6 +1758,27 @@ async def test_reprocess_transactions_rejects_empty_transaction_ids(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+async def test_reprocess_transactions_deduplicates_transaction_ids_at_ingress(
+    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN1", "TXN2", "TXN1", "TXN2"]},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["accepted_count"] == 2
+
+    published_ids = [
+        call.kwargs["value"]["transaction_id"]
+        for call in mock_kafka_producer.publish_message.call_args_list
+    ]
+    assert published_ids == ["TXN1", "TXN2"]
+
+
 @pytest.mark.parametrize(
     ("path", "payload", "entity_type"),
     [

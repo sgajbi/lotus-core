@@ -51,15 +51,11 @@ REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         },
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the reprocessing request.",
-            "content": {
-                "application/json": {"example": REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
-            "content": {
-                "application/json": {"example": REPROCESSING_MODE_BLOCKED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": REPROCESSING_MODE_BLOCKED_EXAMPLE}},
         },
     },
     tags=["Reprocessing"],
@@ -82,7 +78,8 @@ async def reprocess_transactions(
     Accepts a list of transaction IDs and publishes a reprocessing request
     event for each to a Kafka topic.
     """
-    num_to_reprocess = len(request.transaction_ids)
+    ordered_unique_transaction_ids = list(dict.fromkeys(request.transaction_ids))
+    num_to_reprocess = len(ordered_unique_transaction_ids)
     idempotency_key = resolve_idempotency_key(http_request)
     try:
         await ingestion_job_service.assert_ingestion_writable()
@@ -101,7 +98,7 @@ async def reprocess_transactions(
     try:
         enforce_ingestion_write_rate_limit(
             endpoint="/reprocess/transactions",
-            record_count=len(request.transaction_ids),
+            record_count=num_to_reprocess,
         )
     except PermissionError as exc:
         raise HTTPException(
@@ -119,7 +116,7 @@ async def reprocess_transactions(
         correlation_id=correlation_id,
         request_id=request_id,
         trace_id=trace_id,
-        request_payload=request.model_dump(mode="json"),
+        request_payload={"transaction_ids": ordered_unique_transaction_ids},
     )
     if not job_result.created:
         return build_batch_ack(
@@ -138,7 +135,7 @@ async def reprocess_transactions(
     logger.info(f"Received request to reprocess {num_to_reprocess} transaction(s).")
 
     try:
-        for txn_id in request.transaction_ids:
+        for txn_id in ordered_unique_transaction_ids:
             event_payload = {"transaction_id": txn_id}
             kafka_producer.publish_message(
                 topic=REPROCESSING_REQUESTED_TOPIC,
@@ -153,7 +150,7 @@ async def reprocess_transactions(
         await ingestion_job_service.mark_failed(
             job_result.job.job_id,
             str(exc),
-            failed_record_keys=request.transaction_ids,
+            failed_record_keys=ordered_unique_transaction_ids,
         )
         raise
 
@@ -165,4 +162,3 @@ async def reprocess_transactions(
         accepted_count=num_to_reprocess,
         idempotency_key=idempotency_key,
     )
-
