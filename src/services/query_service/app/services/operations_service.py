@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,8 @@ from ..repositories.operations_repository import OperationsRepository
 
 
 class OperationsService:
+    SUPPORT_JOB_STALE_THRESHOLD = timedelta(minutes=15)
+
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
 
@@ -303,6 +305,8 @@ class OperationsService:
                     security_id=job.security_id,
                     epoch=job.epoch,
                     attempt_count=job.attempt_count,
+                    updated_at=job.updated_at,
+                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
                 )
                 for job in jobs
@@ -332,6 +336,8 @@ class OperationsService:
                     security_id=None,
                     epoch=None,
                     attempt_count=job.attempt_count,
+                    updated_at=job.updated_at,
+                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
                 )
                 for job in jobs
@@ -440,3 +446,12 @@ class OperationsService:
                 for finding in findings
             ],
         )
+
+    @classmethod
+    def _is_support_job_stale(
+        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+    ) -> bool:
+        if status != "PROCESSING" or updated_at is None:
+            return False
+        reference_now = now or datetime.now(timezone.utc)
+        return updated_at < reference_now - cls.SUPPORT_JOB_STALE_THRESHOLD

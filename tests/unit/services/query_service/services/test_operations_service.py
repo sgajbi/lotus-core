@@ -164,6 +164,7 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
 
 
 async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
+    updated_at = datetime(2025, 8, 31, 10, 15, tzinfo=timezone.utc)
     mock_ops_repo.get_valuation_jobs_count.return_value = 1
     mock_ops_repo.get_valuation_jobs.return_value = [
         type(
@@ -175,6 +176,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
                 "status": "PENDING",
                 "epoch": 1,
                 "attempt_count": 0,
+                "updated_at": updated_at,
                 "failure_reason": None,
             },
         )()
@@ -186,9 +188,12 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
     assert response.items[0].job_type == "VALUATION"
     assert response.items[0].security_id == "S1"
     assert response.items[0].business_date == date(2025, 8, 31)
+    assert response.items[0].updated_at == updated_at
+    assert response.items[0].is_stale_processing is False
 
 
 async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
+    updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
     mock_ops_repo.get_aggregation_jobs_count.return_value = 1
     mock_ops_repo.get_aggregation_jobs.return_value = [
         type(
@@ -198,6 +203,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
                 "aggregation_date": date(2025, 8, 31),
                 "status": "PROCESSING",
                 "attempt_count": 2,
+                "updated_at": updated_at,
                 "failure_reason": "timed out once",
             },
         )()
@@ -209,7 +215,38 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.items[0].job_type == "AGGREGATION"
     assert response.items[0].business_date == date(2025, 8, 31)
     assert response.items[0].attempt_count == 2
+    assert response.items[0].updated_at == updated_at
+    assert response.items[0].is_stale_processing is True
     assert response.items[0].failure_reason == "timed out once"
+
+
+async def test_support_job_stale_flag_only_marks_old_processing():
+    updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
+
+    assert (
+        OperationsService._is_support_job_stale(
+            "PROCESSING",
+            updated_at,
+            now=datetime(2025, 8, 31, 10, 20, tzinfo=timezone.utc),
+        )
+        is True
+    )
+    assert (
+        OperationsService._is_support_job_stale(
+            "PROCESSING",
+            updated_at,
+            now=datetime(2025, 8, 31, 10, 10, tzinfo=timezone.utc),
+        )
+        is False
+    )
+    assert (
+        OperationsService._is_support_job_stale(
+            "FAILED",
+            updated_at,
+            now=datetime(2025, 8, 31, 11, 0, tzinfo=timezone.utc),
+        )
+        is False
+    )
 
 
 async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_repo: AsyncMock):

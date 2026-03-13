@@ -409,6 +409,19 @@ class SupportJobRecord(BaseModel):
         description="Current retry attempt count for valuation jobs.",
         examples=[1],
     )
+    updated_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp of the most recent durable lifecycle update for the job.",
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    is_stale_processing: bool = Field(
+        ...,
+        description=(
+            "True when the job is in PROCESSING state and its last update is older than the "
+            "support stale threshold (15 minutes)."
+        ),
+        examples=[False],
+    )
     failure_reason: Optional[str] = Field(
         None,
         description="Failure reason (when status=FAILED).",
@@ -433,6 +446,8 @@ class SupportJobListResponse(BaseModel):
                     "security_id": "AAPL.OQ",
                     "epoch": 3,
                     "attempt_count": 1,
+                    "updated_at": "2025-12-30T10:15:09Z",
+                    "is_stale_processing": False,
                     "failure_reason": None,
                 }
             ]

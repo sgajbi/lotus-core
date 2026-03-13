@@ -211,6 +211,8 @@ async def test_valuation_jobs_success(async_test_client):
                 "security_id": "S1",
                 "epoch": 1,
                 "attempt_count": 0,
+                "updated_at": "2025-08-31T10:15:00Z",
+                "is_stale_processing": False,
                 "failure_reason": None,
             }
         ],
@@ -220,6 +222,7 @@ async def test_valuation_jobs_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["items"][0]["job_type"] == "VALUATION"
+    assert response.json()["items"][0]["is_stale_processing"] is False
 
 
 async def test_valuation_jobs_unexpected_maps_to_500(async_test_client):
@@ -247,6 +250,8 @@ async def test_aggregation_jobs_success(async_test_client):
                 "security_id": None,
                 "epoch": None,
                 "attempt_count": 2,
+                "updated_at": "2025-08-31T10:00:00Z",
+                "is_stale_processing": True,
                 "failure_reason": "timed out once",
             }
         ],
@@ -257,6 +262,7 @@ async def test_aggregation_jobs_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"][0]["job_type"] == "AGGREGATION"
     assert response.json()["items"][0]["attempt_count"] == 2
+    assert response.json()["items"][0]["is_stale_processing"] is True
     assert response.json()["items"][0]["failure_reason"] == "timed out once"
 
 

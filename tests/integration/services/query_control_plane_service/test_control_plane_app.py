@@ -153,6 +153,13 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_jobs["properties"]["items"]["description"] == (
         "Operational jobs for support workflows."
     )
+    support_job_record = components["SupportJobRecord"]
+    assert support_job_record["properties"]["updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable lifecycle update for the job."
+    )
+    assert support_job_record["properties"]["is_stale_processing"]["description"].startswith(
+        "True when the job is in PROCESSING state"
+    )
     assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
         "Number of valuation jobs currently in FAILED terminal state."
     )
