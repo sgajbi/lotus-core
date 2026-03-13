@@ -1105,7 +1105,7 @@ class ReprocessingJob(Base):
     __table_args__ = (
         Index(
             "ix_reprocessing_jobs_pending_resetwatermarks_priority",
-            text("((payload->>'earliest_impacted_date')::date)"),
+            text("(payload->>'earliest_impacted_date')"),
             "created_at",
             "id",
             postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),

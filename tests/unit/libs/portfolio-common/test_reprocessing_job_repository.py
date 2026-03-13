@@ -183,12 +183,15 @@ async def test_find_and_reset_stale_jobs_resets_processing_rows(
     mock_db_session: AsyncMock,
 ) -> None:
     mock_select_result = MagicMock()
-    mock_select_result.scalars.return_value = [10, 11]
+    mock_select_result.all.return_value = [
+        MagicMock(id=10, attempt_count=1),
+        MagicMock(id=11, attempt_count=2),
+    ]
     mock_update_result = MagicMock()
     mock_update_result.rowcount = 2
     mock_db_session.execute.side_effect = [mock_select_result, mock_update_result]
 
-    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30)
+    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30, max_attempts=3)
 
     assert reset_count == 2
     assert mock_db_session.execute.await_count == 2
@@ -203,13 +206,41 @@ async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
     mock_db_session: AsyncMock,
 ) -> None:
     mock_select_result = MagicMock()
-    mock_select_result.scalars.return_value = []
+    mock_select_result.all.return_value = []
     mock_db_session.execute.return_value = mock_select_result
 
     reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30)
 
     assert reset_count == 0
     assert mock_db_session.execute.await_count == 1
+
+
+async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_select_result = MagicMock()
+    mock_select_result.all.return_value = [
+        MagicMock(id=20, attempt_count=3),
+        MagicMock(id=21, attempt_count=1),
+    ]
+    mock_failed_result = MagicMock()
+    mock_reset_result = MagicMock()
+    mock_reset_result.rowcount = 1
+    mock_db_session.execute.side_effect = [
+        mock_select_result,
+        mock_failed_result,
+        mock_reset_result,
+    ]
+
+    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30, max_attempts=3)
+
+    assert reset_count == 1
+    assert mock_db_session.execute.await_count == 3
+    failed_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    reset_stmt = mock_db_session.execute.await_args_list[2].args[0]
+    assert "failure_reason" in str(failed_stmt)
+    assert "UPDATE reprocessing_jobs SET status=:status" in str(reset_stmt)
 
 
 async def test_create_job_coalesces_pending_reset_watermarks_job(

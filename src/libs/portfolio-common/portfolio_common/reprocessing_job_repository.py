@@ -219,19 +219,44 @@ class ReprocessingJobRepository:
         return jobs
 
     @async_timed(repository="ReprocessingJobRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(self, timeout_minutes: int = 15) -> int:
+    async def find_and_reset_stale_jobs(
+        self, timeout_minutes: int = 15, max_attempts: int = 3
+    ) -> int:
         stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_job_ids_stmt = select(ReprocessingJob.id).where(
+        stale_jobs_stmt = select(ReprocessingJob.id, ReprocessingJob.attempt_count).where(
             ReprocessingJob.status == "PROCESSING",
             ReprocessingJob.updated_at < stale_cutoff,
         )
-        stale_job_ids = list((await self.db.execute(stale_job_ids_stmt)).scalars())
-        if not stale_job_ids:
+        stale_rows = (await self.db.execute(stale_jobs_stmt)).all()
+        if not stale_rows:
+            return 0
+
+        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+        if failed_job_ids:
+            failure_stmt = (
+                update(ReprocessingJob)
+                .where(ReprocessingJob.id.in_(failed_job_ids))
+                .values(
+                    status="FAILED",
+                    failure_reason="Stale processing timeout exceeded max attempts",
+                    updated_at=func.now(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.execute(failure_stmt)
+            logger.warning(
+                "Marked stale reprocessing jobs as FAILED after max attempts.",
+                extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+            )
+
+        if not reset_job_ids:
             return 0
 
         stmt = (
             update(ReprocessingJob)
-            .where(ReprocessingJob.id.in_(stale_job_ids))
+            .where(ReprocessingJob.id.in_(reset_job_ids))
             .values(status="PENDING", updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
