@@ -36,6 +36,26 @@ async def test_middleware_generates_correlation_id_when_missing(async_test_clien
     assert response.headers["X-Correlation-ID"] == "ERP-abc"
 
 
+async def test_middleware_replaces_unset_lineage_headers(async_test_client):
+    with patch(
+        "src.services.event_replay_service.app.main.generate_correlation_id",
+        side_effect=["ERP-abc", "REQ-abc"],
+    ):
+        response = await async_test_client.get(
+            "/openapi.json",
+            headers={
+                "X-Correlation-ID": "<not-set>",
+                "X-Request-Id": "",
+                "X-Trace-Id": "<not-set>",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == "ERP-abc"
+    assert response.headers["X-Request-Id"] == "REQ-abc"
+    assert response.headers["X-Trace-Id"] not in ("", "<not-set>")
+
+
 async def test_lifespan_logs_startup_and_shutdown():
     with patch("src.services.event_replay_service.app.main.logger.info") as logger_info:
         async with lifespan(app):
