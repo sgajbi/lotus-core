@@ -833,6 +833,8 @@ class PortfolioAggregationJob(Base):
     aggregation_date = Column(Date, nullable=False, index=True)
     status = Column(String, nullable=False, default="PENDING", index=True)
     correlation_id = Column(String, nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

@@ -79,3 +79,21 @@ async def test_scheduler_omits_empty_correlation_header(
         headers=[],
     )
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_scheduler_reads_runtime_settings_from_environment(
+    mock_kafka_producer: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS", "9")
+    monkeypatch.setenv("AGGREGATION_SCHEDULER_BATCH_SIZE", "17")
+    monkeypatch.setenv("AGGREGATION_SCHEDULER_MAX_ATTEMPTS", "6")
+
+    with patch(
+        "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
+        return_value=mock_kafka_producer,
+    ):
+        scheduler = AggregationScheduler()
+
+    assert scheduler._poll_interval == 9
+    assert scheduler._batch_size == 17
+    assert scheduler._max_attempts == 6

@@ -9,6 +9,7 @@ from portfolio_common.events import PortfolioAggregationRequiredEvent
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
 from ..repositories.timeseries_repository import TimeseriesRepository
+from ..settings import get_aggregation_runtime_settings
 
 # src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py
 
@@ -18,8 +19,13 @@ logger = logging.getLogger(__name__)
 
 class AggregationScheduler:
     def __init__(self, poll_interval: int = 5, batch_size: int = 100):
-        self._poll_interval = poll_interval
-        self._batch_size = batch_size
+        runtime_settings = get_aggregation_runtime_settings(
+            scheduler_poll_interval_default=poll_interval,
+            scheduler_batch_size_default=batch_size,
+        )
+        self._poll_interval = runtime_settings.aggregation_scheduler_poll_interval_seconds
+        self._batch_size = runtime_settings.aggregation_scheduler_batch_size
+        self._max_attempts = runtime_settings.aggregation_scheduler_max_attempts
         self._running = True
         self._producer: KafkaProducer = get_kafka_producer()
 
@@ -58,7 +64,7 @@ class AggregationScheduler:
                     async with db.begin():
                         repo = TimeseriesRepository(db)
 
-                        await repo.find_and_reset_stale_jobs()
+                        await repo.find_and_reset_stale_jobs(max_attempts=self._max_attempts)
                         claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
 
                 if claimed_jobs:
