@@ -106,7 +106,10 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     mock_observe_claimed.assert_called_once_with("RESET_WATERMARKS", 1)
     mock_observe_completed.assert_called_once_with("RESET_WATERMARKS")
     mock_observe_failed.assert_not_called()
-    mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with(max_attempts=3)
+    mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with(
+        timeout_minutes=15,
+        max_attempts=3,
+    )
     mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with("RESET_WATERMARKS", 10)
     mock_valuation_repo.find_portfolios_holding_security_on_date.assert_awaited_once_with(
         "S1",
@@ -195,19 +198,24 @@ async def test_worker_resets_stale_jobs_before_claiming(mock_dependencies):
 
     await worker._process_batch()
 
-    mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with(max_attempts=3)
+    mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with(
+        timeout_minutes=15,
+        max_attempts=3,
+    )
     mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with("RESET_WATERMARKS", 10)
 
 
 async def test_worker_reads_poll_and_batch_from_environment(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", "7")
     monkeypatch.setenv("REPROCESSING_WORKER_BATCH_SIZE", "21")
+    monkeypatch.setenv("REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES", "14")
     monkeypatch.setenv("REPROCESSING_WORKER_MAX_ATTEMPTS", "5")
 
     worker = ReprocessingWorker()
 
     assert worker._poll_interval == 7
     assert worker._batch_size == 21
+    assert worker._stale_timeout_minutes == 14
     assert worker._max_attempts == 5
 
 

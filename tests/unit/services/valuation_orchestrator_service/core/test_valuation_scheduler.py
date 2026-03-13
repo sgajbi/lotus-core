@@ -404,6 +404,7 @@ async def test_scheduler_reads_max_attempts_from_environment(
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_INTERVAL", "9")
     monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "17")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "4")
+    monkeypatch.setenv("VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES", "12")
     monkeypatch.setenv("VALUATION_SCHEDULER_MAX_ATTEMPTS", "6")
 
     with patch(
@@ -415,6 +416,7 @@ async def test_scheduler_reads_max_attempts_from_environment(
     assert scheduler._poll_interval == 9
     assert scheduler._batch_size == 17
     assert scheduler._dispatch_rounds_per_poll == 4
+    assert scheduler._stale_timeout_minutes == 12
     assert scheduler._max_attempts == 6
 
 

@@ -33,6 +33,7 @@ class ReprocessingWorker:
         )
         self._poll_interval = runtime_settings.reprocessing_worker_poll_interval_seconds
         self._batch_size = runtime_settings.reprocessing_worker_batch_size
+        self._stale_timeout_minutes = runtime_settings.reprocessing_worker_stale_timeout_minutes
         self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
 
@@ -49,7 +50,10 @@ class ReprocessingWorker:
                     state_repo = PositionStateRepository(db)
                     valuation_repo = ValuationRepository(db)
 
-                    await job_repo.find_and_reset_stale_jobs(max_attempts=self._max_attempts)
+                    await job_repo.find_and_reset_stale_jobs(
+                        timeout_minutes=self._stale_timeout_minutes,
+                        max_attempts=self._max_attempts,
+                    )
 
                     claimed_jobs = await job_repo.find_and_claim_jobs(
                         "RESET_WATERMARKS", self._batch_size

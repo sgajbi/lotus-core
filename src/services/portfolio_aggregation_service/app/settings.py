@@ -18,6 +18,7 @@ def _env_positive_int(name: str, default: int) -> int:
 class AggregationRuntimeSettings:
     aggregation_scheduler_poll_interval_seconds: int
     aggregation_scheduler_batch_size: int
+    aggregation_scheduler_stale_timeout_minutes: int
     aggregation_scheduler_max_attempts: int
 
 
@@ -34,6 +35,10 @@ def get_aggregation_runtime_settings(
         aggregation_scheduler_batch_size=_env_positive_int(
             "AGGREGATION_SCHEDULER_BATCH_SIZE",
             scheduler_batch_size_default,
+        ),
+        aggregation_scheduler_stale_timeout_minutes=_env_positive_int(
+            "AGGREGATION_SCHEDULER_STALE_TIMEOUT_MINUTES",
+            15,
         ),
         aggregation_scheduler_max_attempts=_env_positive_int(
             "AGGREGATION_SCHEDULER_MAX_ATTEMPTS",
