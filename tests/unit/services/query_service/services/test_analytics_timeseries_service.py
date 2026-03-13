@@ -23,7 +23,9 @@ from src.services.query_service.app.services.analytics_timeseries_service import
 
 
 def make_service() -> AnalyticsTimeseriesService:
-    return AnalyticsTimeseriesService(MagicMock(spec=AsyncSession))
+    service = AnalyticsTimeseriesService(MagicMock(spec=AsyncSession))
+    service._analytics_export_stale_timeout_minutes = 15  # pylint: disable=protected-access
+    return service
 
 
 @pytest.mark.asyncio
@@ -723,6 +725,7 @@ async def test_create_export_job_reuses_existing() -> None:
         created_at=datetime(2026, 3, 1, tzinfo=UTC),
         started_at=datetime(2026, 3, 1, tzinfo=UTC),
         completed_at=datetime(2026, 3, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 3, 1, tzinfo=UTC),
     )
     service.export_repo = SimpleNamespace(
         get_latest_by_fingerprint=AsyncMock(return_value=existing),
@@ -738,6 +741,117 @@ async def test_create_export_job_reuses_existing() -> None:
         )
     )
     assert response.job_id == "aexp_existing"
+
+
+@pytest.mark.asyncio
+async def test_create_export_job_reuses_fresh_running_job() -> None:
+    service = make_service()
+    existing = SimpleNamespace(
+        job_id="aexp_running",
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        status="running",
+        request_fingerprint="fp",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        started_at=datetime(2026, 3, 1, tzinfo=UTC),
+        completed_at=None,
+        updated_at=datetime.now(UTC),
+    )
+    service.export_repo = SimpleNamespace(
+        get_latest_by_fingerprint=AsyncMock(return_value=existing),
+    )
+
+    response = await service.create_export_job(
+        AnalyticsExportCreateRequest(
+            dataset_type="portfolio_timeseries",
+            portfolio_id="P1",
+            portfolio_timeseries_request=PortfolioAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                period="one_month",
+            ),
+        )
+    )
+
+    assert response.job_id == "aexp_running"
+
+
+@pytest.mark.asyncio
+async def test_create_export_job_replaces_stale_running_job() -> None:
+    service = make_service()
+    existing = SimpleNamespace(
+        job_id="aexp_stale",
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        status="running",
+        request_fingerprint="fp",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        started_at=datetime(2026, 3, 1, tzinfo=UTC),
+        completed_at=None,
+        updated_at=datetime(2026, 3, 1, tzinfo=UTC),
+    )
+    new_row = SimpleNamespace(
+        job_id="aexp_new",
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        status="accepted",
+        request_fingerprint="fp2",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime.now(UTC),
+        started_at=None,
+        completed_at=None,
+        updated_at=datetime.now(UTC),
+    )
+
+    async def _mark_failed(row, *, error_message):
+        row.status = "failed"
+        row.error_message = error_message
+
+    async def _mark_running(row):
+        row.status = "running"
+
+    async def _mark_completed(row, *, result_payload, result_row_count):
+        row.status = "completed"
+        row.result_payload = result_payload
+        row.result_row_count = result_row_count
+
+    service.export_repo = SimpleNamespace(
+        get_latest_by_fingerprint=AsyncMock(return_value=existing),
+        create_job=AsyncMock(return_value=new_row),
+        get_job=AsyncMock(return_value=new_row),
+        mark_failed=AsyncMock(side_effect=_mark_failed),
+        mark_running=AsyncMock(side_effect=_mark_running),
+        mark_completed=AsyncMock(side_effect=_mark_completed),
+    )
+    service._collect_portfolio_timeseries_for_export = AsyncMock(  # pylint: disable=protected-access
+        return_value=([{"valuation_date": "2025-01-01"}], 1)
+    )
+
+    response = await service.create_export_job(
+        AnalyticsExportCreateRequest(
+            dataset_type="portfolio_timeseries",
+            portfolio_id="P1",
+            portfolio_timeseries_request=PortfolioAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                period="one_month",
+            ),
+        )
+    )
+
+    assert existing.status == "failed"
+    assert existing.error_message == "Stale analytics export job superseded by a new request."
+    assert response.job_id == "aexp_new"
+    service.export_repo.create_job.assert_awaited_once()
 
 
 @pytest.mark.asyncio

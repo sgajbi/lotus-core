@@ -56,7 +56,11 @@ class AnalyticsTimeseriesService:
         self.db = db
         self.repo = AnalyticsTimeseriesRepository(db)
         self.export_repo = AnalyticsExportRepository(db)
-        self._page_token_secret = load_query_service_settings().page_token_secret
+        settings = load_query_service_settings()
+        self._page_token_secret = settings.page_token_secret
+        self._analytics_export_stale_timeout_minutes = (
+            settings.analytics_export_stale_timeout_minutes
+        )
 
     def _request_fingerprint(self, payload: dict) -> str:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -577,8 +581,19 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=request_fingerprint,
                 dataset_type=request.dataset_type,
             )
-            if existing is not None and existing.status in {"accepted", "running", "completed"}:
-                return existing, True
+            if existing is not None:
+                if existing.status == "completed":
+                    return existing, True
+                if existing.status in {"accepted", "running"}:
+                    stale_threshold = datetime.now(UTC) - timedelta(
+                        minutes=self._analytics_export_stale_timeout_minutes
+                    )
+                    if existing.updated_at is not None and existing.updated_at >= stale_threshold:
+                        return existing, True
+                    await self.export_repo.mark_failed(
+                        existing,
+                        error_message=("Stale analytics export job superseded by a new request."),
+                    )
 
             row = await self.export_repo.create_job(
                 job_id=f"aexp_{uuid4().hex[:24]}",
