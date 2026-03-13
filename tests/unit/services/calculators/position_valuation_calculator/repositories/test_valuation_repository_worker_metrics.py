@@ -104,3 +104,27 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
 
     assert reset_count == 0
     reset_metric.assert_not_called()
+
+
+async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    oldest_pending = datetime(2026, 3, 3, tzinfo=timezone.utc)
+
+    row = MagicMock(
+        pending_count=5,
+        failed_count=2,
+        oldest_pending_created_at=oldest_pending,
+    )
+    result = MagicMock()
+    result.one.return_value = row
+    mock_db_session.execute.return_value = result
+
+    queue_stats = await repo.get_job_queue_stats()
+
+    assert queue_stats == {
+        "pending_count": 5,
+        "failed_count": 2,
+        "oldest_pending_created_at": oldest_pending,
+    }

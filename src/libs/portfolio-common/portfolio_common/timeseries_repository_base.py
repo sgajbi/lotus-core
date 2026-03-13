@@ -387,6 +387,22 @@ class TimeseriesRepositoryBase:
             )
         return reset_count
 
+    @async_timed(repository="TimeseriesRepository", method="get_job_queue_stats")
+    async def get_job_queue_stats(self) -> dict:
+        stmt = select(
+            func.count().filter(PortfolioAggregationJob.status == "PENDING").label("pending_count"),
+            func.count().filter(PortfolioAggregationJob.status == "FAILED").label("failed_count"),
+            func.min(PortfolioAggregationJob.created_at)
+            .filter(PortfolioAggregationJob.status == "PENDING")
+            .label("oldest_pending_created_at"),
+        )
+        row = (await self.db.execute(stmt)).one()
+        return {
+            "pending_count": int(row.pending_count or 0),
+            "failed_count": int(row.failed_count or 0),
+            "oldest_pending_created_at": row.oldest_pending_created_at,
+        }
+
     @async_timed(repository="TimeseriesRepository", method="get_last_snapshot_before")
     async def get_last_snapshot_before(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int

@@ -114,3 +114,23 @@ async def test_find_and_claim_eligible_jobs_increments_attempt_count(
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PROCESSING'" in compiled_query
     assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
+
+
+async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    result = MagicMock()
+    result.one.return_value = MagicMock(
+        pending_count=4,
+        failed_count=1,
+        oldest_pending_created_at=date(2025, 1, 1),
+    )
+    mock_db_session.execute.return_value = result
+
+    queue_stats = await repository.get_job_queue_stats()
+
+    assert queue_stats == {
+        "pending_count": 4,
+        "failed_count": 1,
+        "oldest_pending_created_at": date(2025, 1, 1),
+    }

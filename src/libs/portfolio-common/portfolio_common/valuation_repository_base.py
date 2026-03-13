@@ -1,6 +1,6 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, cast, func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -346,6 +346,22 @@ class ValuationRepositoryBase:
             logger.info("Found and claimed %s eligible valuation jobs.", len(claimed_jobs))
             self._observe_jobs_claimed(len(claimed_jobs))
         return [PortfolioValuationJob(**job) for job in claimed_jobs]
+
+    @async_timed(repository="ValuationRepository", method="get_job_queue_stats")
+    async def get_job_queue_stats(self) -> Dict[str, Any]:
+        stmt = select(
+            func.count().filter(PortfolioValuationJob.status == "PENDING").label("pending_count"),
+            func.count().filter(PortfolioValuationJob.status == "FAILED").label("failed_count"),
+            func.min(PortfolioValuationJob.created_at)
+            .filter(PortfolioValuationJob.status == "PENDING")
+            .label("oldest_pending_created_at"),
+        )
+        row = (await self.db.execute(stmt)).one()
+        return {
+            "pending_count": int(row.pending_count or 0),
+            "failed_count": int(row.failed_count or 0),
+            "oldest_pending_created_at": row.oldest_pending_created_at,
+        }
 
     @async_timed(repository="ValuationRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:

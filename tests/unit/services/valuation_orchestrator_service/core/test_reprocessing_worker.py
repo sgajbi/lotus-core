@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -23,6 +23,11 @@ def mock_dependencies():
     mock_valuation_repo = AsyncMock(spec=ValuationRepository)
     mock_state_repo = AsyncMock(spec=PositionStateRepository)
     mock_repro_job_repo = AsyncMock(spec=ReprocessingJobRepository)
+    mock_repro_job_repo.get_queue_stats.return_value = {
+        "pending_count": 0,
+        "failed_count": 0,
+        "oldest_pending_created_at": None,
+    }
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_db_session.begin.return_value = AsyncMock()
@@ -223,6 +228,39 @@ async def test_worker_reads_poll_and_batch_from_environment(monkeypatch: pytest.
     assert worker._batch_size == 21
     assert worker._stale_timeout_minutes == 14
     assert worker._max_attempts == 5
+
+
+async def test_worker_updates_queue_metrics(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
+    mock_repro_job_repo.get_queue_stats.return_value = {
+        "pending_count": 6,
+        "failed_count": 2,
+        "oldest_pending_created_at": datetime(2025, 8, 12, 0, 0, tzinfo=timezone.utc),
+    }
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.set_control_queue_pending"
+        ) as mock_set_pending,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.set_control_queue_failed_stored"
+        ) as mock_set_failed,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.set_control_queue_oldest_pending_age_seconds"
+        ) as mock_set_oldest,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.datetime"
+        ) as mock_datetime,
+    ):
+        mock_datetime.now.return_value = datetime(2025, 8, 12, 0, 10, tzinfo=timezone.utc)
+        mock_datetime.side_effect = datetime
+
+        await worker._update_queue_metrics(mock_repro_job_repo)
+
+    mock_set_pending.assert_called_once_with("reprocessing", 6)
+    mock_set_failed.assert_called_once_with("reprocessing", 2)
+    mock_set_oldest.assert_called_once_with("reprocessing", 600.0)
 
 
 async def test_worker_emits_noop_metric_when_no_impacted_portfolios(mock_dependencies):

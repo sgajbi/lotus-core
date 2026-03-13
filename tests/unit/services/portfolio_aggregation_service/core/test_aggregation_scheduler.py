@@ -1,5 +1,5 @@
-from datetime import date
-from unittest.mock import MagicMock, patch
+from datetime import date, datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.config import KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC
@@ -8,6 +8,9 @@ from portfolio_common.kafka_utils import KafkaProducer
 
 from src.services.portfolio_aggregation_service.app.core.aggregation_scheduler import (
     AggregationScheduler,
+)
+from src.services.portfolio_aggregation_service.app.repositories.timeseries_repository import (
+    TimeseriesRepository,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -99,3 +102,40 @@ async def test_scheduler_reads_runtime_settings_from_environment(
     assert scheduler._batch_size == 17
     assert scheduler._stale_timeout_minutes == 13
     assert scheduler._max_attempts == 6
+
+
+async def test_scheduler_updates_queue_metrics():
+    repo = AsyncMock(spec=TimeseriesRepository)
+    repo.get_job_queue_stats.return_value = {
+        "pending_count": 3,
+        "failed_count": 1,
+        "oldest_pending_created_at": datetime(2025, 8, 12, 0, 0, tzinfo=timezone.utc),
+    }
+
+    with (
+        patch(
+            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
+            return_value=MagicMock(spec=KafkaProducer),
+        ),
+        patch(
+            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.set_control_queue_pending"
+        ) as mock_set_pending,
+        patch(
+            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.set_control_queue_failed_stored"
+        ) as mock_set_failed,
+        patch(
+            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.set_control_queue_oldest_pending_age_seconds"
+        ) as mock_set_oldest,
+        patch(
+            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.datetime"
+        ) as mock_datetime,
+    ):
+        scheduler = AggregationScheduler()
+        mock_datetime.now.return_value = datetime(2025, 8, 12, 0, 2, tzinfo=timezone.utc)
+        mock_datetime.side_effect = datetime
+
+        await scheduler._update_queue_metrics(repo)
+
+    mock_set_pending.assert_called_once_with("aggregation", 3)
+    mock_set_failed.assert_called_once_with("aggregation", 1)
+    mock_set_oldest.assert_called_once_with("aggregation", 120.0)

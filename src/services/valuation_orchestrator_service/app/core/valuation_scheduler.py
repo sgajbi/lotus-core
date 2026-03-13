@@ -1,7 +1,7 @@
 # src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from portfolio_common.config import KAFKA_VALUATION_REQUIRED_TOPIC
@@ -17,6 +17,9 @@ from portfolio_common.monitoring import (
     SNAPSHOT_LAG_SECONDS,
     VALUATION_JOBS_CREATED_TOTAL,
     observe_reprocessing_stale_skips,
+    set_control_queue_failed_stored,
+    set_control_queue_oldest_pending_age_seconds,
+    set_control_queue_pending,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
@@ -68,6 +71,20 @@ class ValuationScheduler:
         repo = ValuationRepository(db)
         pending_triggers = await repo.get_instrument_reprocessing_triggers_count()
         INSTRUMENT_REPROCESSING_TRIGGERS_PENDING.set(pending_triggers)
+
+    async def _update_queue_metrics(self, db):
+        repo = ValuationRepository(db)
+        queue_stats = await repo.get_job_queue_stats()
+        set_control_queue_pending("valuation", queue_stats["pending_count"])
+        set_control_queue_failed_stored("valuation", queue_stats["failed_count"])
+        oldest_pending_created_at = queue_stats["oldest_pending_created_at"]
+        if oldest_pending_created_at is None:
+            set_control_queue_oldest_pending_age_seconds("valuation", 0.0)
+            return
+        age_seconds = (
+            datetime.now(timezone.utc) - oldest_pending_created_at.astimezone(timezone.utc)
+        ).total_seconds()
+        set_control_queue_oldest_pending_age_seconds("valuation", max(age_seconds, 0.0))
 
     async def _process_instrument_level_triggers(self, db):
         """
@@ -329,6 +346,7 @@ class ValuationScheduler:
                 async for db in get_async_db_session():
                     async with db.begin():
                         await self._update_reprocessing_metrics(db)
+                        await self._update_queue_metrics(db)
 
                 async for db in get_async_db_session():
                     async with db.begin():
@@ -359,6 +377,10 @@ class ValuationScheduler:
                 async for db in get_async_db_session():
                     async with db.begin():
                         await self._advance_watermarks(db)
+
+                async for db in get_async_db_session():
+                    async with db.begin():
+                        await self._update_queue_metrics(db)
 
             except Exception:
                 logger.error("Error in scheduler polling loop.", exc_info=True)

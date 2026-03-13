@@ -265,6 +265,24 @@ class ReprocessingJobRepository:
         result = await self.db.execute(stmt)
         return result.rowcount
 
+    @async_timed(repository="ReprocessingJobRepository", method="get_queue_stats")
+    async def get_queue_stats(self, job_type: str | None = None) -> Dict[str, Any]:
+        stmt = select(
+            func.count().filter(ReprocessingJob.status == "PENDING").label("pending_count"),
+            func.count().filter(ReprocessingJob.status == "FAILED").label("failed_count"),
+            func.min(ReprocessingJob.created_at)
+            .filter(ReprocessingJob.status == "PENDING")
+            .label("oldest_pending_created_at"),
+        )
+        if job_type is not None:
+            stmt = stmt.where(ReprocessingJob.job_type == job_type)
+        row = (await self.db.execute(stmt)).one()
+        return {
+            "pending_count": int(row.pending_count or 0),
+            "failed_count": int(row.failed_count or 0),
+            "oldest_pending_created_at": row.oldest_pending_created_at,
+        }
+
     @async_timed(repository="ReprocessingJobRepository", method="update_job_status")
     async def update_job_status(
         self, job_id: int, status: str, failure_reason: Optional[str] = None

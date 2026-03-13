@@ -215,6 +215,29 @@ async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
     assert mock_db_session.execute.await_count == 1
 
 
+async def test_get_queue_stats_filters_by_job_type(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    result = MagicMock()
+    result.one.return_value = MagicMock(
+        pending_count=7,
+        failed_count=2,
+        oldest_pending_created_at=None,
+    )
+    mock_db_session.execute.return_value = result
+
+    queue_stats = await repository.get_queue_stats("RESET_WATERMARKS")
+
+    assert queue_stats == {
+        "pending_count": 7,
+        "failed_count": 2,
+        "oldest_pending_created_at": None,
+    }
+    stmt = mock_db_session.execute.await_args.args[0]
+    assert "reprocessing_jobs.job_type" in str(stmt)
+
+
 async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,

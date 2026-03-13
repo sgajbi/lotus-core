@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -245,6 +245,42 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
     mock_observe_stale_skips.assert_called_once_with("watermark_advance", 1)
+
+
+async def test_scheduler_updates_queue_metrics(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    oldest_pending = datetime(2025, 8, 12, tzinfo=timezone.utc)
+    mock_repo.get_job_queue_stats.return_value = {
+        "pending_count": 4,
+        "failed_count": 2,
+        "oldest_pending_created_at": oldest_pending,
+    }
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_pending"
+        ) as mock_set_pending,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_failed_stored"
+        ) as mock_set_failed,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_oldest_pending_age_seconds"
+        ) as mock_set_oldest,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.datetime"
+        ) as mock_datetime,
+    ):
+        mock_datetime.now.return_value = datetime(2025, 8, 12, 0, 5, tzinfo=timezone.utc)
+        mock_datetime.side_effect = datetime
+
+        await scheduler._update_queue_metrics(AsyncMock())
+
+    mock_set_pending.assert_called_once_with("valuation", 4)
+    mock_set_failed.assert_called_once_with("valuation", 2)
+    mock_set_oldest.assert_called_once_with("valuation", 300.0)
 
 
 async def test_scheduler_normalizes_terminal_reprocessing_states(

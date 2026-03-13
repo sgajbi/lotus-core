@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import List
 
 from portfolio_common.config import KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC
@@ -7,6 +8,11 @@ from portfolio_common.database_models import PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioAggregationRequiredEvent
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+from portfolio_common.monitoring import (
+    set_control_queue_failed_stored,
+    set_control_queue_oldest_pending_age_seconds,
+    set_control_queue_pending,
+)
 
 from ..repositories.timeseries_repository import TimeseriesRepository
 from ..settings import get_aggregation_runtime_settings
@@ -33,6 +39,19 @@ class AggregationScheduler:
     def stop(self):
         logger.info("Aggregation scheduler shutdown signal received.")
         self._running = False
+
+    async def _update_queue_metrics(self, repo: TimeseriesRepository):
+        queue_stats = await repo.get_job_queue_stats()
+        set_control_queue_pending("aggregation", queue_stats["pending_count"])
+        set_control_queue_failed_stored("aggregation", queue_stats["failed_count"])
+        oldest_pending_created_at = queue_stats["oldest_pending_created_at"]
+        if oldest_pending_created_at is None:
+            set_control_queue_oldest_pending_age_seconds("aggregation", 0.0)
+            return
+        age_seconds = (
+            datetime.now(timezone.utc) - oldest_pending_created_at.astimezone(timezone.utc)
+        ).total_seconds()
+        set_control_queue_oldest_pending_age_seconds("aggregation", max(age_seconds, 0.0))
 
     async def _dispatch_jobs(self, jobs: List[PortfolioAggregationJob]):
         if not jobs:
@@ -64,12 +83,14 @@ class AggregationScheduler:
                 async for db in get_async_db_session():
                     async with db.begin():
                         repo = TimeseriesRepository(db)
+                        await self._update_queue_metrics(repo)
 
                         await repo.find_and_reset_stale_jobs(
                             timeout_minutes=self._stale_timeout_minutes,
                             max_attempts=self._max_attempts,
                         )
                         claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
+                        await self._update_queue_metrics(repo)
 
                 if claimed_jobs:
                     logger.info(f"Scheduler claimed {len(claimed_jobs)} jobs for processing.")
