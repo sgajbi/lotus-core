@@ -86,6 +86,17 @@ class OperationsRepository:
             else_=9,
         )
 
+    @staticmethod
+    def _reprocessing_key_priority(status_column, updated_at_column, stale_threshold: datetime):
+        return case(
+            (
+                and_(status_column == "REPROCESSING", updated_at_column < stale_threshold),
+                0,
+            ),
+            (status_column == "REPROCESSING", 1),
+            else_=9,
+        )
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -682,6 +693,53 @@ class OperationsRepository:
                 PipelineStageState.epoch.desc(),
                 PipelineStageState.updated_at.desc(),
                 PipelineStageState.id.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_reprocessing_keys_count(
+        self,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        security_id: Optional[str] = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(PositionState)
+            .where(PositionState.portfolio_id == portfolio_id)
+        )
+        if status:
+            stmt = stmt.where(PositionState.status == status)
+        if security_id:
+            stmt = stmt.where(PositionState.security_id == security_id)
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_reprocessing_keys(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: Optional[str] = None,
+        security_id: Optional[str] = None,
+        stale_minutes: int = 15,
+    ) -> list[PositionState]:
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        stmt = select(PositionState).where(PositionState.portfolio_id == portfolio_id)
+        if status:
+            stmt = stmt.where(PositionState.status == status)
+        if security_id:
+            stmt = stmt.where(PositionState.security_id == security_id)
+        stmt = (
+            stmt.order_by(
+                self._reprocessing_key_priority(
+                    PositionState.status,
+                    PositionState.updated_at,
+                    stale_threshold,
+                ).asc(),
+                PositionState.updated_at.asc(),
+                PositionState.security_id.asc(),
             )
             .offset(skip)
             .limit(limit)

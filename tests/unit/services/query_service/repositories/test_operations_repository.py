@@ -662,3 +662,48 @@ async def test_get_portfolio_control_stages_query(
     assert "CASE WHEN (pipeline_stage_state.status IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
     assert "pipeline_stage_state.business_date DESC" in compiled
     assert "LIMIT 10 OFFSET 1" in compiled
+
+
+async def test_get_reprocessing_keys_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+
+    value = await repository.get_reprocessing_keys_count(
+        portfolio_id="P1",
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+    )
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from position_state" in compiled.lower()
+    assert "position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+
+
+async def test_get_reprocessing_keys_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["key1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reprocessing_keys(
+        portfolio_id="P1",
+        skip=3,
+        limit=7,
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+    )
+
+    assert value == ["key1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from position_state" in compiled.lower()
+    assert "position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+    assert "CASE WHEN (position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.updated_at ASC" in compiled
+    assert "LIMIT 7 OFFSET 3" in compiled

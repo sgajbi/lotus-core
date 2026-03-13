@@ -128,6 +128,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings"
     ]["get"]
     control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
+    reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
+        "get"
+    ]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -243,10 +246,26 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "status_filter"
     )
     assert control_stage_status["description"].startswith("Optional control stage status filter")
+    reprocessing_status = next(
+        parameter
+        for parameter in reprocessing_keys["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert reprocessing_status["description"].startswith("Optional replay key status filter")
+    reprocessing_security = next(
+        parameter
+        for parameter in reprocessing_keys["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert reprocessing_security["description"].startswith("Optional security identifier filter")
     control_stages_not_found = control_stages["responses"]["404"]["content"]["application/json"][
         "example"
     ]
     assert control_stages_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    reprocessing_keys_not_found = reprocessing_keys["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
 
     reconciliation_run_schema = components["ReconciliationRunListResponse"]
     reconciliation_run_record = components["ReconciliationRunRecord"]
@@ -254,6 +273,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reconciliation_finding_record = components["ReconciliationFindingRecord"]
     control_stage_schema = components["PortfolioControlStageListResponse"]
     control_stage_record = components["PortfolioControlStageRecord"]
+    reprocessing_key_schema = components["ReprocessingKeyListResponse"]
+    reprocessing_key_record = components["ReprocessingKeyRecord"]
 
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
@@ -286,6 +307,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "True when the control stage blocks downstream publication or release decisions."
     )
     assert control_stage_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
+    )
+    assert reprocessing_key_schema["properties"]["items"]["description"] == (
+        "Durable replay key rows for support workflows."
+    )
+    assert reprocessing_key_record["properties"]["updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable lifecycle update for the key."
+    )
+    assert reprocessing_key_record["properties"]["is_stale_reprocessing"]["description"].startswith(
+        "True when the key is still marked REPROCESSING"
+    )
+    assert reprocessing_key_record["properties"]["operational_state"]["description"] == (
         "Derived operator-facing lifecycle state used for support triage ordering."
     )
 

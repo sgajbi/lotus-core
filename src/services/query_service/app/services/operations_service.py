@@ -17,6 +17,8 @@ from ..dtos.operations_dto import (
     ReconciliationFindingRecord,
     ReconciliationRunListResponse,
     ReconciliationRunRecord,
+    ReprocessingKeyListResponse,
+    ReprocessingKeyRecord,
     ReprocessingSloBucket,
     SupportJobListResponse,
     SupportJobRecord,
@@ -79,6 +81,16 @@ class OperationsService:
     @classmethod
     def _get_portfolio_control_stage_operational_state(cls, status: str | None) -> str:
         return "BLOCKING" if cls._is_controls_blocking(status) else "COMPLETED"
+
+    @classmethod
+    def _get_reprocessing_key_operational_state(
+        cls, status: str | None, updated_at: datetime | None
+    ) -> str:
+        if cls._is_reprocessing_key_stale(status, updated_at):
+            return "STALE_REPROCESSING"
+        if status == "REPROCESSING":
+            return "REPROCESSING"
+        return "CURRENT"
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
@@ -585,6 +597,56 @@ class OperationsService:
             ],
         )
 
+    async def get_reprocessing_keys(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: str | None = None,
+        security_id: str | None = None,
+    ) -> ReprocessingKeyListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        total, keys = await asyncio.gather(
+            self.repo.get_reprocessing_keys_count(
+                portfolio_id=portfolio_id,
+                status=status,
+                security_id=security_id,
+            ),
+            self.repo.get_reprocessing_keys(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                security_id=security_id,
+                stale_minutes=stale_minutes,
+            ),
+        )
+        return ReprocessingKeyListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                ReprocessingKeyRecord(
+                    security_id=key.security_id,
+                    epoch=key.epoch,
+                    watermark_date=key.watermark_date,
+                    status=key.status,
+                    updated_at=key.updated_at,
+                    is_stale_reprocessing=self._is_reprocessing_key_stale(
+                        key.status,
+                        key.updated_at,
+                    ),
+                    operational_state=self._get_reprocessing_key_operational_state(
+                        key.status,
+                        key.updated_at,
+                    ),
+                )
+                for key in keys
+            ],
+        )
+
     @classmethod
     def _is_support_job_stale(
         cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
@@ -601,6 +663,12 @@ class OperationsService:
         normalized_status = cls._normalize_analytics_export_status(status)
         normalized_status = "PROCESSING" if normalized_status == "running" else normalized_status
         return cls._is_support_job_stale(normalized_status, updated_at, now)
+
+    @classmethod
+    def _is_reprocessing_key_stale(
+        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+    ) -> bool:
+        return cls._is_support_job_stale(status, updated_at, now)
 
     @staticmethod
     def _get_analytics_export_backlog_age_minutes(

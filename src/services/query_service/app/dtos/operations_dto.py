@@ -819,3 +819,72 @@ class PortfolioControlStageListResponse(BaseModel):
             ]
         ],
     )
+
+
+class ReprocessingKeyRecord(BaseModel):
+    security_id: str = Field(
+        ...,
+        description="Security identifier for the durable portfolio-security replay key.",
+        examples=["SEC-US-IBM"],
+    )
+    epoch: int = Field(
+        ...,
+        description="Current active epoch for the replay key.",
+        examples=[3],
+    )
+    watermark_date: date = Field(
+        ...,
+        description="Current replay watermark date for the portfolio-security key.",
+        examples=["2026-03-10"],
+    )
+    status: str = Field(
+        ...,
+        description="Current durable reprocessing state for the key.",
+        examples=["REPROCESSING"],
+    )
+    updated_at: datetime = Field(
+        ...,
+        description="UTC timestamp of the most recent durable lifecycle update for the key.",
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    is_stale_reprocessing: bool = Field(
+        ...,
+        description=(
+            "True when the key is still marked REPROCESSING and its last durable update is older "
+            "than the support stale threshold (15 minutes)."
+        ),
+        examples=[False],
+    )
+    operational_state: Literal["STALE_REPROCESSING", "REPROCESSING", "CURRENT"] = Field(
+        ...,
+        description="Derived operator-facing lifecycle state used for support triage ordering.",
+        examples=["REPROCESSING"],
+    )
+
+
+class ReprocessingKeyListResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    total: int = Field(
+        ...,
+        description="Total durable portfolio-security replay keys matching the filter.",
+        examples=[4],
+    )
+    skip: int = Field(..., description="Pagination offset.", examples=[0])
+    limit: int = Field(..., description="Pagination limit.", examples=[100])
+    items: list[ReprocessingKeyRecord] = Field(
+        ...,
+        description="Durable replay key rows for support workflows.",
+        examples=[
+            [
+                {
+                    "security_id": "SEC-US-IBM",
+                    "epoch": 3,
+                    "watermark_date": "2026-03-10",
+                    "status": "REPROCESSING",
+                    "updated_at": "2026-03-13T10:15:09Z",
+                    "is_stale_reprocessing": False,
+                    "operational_state": "REPROCESSING",
+                }
+            ]
+        ],
+    )

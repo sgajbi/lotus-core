@@ -471,6 +471,50 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
     )
 
 
+async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: AsyncMock):
+    updated_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
+    mock_ops_repo.get_reprocessing_keys_count.return_value = 1
+    mock_ops_repo.get_reprocessing_keys.return_value = [
+        type(
+            "PositionStateStub",
+            (),
+            {
+                "security_id": "SEC-US-IBM",
+                "epoch": 3,
+                "watermark_date": date(2026, 3, 10),
+                "status": "REPROCESSING",
+                "updated_at": updated_at,
+            },
+        )()
+    ]
+
+    response = await service.get_reprocessing_keys(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+    )
+
+    assert response.portfolio_id == "P1"
+    assert response.total == 1
+    assert response.items[0].security_id == "SEC-US-IBM"
+    assert response.items[0].epoch == 3
+    assert response.items[0].watermark_date == date(2026, 3, 10)
+    assert response.items[0].status == "REPROCESSING"
+    assert response.items[0].updated_at == updated_at
+    assert response.items[0].is_stale_reprocessing is False
+    assert response.items[0].operational_state == "REPROCESSING"
+    mock_ops_repo.get_reprocessing_keys.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+        stale_minutes=15,
+    )
+
+
 async def test_get_support_overview_raises_when_portfolio_missing(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
