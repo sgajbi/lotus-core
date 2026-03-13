@@ -169,7 +169,12 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
         type(
             "AggregationJobStub",
             (),
-            {"aggregation_date": date(2025, 8, 31), "status": "PROCESSING"},
+            {
+                "aggregation_date": date(2025, 8, 31),
+                "status": "PROCESSING",
+                "attempt_count": 2,
+                "failure_reason": "timed out once",
+            },
         )()
     ]
 
@@ -178,6 +183,8 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.total == 1
     assert response.items[0].job_type == "AGGREGATION"
     assert response.items[0].business_date == date(2025, 8, 31)
+    assert response.items[0].attempt_count == 2
+    assert response.items[0].failure_reason == "timed out once"
 
 
 async def test_get_support_overview_raises_when_portfolio_missing(

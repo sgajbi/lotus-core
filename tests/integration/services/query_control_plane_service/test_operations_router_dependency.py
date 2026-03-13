@@ -234,8 +234,8 @@ async def test_aggregation_jobs_success(async_test_client):
                 "status": "PROCESSING",
                 "security_id": None,
                 "epoch": None,
-                "attempt_count": None,
-                "failure_reason": None,
+                "attempt_count": 2,
+                "failure_reason": "timed out once",
             }
         ],
     }
@@ -244,6 +244,8 @@ async def test_aggregation_jobs_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["items"][0]["job_type"] == "AGGREGATION"
+    assert response.json()["items"][0]["attempt_count"] == 2
+    assert response.json()["items"][0]["failure_reason"] == "timed out once"
 
 
 async def test_aggregation_jobs_unexpected_maps_to_500(async_test_client):

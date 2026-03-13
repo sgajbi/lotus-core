@@ -295,8 +295,8 @@ class OperationsService:
                     status=job.status,
                     security_id=None,
                     epoch=None,
-                    attempt_count=None,
-                    failure_reason=None,
+                    attempt_count=job.attempt_count,
+                    failure_reason=job.failure_reason,
                 )
                 for job in jobs
             ],
