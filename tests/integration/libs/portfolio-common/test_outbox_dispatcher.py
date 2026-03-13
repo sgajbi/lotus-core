@@ -6,12 +6,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
+from portfolio_common import outbox_dispatcher as outbox_dispatcher_module
 from portfolio_common.database_models import OutboxEvent
-
-# Import async session tools
 from portfolio_common.db import AsyncSessionLocal
 from portfolio_common.kafka_utils import KafkaProducer
-from portfolio_common import outbox_dispatcher as outbox_dispatcher_module
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy import text
@@ -302,6 +300,56 @@ def test_dispatcher_marks_terminal_failures_as_failed(db_engine, clean_db):
         ).one()
         assert status == "FAILED"
         assert retry_count == 3
+
+
+def test_dispatcher_respects_configured_terminal_retry_ceiling(db_engine, clean_db):
+    """
+    GIVEN a pending outbox event with retry_count just below a custom ceiling
+    WHEN delivery fails and the dispatcher uses a non-default max_retries
+    THEN the event should move to FAILED at that configured threshold.
+    """
+    failing_producer = MagicMock(spec=KafkaProducer)
+
+    def _failing_flush(timeout=10):
+        for call in failing_producer.publish_message.call_args_list:
+            kwargs = call.kwargs
+            cb = kwargs.get("on_delivery")
+            outbox_id = kwargs.get("outbox_id")
+            if cb and outbox_id:
+                cb(outbox_id, False, "terminal failure")
+
+    failing_producer.flush.side_effect = _failing_flush
+
+    TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    aggregate_id = f"custom-terminal-agg-{uuid.uuid4()}"
+    with TestSessionFactory() as session:
+        with session.begin():
+            session.add(
+                OutboxEvent(
+                    aggregate_type="TerminalFailureTest",
+                    aggregate_id=aggregate_id,
+                    status="PENDING",
+                    event_type="TestEvent",
+                    payload="{}",
+                    topic="terminal.topic",
+                    retry_count=1,
+                )
+            )
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=failing_producer,
+        db_session_factory=TestSessionFactory,
+        max_retries=2,
+    )
+    dispatcher._process_batch_sync()
+
+    with TestSessionFactory() as session:
+        status, retry_count = session.execute(
+            text("SELECT status, retry_count FROM outbox_events WHERE aggregate_id = :id"),
+            {"id": aggregate_id},
+        ).one()
+        assert status == "FAILED"
+        assert retry_count == 2
 
 
 def test_dispatcher_reads_pending_failed_and_oldest_age_gauges(db_engine, clean_db, monkeypatch):

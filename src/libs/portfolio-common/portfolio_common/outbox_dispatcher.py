@@ -2,6 +2,8 @@
 import asyncio
 import json
 import logging
+import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -23,9 +25,28 @@ from portfolio_common.monitoring import (
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 3
-BASE_RETRY_DELAY = 2  # seconds
 TERMINAL_FAILURE_STATUS = "FAILED"
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return max(1, int(default))
+    try:
+        return max(1, int(raw))
+    except Exception:
+        return max(1, int(default))
+
+
+@dataclass(frozen=True, slots=True)
+class OutboxRuntimeSettings:
+    max_retries: int
+
+
+def get_outbox_runtime_settings(*, max_retries_default: int = 3) -> OutboxRuntimeSettings:
+    return OutboxRuntimeSettings(
+        max_retries=_env_positive_int("OUTBOX_DISPATCHER_MAX_RETRIES", max_retries_default),
+    )
 
 
 class OutboxDispatcher:
@@ -42,12 +63,17 @@ class OutboxDispatcher:
         poll_interval: int = 5,
         batch_size: int = 50,
         db_session_factory: Optional[sessionmaker] = None,
+        max_retries: Optional[int] = None,
     ):
         self._producer = kafka_producer
         self._poll_interval = poll_interval
         self._batch_size = batch_size
         self._running = True
         self._session_factory = db_session_factory or SessionLocal
+        runtime_settings = get_outbox_runtime_settings()
+        self._max_retries = (
+            max(1, int(max_retries)) if max_retries is not None else runtime_settings.max_retries
+        )
 
     def stop(self):
         logger.info("Outbox dispatcher shutdown signal received.")
@@ -159,7 +185,7 @@ class OutboxDispatcher:
                     terminal_failure_ids = [
                         e.id
                         for e in events_to_process
-                        if e.id in failure_ids and (e.retry_count or 0) + 1 >= MAX_RETRIES
+                        if e.id in failure_ids and (e.retry_count or 0) + 1 >= self._max_retries
                     ]
                     retryable_failure_ids = [
                         failure_id
@@ -227,7 +253,7 @@ class OutboxDispatcher:
                                 extra={
                                     "outbox_id": fid,
                                     "reason": reason,
-                                    "max_retries": MAX_RETRIES,
+                                    "max_retries": self._max_retries,
                                 },
                             )
 
