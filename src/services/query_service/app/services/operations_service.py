@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.operations_dto import (
+    AnalyticsExportJobListResponse,
+    AnalyticsExportJobRecord,
     CalculatorSloBucket,
     CalculatorSloResponse,
     LineageKeyListResponse,
@@ -327,6 +329,36 @@ class OperationsService:
                     epoch=None,
                     attempt_count=job.attempt_count,
                     failure_reason=job.failure_reason,
+                )
+                for job in jobs
+            ],
+        )
+
+    async def get_analytics_export_jobs(
+        self, portfolio_id: str, skip: int, limit: int, status: str | None = None
+    ) -> AnalyticsExportJobListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        total, jobs = await asyncio.gather(
+            self.repo.get_analytics_export_jobs_count(portfolio_id=portfolio_id, status=status),
+            self.repo.get_analytics_export_jobs(
+                portfolio_id=portfolio_id, skip=skip, limit=limit, status=status
+            ),
+        )
+        return AnalyticsExportJobListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                AnalyticsExportJobRecord(
+                    job_id=job.job_id,
+                    dataset_type=job.dataset_type,
+                    status=job.status,
+                    created_at=job.created_at,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at,
+                    result_row_count=job.result_row_count,
+                    error_message=job.error_message,
                 )
                 for job in jobs
             ],

@@ -6,6 +6,7 @@ from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.operations_dto import (
+    AnalyticsExportJobListResponse,
     CalculatorSloResponse,
     LineageKeyListResponse,
     LineageResponse,
@@ -18,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Operations Support"])
 
-PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {
-    "detail": "Portfolio with id PORT-OPS-001 not found"
-}
+PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-OPS-001 not found"}
 
 LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
@@ -196,6 +195,47 @@ async def get_aggregation_jobs(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while listing aggregation jobs.",
+        )
+
+
+@router.get(
+    "/support/portfolios/{portfolio_id}/analytics-export-jobs",
+    response_model=AnalyticsExportJobListResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
+    summary="List analytics export jobs for support workflows",
+    description=(
+        "What: List durable analytics export jobs for a portfolio with support filters.\n"
+        "How: Query export job lifecycle records with pagination and optional status filtering.\n"
+        "When: Use to investigate stuck, failed, or repeated analytics export requests."
+    ),
+)
+async def get_analytics_export_jobs(
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    status_filter: Optional[str] = Query(
+        None,
+        description="Optional export job status filter (e.g., accepted, running, failed).",
+        examples=["failed"],
+    ),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
+    service: OperationsService = Depends(get_operations_service),
+):
+    try:
+        return await service.get_analytics_export_jobs(
+            portfolio_id=portfolio_id, skip=skip, limit=limit, status=status_filter
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception:
+        logger.exception("Failed to list analytics export jobs for portfolio %s", portfolio_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected server error occurred while listing analytics export jobs.",
         )
 
 

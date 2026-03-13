@@ -449,3 +449,32 @@ class OperationsRepository:
             .limit(limit)
         )
         return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_analytics_export_jobs_count(
+        self, portfolio_id: str, status: Optional[str] = None
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(AnalyticsExportJob)
+            .where(AnalyticsExportJob.portfolio_id == portfolio_id)
+        )
+        if status:
+            stmt = stmt.where(AnalyticsExportJob.status == status)
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_analytics_export_jobs(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: Optional[str] = None,
+    ) -> list[AnalyticsExportJob]:
+        stmt = select(AnalyticsExportJob).where(AnalyticsExportJob.portfolio_id == portfolio_id)
+        if status:
+            stmt = stmt.where(AnalyticsExportJob.status == status)
+        stmt = (
+            stmt.order_by(AnalyticsExportJob.created_at.desc(), AnalyticsExportJob.id.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())

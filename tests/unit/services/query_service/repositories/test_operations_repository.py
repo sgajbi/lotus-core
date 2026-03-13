@@ -478,3 +478,36 @@ async def test_get_aggregation_jobs_query_with_status(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+
+
+async def test_get_analytics_export_jobs_count_with_status(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 5)
+
+    value = await repository.get_analytics_export_jobs_count(portfolio_id="P1", status="failed")
+
+    assert value == 5
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.status = 'failed'" in compiled
+
+
+async def test_get_analytics_export_jobs_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["exp1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_analytics_export_jobs(
+        portfolio_id="P1", skip=1, limit=3, status="running"
+    )
+
+    assert value == ["exp1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.status = 'running'" in compiled
+    assert "ORDER BY analytics_export_jobs.created_at DESC" in compiled

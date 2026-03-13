@@ -118,11 +118,27 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
     )
 
+    analytics_export_jobs = schema["paths"][
+        "/support/portfolios/{portfolio_id}/analytics-export-jobs"
+    ]["get"]
+    analytics_export_status = next(
+        parameter
+        for parameter in analytics_export_jobs["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert analytics_export_status["description"].startswith("Optional export job status filter")
+    analytics_export_not_found = analytics_export_jobs["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert analytics_export_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+
     components = schema["components"]["schemas"]
     calculator_slo = components["CalculatorSloResponse"]
     lineage_keys = components["LineageKeyListResponse"]
     support_jobs = components["SupportJobListResponse"]
     support_overview = components["SupportOverviewResponse"]
+    analytics_export_jobs_schema = components["AnalyticsExportJobListResponse"]
+    analytics_export_job_record = components["AnalyticsExportJobRecord"]
 
     assert calculator_slo["properties"]["valuation"]["description"] == (
         "Valuation calculator SLO snapshot for this portfolio."
@@ -149,6 +165,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["analytics_export_backlog_age_minutes"][
         "description"
     ].startswith("Backlog age in minutes from the oldest waiting/running analytics export job")
+    assert analytics_export_jobs_schema["properties"]["items"]["description"] == (
+        "Durable analytics export jobs for support workflows."
+    )
+    assert analytics_export_job_record["properties"]["dataset_type"]["description"] == (
+        "Analytics dataset exported by the job."
+    )
 
 
 async def test_openapi_describes_simulation_parameters_and_examples(async_test_client):

@@ -270,6 +270,45 @@ async def test_aggregation_jobs_unexpected_maps_to_500(async_test_client):
     assert "aggregation jobs" in response.json()["detail"].lower()
 
 
+async def test_analytics_export_jobs_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_analytics_export_jobs.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "job_id": "aexp_1234567890abcdef",
+                "dataset_type": "portfolio_timeseries",
+                "status": "FAILED",
+                "created_at": "2026-03-13T10:15:00Z",
+                "started_at": "2026-03-13T10:15:01Z",
+                "completed_at": "2026-03-13T10:15:02Z",
+                "result_row_count": None,
+                "error_message": "Unexpected analytics export processing failure.",
+            }
+        ],
+    }
+
+    response = await client.get("/support/portfolios/P1/analytics-export-jobs?status_filter=FAILED")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["job_id"] == "aexp_1234567890abcdef"
+    assert response.json()["items"][0]["dataset_type"] == "portfolio_timeseries"
+    assert response.json()["items"][0]["status"] == "FAILED"
+
+
+async def test_analytics_export_jobs_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_analytics_export_jobs.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/analytics-export-jobs?status_filter=FAILED")
+
+    assert response.status_code == 500
+    assert "analytics export jobs" in response.json()["detail"].lower()
+
+
 async def test_lineage_keys_unexpected_maps_to_500(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage_keys.side_effect = RuntimeError("boom")
@@ -315,6 +354,18 @@ async def test_aggregation_jobs_not_found_maps_to_404(async_test_client):
     mock_service.get_aggregation_jobs.side_effect = ValueError("not found")
 
     response = await client.get("/support/portfolios/P404/aggregation-jobs?status=PROCESSING")
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_analytics_export_jobs_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_analytics_export_jobs.side_effect = ValueError("not found")
+
+    response = await client.get(
+        "/support/portfolios/P404/analytics-export-jobs?status_filter=FAILED"
+    )
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()

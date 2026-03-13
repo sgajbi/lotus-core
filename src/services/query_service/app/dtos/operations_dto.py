@@ -438,3 +438,67 @@ class SupportJobListResponse(BaseModel):
             ]
         ],
     )
+
+
+class AnalyticsExportJobRecord(BaseModel):
+    job_id: str = Field(
+        ...,
+        description="Stable analytics export job identifier.",
+        examples=["aexp_1234567890abcdef"],
+    )
+    dataset_type: str = Field(
+        ..., description="Analytics dataset exported by the job.", examples=["portfolio_timeseries"]
+    )
+    status: str = Field(
+        ..., description="Current analytics export job status.", examples=["running"]
+    )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the export job was created.",
+        examples=["2026-03-13T10:15:00Z"],
+    )
+    started_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when export processing started.",
+        examples=["2026-03-13T10:15:01Z"],
+    )
+    completed_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when export processing completed or failed.",
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    result_row_count: Optional[int] = Field(
+        None,
+        description="Number of rows emitted when the export completed successfully.",
+        examples=[365],
+    )
+    error_message: Optional[str] = Field(
+        None,
+        description="Failure reason when the export job reaches FAILED state.",
+        examples=["Missing FX rate for EUR/USD on 2025-01-31."],
+    )
+
+
+class AnalyticsExportJobListResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    total: int = Field(..., description="Total export jobs matching the filter.", examples=[12])
+    skip: int = Field(..., description="Pagination offset.", examples=[0])
+    limit: int = Field(..., description="Pagination limit.", examples=[50])
+    items: list[AnalyticsExportJobRecord] = Field(
+        ...,
+        description="Durable analytics export jobs for support workflows.",
+        examples=[
+            [
+                {
+                    "job_id": "aexp_1234567890abcdef",
+                    "dataset_type": "portfolio_timeseries",
+                    "status": "failed",
+                    "created_at": "2026-03-13T10:15:00Z",
+                    "started_at": "2026-03-13T10:15:01Z",
+                    "completed_at": "2026-03-13T10:15:02Z",
+                    "result_row_count": None,
+                    "error_message": "Unexpected analytics export processing failure.",
+                }
+            ]
+        ],
+    )

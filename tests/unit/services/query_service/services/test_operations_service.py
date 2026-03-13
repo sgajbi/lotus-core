@@ -212,6 +212,40 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.items[0].failure_reason == "timed out once"
 
 
+async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
+    created_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
+    started_at = datetime(2026, 3, 13, 10, 16, tzinfo=timezone.utc)
+    completed_at = datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc)
+    mock_ops_repo.get_analytics_export_jobs_count.return_value = 1
+    mock_ops_repo.get_analytics_export_jobs.return_value = [
+        type(
+            "AnalyticsExportJobStub",
+            (),
+            {
+                "job_id": "aexp_1234567890abcdef",
+                "dataset_type": "portfolio_timeseries",
+                "status": "FAILED",
+                "created_at": created_at,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "result_row_count": None,
+                "error_message": "Unexpected analytics export processing failure.",
+            },
+        )()
+    ]
+
+    response = await service.get_analytics_export_jobs("P1", skip=0, limit=20, status="FAILED")
+
+    assert response.total == 1
+    assert response.items[0].job_id == "aexp_1234567890abcdef"
+    assert response.items[0].dataset_type == "portfolio_timeseries"
+    assert response.items[0].status == "FAILED"
+    assert response.items[0].created_at == created_at
+    assert response.items[0].started_at == started_at
+    assert response.items[0].completed_at == completed_at
+    assert response.items[0].error_message == "Unexpected analytics export processing failure."
+
+
 async def test_get_support_overview_raises_when_portfolio_missing(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
