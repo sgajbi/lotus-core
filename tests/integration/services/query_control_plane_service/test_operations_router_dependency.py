@@ -291,6 +291,9 @@ async def test_analytics_export_jobs_success(async_test_client):
                 "created_at": "2026-03-13T10:15:00Z",
                 "started_at": "2026-03-13T10:15:01Z",
                 "completed_at": "2026-03-13T10:15:02Z",
+                "updated_at": "2026-03-13T10:15:02Z",
+                "is_stale_running": False,
+                "backlog_age_minutes": None,
                 "result_row_count": None,
                 "error_message": "Unexpected analytics export processing failure.",
             }
@@ -303,6 +306,7 @@ async def test_analytics_export_jobs_success(async_test_client):
     assert response.json()["items"][0]["job_id"] == "aexp_1234567890abcdef"
     assert response.json()["items"][0]["dataset_type"] == "portfolio_timeseries"
     assert response.json()["items"][0]["status"] == "FAILED"
+    assert response.json()["items"][0]["is_stale_running"] is False
 
 
 async def test_analytics_export_jobs_unexpected_maps_to_500(async_test_client):

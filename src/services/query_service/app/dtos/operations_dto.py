@@ -482,6 +482,27 @@ class AnalyticsExportJobRecord(BaseModel):
         description="UTC timestamp when export processing completed or failed.",
         examples=["2026-03-13T10:15:09Z"],
     )
+    updated_at: datetime = Field(
+        ...,
+        description="UTC timestamp of the most recent durable lifecycle update for the export job.",
+        examples=["2026-03-13T10:17:00Z"],
+    )
+    is_stale_running: bool = Field(
+        ...,
+        description=(
+            "True when the export job is in RUNNING state and its last update is older than the "
+            "support stale threshold (15 minutes)."
+        ),
+        examples=[False],
+    )
+    backlog_age_minutes: Optional[int] = Field(
+        None,
+        description=(
+            "Age in minutes from created_at to the current UTC time while the job remains in "
+            "ACCEPTED or RUNNING state."
+        ),
+        examples=[42],
+    )
     result_row_count: Optional[int] = Field(
         None,
         description="Number of rows emitted when the export completed successfully.",
@@ -511,6 +532,9 @@ class AnalyticsExportJobListResponse(BaseModel):
                     "created_at": "2026-03-13T10:15:00Z",
                     "started_at": "2026-03-13T10:15:01Z",
                     "completed_at": "2026-03-13T10:15:02Z",
+                    "updated_at": "2026-03-13T10:15:02Z",
+                    "is_stale_running": False,
+                    "backlog_age_minutes": None,
                     "result_row_count": None,
                     "error_message": "Unexpected analytics export processing failure.",
                 }

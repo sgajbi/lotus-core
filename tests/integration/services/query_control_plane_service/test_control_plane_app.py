@@ -184,6 +184,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_job_record["properties"]["dataset_type"]["description"] == (
         "Analytics dataset exported by the job."
     )
+    assert analytics_export_job_record["properties"]["updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable lifecycle update for the export job."
+    )
+    assert analytics_export_job_record["properties"]["is_stale_running"]["description"].startswith(
+        "True when the export job is in RUNNING state"
+    )
+    assert analytics_export_job_record["properties"]["backlog_age_minutes"][
+        "description"
+    ].startswith("Age in minutes from created_at to the current UTC time")
     reconciliation_type = next(
         parameter
         for parameter in reconciliation_runs["parameters"]

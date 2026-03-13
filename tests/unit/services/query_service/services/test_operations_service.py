@@ -253,6 +253,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     created_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
     started_at = datetime(2026, 3, 13, 10, 16, tzinfo=timezone.utc)
     completed_at = datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc)
+    updated_at = datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc)
     mock_ops_repo.get_analytics_export_jobs_count.return_value = 1
     mock_ops_repo.get_analytics_export_jobs.return_value = [
         type(
@@ -265,6 +266,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
                 "created_at": created_at,
                 "started_at": started_at,
                 "completed_at": completed_at,
+                "updated_at": updated_at,
                 "result_row_count": None,
                 "error_message": "Unexpected analytics export processing failure.",
             },
@@ -280,7 +282,29 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     assert response.items[0].created_at == created_at
     assert response.items[0].started_at == started_at
     assert response.items[0].completed_at == completed_at
+    assert response.items[0].updated_at == updated_at
+    assert response.items[0].is_stale_running is False
+    assert response.items[0].backlog_age_minutes is None
     assert response.items[0].error_message == "Unexpected analytics export processing failure."
+
+
+async def test_analytics_export_job_flags_running_staleness_and_backlog_age():
+    created_at = datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc)
+    updated_at = datetime(2026, 3, 13, 10, 5, tzinfo=timezone.utc)
+    now = datetime(2026, 3, 13, 10, 30, tzinfo=timezone.utc)
+
+    assert (
+        OperationsService._is_analytics_export_job_stale("running", updated_at, now=now) is True
+    )
+    assert OperationsService._get_analytics_export_backlog_age_minutes(
+        "running", created_at, now=now
+    ) == 30
+    assert (
+        OperationsService._get_analytics_export_backlog_age_minutes(
+            "failed", created_at, now=now
+        )
+        is None
+    )
 
 
 async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo: AsyncMock):

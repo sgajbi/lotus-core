@@ -367,6 +367,13 @@ class OperationsService:
                     created_at=job.created_at,
                     started_at=job.started_at,
                     completed_at=job.completed_at,
+                    updated_at=job.updated_at,
+                    is_stale_running=self._is_analytics_export_job_stale(
+                        job.status, job.updated_at
+                    ),
+                    backlog_age_minutes=self._get_analytics_export_backlog_age_minutes(
+                        job.status, job.created_at
+                    ),
                     result_row_count=job.result_row_count,
                     error_message=job.error_message,
                 )
@@ -455,3 +462,19 @@ class OperationsService:
             return False
         reference_now = now or datetime.now(timezone.utc)
         return updated_at < reference_now - cls.SUPPORT_JOB_STALE_THRESHOLD
+
+    @classmethod
+    def _is_analytics_export_job_stale(
+        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+    ) -> bool:
+        normalized_status = "PROCESSING" if status == "running" else status
+        return cls._is_support_job_stale(normalized_status, updated_at, now)
+
+    @staticmethod
+    def _get_analytics_export_backlog_age_minutes(
+        status: str | None, created_at: datetime | None, now: datetime | None = None
+    ) -> int | None:
+        if status not in {"accepted", "running"} or created_at is None:
+            return None
+        reference_now = now or datetime.now(timezone.utc)
+        return max(0, int((reference_now - created_at).total_seconds() // 60))
