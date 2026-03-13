@@ -33,6 +33,7 @@ class OperationsService:
             active_reprocessing_keys,
             valuation_job_health,
             aggregation_job_health,
+            analytics_export_job_health,
             latest_transaction_date,
             latest_position_snapshot_date_unbounded,
             position_snapshot_history_mismatch_count,
@@ -45,6 +46,9 @@ class OperationsService:
                 portfolio_id, stale_minutes=15, failed_window_hours=24
             ),
             self.repo.get_aggregation_job_health_summary(
+                portfolio_id, stale_minutes=15, failed_window_hours=24
+            ),
+            self.repo.get_analytics_export_job_health_summary(
                 portfolio_id, stale_minutes=15, failed_window_hours=24
             ),
             self.repo.get_latest_transaction_date(portfolio_id),
@@ -78,6 +82,12 @@ class OperationsService:
             aggregation_backlog_age_days = max(
                 0, (reference_date - aggregation_job_health.oldest_open_job_date).days
             )
+        analytics_export_backlog_age_minutes = None
+        if analytics_export_job_health.oldest_open_job_created_at:
+            delta = (
+                datetime.now(timezone.utc) - analytics_export_job_health.oldest_open_job_created_at
+            )
+            analytics_export_backlog_age_minutes = max(0, int(delta.total_seconds() // 60))
 
         controls_status = latest_control_stage.status if latest_control_stage else None
         controls_blocking = self._is_controls_blocking(controls_status)
@@ -99,6 +109,14 @@ class OperationsService:
             failed_aggregation_jobs=aggregation_job_health.failed_jobs,
             oldest_pending_aggregation_date=aggregation_job_health.oldest_open_job_date,
             aggregation_backlog_age_days=aggregation_backlog_age_days,
+            pending_analytics_export_jobs=analytics_export_job_health.accepted_jobs,
+            processing_analytics_export_jobs=analytics_export_job_health.running_jobs,
+            stale_processing_analytics_export_jobs=analytics_export_job_health.stale_running_jobs,
+            failed_analytics_export_jobs=analytics_export_job_health.failed_jobs,
+            oldest_pending_analytics_export_created_at=(
+                analytics_export_job_health.oldest_open_job_created_at
+            ),
+            analytics_export_backlog_age_minutes=analytics_export_backlog_age_minutes,
             latest_transaction_date=latest_transaction_date,
             latest_booked_transaction_date=latest_booked_transaction_date,
             latest_position_snapshot_date=latest_position_snapshot_date_unbounded,

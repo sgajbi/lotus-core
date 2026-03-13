@@ -70,8 +70,7 @@ class SupportOverviewResponse(BaseModel):
     stale_processing_aggregation_jobs: int = Field(
         ...,
         description=(
-            "Number of PROCESSING aggregation jobs older than stale threshold "
-            "(15 minutes)."
+            "Number of PROCESSING aggregation jobs older than stale threshold " "(15 minutes)."
         ),
         examples=[0],
     )
@@ -92,6 +91,44 @@ class SupportOverviewResponse(BaseModel):
             "to business_date (or current UTC date when business_date is missing)."
         ),
         examples=[1],
+    )
+    pending_analytics_export_jobs: int = Field(
+        ...,
+        description="Number of analytics export jobs currently waiting in ACCEPTED state.",
+        examples=[2],
+    )
+    processing_analytics_export_jobs: int = Field(
+        ...,
+        description="Number of analytics export jobs currently in RUNNING state.",
+        examples=[1],
+    )
+    stale_processing_analytics_export_jobs: int = Field(
+        ...,
+        description=(
+            "Number of analytics export jobs in RUNNING state whose last update is older than "
+            "the stale threshold (15 minutes)."
+        ),
+        examples=[0],
+    )
+    failed_analytics_export_jobs: int = Field(
+        ...,
+        description="Number of analytics export jobs currently in FAILED terminal state.",
+        examples=[1],
+    )
+    oldest_pending_analytics_export_created_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "Oldest created_at timestamp among analytics export jobs still waiting or running."
+        ),
+        examples=["2026-03-13T10:15:00Z"],
+    )
+    analytics_export_backlog_age_minutes: Optional[int] = Field(
+        None,
+        description=(
+            "Backlog age in minutes from the oldest waiting/running analytics export job to the "
+            "current UTC time."
+        ),
+        examples=[42],
     )
     latest_transaction_date: Optional[date] = Field(
         None,

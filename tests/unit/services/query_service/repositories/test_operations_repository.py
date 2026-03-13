@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -125,6 +125,39 @@ async def test_get_aggregation_job_health_summary(
         "FILTER (WHERE portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING'))" in compiled
     )
     assert "FILTER (WHERE portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+
+
+async def test_get_analytics_export_job_health_summary(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_row = MagicMock(
+        accepted_jobs=2,
+        running_jobs=1,
+        stale_running_jobs=1,
+        failed_jobs=3,
+        failed_jobs_last_hours=2,
+        oldest_open_job_created_at=datetime(2025, 8, 10, 9, 0, tzinfo=timezone.utc),
+    )
+    mock_result = MagicMock()
+    mock_result.one.return_value = mock_row
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_analytics_export_job_health_summary(
+        "P1", stale_minutes=15, failed_window_hours=24
+    )
+
+    assert value.accepted_jobs == 2
+    assert value.running_jobs == 1
+    assert value.stale_running_jobs == 1
+    assert value.failed_jobs == 3
+    assert value.failed_jobs_last_hours == 2
+    assert value.oldest_open_job_created_at == datetime(2025, 8, 10, 9, 0, tzinfo=timezone.utc)
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from analytics_export_jobs" in compiled.lower()
+    assert "FILTER (WHERE analytics_export_jobs.status = 'accepted')" in compiled
+    assert "FILTER (WHERE analytics_export_jobs.status = 'running')" in compiled
+    assert "FILTER (WHERE analytics_export_jobs.status = 'failed')" in compiled
 
 
 async def test_get_latest_transaction_date(

@@ -4,6 +4,7 @@ from typing import Optional
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
+    AnalyticsExportJob,
     BusinessDate,
     DailyPositionSnapshot,
     PipelineStageState,
@@ -26,6 +27,16 @@ class JobHealthSummary:
     failed_jobs: int
     failed_jobs_last_hours: int
     oldest_open_job_date: Optional[date]
+
+
+@dataclass(frozen=True)
+class ExportJobHealthSummary:
+    accepted_jobs: int
+    running_jobs: int
+    stale_running_jobs: int
+    failed_jobs: int
+    failed_jobs_last_hours: int
+    oldest_open_job_created_at: Optional[datetime]
 
 
 class OperationsRepository:
@@ -135,6 +146,44 @@ class OperationsRepository:
             failed_jobs=int(row.failed_jobs or 0),
             failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
             oldest_open_job_date=row.oldest_open_job_date,
+        )
+
+    async def get_analytics_export_job_health_summary(
+        self,
+        portfolio_id: str,
+        stale_minutes: int,
+        failed_window_hours: int,
+    ) -> ExportJobHealthSummary:
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        failed_since = datetime.now(timezone.utc) - timedelta(hours=failed_window_hours)
+        stmt = select(
+            func.count().filter(AnalyticsExportJob.status == "accepted").label("accepted_jobs"),
+            func.count().filter(AnalyticsExportJob.status == "running").label("running_jobs"),
+            func.count()
+            .filter(
+                AnalyticsExportJob.status == "running",
+                AnalyticsExportJob.updated_at < stale_threshold,
+            )
+            .label("stale_running_jobs"),
+            func.count().filter(AnalyticsExportJob.status == "failed").label("failed_jobs"),
+            func.count()
+            .filter(
+                AnalyticsExportJob.status == "failed",
+                AnalyticsExportJob.updated_at >= failed_since,
+            )
+            .label("failed_jobs_last_hours"),
+            func.min(AnalyticsExportJob.created_at)
+            .filter(AnalyticsExportJob.status.in_(("accepted", "running")))
+            .label("oldest_open_job_created_at"),
+        ).where(AnalyticsExportJob.portfolio_id == portfolio_id)
+        row = (await self.db.execute(stmt)).one()
+        return ExportJobHealthSummary(
+            accepted_jobs=int(row.accepted_jobs or 0),
+            running_jobs=int(row.running_jobs or 0),
+            stale_running_jobs=int(row.stale_running_jobs or 0),
+            failed_jobs=int(row.failed_jobs or 0),
+            failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
+            oldest_open_job_created_at=row.oldest_open_job_created_at,
         )
 
     async def get_latest_transaction_date(self, portfolio_id: str) -> Optional[date]:

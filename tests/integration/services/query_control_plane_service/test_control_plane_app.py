@@ -140,6 +140,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["aggregation_backlog_age_days"]["description"].startswith(
         "Backlog age in days computed from oldest pending aggregation date"
     )
+    assert support_overview["properties"]["pending_analytics_export_jobs"]["description"] == (
+        "Number of analytics export jobs currently waiting in ACCEPTED state."
+    )
+    assert support_overview["properties"]["failed_analytics_export_jobs"]["description"] == (
+        "Number of analytics export jobs currently in FAILED terminal state."
+    )
+    assert support_overview["properties"]["analytics_export_backlog_age_minutes"][
+        "description"
+    ].startswith("Backlog age in minutes from the oldest waiting/running analytics export job")
 
 
 async def test_openapi_describes_simulation_parameters_and_examples(async_test_client):

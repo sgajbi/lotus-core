@@ -1,10 +1,13 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.repositories.operations_repository import JobHealthSummary
+from src.services.query_service.app.repositories.operations_repository import (
+    ExportJobHealthSummary,
+    JobHealthSummary,
+)
 from src.services.query_service.app.services.operations_service import OperationsService
 
 pytestmark = pytest.mark.asyncio
@@ -46,6 +49,14 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
     )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=2,
+        running_jobs=1,
+        stale_running_jobs=0,
+        failed_jobs=1,
+        failed_jobs_last_hours=1,
+        oldest_open_job_created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+    )
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
@@ -75,6 +86,14 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.failed_aggregation_jobs == 0
     assert response.oldest_pending_aggregation_date is None
     assert response.aggregation_backlog_age_days is None
+    assert response.pending_analytics_export_jobs == 2
+    assert response.processing_analytics_export_jobs == 1
+    assert response.stale_processing_analytics_export_jobs == 0
+    assert response.failed_analytics_export_jobs == 1
+    assert response.oldest_pending_analytics_export_created_at == datetime(
+        2025, 8, 30, 10, 0, tzinfo=timezone.utc
+    )
+    assert response.analytics_export_backlog_age_minutes is not None
     assert response.latest_transaction_date == date(2025, 9, 2)
     assert response.latest_booked_transaction_date == date(2025, 8, 30)
     assert response.latest_position_snapshot_date == date(2025, 8, 30)
@@ -224,6 +243,14 @@ async def test_get_support_overview_without_business_date(
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
     )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+    )
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 31)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 31)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
@@ -234,6 +261,12 @@ async def test_get_support_overview_without_business_date(
     assert response.business_date is None
     assert response.valuation_backlog_age_days is None
     assert response.aggregation_backlog_age_days is None
+    assert response.pending_analytics_export_jobs == 0
+    assert response.processing_analytics_export_jobs == 0
+    assert response.stale_processing_analytics_export_jobs == 0
+    assert response.failed_analytics_export_jobs == 0
+    assert response.oldest_pending_analytics_export_created_at is None
+    assert response.analytics_export_backlog_age_minutes is None
     assert response.latest_booked_transaction_date is None
     assert response.latest_booked_position_snapshot_date is None
     assert response.controls_status is None
@@ -264,6 +297,14 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         failed_jobs=0,
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
     )
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
