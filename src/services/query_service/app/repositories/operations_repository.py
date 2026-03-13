@@ -45,6 +45,42 @@ class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
+        return case(
+            (status_column == "FAILED", 0),
+            (
+                and_(status_column == "PROCESSING", updated_at_column < stale_threshold),
+                1,
+            ),
+            (status_column == "PROCESSING", 2),
+            (status_column == "PENDING", 3),
+            else_=9,
+        )
+
+    @staticmethod
+    def _analytics_export_job_priority(
+        status_column, updated_at_column, stale_threshold: datetime
+    ):
+        return case(
+            (status_column == "failed", 0),
+            (
+                and_(status_column == "running", updated_at_column < stale_threshold),
+                1,
+            ),
+            (status_column == "running", 2),
+            (status_column == "accepted", 3),
+            else_=9,
+        )
+
+    @staticmethod
+    def _reconciliation_run_priority(status_column):
+        return case(
+            (status_column.in_(("FAILED", "REQUIRES_REPLAY")), 0),
+            (status_column == "RUNNING", 1),
+            else_=9,
+        )
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -404,7 +440,9 @@ class OperationsRepository:
         skip: int,
         limit: int,
         status: Optional[str] = None,
+        stale_minutes: int = 15,
     ) -> list[PortfolioValuationJob]:
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
         stmt = select(PortfolioValuationJob).where(
             PortfolioValuationJob.portfolio_id == portfolio_id
         )
@@ -412,7 +450,14 @@ class OperationsRepository:
             stmt = stmt.where(PortfolioValuationJob.status == status)
         stmt = (
             stmt.order_by(
-                PortfolioValuationJob.valuation_date.desc(), PortfolioValuationJob.id.desc()
+                self._support_job_priority(
+                    PortfolioValuationJob.status,
+                    PortfolioValuationJob.updated_at,
+                    stale_threshold,
+                ).asc(),
+                PortfolioValuationJob.valuation_date.asc(),
+                PortfolioValuationJob.updated_at.asc(),
+                PortfolioValuationJob.id.asc(),
             )
             .offset(skip)
             .limit(limit)
@@ -437,7 +482,9 @@ class OperationsRepository:
         skip: int,
         limit: int,
         status: Optional[str] = None,
+        stale_minutes: int = 15,
     ) -> list[PortfolioAggregationJob]:
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
         stmt = select(PortfolioAggregationJob).where(
             PortfolioAggregationJob.portfolio_id == portfolio_id
         )
@@ -445,7 +492,14 @@ class OperationsRepository:
             stmt = stmt.where(PortfolioAggregationJob.status == status)
         stmt = (
             stmt.order_by(
-                PortfolioAggregationJob.aggregation_date.desc(), PortfolioAggregationJob.id.desc()
+                self._support_job_priority(
+                    PortfolioAggregationJob.status,
+                    PortfolioAggregationJob.updated_at,
+                    stale_threshold,
+                ).asc(),
+                PortfolioAggregationJob.aggregation_date.asc(),
+                PortfolioAggregationJob.updated_at.asc(),
+                PortfolioAggregationJob.id.asc(),
             )
             .offset(skip)
             .limit(limit)
@@ -470,12 +524,22 @@ class OperationsRepository:
         skip: int,
         limit: int,
         status: Optional[str] = None,
+        stale_minutes: int = 15,
     ) -> list[AnalyticsExportJob]:
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
         stmt = select(AnalyticsExportJob).where(AnalyticsExportJob.portfolio_id == portfolio_id)
         if status:
             stmt = stmt.where(AnalyticsExportJob.status == status)
         stmt = (
-            stmt.order_by(AnalyticsExportJob.created_at.desc(), AnalyticsExportJob.id.desc())
+            stmt.order_by(
+                self._analytics_export_job_priority(
+                    AnalyticsExportJob.status,
+                    AnalyticsExportJob.updated_at,
+                    stale_threshold,
+                ).asc(),
+                AnalyticsExportJob.created_at.asc(),
+                AnalyticsExportJob.id.asc(),
+            )
             .offset(skip)
             .limit(limit)
         )
@@ -515,8 +579,9 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationRun.status == status)
         stmt = (
             stmt.order_by(
+                self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
                 FinancialReconciliationRun.started_at.desc(),
-                FinancialReconciliationRun.id.desc(),
+                FinancialReconciliationRun.id.asc(),
             )
             .offset(skip)
             .limit(limit)

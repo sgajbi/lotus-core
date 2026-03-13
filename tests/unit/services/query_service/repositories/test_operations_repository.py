@@ -362,7 +362,8 @@ async def test_get_valuation_jobs_query(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "ORDER BY portfolio_valuation_jobs.valuation_date DESC" in compiled
+    assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
 
 
@@ -392,7 +393,8 @@ async def test_get_aggregation_jobs_query(
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "ORDER BY portfolio_aggregation_jobs.aggregation_date DESC" in compiled
+    assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
 
 
@@ -510,7 +512,8 @@ async def test_get_analytics_export_jobs_query(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.status = 'running'" in compiled
-    assert "ORDER BY analytics_export_jobs.created_at DESC" in compiled
+    assert "CASE WHEN (analytics_export_jobs.status = 'failed')" in compiled
+    assert "analytics_export_jobs.created_at ASC" in compiled
 
 
 async def test_get_reconciliation_runs_count_with_filters(
@@ -553,7 +556,11 @@ async def test_get_reconciliation_runs_query(
     assert "from financial_reconciliation_runs" in compiled.lower()
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
     assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
-    assert "ORDER BY financial_reconciliation_runs.started_at DESC" in compiled
+    assert (
+        "CASE WHEN (financial_reconciliation_runs.status IN ('FAILED', 'REQUIRES_REPLAY'))"
+        in compiled
+    )
+    assert "financial_reconciliation_runs.started_at DESC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
 
 

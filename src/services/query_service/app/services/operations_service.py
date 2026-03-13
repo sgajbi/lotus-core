@@ -286,10 +286,15 @@ class OperationsService:
         self, portfolio_id: str, skip: int, limit: int, status: str | None = None
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
         total, jobs = await asyncio.gather(
             self.repo.get_valuation_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_valuation_jobs(
-                portfolio_id=portfolio_id, skip=skip, limit=limit, status=status
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                stale_minutes=stale_minutes,
             ),
         )
         return SupportJobListResponse(
@@ -317,10 +322,15 @@ class OperationsService:
         self, portfolio_id: str, skip: int, limit: int, status: str | None = None
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
         total, jobs = await asyncio.gather(
             self.repo.get_aggregation_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_aggregation_jobs(
-                portfolio_id=portfolio_id, skip=skip, limit=limit, status=status
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                stale_minutes=stale_minutes,
             ),
         )
         return SupportJobListResponse(
@@ -348,10 +358,15 @@ class OperationsService:
         self, portfolio_id: str, skip: int, limit: int, status: str | None = None
     ) -> AnalyticsExportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
         total, jobs = await asyncio.gather(
             self.repo.get_analytics_export_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_analytics_export_jobs(
-                portfolio_id=portfolio_id, skip=skip, limit=limit, status=status
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                stale_minutes=stale_minutes,
             ),
         )
         return AnalyticsExportJobListResponse(

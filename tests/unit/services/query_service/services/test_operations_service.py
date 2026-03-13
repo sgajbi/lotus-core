@@ -190,6 +190,9 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
     assert response.items[0].business_date == date(2025, 8, 31)
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_processing is False
+    mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
+        portfolio_id="P1", skip=0, limit=20, status="PENDING", stale_minutes=15
+    )
 
 
 async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
@@ -218,6 +221,9 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_processing is True
     assert response.items[0].failure_reason == "timed out once"
+    mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
+        portfolio_id="P1", skip=0, limit=20, status="PROCESSING", stale_minutes=15
+    )
 
 
 async def test_support_job_stale_flag_only_marks_old_processing():
@@ -286,6 +292,9 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     assert response.items[0].is_stale_running is False
     assert response.items[0].backlog_age_minutes is None
     assert response.items[0].error_message == "Unexpected analytics export processing failure."
+    mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
+        portfolio_id="P1", skip=0, limit=20, status="FAILED", stale_minutes=15
+    )
 
 
 async def test_analytics_export_job_flags_running_staleness_and_backlog_age():
