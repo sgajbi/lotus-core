@@ -157,8 +157,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_job_record["properties"]["updated_at"]["description"] == (
         "UTC timestamp of the most recent durable lifecycle update for the job."
     )
+    assert support_job_record["properties"]["is_retrying"]["description"].startswith(
+        "True when the durable job has already consumed at least one retry attempt"
+    )
     assert support_job_record["properties"]["is_stale_processing"]["description"].startswith(
         "True when the job is in PROCESSING state"
+    )
+    assert support_job_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
     )
     assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
         "Number of valuation jobs currently in FAILED terminal state."
@@ -189,6 +195,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert analytics_export_job_record["properties"]["is_stale_running"]["description"].startswith(
         "True when the export job is in RUNNING state"
+    )
+    assert analytics_export_job_record["properties"]["is_terminal_failure"]["description"] == (
+        "True when the export job is durably in FAILED terminal state."
+    )
+    assert analytics_export_job_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
     )
     assert analytics_export_job_record["properties"]["backlog_age_minutes"][
         "description"
@@ -232,8 +244,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reconciliation_run_record["properties"]["failure_reason"]["description"] == (
         "Failure reason when the reconciliation run reaches FAILED state."
     )
+    assert reconciliation_run_record["properties"]["is_terminal_failure"]["description"] == (
+        "True when the reconciliation run is durably in FAILED terminal state."
+    )
     assert reconciliation_run_record["properties"]["is_blocking"]["description"].startswith(
         "True when the run status blocks downstream publication"
+    )
+    assert reconciliation_run_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
     )
     assert reconciliation_finding_schema["properties"]["items"]["description"] == (
         "Durable reconciliation findings for the requested run."

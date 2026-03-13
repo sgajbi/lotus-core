@@ -29,6 +29,53 @@ class OperationsService:
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
 
+    @classmethod
+    def _get_support_job_operational_state(
+        cls, status: str, updated_at: datetime | None
+    ) -> str:
+        if status == "FAILED":
+            return "FAILED"
+        if cls._is_support_job_stale(status, updated_at):
+            return "STALE_PROCESSING"
+        if status == "PROCESSING":
+            return "PROCESSING"
+        if status == "PENDING":
+            return "PENDING"
+        return "COMPLETED"
+
+    @staticmethod
+    def _is_support_job_retrying(status: str, attempt_count: int | None) -> bool:
+        return (attempt_count or 0) > 0 and status in {"PENDING", "PROCESSING"}
+
+    @staticmethod
+    def _normalize_analytics_export_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        return status.lower()
+
+    @classmethod
+    def _get_analytics_export_operational_state(
+        cls, status: str, updated_at: datetime | None
+    ) -> str:
+        status = cls._normalize_analytics_export_status(status) or ""
+        if status == "failed":
+            return "FAILED"
+        if cls._is_analytics_export_job_stale(status, updated_at):
+            return "STALE_RUNNING"
+        if status == "running":
+            return "RUNNING"
+        if status == "accepted":
+            return "ACCEPTED"
+        return "COMPLETED"
+
+    @classmethod
+    def _get_reconciliation_operational_state(cls, status: str | None) -> str:
+        if cls._is_controls_blocking(status):
+            return "BLOCKING"
+        if status == "RUNNING":
+            return "RUNNING"
+        return "COMPLETED"
+
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
@@ -310,9 +357,13 @@ class OperationsService:
                     security_id=job.security_id,
                     epoch=job.epoch,
                     attempt_count=job.attempt_count,
+                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
                     updated_at=job.updated_at,
                     is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
+                    operational_state=self._get_support_job_operational_state(
+                        job.status, job.updated_at
+                    ),
                 )
                 for job in jobs
             ],
@@ -346,9 +397,13 @@ class OperationsService:
                     security_id=None,
                     epoch=None,
                     attempt_count=job.attempt_count,
+                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
                     updated_at=job.updated_at,
                     is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
+                    operational_state=self._get_support_job_operational_state(
+                        job.status, job.updated_at
+                    ),
                 )
                 for job in jobs
             ],
@@ -391,6 +446,12 @@ class OperationsService:
                     ),
                     result_row_count=job.result_row_count,
                     error_message=job.error_message,
+                    is_terminal_failure=(
+                        self._normalize_analytics_export_status(job.status) == "failed"
+                    ),
+                    operational_state=self._get_analytics_export_operational_state(
+                        job.status, job.updated_at
+                    ),
                 )
                 for job in jobs
             ],
@@ -434,7 +495,9 @@ class OperationsService:
                     started_at=run.started_at,
                     completed_at=run.completed_at,
                     failure_reason=run.failure_reason,
+                    is_terminal_failure=run.status == "FAILED",
                     is_blocking=self._is_controls_blocking(run.status),
+                    operational_state=self._get_reconciliation_operational_state(run.status),
                 )
                 for run in runs
             ],
@@ -483,14 +546,16 @@ class OperationsService:
     def _is_analytics_export_job_stale(
         cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
     ) -> bool:
-        normalized_status = "PROCESSING" if status == "running" else status
+        normalized_status = cls._normalize_analytics_export_status(status)
+        normalized_status = "PROCESSING" if normalized_status == "running" else normalized_status
         return cls._is_support_job_stale(normalized_status, updated_at, now)
 
     @staticmethod
     def _get_analytics_export_backlog_age_minutes(
         status: str | None, created_at: datetime | None, now: datetime | None = None
     ) -> int | None:
-        if status not in {"accepted", "running"} or created_at is None:
+        normalized_status = OperationsService._normalize_analytics_export_status(status)
+        if normalized_status not in {"accepted", "running"} or created_at is None:
             return None
         reference_now = now or datetime.now(timezone.utc)
         return max(0, int((reference_now - created_at).total_seconds() // 60))

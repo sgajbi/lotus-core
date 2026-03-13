@@ -409,6 +409,14 @@ class SupportJobRecord(BaseModel):
         description="Current retry attempt count for valuation jobs.",
         examples=[1],
     )
+    is_retrying: bool = Field(
+        ...,
+        description=(
+            "True when the durable job has already consumed at least one retry attempt and is "
+            "still awaiting terminal completion."
+        ),
+        examples=[False],
+    )
     updated_at: Optional[datetime] = Field(
         None,
         description="UTC timestamp of the most recent durable lifecycle update for the job.",
@@ -426,6 +434,19 @@ class SupportJobRecord(BaseModel):
         None,
         description="Failure reason (when status=FAILED).",
         examples=["Missing market price for security/date"],
+    )
+    operational_state: Literal[
+        "FAILED",
+        "STALE_PROCESSING",
+        "PROCESSING",
+        "PENDING",
+        "COMPLETED",
+    ] = Field(
+        ...,
+        description=(
+            "Derived operator-facing lifecycle state used for support triage ordering."
+        ),
+        examples=["STALE_PROCESSING"],
     )
 
 
@@ -446,9 +467,11 @@ class SupportJobListResponse(BaseModel):
                     "security_id": "AAPL.OQ",
                     "epoch": 3,
                     "attempt_count": 1,
+                    "is_retrying": True,
                     "updated_at": "2025-12-30T10:15:09Z",
                     "is_stale_processing": False,
                     "failure_reason": None,
+                    "operational_state": "PENDING",
                 }
             ]
         ],
@@ -513,6 +536,22 @@ class AnalyticsExportJobRecord(BaseModel):
         description="Failure reason when the export job reaches FAILED state.",
         examples=["Missing FX rate for EUR/USD on 2025-01-31."],
     )
+    is_terminal_failure: bool = Field(
+        ...,
+        description="True when the export job is durably in FAILED terminal state.",
+        examples=[True],
+    )
+    operational_state: Literal[
+        "FAILED",
+        "STALE_RUNNING",
+        "RUNNING",
+        "ACCEPTED",
+        "COMPLETED",
+    ] = Field(
+        ...,
+        description="Derived operator-facing lifecycle state used for support triage ordering.",
+        examples=["FAILED"],
+    )
 
 
 class AnalyticsExportJobListResponse(BaseModel):
@@ -537,6 +576,8 @@ class AnalyticsExportJobListResponse(BaseModel):
                     "backlog_age_minutes": None,
                     "result_row_count": None,
                     "error_message": "Unexpected analytics export processing failure.",
+                    "is_terminal_failure": True,
+                    "operational_state": "FAILED",
                 }
             ]
         ],
@@ -584,6 +625,11 @@ class ReconciliationRunRecord(BaseModel):
         description="Failure reason when the reconciliation run reaches FAILED state.",
         examples=["Tolerance exceeded for portfolio timeseries totals."],
     )
+    is_terminal_failure: bool = Field(
+        ...,
+        description="True when the reconciliation run is durably in FAILED terminal state.",
+        examples=[True],
+    )
     is_blocking: bool = Field(
         ...,
         description=(
@@ -591,6 +637,11 @@ class ReconciliationRunRecord(BaseModel):
             "(FAILED or REQUIRES_REPLAY)."
         ),
         examples=[True],
+    )
+    operational_state: Literal["BLOCKING", "RUNNING", "COMPLETED"] = Field(
+        ...,
+        description="Derived operator-facing lifecycle state used for support triage ordering.",
+        examples=["BLOCKING"],
     )
 
 
@@ -615,6 +666,9 @@ class ReconciliationRunListResponse(BaseModel):
                     "started_at": "2026-03-13T10:15:00Z",
                     "completed_at": "2026-03-13T10:15:09Z",
                     "failure_reason": None,
+                    "is_terminal_failure": False,
+                    "is_blocking": False,
+                    "operational_state": "COMPLETED",
                 }
             ]
         ],

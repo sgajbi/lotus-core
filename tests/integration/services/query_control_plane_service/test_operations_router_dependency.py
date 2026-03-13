@@ -211,9 +211,11 @@ async def test_valuation_jobs_success(async_test_client):
                 "security_id": "S1",
                 "epoch": 1,
                 "attempt_count": 0,
+                "is_retrying": False,
                 "updated_at": "2025-08-31T10:15:00Z",
                 "is_stale_processing": False,
                 "failure_reason": None,
+                "operational_state": "PENDING",
             }
         ],
     }
@@ -223,6 +225,8 @@ async def test_valuation_jobs_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"][0]["job_type"] == "VALUATION"
     assert response.json()["items"][0]["is_stale_processing"] is False
+    assert response.json()["items"][0]["is_retrying"] is False
+    assert response.json()["items"][0]["operational_state"] == "PENDING"
 
 
 async def test_valuation_jobs_unexpected_maps_to_500(async_test_client):
@@ -250,9 +254,11 @@ async def test_aggregation_jobs_success(async_test_client):
                 "security_id": None,
                 "epoch": None,
                 "attempt_count": 2,
+                "is_retrying": True,
                 "updated_at": "2025-08-31T10:00:00Z",
                 "is_stale_processing": True,
                 "failure_reason": "timed out once",
+                "operational_state": "STALE_PROCESSING",
             }
         ],
     }
@@ -263,7 +269,9 @@ async def test_aggregation_jobs_success(async_test_client):
     assert response.json()["items"][0]["job_type"] == "AGGREGATION"
     assert response.json()["items"][0]["attempt_count"] == 2
     assert response.json()["items"][0]["is_stale_processing"] is True
+    assert response.json()["items"][0]["is_retrying"] is True
     assert response.json()["items"][0]["failure_reason"] == "timed out once"
+    assert response.json()["items"][0]["operational_state"] == "STALE_PROCESSING"
 
 
 async def test_aggregation_jobs_unexpected_maps_to_500(async_test_client):
@@ -296,6 +304,8 @@ async def test_analytics_export_jobs_success(async_test_client):
                 "backlog_age_minutes": None,
                 "result_row_count": None,
                 "error_message": "Unexpected analytics export processing failure.",
+                "is_terminal_failure": True,
+                "operational_state": "FAILED",
             }
         ],
     }
@@ -307,6 +317,8 @@ async def test_analytics_export_jobs_success(async_test_client):
     assert response.json()["items"][0]["dataset_type"] == "portfolio_timeseries"
     assert response.json()["items"][0]["status"] == "FAILED"
     assert response.json()["items"][0]["is_stale_running"] is False
+    assert response.json()["items"][0]["is_terminal_failure"] is True
+    assert response.json()["items"][0]["operational_state"] == "FAILED"
 
 
 async def test_analytics_export_jobs_unexpected_maps_to_500(async_test_client):
@@ -398,7 +410,9 @@ async def test_reconciliation_runs_success(async_test_client):
                 "started_at": "2026-03-13T10:15:00Z",
                 "completed_at": "2026-03-13T10:15:09Z",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
+                "is_terminal_failure": True,
                 "is_blocking": True,
+                "operational_state": "BLOCKING",
             }
         ],
     }
@@ -410,7 +424,9 @@ async def test_reconciliation_runs_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"][0]["run_id"] == "recon_1234567890abcdef"
     assert response.json()["items"][0]["status"] == "FAILED"
+    assert response.json()["items"][0]["is_terminal_failure"] is True
     assert response.json()["items"][0]["is_blocking"] is True
+    assert response.json()["items"][0]["operational_state"] == "BLOCKING"
 
 
 async def test_reconciliation_runs_not_found_maps_to_404(async_test_client):
