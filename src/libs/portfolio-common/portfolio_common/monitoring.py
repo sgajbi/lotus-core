@@ -204,6 +204,12 @@ REPROCESSING_WORKER_JOBS_COMPLETED_TOTAL = Counter(
     ["job_type"],
 )
 
+REPROCESSING_WORKER_JOBS_NOOP_TOTAL = Counter(
+    "reprocessing_worker_jobs_noop_total",
+    "Total number of reprocessing jobs that completed without mutating any state.",
+    ["job_type", "reason"],
+)
+
 REPROCESSING_WORKER_JOBS_FAILED_TOTAL = Counter(
     "reprocessing_worker_jobs_failed_total",
     "Total number of reprocessing jobs that failed in worker processing.",
@@ -379,6 +385,12 @@ def observe_reprocessing_worker_jobs_claimed(job_type: str, count: int = 1) -> N
 
 def observe_reprocessing_worker_jobs_completed(job_type: str, count: int = 1) -> None:
     REPROCESSING_WORKER_JOBS_COMPLETED_TOTAL.labels(job_type).inc(count)
+
+
+def observe_reprocessing_worker_jobs_noop(
+    job_type: str, reason: str, count: int = 1
+) -> None:
+    REPROCESSING_WORKER_JOBS_NOOP_TOTAL.labels(job_type, reason).inc(count)
 
 
 def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> None:

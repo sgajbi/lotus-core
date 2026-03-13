@@ -57,6 +57,9 @@ def mock_dependencies():
             "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_failed"
         ) as mock_observe_failed,
         patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_noop"
+        ) as mock_observe_noop,
+        patch(
             "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_stale_skips"
         ) as mock_observe_stale_skips,
         patch(
@@ -72,6 +75,7 @@ def mock_dependencies():
             "observe_claimed": mock_observe_claimed,
             "observe_completed": mock_observe_completed,
             "observe_failed": mock_observe_failed,
+            "observe_noop": mock_observe_noop,
             "observe_stale_skips": mock_observe_stale_skips,
             "batch_timer": mock_batch_timer,
         }
@@ -85,6 +89,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     mock_observe_claimed = mock_dependencies["observe_claimed"]
     mock_observe_completed = mock_dependencies["observe_completed"]
     mock_observe_failed = mock_dependencies["observe_failed"]
+    mock_observe_noop = mock_dependencies["observe_noop"]
     mock_batch_timer = mock_dependencies["batch_timer"]
 
     job_payload = {"security_id": "S1", "earliest_impacted_date": "2025-08-10"}
@@ -106,6 +111,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     mock_observe_claimed.assert_called_once_with("RESET_WATERMARKS", 1)
     mock_observe_completed.assert_called_once_with("RESET_WATERMARKS")
     mock_observe_failed.assert_not_called()
+    mock_observe_noop.assert_not_called()
     mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with(
         timeout_minutes=15,
         max_attempts=3,
@@ -217,6 +223,36 @@ async def test_worker_reads_poll_and_batch_from_environment(monkeypatch: pytest.
     assert worker._batch_size == 21
     assert worker._stale_timeout_minutes == 14
     assert worker._max_attempts == 5
+
+
+async def test_worker_emits_noop_metric_when_no_impacted_portfolios(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    mock_observe_noop = mock_dependencies["observe_noop"]
+    mock_observe_completed = mock_dependencies["observe_completed"]
+
+    pending_job = ReprocessingJob(
+        id=19,
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
+        status="PENDING",
+    )
+
+    mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
+    mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
+    mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
+
+    await worker._process_batch()
+
+    mock_state_repo.update_watermarks_if_older.assert_not_called()
+    mock_observe_noop.assert_called_once_with(
+        "RESET_WATERMARKS",
+        "no_impacted_portfolios",
+    )
+    mock_observe_completed.assert_called_once_with("RESET_WATERMARKS")
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(19, "COMPLETE")
 
 
 async def test_worker_processes_job_under_job_correlation_context(mock_dependencies):

@@ -10,6 +10,7 @@ from portfolio_common.monitoring import (
     observe_reprocessing_worker_jobs_claimed,
     observe_reprocessing_worker_jobs_completed,
     observe_reprocessing_worker_jobs_failed,
+    observe_reprocessing_worker_jobs_noop,
     reprocessing_worker_batch_timer,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
@@ -119,6 +120,10 @@ class ReprocessingWorker:
                                         f"security {security_id}."
                                     )
                             else:
+                                observe_reprocessing_worker_jobs_noop(
+                                    "RESET_WATERMARKS",
+                                    "no_impacted_portfolios",
+                                )
                                 logger.info(
                                     f"Job {job.id}: No portfolios found for "
                                     f"security {security_id}, skipping "
