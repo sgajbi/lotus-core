@@ -19,6 +19,7 @@ class ValuationRuntimeSettings:
     valuation_scheduler_poll_interval_seconds: int
     valuation_scheduler_batch_size: int
     valuation_scheduler_dispatch_rounds: int
+    valuation_scheduler_max_attempts: int
     reprocessing_worker_poll_interval_seconds: int
     reprocessing_worker_batch_size: int
     reprocessing_worker_max_attempts: int
@@ -42,6 +43,7 @@ def load_valuation_runtime_settings(
         valuation_scheduler_dispatch_rounds=_env_positive_int(
             "VALUATION_SCHEDULER_DISPATCH_ROUNDS", scheduler_dispatch_rounds_default
         ),
+        valuation_scheduler_max_attempts=_env_positive_int("VALUATION_SCHEDULER_MAX_ATTEMPTS", 3),
         reprocessing_worker_poll_interval_seconds=_env_positive_int(
             "REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", worker_poll_interval_default
         ),

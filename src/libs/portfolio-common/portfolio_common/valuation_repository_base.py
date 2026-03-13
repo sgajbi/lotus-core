@@ -279,18 +279,15 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_latest_business_date")
     async def get_latest_business_date(self) -> Optional[date]:
-        business_date_stmt = (
-            select(func.max(BusinessDate.date))
-            .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
+        business_date_stmt = select(func.max(BusinessDate.date)).where(
+            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
         )
         snapshot_date_stmt = select(func.max(DailyPositionSnapshot.date))
         valuation_job_date_stmt = select(func.max(PortfolioValuationJob.valuation_date))
 
         business_date = (await self.db.execute(business_date_stmt)).scalar_one_or_none()
         snapshot_date = (await self.db.execute(snapshot_date_stmt)).scalar_one_or_none()
-        valuation_job_date = (
-            await self.db.execute(valuation_job_date_stmt)
-        ).scalar_one_or_none()
+        valuation_job_date = (await self.db.execute(valuation_job_date_stmt)).scalar_one_or_none()
 
         candidates = [
             d for d in (business_date, snapshot_date, valuation_job_date) if d is not None
@@ -442,15 +439,47 @@ class ValuationRepositoryBase:
             raise
 
     @async_timed(repository="ValuationRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(self, timeout_minutes: int = 15) -> int:
+    async def find_and_reset_stale_jobs(
+        self, timeout_minutes: int = 15, max_attempts: int = 3
+    ) -> int:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+        stale_jobs_stmt = select(
+            PortfolioValuationJob.id,
+            PortfolioValuationJob.attempt_count,
+        ).where(
+            PortfolioValuationJob.status == "PROCESSING",
+            PortfolioValuationJob.updated_at < stale_threshold,
+        )
+        stale_rows = (await self.db.execute(stale_jobs_stmt)).all()
+        if not stale_rows:
+            return 0
+
+        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+        if failed_job_ids:
+            failure_stmt = (
+                update(PortfolioValuationJob)
+                .where(PortfolioValuationJob.id.in_(failed_job_ids))
+                .values(
+                    status="FAILED",
+                    failure_reason="Stale processing timeout exceeded max attempts",
+                    updated_at=func.now(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.execute(failure_stmt)
+            logger.warning(
+                "Marked stale valuation jobs as FAILED after max attempts.",
+                extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+            )
+
+        if not reset_job_ids:
+            return 0
 
         stmt = (
             update(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.status == "PROCESSING",
-                PortfolioValuationJob.updated_at < stale_threshold,
-            )
+            .where(PortfolioValuationJob.id.in_(reset_job_ids))
             .values(
                 status="PENDING",
                 updated_at=func.now(),

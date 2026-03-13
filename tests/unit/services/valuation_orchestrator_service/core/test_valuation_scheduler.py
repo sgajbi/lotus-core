@@ -398,6 +398,26 @@ async def test_scheduler_omits_empty_correlation_header(
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
 
 
+async def test_scheduler_reads_max_attempts_from_environment(
+    mock_kafka_producer: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("VALUATION_SCHEDULER_POLL_INTERVAL", "9")
+    monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "17")
+    monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "4")
+    monkeypatch.setenv("VALUATION_SCHEDULER_MAX_ATTEMPTS", "6")
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_kafka_producer",
+        return_value=mock_kafka_producer,
+    ):
+        scheduler = ValuationScheduler()
+
+    assert scheduler._poll_interval == 9
+    assert scheduler._batch_size == 17
+    assert scheduler._dispatch_rounds_per_poll == 4
+    assert scheduler._max_attempts == 6
+
+
 @patch.object(INSTRUMENT_REPROCESSING_TRIGGERS_PENDING, "set")
 async def test_scheduler_updates_pending_triggers_metric(
     mock_gauge_set,

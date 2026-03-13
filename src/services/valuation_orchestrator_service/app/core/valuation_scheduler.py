@@ -44,6 +44,7 @@ class ValuationScheduler:
         self._poll_interval = runtime_settings.valuation_scheduler_poll_interval_seconds
         self._batch_size = runtime_settings.valuation_scheduler_batch_size
         self._dispatch_rounds_per_poll = runtime_settings.valuation_scheduler_dispatch_rounds
+        self._max_attempts = runtime_settings.valuation_scheduler_max_attempts
         self._running = True
         self._producer: KafkaProducer = get_kafka_producer()
 
@@ -335,7 +336,7 @@ class ValuationScheduler:
                 async for db in get_async_db_session():
                     async with db.begin():
                         repo = ValuationRepository(db)
-                        await repo.find_and_reset_stale_jobs()
+                        await repo.find_and_reset_stale_jobs(max_attempts=self._max_attempts)
 
                 async for db in get_async_db_session():
                     async with db.begin():

@@ -686,7 +686,7 @@ async def test_find_and_reset_stale_jobs(
 
     async with session_factory() as session:
         repo = ValuationRepository(session)
-        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15)
+        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
         await session.commit()
     assert reset_count == 1
 
@@ -715,6 +715,26 @@ async def test_find_and_reset_stale_jobs(
             )
         ).scalar_one()
         assert job4.status == initial_states["P4"]
+
+
+async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
+    clean_db, setup_stale_job_data, session_factory: async_sessionmaker
+):
+    async with session_factory() as session:
+        repo = ValuationRepository(session)
+        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=0)
+        await session.commit()
+
+    assert reset_count == 0
+
+    async with session_factory() as session:
+        job1 = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "P1")
+            )
+        ).scalar_one()
+        assert job1.status == "FAILED"
+        assert job1.failure_reason == "Stale processing timeout exceeded max attempts"
 
 
 async def test_get_first_open_dates_for_keys(
