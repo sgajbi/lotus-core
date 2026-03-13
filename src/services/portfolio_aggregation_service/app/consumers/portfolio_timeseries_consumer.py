@@ -13,7 +13,6 @@ from portfolio_common.events import (
     PortfolioAggregationRequiredEvent,
 )
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
 from sqlalchemy import func, update
@@ -36,9 +35,8 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
-            ):
+            ) as correlation_id:
                 event = PortfolioAggregationRequiredEvent.model_validate(event_data)
-                correlation_id = correlation_id_var.get()
 
                 work_key = (event.portfolio_id, event.aggregation_date)
                 logger.info(f"Received aggregation job for {work_key}.")
