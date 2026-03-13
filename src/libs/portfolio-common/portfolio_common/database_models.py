@@ -1106,6 +1106,12 @@ class ReprocessingJob(Base):
 
     __table_args__ = (
         Index(
+            "uq_reprocessing_jobs_pending_reset_watermarks_security",
+            text("(payload->>'security_id')"),
+            unique=True,
+            postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),
+        ),
+        Index(
             "ix_reprocessing_jobs_pending_resetwatermarks_priority",
             text("(payload->>'earliest_impacted_date')"),
             "created_at",
