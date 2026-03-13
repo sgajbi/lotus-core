@@ -10,6 +10,8 @@ from src.services.query_service.app.dtos.operations_dto import (
     CalculatorSloResponse,
     LineageKeyListResponse,
     LineageResponse,
+    ReconciliationFindingListResponse,
+    ReconciliationRunListResponse,
     SupportJobListResponse,
     SupportOverviewResponse,
 )
@@ -236,6 +238,106 @@ async def get_analytics_export_jobs(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while listing analytics export jobs.",
+        )
+
+
+@router.get(
+    "/support/portfolios/{portfolio_id}/reconciliation-runs",
+    response_model=ReconciliationRunListResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
+    summary="List reconciliation runs for support workflows",
+    description=(
+        "What: List durable reconciliation control runs for a portfolio.\n"
+        "How: Query reconciliation run records with pagination and optional type/status filters.\n"
+        "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
+        "unexpected reconciliation failures."
+    ),
+)
+async def get_reconciliation_runs(
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    reconciliation_type: Optional[str] = Query(
+        None,
+        description="Optional reconciliation type filter (e.g., transaction_cashflow).",
+        examples=["transaction_cashflow"],
+    ),
+    status_filter: Optional[str] = Query(
+        None,
+        description="Optional run status filter (e.g., COMPLETED, FAILED, REQUIRES_REPLAY).",
+        examples=["FAILED"],
+    ),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
+    service: OperationsService = Depends(get_operations_service),
+):
+    try:
+        return await service.get_reconciliation_runs(
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            reconciliation_type=reconciliation_type,
+            status=status_filter,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception:
+        logger.exception("Failed to list reconciliation runs for portfolio %s", portfolio_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected server error occurred while listing reconciliation runs.",
+        )
+
+
+@router.get(
+    "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings",
+    response_model=ReconciliationFindingListResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio or reconciliation run not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
+    summary="List reconciliation findings for one support run",
+    description=(
+        "What: Return durable findings for one reconciliation run.\n"
+        "How: Query persisted reconciliation findings scoped to the requested run identifier.\n"
+        "When: Use after a control failure or replay requirement to inspect the exact breaches "
+        "that blocked publication."
+    ),
+)
+async def get_reconciliation_findings(
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    run_id: str = Path(
+        ...,
+        description="Reconciliation run identifier.",
+        examples=["recon_1234567890abcdef"],
+    ),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum findings to return.", examples=[100]
+    ),
+    service: OperationsService = Depends(get_operations_service),
+):
+    try:
+        return await service.get_reconciliation_findings(
+            portfolio_id=portfolio_id,
+            run_id=run_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception:
+        logger.exception(
+            "Failed to list reconciliation findings for portfolio %s run %s",
+            portfolio_id,
+            run_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected server error occurred while listing reconciliation findings.",
         )
 
 

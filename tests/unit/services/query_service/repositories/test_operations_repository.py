@@ -511,3 +511,96 @@ async def test_get_analytics_export_jobs_query(
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.status = 'running'" in compiled
     assert "ORDER BY analytics_export_jobs.created_at DESC" in compiled
+
+
+async def test_get_reconciliation_runs_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 3)
+
+    value = await repository.get_reconciliation_runs_count(
+        portfolio_id="P1",
+        reconciliation_type="transaction_cashflow",
+        status="FAILED",
+    )
+
+    assert value == 3
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
+    assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
+
+
+async def test_get_reconciliation_runs_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["run1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reconciliation_runs(
+        portfolio_id="P1",
+        skip=2,
+        limit=5,
+        reconciliation_type="transaction_cashflow",
+        status="COMPLETED",
+    )
+
+    assert value == ["run1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
+    assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
+    assert "ORDER BY financial_reconciliation_runs.started_at DESC" in compiled
+    assert "LIMIT 5 OFFSET 2" in compiled
+
+
+async def test_get_reconciliation_findings_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["finding1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reconciliation_findings(run_id="recon_123", limit=20)
+
+    assert value == ["finding1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_findings" in compiled.lower()
+    assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+    assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
+    assert "financial_reconciliation_findings.created_at DESC" in compiled
+    assert "LIMIT 20" in compiled
+
+
+async def test_get_reconciliation_run_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_run = object()
+    mock_execute_scalar_one_or_none(mock_db_session, mock_run)
+
+    value = await repository.get_reconciliation_run(portfolio_id="P1", run_id="recon_123")
+
+    assert value is mock_run
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled
+    assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
+
+
+async def test_get_reconciliation_findings_count(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 4)
+
+    value = await repository.get_reconciliation_findings_count(run_id="recon_123")
+
+    assert value == 4
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_findings" in compiled.lower()
+    assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled

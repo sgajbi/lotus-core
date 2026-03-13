@@ -7,6 +7,8 @@ from portfolio_common.database_models import (
     AnalyticsExportJob,
     BusinessDate,
     DailyPositionSnapshot,
+    FinancialReconciliationFinding,
+    FinancialReconciliationRun,
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
@@ -15,7 +17,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -478,3 +480,85 @@ class OperationsRepository:
             .limit(limit)
         )
         return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_reconciliation_runs_count(
+        self,
+        portfolio_id: str,
+        reconciliation_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(FinancialReconciliationRun)
+            .where(FinancialReconciliationRun.portfolio_id == portfolio_id)
+        )
+        if reconciliation_type:
+            stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
+        if status:
+            stmt = stmt.where(FinancialReconciliationRun.status == status)
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_reconciliation_runs(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        reconciliation_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> list[FinancialReconciliationRun]:
+        stmt = select(FinancialReconciliationRun).where(
+            FinancialReconciliationRun.portfolio_id == portfolio_id
+        )
+        if reconciliation_type:
+            stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
+        if status:
+            stmt = stmt.where(FinancialReconciliationRun.status == status)
+        stmt = (
+            stmt.order_by(
+                FinancialReconciliationRun.started_at.desc(),
+                FinancialReconciliationRun.id.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_reconciliation_run(
+        self, portfolio_id: str, run_id: str
+    ) -> Optional[FinancialReconciliationRun]:
+        stmt = (
+            select(FinancialReconciliationRun)
+            .where(FinancialReconciliationRun.portfolio_id == portfolio_id)
+            .where(FinancialReconciliationRun.run_id == run_id)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def get_reconciliation_findings(
+        self, run_id: str, limit: int
+    ) -> list[FinancialReconciliationFinding]:
+        severity_rank = case(
+            (FinancialReconciliationFinding.severity == "ERROR", 0),
+            (FinancialReconciliationFinding.severity == "WARNING", 1),
+            (FinancialReconciliationFinding.severity == "INFO", 2),
+            else_=9,
+        )
+        stmt = (
+            select(FinancialReconciliationFinding)
+            .where(FinancialReconciliationFinding.run_id == run_id)
+            .order_by(
+                severity_rank.asc(),
+                FinancialReconciliationFinding.finding_type.asc(),
+                FinancialReconciliationFinding.created_at.desc(),
+                FinancialReconciliationFinding.id.asc(),
+            )
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_reconciliation_findings_count(self, run_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(FinancialReconciliationFinding)
+            .where(FinancialReconciliationFinding.run_id == run_id)
+        )
+        return int((await self.db.execute(stmt)).scalar_one() or 0)

@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -498,6 +498,150 @@ class AnalyticsExportJobListResponse(BaseModel):
                     "completed_at": "2026-03-13T10:15:02Z",
                     "result_row_count": None,
                     "error_message": "Unexpected analytics export processing failure.",
+                }
+            ]
+        ],
+    )
+
+
+class ReconciliationRunRecord(BaseModel):
+    run_id: str = Field(
+        ...,
+        description="Stable financial reconciliation run identifier.",
+        examples=["recon_1234567890abcdef"],
+    )
+    reconciliation_type: str = Field(
+        ...,
+        description="Control family executed by the run.",
+        examples=["transaction_cashflow"],
+    )
+    status: str = Field(
+        ...,
+        description="Current reconciliation run status.",
+        examples=["COMPLETED"],
+    )
+    business_date: Optional[date] = Field(
+        None,
+        description="Business date scope for the reconciliation run.",
+        examples=["2026-03-13"],
+    )
+    epoch: Optional[int] = Field(
+        None,
+        description="Epoch scope for the reconciliation run when applicable.",
+        examples=[3],
+    )
+    started_at: datetime = Field(
+        ...,
+        description="UTC timestamp when reconciliation execution started.",
+        examples=["2026-03-13T10:15:00Z"],
+    )
+    completed_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when reconciliation execution completed.",
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    failure_reason: Optional[str] = Field(
+        None,
+        description="Failure reason when the reconciliation run reaches FAILED state.",
+        examples=["Tolerance exceeded for portfolio timeseries totals."],
+    )
+
+
+class ReconciliationRunListResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    total: int = Field(
+        ..., description="Total reconciliation runs matching the filter.", examples=[8]
+    )
+    skip: int = Field(..., description="Pagination offset.", examples=[0])
+    limit: int = Field(..., description="Pagination limit.", examples=[50])
+    items: list[ReconciliationRunRecord] = Field(
+        ...,
+        description="Durable reconciliation runs for support workflows.",
+        examples=[
+            [
+                {
+                    "run_id": "recon_1234567890abcdef",
+                    "reconciliation_type": "transaction_cashflow",
+                    "status": "COMPLETED",
+                    "business_date": "2026-03-13",
+                    "epoch": 3,
+                    "started_at": "2026-03-13T10:15:00Z",
+                    "completed_at": "2026-03-13T10:15:09Z",
+                    "failure_reason": None,
+                }
+            ]
+        ],
+    )
+
+
+class ReconciliationFindingRecord(BaseModel):
+    finding_id: str = Field(
+        ...,
+        description="Stable reconciliation finding identifier.",
+        examples=["rf_1234567890abcdef"],
+    )
+    finding_type: str = Field(
+        ...,
+        description="Canonical reconciliation finding type.",
+        examples=["missing_cashflow"],
+    )
+    severity: str = Field(
+        ...,
+        description="Operational severity assigned to the finding.",
+        examples=["ERROR"],
+    )
+    security_id: Optional[str] = Field(
+        None,
+        description="Security identifier affected by the finding, when applicable.",
+        examples=["SEC-US-IBM"],
+    )
+    transaction_id: Optional[str] = Field(
+        None,
+        description="Transaction identifier affected by the finding, when applicable.",
+        examples=["TXN-20260313-0042"],
+    )
+    business_date: Optional[date] = Field(
+        None,
+        description="Business date evaluated by the control.",
+        examples=["2026-03-13"],
+    )
+    epoch: Optional[int] = Field(
+        None,
+        description="Epoch evaluated by the control when applicable.",
+        examples=[3],
+    )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the finding was persisted.",
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    detail: Optional[dict[str, Any]] = Field(
+        None,
+        description="Structured detail describing the mismatch or control breach.",
+        examples=[{"expected_cashflow_count": 1, "observed_cashflow_count": 0}],
+    )
+
+
+class ReconciliationFindingListResponse(BaseModel):
+    run_id: str = Field(
+        ..., description="Reconciliation run identifier.", examples=["recon_1234567890abcdef"]
+    )
+    total: int = Field(..., description="Total findings returned for the run.", examples=[2])
+    items: list[ReconciliationFindingRecord] = Field(
+        ...,
+        description="Durable reconciliation findings for the requested run.",
+        examples=[
+            [
+                {
+                    "finding_id": "rf_1234567890abcdef",
+                    "finding_type": "missing_cashflow",
+                    "severity": "ERROR",
+                    "security_id": "SEC-US-IBM",
+                    "transaction_id": "TXN-20260313-0042",
+                    "business_date": "2026-03-13",
+                    "epoch": 3,
+                    "created_at": "2026-03-13T10:15:09Z",
+                    "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
                 }
             ]
         ],

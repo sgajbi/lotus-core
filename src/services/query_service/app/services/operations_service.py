@@ -11,6 +11,10 @@ from ..dtos.operations_dto import (
     LineageKeyListResponse,
     LineageKeyRecord,
     LineageResponse,
+    ReconciliationFindingListResponse,
+    ReconciliationFindingRecord,
+    ReconciliationRunListResponse,
+    ReconciliationRunRecord,
     ReprocessingSloBucket,
     SupportJobListResponse,
     SupportJobRecord,
@@ -361,5 +365,78 @@ class OperationsService:
                     error_message=job.error_message,
                 )
                 for job in jobs
+            ],
+        )
+
+    async def get_reconciliation_runs(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        reconciliation_type: str | None = None,
+        status: str | None = None,
+    ) -> ReconciliationRunListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        total, runs = await asyncio.gather(
+            self.repo.get_reconciliation_runs_count(
+                portfolio_id=portfolio_id,
+                reconciliation_type=reconciliation_type,
+                status=status,
+            ),
+            self.repo.get_reconciliation_runs(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                reconciliation_type=reconciliation_type,
+                status=status,
+            ),
+        )
+        return ReconciliationRunListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                ReconciliationRunRecord(
+                    run_id=run.run_id,
+                    reconciliation_type=run.reconciliation_type,
+                    status=run.status,
+                    business_date=run.business_date,
+                    epoch=run.epoch,
+                    started_at=run.started_at,
+                    completed_at=run.completed_at,
+                    failure_reason=run.failure_reason,
+                )
+                for run in runs
+            ],
+        )
+
+    async def get_reconciliation_findings(
+        self, portfolio_id: str, run_id: str, limit: int
+    ) -> ReconciliationFindingListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        run = await self.repo.get_reconciliation_run(portfolio_id=portfolio_id, run_id=run_id)
+        if run is None:
+            raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
+        total, findings = await asyncio.gather(
+            self.repo.get_reconciliation_findings_count(run_id=run_id),
+            self.repo.get_reconciliation_findings(run_id=run_id, limit=limit),
+        )
+        return ReconciliationFindingListResponse(
+            run_id=run_id,
+            total=total,
+            items=[
+                ReconciliationFindingRecord(
+                    finding_id=finding.finding_id,
+                    finding_type=finding.finding_type,
+                    severity=finding.severity,
+                    security_id=finding.security_id,
+                    transaction_id=finding.transaction_id,
+                    business_date=finding.business_date,
+                    epoch=finding.epoch,
+                    created_at=finding.created_at,
+                    detail=finding.detail,
+                )
+                for finding in findings
             ],
         )

@@ -371,6 +371,113 @@ async def test_analytics_export_jobs_not_found_maps_to_404(async_test_client):
     assert "not found" in response.json()["detail"].lower()
 
 
+async def test_reconciliation_runs_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_runs.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "run_id": "recon_1234567890abcdef",
+                "reconciliation_type": "transaction_cashflow",
+                "status": "FAILED",
+                "business_date": "2026-03-13",
+                "epoch": 3,
+                "started_at": "2026-03-13T10:15:00Z",
+                "completed_at": "2026-03-13T10:15:09Z",
+                "failure_reason": "Tolerance exceeded for portfolio totals.",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/reconciliation-runs?reconciliation_type=transaction_cashflow&status_filter=FAILED"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["run_id"] == "recon_1234567890abcdef"
+    assert response.json()["items"][0]["status"] == "FAILED"
+
+
+async def test_reconciliation_runs_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_runs.side_effect = ValueError("not found")
+
+    response = await client.get(
+        "/support/portfolios/P404/reconciliation-runs?reconciliation_type=transaction_cashflow"
+    )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reconciliation_runs_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_runs.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/reconciliation-runs")
+
+    assert response.status_code == 500
+    assert "reconciliation runs" in response.json()["detail"].lower()
+
+
+async def test_reconciliation_findings_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_findings.return_value = {
+        "run_id": "recon_1234567890abcdef",
+        "total": 1,
+        "items": [
+            {
+                "finding_id": "rf_1234567890abcdef",
+                "finding_type": "missing_cashflow",
+                "severity": "ERROR",
+                "security_id": "SEC-US-IBM",
+                "transaction_id": "TXN-20260313-0042",
+                "business_date": "2026-03-13",
+                "epoch": 3,
+                "created_at": "2026-03-13T10:15:09Z",
+                "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/reconciliation-runs/recon_1234567890abcdef/findings?limit=50"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "recon_1234567890abcdef"
+    assert response.json()["items"][0]["finding_id"] == "rf_1234567890abcdef"
+
+
+async def test_reconciliation_findings_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_findings.side_effect = ValueError(
+        "Reconciliation run recon_404 not found for portfolio P404"
+    )
+
+    response = await client.get(
+        "/support/portfolios/P404/reconciliation-runs/recon_404/findings?limit=50"
+    )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reconciliation_findings_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_findings.side_effect = RuntimeError("boom")
+
+    response = await client.get(
+        "/support/portfolios/P1/reconciliation-runs/recon_123/findings?limit=50"
+    )
+
+    assert response.status_code == 500
+    assert "reconciliation findings" in response.json()["detail"].lower()
+
+
 async def test_lineage_keys_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage_keys.side_effect = ValueError("not found")

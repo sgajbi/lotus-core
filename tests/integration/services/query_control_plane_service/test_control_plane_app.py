@@ -121,6 +121,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
     ]["get"]
+    reconciliation_runs = schema["paths"]["/support/portfolios/{portfolio_id}/reconciliation-runs"][
+        "get"
+    ]
+    reconciliation_findings = schema["paths"][
+        "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings"
+    ]["get"]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -170,6 +176,51 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert analytics_export_job_record["properties"]["dataset_type"]["description"] == (
         "Analytics dataset exported by the job."
+    )
+    reconciliation_type = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "reconciliation_type"
+    )
+    assert reconciliation_type["description"].startswith("Optional reconciliation type filter")
+    reconciliation_status = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert reconciliation_status["description"].startswith("Optional run status filter")
+    run_id_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "run_id"
+    )
+    assert run_id_param["description"] == "Reconciliation run identifier."
+
+    reconciliation_not_found = reconciliation_runs["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert reconciliation_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    findings_not_found = reconciliation_findings["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert findings_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+
+    reconciliation_run_schema = components["ReconciliationRunListResponse"]
+    reconciliation_run_record = components["ReconciliationRunRecord"]
+    reconciliation_finding_schema = components["ReconciliationFindingListResponse"]
+    reconciliation_finding_record = components["ReconciliationFindingRecord"]
+
+    assert reconciliation_run_schema["properties"]["items"]["description"] == (
+        "Durable reconciliation runs for support workflows."
+    )
+    assert reconciliation_run_record["properties"]["failure_reason"]["description"] == (
+        "Failure reason when the reconciliation run reaches FAILED state."
+    )
+    assert reconciliation_finding_schema["properties"]["items"]["description"] == (
+        "Durable reconciliation findings for the requested run."
+    )
+    assert reconciliation_finding_record["properties"]["detail"]["description"] == (
+        "Structured detail describing the mismatch or control breach."
     )
 
 

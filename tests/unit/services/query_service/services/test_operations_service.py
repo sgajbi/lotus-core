@@ -246,6 +246,97 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     assert response.items[0].error_message == "Unexpected analytics export processing failure."
 
 
+async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo: AsyncMock):
+    started_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
+    completed_at = datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc)
+    mock_ops_repo.get_reconciliation_runs_count.return_value = 1
+    mock_ops_repo.get_reconciliation_runs.return_value = [
+        type(
+            "ReconciliationRunStub",
+            (),
+            {
+                "run_id": "recon_1234567890abcdef",
+                "reconciliation_type": "transaction_cashflow",
+                "status": "FAILED",
+                "business_date": date(2026, 3, 13),
+                "epoch": 3,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "failure_reason": "Tolerance exceeded for portfolio totals.",
+            },
+        )()
+    ]
+
+    response = await service.get_reconciliation_runs(
+        "P1",
+        skip=0,
+        limit=20,
+        reconciliation_type="transaction_cashflow",
+        status="FAILED",
+    )
+
+    assert response.total == 1
+    assert response.items[0].run_id == "recon_1234567890abcdef"
+    assert response.items[0].reconciliation_type == "transaction_cashflow"
+    assert response.items[0].status == "FAILED"
+    assert response.items[0].failure_reason == "Tolerance exceeded for portfolio totals."
+
+
+async def test_get_reconciliation_findings(service: OperationsService, mock_ops_repo: AsyncMock):
+    created_at = datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc)
+    mock_ops_repo.get_reconciliation_run.return_value = type(
+        "ReconciliationRunStub",
+        (),
+        {"run_id": "recon_1234567890abcdef"},
+    )()
+    mock_ops_repo.get_reconciliation_findings_count.return_value = 7
+    mock_ops_repo.get_reconciliation_findings.return_value = [
+        type(
+            "ReconciliationFindingStub",
+            (),
+            {
+                "finding_id": "rf_1234567890abcdef",
+                "finding_type": "missing_cashflow",
+                "severity": "ERROR",
+                "security_id": "SEC-US-IBM",
+                "transaction_id": "TXN-20260313-0042",
+                "business_date": date(2026, 3, 13),
+                "epoch": 3,
+                "created_at": created_at,
+                "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+            },
+        )()
+    ]
+
+    response = await service.get_reconciliation_findings(
+        portfolio_id="P1",
+        run_id="recon_1234567890abcdef",
+        limit=50,
+    )
+
+    assert response.run_id == "recon_1234567890abcdef"
+    assert response.total == 7
+    assert response.items[0].finding_id == "rf_1234567890abcdef"
+    assert response.items[0].severity == "ERROR"
+    assert response.items[0].detail == {"expected_cashflow_count": 1, "observed_cashflow_count": 0}
+
+
+async def test_get_reconciliation_findings_raises_when_run_missing(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_reconciliation_run.return_value = None
+
+    with pytest.raises(
+        ValueError,
+        match="Reconciliation run recon_1234567890abcdef not found for portfolio P1",
+    ):
+        await service.get_reconciliation_findings(
+            portfolio_id="P1",
+            run_id="recon_1234567890abcdef",
+            limit=50,
+        )
+
+
 async def test_get_support_overview_raises_when_portfolio_missing(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
