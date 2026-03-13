@@ -18,7 +18,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.events import CashflowCalculatedEvent, TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
 from portfolio_common.transaction_domain import (
@@ -177,8 +176,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
-            ):
-                correlation_id = correlation_id_var.get()
+            ) as correlation_id:
                 event = TransactionEvent.model_validate(event_data)
 
                 if (
@@ -310,9 +308,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
                                 "Message will be sent to DLQ."
                             )
 
-                        cashflow_to_save = CashflowLogic.calculate(
-                            event, rule, epoch=event.epoch
-                        )
+                        cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
                         saved = await cashflow_repo.create_cashflow(cashflow_to_save)
 
                         completion_evt = CashflowCalculatedEvent(

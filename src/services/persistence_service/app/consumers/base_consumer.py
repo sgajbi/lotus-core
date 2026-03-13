@@ -9,7 +9,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
@@ -70,8 +69,7 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
-            ):
-                correlation_id = correlation_id_var.get()
+            ) as correlation_id:
                 event = self.event_model.model_validate(event_data)
 
                 idempotency_key = getattr(event, "transaction_id", event_id)

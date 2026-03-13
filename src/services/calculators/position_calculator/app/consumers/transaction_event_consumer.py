@@ -7,7 +7,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.events import TransactionEvent, TransactionProcessingCompletedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from pydantic import ValidationError
@@ -68,8 +67,7 @@ class TransactionEventConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=data.get("correlation_id"),
-            ):
-                correlation_id = correlation_id_var.get()
+            ) as correlation_id:
                 try:
                     gate_event = TransactionProcessingCompletedEvent.model_validate(data)
                 except ValidationError:

@@ -16,7 +16,6 @@ from portfolio_common.events import (
 )
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
@@ -66,8 +65,7 @@ class ValuationConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
-            ):
-                correlation_id = correlation_id_var.get()
+            ) as correlation_id:
                 event = PortfolioValuationRequiredEvent.model_validate(event_data)
 
                 logger.info(
