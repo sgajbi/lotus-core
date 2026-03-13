@@ -102,6 +102,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     calculator_slo = components["CalculatorSloResponse"]
     lineage_keys = components["LineageKeyListResponse"]
     support_jobs = components["SupportJobListResponse"]
+    support_overview = components["SupportOverviewResponse"]
 
     assert calculator_slo["properties"]["valuation"]["description"] == (
         "Valuation calculator SLO snapshot for this portfolio."
@@ -109,6 +110,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_keys["properties"]["items"]["description"] == "Current lineage key states."
     assert support_jobs["properties"]["items"]["description"] == (
         "Operational jobs for support workflows."
+    )
+    assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
+        "Number of valuation jobs currently in FAILED terminal state."
+    )
+    assert support_overview["properties"]["oldest_pending_aggregation_date"]["description"] == (
+        "Oldest aggregation date among pending/processing jobs for backlog analysis."
+    )
+    assert support_overview["properties"]["aggregation_backlog_age_days"]["description"].startswith(
+        "Backlog age in days computed from oldest pending aggregation date"
     )
 
 
@@ -271,12 +281,8 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "/integration/benchmarks/{benchmark_id}/market-series"
     ]["post"]
     index_price_series = schema["paths"]["/integration/indices/{index_id}/price-series"]["post"]
-    benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"][
-        "post"
-    ]
-    risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"][
-        "post"
-    ]
+    benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"]["post"]
+    risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"]["post"]
 
     portfolio_param = next(
         parameter
@@ -287,9 +293,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Portfolio identifier whose effective benchmark assignment is requested."
     )
 
-    assignment_not_found = benchmark_assignment["responses"]["404"]["content"][
-        "application/json"
-    ]["example"]
+    assignment_not_found = benchmark_assignment["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     assert assignment_not_found["detail"] == (
         "No effective benchmark assignment found for portfolio and as_of_date."
     )
@@ -303,9 +309,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Benchmark identifier for the requested benchmark definition."
     )
 
-    definition_not_found = benchmark_definition["responses"]["404"]["content"][
-        "application/json"
-    ]["example"]
+    definition_not_found = benchmark_definition["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     assert definition_not_found["detail"] == (
         "No effective benchmark definition found for benchmark_id and as_of_date."
     )

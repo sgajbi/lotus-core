@@ -72,6 +72,12 @@ class OperationsService:
             valuation_backlog_age_days = max(
                 0, (reference_date - valuation_job_health.oldest_open_job_date).days
             )
+        aggregation_backlog_age_days = None
+        if aggregation_job_health.oldest_open_job_date:
+            reference_date = latest_business_date or datetime.now(timezone.utc).date()
+            aggregation_backlog_age_days = max(
+                0, (reference_date - aggregation_job_health.oldest_open_job_date).days
+            )
 
         controls_status = latest_control_stage.status if latest_control_stage else None
         controls_blocking = self._is_controls_blocking(controls_status)
@@ -84,9 +90,15 @@ class OperationsService:
             pending_valuation_jobs=valuation_job_health.pending_jobs,
             processing_valuation_jobs=valuation_job_health.processing_jobs,
             stale_processing_valuation_jobs=valuation_job_health.stale_processing_jobs,
+            failed_valuation_jobs=valuation_job_health.failed_jobs,
             oldest_pending_valuation_date=valuation_job_health.oldest_open_job_date,
             valuation_backlog_age_days=valuation_backlog_age_days,
             pending_aggregation_jobs=aggregation_job_health.pending_jobs,
+            processing_aggregation_jobs=aggregation_job_health.processing_jobs,
+            stale_processing_aggregation_jobs=aggregation_job_health.stale_processing_jobs,
+            failed_aggregation_jobs=aggregation_job_health.failed_jobs,
+            oldest_pending_aggregation_date=aggregation_job_health.oldest_open_job_date,
+            aggregation_backlog_age_days=aggregation_backlog_age_days,
             latest_transaction_date=latest_transaction_date,
             latest_booked_transaction_date=latest_booked_transaction_date,
             latest_position_snapshot_date=latest_position_snapshot_date_unbounded,

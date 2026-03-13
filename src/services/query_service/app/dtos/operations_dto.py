@@ -39,6 +39,11 @@ class SupportOverviewResponse(BaseModel):
         description="Number of PROCESSING valuation jobs older than stale threshold (15 minutes).",
         examples=[1],
     )
+    failed_valuation_jobs: int = Field(
+        ...,
+        description="Number of valuation jobs currently in FAILED terminal state.",
+        examples=[2],
+    )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
         description="Oldest valuation date among pending/processing jobs for backlog analysis.",
@@ -55,6 +60,37 @@ class SupportOverviewResponse(BaseModel):
     pending_aggregation_jobs: int = Field(
         ...,
         description="Number of pending/processing portfolio aggregation jobs for the portfolio.",
+        examples=[1],
+    )
+    processing_aggregation_jobs: int = Field(
+        ...,
+        description="Number of aggregation jobs currently in PROCESSING state.",
+        examples=[0],
+    )
+    stale_processing_aggregation_jobs: int = Field(
+        ...,
+        description=(
+            "Number of PROCESSING aggregation jobs older than stale threshold "
+            "(15 minutes)."
+        ),
+        examples=[0],
+    )
+    failed_aggregation_jobs: int = Field(
+        ...,
+        description="Number of aggregation jobs currently in FAILED terminal state.",
+        examples=[1],
+    )
+    oldest_pending_aggregation_date: Optional[date] = Field(
+        None,
+        description="Oldest aggregation date among pending/processing jobs for backlog analysis.",
+        examples=["2025-12-29"],
+    )
+    aggregation_backlog_age_days: Optional[int] = Field(
+        None,
+        description=(
+            "Backlog age in days computed from oldest pending aggregation date "
+            "to business_date (or current UTC date when business_date is missing)."
+        ),
         examples=[1],
     )
     latest_transaction_date: Optional[date] = Field(
@@ -81,8 +117,7 @@ class SupportOverviewResponse(BaseModel):
     latest_booked_position_snapshot_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent daily position snapshot date in the current epoch "
-            "up to business_date."
+            "Most recent daily position snapshot date in the current epoch " "up to business_date."
         ),
         examples=["2025-12-30"],
     )
@@ -105,8 +140,7 @@ class SupportOverviewResponse(BaseModel):
     controls_epoch: Optional[int] = Field(
         None,
         description=(
-            "Epoch associated with the latest portfolio-day financial "
-            "reconciliation stage."
+            "Epoch associated with the latest portfolio-day financial " "reconciliation stage."
         ),
         examples=[3],
     )

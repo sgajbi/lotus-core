@@ -66,9 +66,15 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.pending_valuation_jobs == 4
     assert response.processing_valuation_jobs == 2
     assert response.stale_processing_valuation_jobs == 1
+    assert response.failed_valuation_jobs == 0
     assert response.oldest_pending_valuation_date == date(2025, 8, 20)
     assert response.valuation_backlog_age_days == 10
     assert response.pending_aggregation_jobs == 1
+    assert response.processing_aggregation_jobs == 0
+    assert response.stale_processing_aggregation_jobs == 0
+    assert response.failed_aggregation_jobs == 0
+    assert response.oldest_pending_aggregation_date is None
+    assert response.aggregation_backlog_age_days is None
     assert response.latest_transaction_date == date(2025, 9, 2)
     assert response.latest_booked_transaction_date == date(2025, 8, 30)
     assert response.latest_position_snapshot_date == date(2025, 8, 30)
@@ -227,6 +233,7 @@ async def test_get_support_overview_without_business_date(
 
     assert response.business_date is None
     assert response.valuation_backlog_age_days is None
+    assert response.aggregation_backlog_age_days is None
     assert response.latest_booked_transaction_date is None
     assert response.latest_booked_position_snapshot_date is None
     assert response.controls_status is None
