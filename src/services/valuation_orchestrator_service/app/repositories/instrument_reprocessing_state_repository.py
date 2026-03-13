@@ -4,6 +4,7 @@ import logging
 from datetime import date
 
 from portfolio_common.database_models import InstrumentReprocessingState
+from portfolio_common.logging_utils import normalize_lineage_value
 from sqlalchemy import case, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ class InstrumentReprocessingStateRepository:
     async def upsert_state(
         self, security_id: str, price_date: date, correlation_id: str | None = None
     ) -> None:
+        correlation_id = normalize_lineage_value(correlation_id)
         """
         Idempotently creates or updates an instrument reprocessing state.
 

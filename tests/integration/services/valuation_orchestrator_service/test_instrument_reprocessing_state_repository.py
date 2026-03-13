@@ -130,3 +130,28 @@ async def test_upsert_state_preserves_existing_correlation_when_earlier_event_ha
 
     assert row.earliest_impacted_date == date(2025, 8, 8)
     assert row.correlation_id == "corr-10"
+
+
+async def test_upsert_state_normalizes_sentinel_correlation(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = instrument_reprocessing_state_repo.InstrumentReprocessingStateRepository(
+        async_db_session
+    )
+
+    await repo.upsert_state("S-TRIGGER-5", date(2025, 8, 10), correlation_id="<not-set>")
+    await async_db_session.commit()
+
+    row = (
+        (
+            await async_db_session.execute(
+                select(InstrumentReprocessingState).where(
+                    InstrumentReprocessingState.security_id == "S-TRIGGER-5"
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+
+    assert row.correlation_id is None

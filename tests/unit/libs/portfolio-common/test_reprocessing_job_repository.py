@@ -349,3 +349,18 @@ async def test_create_job_sets_correlation_for_generic_jobs(
     assert result.correlation_id == "corr-generic"
     mock_db_session.add.assert_called_once()
     mock_db_session.flush.assert_awaited_once()
+
+
+async def test_create_job_normalizes_sentinel_correlation_for_generic_jobs(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.refresh.return_value = None
+
+    result = await repository.create_job(
+        "OTHER_JOB",
+        {"transaction_ids": ["T1"]},
+        correlation_id="<not-set>",
+    )
+
+    assert result.correlation_id is None

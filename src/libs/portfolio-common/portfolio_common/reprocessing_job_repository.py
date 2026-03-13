@@ -7,6 +7,7 @@ from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
+from .logging_utils import normalize_lineage_value
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .utils import async_timed
 
@@ -80,6 +81,7 @@ class ReprocessingJobRepository:
     async def create_job(
         self, job_type: str, payload: Dict[str, Any], correlation_id: str | None = None
     ) -> ReprocessingJob:
+        correlation_id = normalize_lineage_value(correlation_id)
         if (
             job_type == "RESET_WATERMARKS"
             and payload.get("security_id")
