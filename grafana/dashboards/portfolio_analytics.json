@@ -1444,7 +1444,7 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "description": "Replay work-in-flight, backlog aging, and worker claim/completion/failure balance.",
+      "description": "Replay work-in-flight, backlog aging, worker claim/completion/failure balance, and explicit no-op outcomes where replay work correctly results in no impacted portfolios.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1568,6 +1568,17 @@
           "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_failed_total[5m]))",
           "legendFormat": "failed {{job_type}}",
           "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (job_type, reason) (rate(reprocessing_worker_jobs_noop_total[5m]))",
+          "legendFormat": "noop {{job_type}} / {{reason}}",
+          "refId": "F"
         }
       ],
       "title": "Reprocessing Worker Throughput and Backlog",

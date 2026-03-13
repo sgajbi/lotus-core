@@ -387,9 +387,7 @@ def observe_reprocessing_worker_jobs_completed(job_type: str, count: int = 1) ->
     REPROCESSING_WORKER_JOBS_COMPLETED_TOTAL.labels(job_type).inc(count)
 
 
-def observe_reprocessing_worker_jobs_noop(
-    job_type: str, reason: str, count: int = 1
-) -> None:
+def observe_reprocessing_worker_jobs_noop(job_type: str, reason: str, count: int = 1) -> None:
     REPROCESSING_WORKER_JOBS_NOOP_TOTAL.labels(job_type, reason).inc(count)
 
 
