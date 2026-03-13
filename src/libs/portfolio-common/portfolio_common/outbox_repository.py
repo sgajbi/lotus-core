@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.database_models import OutboxEvent
+from portfolio_common.logging_utils import normalize_lineage_value
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class OutboxRepository:
 
         if not isinstance(payload, dict):
             raise TypeError("payload must be a dict (will be serialized by SQLAlchemy JSON type)")
+
+        correlation_id = normalize_lineage_value(correlation_id)
 
         event = OutboxEvent(
             aggregate_type=aggregate_type,

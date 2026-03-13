@@ -87,3 +87,23 @@ async def test_upsert_job_skips_when_newer_epoch_already_exists(
 
     mock_pg_insert.assert_not_called()
     mock_db_session.execute.assert_awaited_once()
+
+
+@patch("portfolio_common.valuation_job_repository.pg_insert")
+async def test_upsert_job_normalizes_sentinel_correlation(
+    mock_pg_insert, repository: ValuationJobRepository, mock_db_session: AsyncMock
+):
+    latest_epoch_result = MagicMock()
+    latest_epoch_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.side_effect = [latest_epoch_result, None]
+
+    await repository.upsert_job(
+        portfolio_id="P1",
+        security_id="S1",
+        valuation_date=date(2025, 8, 10),
+        epoch=1,
+        correlation_id="<not-set>",
+    )
+
+    values_kwargs = mock_pg_insert.return_value.values.call_args.kwargs
+    assert values_kwargs["correlation_id"] is None

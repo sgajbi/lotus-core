@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PortfolioValuationJob
+from .logging_utils import normalize_lineage_value
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class ValuationJobRepository:
         valuation job. A genuinely new replay/backfill run is allowed to re-arm the job via a
         different correlation id.
         """
+        correlation_id = normalize_lineage_value(correlation_id)
         try:
             latest_epoch = await self.get_latest_epoch_for_scope(
                 portfolio_id=portfolio_id,
