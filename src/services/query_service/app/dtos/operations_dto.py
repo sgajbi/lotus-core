@@ -383,6 +383,22 @@ class LineageKeyRecord(BaseModel):
         ),
         examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
     )
+    has_artifact_gap: bool = Field(
+        ...,
+        description=(
+            "True when the current epoch shows missing or lagging downstream artifacts relative "
+            "to the latest position history for this key."
+        ),
+        examples=[False, True],
+    )
+    operational_state: str = Field(
+        ...,
+        description=(
+            "Derived operator-facing lineage state for this key, based on replay status and "
+            "artifact freshness."
+        ),
+        examples=["HEALTHY", "REPLAYING", "ARTIFACT_GAP", "VALUATION_BLOCKED"],
+    )
 
 
 class LineageKeyListResponse(BaseModel):
@@ -404,6 +420,8 @@ class LineageKeyListResponse(BaseModel):
                     "latest_daily_snapshot_date": "2025-12-30",
                     "latest_valuation_job_date": "2025-12-30",
                     "latest_valuation_job_status": "DONE",
+                    "has_artifact_gap": False,
+                    "operational_state": "HEALTHY",
                 }
             ]
         ],

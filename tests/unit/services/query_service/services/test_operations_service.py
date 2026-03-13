@@ -165,6 +165,62 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     assert response.items[0].latest_daily_snapshot_date == date(2025, 8, 30)
     assert response.items[0].latest_valuation_job_date == date(2025, 8, 31)
     assert response.items[0].latest_valuation_job_status == "DONE"
+    assert response.items[0].has_artifact_gap is True
+    assert response.items[0].operational_state == "ARTIFACT_GAP"
+
+
+async def test_build_lineage_key_record_healthy_state(service: OperationsService):
+    record = service._build_lineage_key_record(
+        {
+            "security_id": "S1",
+            "epoch": 2,
+            "watermark_date": date(2025, 8, 1),
+            "reprocessing_status": "CURRENT",
+            "latest_position_history_date": date(2025, 8, 31),
+            "latest_daily_snapshot_date": date(2025, 8, 31),
+            "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_status": "DONE",
+        }
+    )
+
+    assert record.has_artifact_gap is False
+    assert record.operational_state == "HEALTHY"
+
+
+async def test_build_lineage_key_record_replaying_state(service: OperationsService):
+    record = service._build_lineage_key_record(
+        {
+            "security_id": "S1",
+            "epoch": 2,
+            "watermark_date": date(2025, 8, 1),
+            "reprocessing_status": "REPROCESSING",
+            "latest_position_history_date": date(2025, 8, 31),
+            "latest_daily_snapshot_date": date(2025, 8, 30),
+            "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_status": "DONE",
+        }
+    )
+
+    assert record.has_artifact_gap is True
+    assert record.operational_state == "REPLAYING"
+
+
+async def test_build_lineage_key_record_valuation_blocked_state(service: OperationsService):
+    record = service._build_lineage_key_record(
+        {
+            "security_id": "S1",
+            "epoch": 2,
+            "watermark_date": date(2025, 8, 1),
+            "reprocessing_status": "CURRENT",
+            "latest_position_history_date": date(2025, 8, 31),
+            "latest_daily_snapshot_date": date(2025, 8, 31),
+            "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_status": "FAILED",
+        }
+    )
+
+    assert record.has_artifact_gap is True
+    assert record.operational_state == "VALUATION_BLOCKED"
 
 
 async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):

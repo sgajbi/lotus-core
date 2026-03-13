@@ -350,6 +350,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_key_record["properties"]["latest_valuation_job_status"]["description"] == (
         "Status of the latest valuation job recorded for the current epoch of this key."
     )
+    assert lineage_key_record["properties"]["has_artifact_gap"]["description"].startswith(
+        "True when the current epoch shows missing or lagging downstream artifacts"
+    )
+    assert lineage_key_record["properties"]["operational_state"]["description"].startswith(
+        "Derived operator-facing lineage state for this key"
+    )
 
 
 async def test_openapi_describes_simulation_parameters_and_examples(async_test_client):

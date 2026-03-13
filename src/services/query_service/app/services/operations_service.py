@@ -92,6 +92,69 @@ class OperationsService:
             return "REPROCESSING"
         return "CURRENT"
 
+    @staticmethod
+    def _has_lineage_artifact_gap(
+        latest_position_history_date: date | None,
+        latest_daily_snapshot_date: date | None,
+        latest_valuation_job_date: date | None,
+        latest_valuation_job_status: str | None,
+    ) -> bool:
+        if latest_position_history_date is None:
+            return False
+        if (
+            latest_daily_snapshot_date is None
+            or latest_daily_snapshot_date < latest_position_history_date
+        ):
+            return True
+        if (
+            latest_valuation_job_date is None
+            or latest_valuation_job_date < latest_position_history_date
+        ):
+            return True
+        return latest_valuation_job_status in {"FAILED", "PENDING", "PROCESSING"}
+
+    @staticmethod
+    def _get_lineage_key_operational_state(
+        reprocessing_status: str | None,
+        has_artifact_gap: bool,
+        latest_valuation_job_status: str | None,
+    ) -> str:
+        if reprocessing_status == "REPROCESSING":
+            return "REPLAYING"
+        if has_artifact_gap:
+            if latest_valuation_job_status == "FAILED":
+                return "VALUATION_BLOCKED"
+            return "ARTIFACT_GAP"
+        return "HEALTHY"
+
+    def _build_lineage_key_record(self, key: dict[str, object]) -> LineageKeyRecord:
+        latest_position_history_date = key["latest_position_history_date"]
+        latest_daily_snapshot_date = key["latest_daily_snapshot_date"]
+        latest_valuation_job_date = key["latest_valuation_job_date"]
+        latest_valuation_job_status = key["latest_valuation_job_status"]
+        has_artifact_gap = self._has_lineage_artifact_gap(
+            latest_position_history_date=latest_position_history_date,
+            latest_daily_snapshot_date=latest_daily_snapshot_date,
+            latest_valuation_job_date=latest_valuation_job_date,
+            latest_valuation_job_status=latest_valuation_job_status,
+        )
+        return LineageKeyRecord(
+            security_id=key["security_id"],
+            epoch=key["epoch"],
+            watermark_date=key["watermark_date"],
+            reprocessing_status=key["reprocessing_status"],
+            latest_position_history_date=latest_position_history_date,
+            latest_daily_snapshot_date=latest_daily_snapshot_date,
+            latest_valuation_job_date=latest_valuation_job_date,
+            latest_valuation_job_status=latest_valuation_job_status,
+            has_artifact_gap=has_artifact_gap,
+            operational_state=self._get_lineage_key_operational_state(
+                reprocessing_status=key["reprocessing_status"],
+                has_artifact_gap=has_artifact_gap,
+                latest_valuation_job_status=latest_valuation_job_status,
+            ),
+        )
+
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
@@ -334,19 +397,7 @@ class OperationsService:
             total=total,
             skip=skip,
             limit=limit,
-            items=[
-                LineageKeyRecord(
-                    security_id=k["security_id"],
-                    epoch=k["epoch"],
-                    watermark_date=k["watermark_date"],
-                    reprocessing_status=k["reprocessing_status"],
-                    latest_position_history_date=k["latest_position_history_date"],
-                    latest_daily_snapshot_date=k["latest_daily_snapshot_date"],
-                    latest_valuation_job_date=k["latest_valuation_job_date"],
-                    latest_valuation_job_status=k["latest_valuation_job_status"],
-                )
-                for k in keys
-            ],
+            items=[self._build_lineage_key_record(k) for k in keys],
         )
 
     async def get_valuation_jobs(
