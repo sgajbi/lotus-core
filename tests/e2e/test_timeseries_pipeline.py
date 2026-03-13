@@ -189,12 +189,18 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         },
     )
 
-    # Wait until position state is queryable after day-2 processing.
+    # Wait until the actual stock and cash positions have converged after day-2 processing.
     e2e_api_client.poll_for_data(
         f"/portfolios/{portfolio_id}/positions",
-        lambda data: data.get("positions") and len(data["positions"]) >= 2,
-        timeout=180,
-        fail_message="Pipeline did not produce queryable positions for timeseries setup.",
+        lambda data: _has_expected_positions(
+            data,
+            stock_security_id=stock_security_id,
+            cash_security_id=cash_security_id,
+        ),
+        timeout=240,
+        fail_message=(
+            "Pipeline did not produce the expected stock and cash positions for timeseries setup."
+        ),
     )
     for valuation_date in ("2025-08-28", "2025-08-29"):
         payload = _position_timeseries_request(valuation_date)
@@ -251,6 +257,23 @@ def _has_stock_timeseries_row(payload: dict, *, valuation_date: str) -> bool:
         ):
             return True
     return False
+
+
+def _has_expected_positions(
+    payload: dict,
+    *,
+    stock_security_id: str,
+    cash_security_id: str,
+) -> bool:
+    positions = payload.get("positions", [])
+    stock_row = next(
+        (row for row in positions if row.get("security_id") == stock_security_id),
+        None,
+    )
+    cash_row = next((row for row in positions if row.get("security_id") == cash_security_id), None)
+    if stock_row is None or cash_row is None:
+        return False
+    return as_decimal(stock_row["quantity"]) == Decimal("100")
 
 
 def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(
