@@ -336,10 +336,14 @@ class OperationsService:
             limit=limit,
             items=[
                 LineageKeyRecord(
-                    security_id=k.security_id,
-                    epoch=k.epoch,
-                    watermark_date=k.watermark_date,
-                    reprocessing_status=k.status,
+                    security_id=k["security_id"],
+                    epoch=k["epoch"],
+                    watermark_date=k["watermark_date"],
+                    reprocessing_status=k["reprocessing_status"],
+                    latest_position_history_date=k["latest_position_history_date"],
+                    latest_daily_snapshot_date=k["latest_daily_snapshot_date"],
+                    latest_valuation_job_date=k["latest_valuation_job_date"],
+                    latest_valuation_job_status=k["latest_valuation_job_status"],
                 )
                 for k in keys
             ],

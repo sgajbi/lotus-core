@@ -324,7 +324,7 @@ async def test_get_lineage_keys_count_with_filters(
 
 async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_session: AsyncMock):
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = ["k1", "k2"]
+    mock_result.mappings.return_value.all.return_value = ["k1", "k2"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_lineage_keys(portfolio_id="P1", skip=5, limit=10)
@@ -334,6 +334,10 @@ async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "ORDER BY position_state.security_id ASC" in compiled
     assert "LIMIT 10 OFFSET 5" in compiled
+    assert "latest_position_history_date" in compiled
+    assert "latest_daily_snapshot_date" in compiled
+    assert "latest_valuation_job_date" in compiled
+    assert "latest_valuation_job_status" in compiled
 
 
 async def test_get_valuation_jobs_count_with_status(
@@ -434,7 +438,7 @@ async def test_get_lineage_keys_query_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = ["k1"]
+    mock_result.mappings.return_value.all.return_value = ["k1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_lineage_keys(

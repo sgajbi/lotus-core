@@ -294,6 +294,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     control_stage_record = components["PortfolioControlStageRecord"]
     reprocessing_key_schema = components["ReprocessingKeyListResponse"]
     reprocessing_key_record = components["ReprocessingKeyRecord"]
+    lineage_key_record = components["LineageKeyRecord"]
 
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
@@ -339,6 +340,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert reprocessing_key_record["properties"]["operational_state"]["description"] == (
         "Derived operator-facing lifecycle state used for support triage ordering."
+    )
+    assert lineage_key_record["properties"]["latest_position_history_date"]["description"] == (
+        "Latest position-history date for the current epoch of this key."
+    )
+    assert lineage_key_record["properties"]["latest_daily_snapshot_date"]["description"] == (
+        "Latest daily snapshot date for the current epoch of this key."
+    )
+    assert lineage_key_record["properties"]["latest_valuation_job_status"]["description"] == (
+        "Status of the latest valuation job recorded for the current epoch of this key."
     )
 
 

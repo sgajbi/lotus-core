@@ -359,6 +359,30 @@ class LineageKeyRecord(BaseModel):
         description="Current key status.",
         examples=["CURRENT", "REPROCESSING"],
     )
+    latest_position_history_date: Optional[date] = Field(
+        None,
+        description="Latest position-history date for the current epoch of this key.",
+        examples=["2025-12-30"],
+    )
+    latest_daily_snapshot_date: Optional[date] = Field(
+        None,
+        description="Latest daily snapshot date for the current epoch of this key.",
+        examples=["2025-12-30"],
+    )
+    latest_valuation_job_date: Optional[date] = Field(
+        None,
+        description=(
+            "Latest valuation job business date recorded for the current epoch of this key."
+        ),
+        examples=["2025-12-30"],
+    )
+    latest_valuation_job_status: Optional[str] = Field(
+        None,
+        description=(
+            "Status of the latest valuation job recorded for the current epoch of this key."
+        ),
+        examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
+    )
 
 
 class LineageKeyListResponse(BaseModel):
@@ -376,6 +400,10 @@ class LineageKeyListResponse(BaseModel):
                     "epoch": 3,
                     "watermark_date": "2025-11-01",
                     "reprocessing_status": "CURRENT",
+                    "latest_position_history_date": "2025-12-30",
+                    "latest_daily_snapshot_date": "2025-12-30",
+                    "latest_valuation_job_date": "2025-12-30",
+                    "latest_valuation_job_status": "DONE",
                 }
             ]
         ],

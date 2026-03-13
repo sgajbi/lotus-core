@@ -142,16 +142,16 @@ async def test_get_lineage_success(service: OperationsService, mock_ops_repo: As
 async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: AsyncMock):
     mock_ops_repo.get_lineage_keys_count.return_value = 1
     mock_ops_repo.get_lineage_keys.return_value = [
-        type(
-            "PositionStateStub",
-            (),
-            {
-                "security_id": "S1",
-                "epoch": 2,
-                "watermark_date": date(2025, 8, 1),
-                "status": "CURRENT",
-            },
-        )()
+        {
+            "security_id": "S1",
+            "epoch": 2,
+            "watermark_date": date(2025, 8, 1),
+            "reprocessing_status": "CURRENT",
+            "latest_position_history_date": date(2025, 8, 31),
+            "latest_daily_snapshot_date": date(2025, 8, 30),
+            "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_status": "DONE",
+        }
     ]
 
     response = await service.get_lineage_keys(
@@ -161,6 +161,10 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     assert response.total == 1
     assert response.items[0].security_id == "S1"
     assert response.items[0].reprocessing_status == "CURRENT"
+    assert response.items[0].latest_position_history_date == date(2025, 8, 31)
+    assert response.items[0].latest_daily_snapshot_date == date(2025, 8, 30)
+    assert response.items[0].latest_valuation_job_date == date(2025, 8, 31)
+    assert response.items[0].latest_valuation_job_status == "DONE"
 
 
 async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):

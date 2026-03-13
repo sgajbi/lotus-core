@@ -430,14 +430,67 @@ class OperationsRepository:
         limit: int,
         reprocessing_status: Optional[str] = None,
         security_id: Optional[str] = None,
-    ) -> list[PositionState]:
-        stmt = select(PositionState).where(PositionState.portfolio_id == portfolio_id)
+    ):
+        latest_position_history_date = (
+            select(func.max(PositionHistory.position_date))
+            .where(
+                PositionHistory.portfolio_id == PositionState.portfolio_id,
+                PositionHistory.security_id == PositionState.security_id,
+                PositionHistory.epoch == PositionState.epoch,
+            )
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
+        latest_daily_snapshot_date = (
+            select(func.max(DailyPositionSnapshot.date))
+            .where(
+                DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
+                DailyPositionSnapshot.security_id == PositionState.security_id,
+                DailyPositionSnapshot.epoch == PositionState.epoch,
+            )
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
+        latest_valuation_job_date = (
+            select(PortfolioValuationJob.valuation_date)
+            .where(
+                PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
+                PortfolioValuationJob.security_id == PositionState.security_id,
+                PortfolioValuationJob.epoch == PositionState.epoch,
+            )
+            .order_by(PortfolioValuationJob.valuation_date.desc(), PortfolioValuationJob.id.desc())
+            .limit(1)
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
+        latest_valuation_job_status = (
+            select(PortfolioValuationJob.status)
+            .where(
+                PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
+                PortfolioValuationJob.security_id == PositionState.security_id,
+                PortfolioValuationJob.epoch == PositionState.epoch,
+            )
+            .order_by(PortfolioValuationJob.valuation_date.desc(), PortfolioValuationJob.id.desc())
+            .limit(1)
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
+        stmt = select(
+            PositionState.security_id,
+            PositionState.epoch,
+            PositionState.watermark_date,
+            PositionState.status.label("reprocessing_status"),
+            latest_position_history_date.label("latest_position_history_date"),
+            latest_daily_snapshot_date.label("latest_daily_snapshot_date"),
+            latest_valuation_job_date.label("latest_valuation_job_date"),
+            latest_valuation_job_status.label("latest_valuation_job_status"),
+        ).where(PositionState.portfolio_id == portfolio_id)
         if reprocessing_status:
             stmt = stmt.where(PositionState.status == reprocessing_status)
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
         stmt = stmt.order_by(PositionState.security_id.asc()).offset(skip).limit(limit)
-        return list((await self.db.execute(stmt)).scalars().all())
+        return list((await self.db.execute(stmt)).mappings().all())
 
     async def get_valuation_jobs_count(
         self, portfolio_id: str, status: Optional[str] = None
