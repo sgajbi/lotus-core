@@ -611,3 +611,54 @@ async def test_get_reconciliation_findings_count(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+
+
+async def test_get_portfolio_control_stages_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 6)
+
+    value = await repository.get_portfolio_control_stages_count(
+        portfolio_id="P1",
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="REQUIRES_REPLAY",
+    )
+
+    assert value == 6
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from pipeline_stage_state" in compiled.lower()
+    assert "pipeline_stage_state.transaction_id LIKE 'portfolio-stage:%'" in compiled
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
+    assert "pipeline_stage_state.status = 'REQUIRES_REPLAY'" in compiled
+
+
+async def test_get_portfolio_control_stages_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["stage1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_portfolio_control_stages(
+        portfolio_id="P1",
+        skip=1,
+        limit=10,
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="FAILED",
+    )
+
+    assert value == ["stage1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from pipeline_stage_state" in compiled.lower()
+    assert "pipeline_stage_state.transaction_id LIKE 'portfolio-stage:%'" in compiled
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
+    assert "pipeline_stage_state.status = 'FAILED'" in compiled
+    assert "CASE WHEN (pipeline_stage_state.status IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
+    assert "pipeline_stage_state.business_date DESC" in compiled
+    assert "LIMIT 10 OFFSET 1" in compiled

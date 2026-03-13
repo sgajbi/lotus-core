@@ -443,9 +443,7 @@ class SupportJobRecord(BaseModel):
         "COMPLETED",
     ] = Field(
         ...,
-        description=(
-            "Derived operator-facing lifecycle state used for support triage ordering."
-        ),
+        description=("Derived operator-facing lifecycle state used for support triage ordering."),
         examples=["STALE_PROCESSING"],
     )
 
@@ -743,6 +741,80 @@ class ReconciliationFindingListResponse(BaseModel):
                     "epoch": 3,
                     "created_at": "2026-03-13T10:15:09Z",
                     "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+                }
+            ]
+        ],
+    )
+
+
+class PortfolioControlStageRecord(BaseModel):
+    stage_name: str = Field(
+        ...,
+        description="Control-plane stage name recorded for the portfolio-day scope.",
+        examples=["FINANCIAL_RECONCILIATION"],
+    )
+    business_date: date = Field(
+        ...,
+        description="Business date covered by the durable portfolio control stage row.",
+        examples=["2026-03-13"],
+    )
+    epoch: int = Field(
+        ...,
+        description="Epoch of the portfolio-day control stage row.",
+        examples=[3],
+    )
+    status: str = Field(
+        ...,
+        description="Current durable control stage status.",
+        examples=["REQUIRES_REPLAY"],
+    )
+    last_source_event_type: Optional[str] = Field(
+        None,
+        description="Last event type that updated the control stage row.",
+        examples=["financial_reconciliation_completed"],
+    )
+    updated_at: datetime = Field(
+        ...,
+        description=(
+            "UTC timestamp of the most recent durable lifecycle update for the control stage."
+        ),
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    is_blocking: bool = Field(
+        ...,
+        description=(
+            "True when the control stage blocks downstream publication or release decisions."
+        ),
+        examples=[True],
+    )
+    operational_state: Literal["BLOCKING", "COMPLETED"] = Field(
+        ...,
+        description="Derived operator-facing lifecycle state used for support triage ordering.",
+        examples=["BLOCKING"],
+    )
+
+
+class PortfolioControlStageListResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    total: int = Field(
+        ..., description="Total portfolio control stage rows matching the filter.", examples=[6]
+    )
+    skip: int = Field(..., description="Pagination offset.", examples=[0])
+    limit: int = Field(..., description="Pagination limit.", examples=[50])
+    items: list[PortfolioControlStageRecord] = Field(
+        ...,
+        description="Durable portfolio-day control stage rows for support workflows.",
+        examples=[
+            [
+                {
+                    "stage_name": "FINANCIAL_RECONCILIATION",
+                    "business_date": "2026-03-13",
+                    "epoch": 3,
+                    "status": "REQUIRES_REPLAY",
+                    "last_source_event_type": "financial_reconciliation_completed",
+                    "updated_at": "2026-03-13T10:15:09Z",
+                    "is_blocking": True,
+                    "operational_state": "BLOCKING",
                 }
             ]
         ],

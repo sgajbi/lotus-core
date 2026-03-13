@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,8 @@ from ..dtos.operations_dto import (
     LineageKeyListResponse,
     LineageKeyRecord,
     LineageResponse,
+    PortfolioControlStageListResponse,
+    PortfolioControlStageRecord,
     ReconciliationFindingListResponse,
     ReconciliationFindingRecord,
     ReconciliationRunListResponse,
@@ -30,9 +32,7 @@ class OperationsService:
         self.repo = OperationsRepository(db)
 
     @classmethod
-    def _get_support_job_operational_state(
-        cls, status: str, updated_at: datetime | None
-    ) -> str:
+    def _get_support_job_operational_state(cls, status: str, updated_at: datetime | None) -> str:
         if status == "FAILED":
             return "FAILED"
         if cls._is_support_job_stale(status, updated_at):
@@ -75,6 +75,10 @@ class OperationsService:
         if status == "RUNNING":
             return "RUNNING"
         return "COMPLETED"
+
+    @classmethod
+    def _get_portfolio_control_stage_operational_state(cls, status: str | None) -> str:
+        return "BLOCKING" if cls._is_controls_blocking(status) else "COMPLETED"
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
@@ -530,6 +534,54 @@ class OperationsService:
                     detail=finding.detail,
                 )
                 for finding in findings
+            ],
+        )
+
+    async def get_portfolio_control_stages(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        stage_name: str | None = None,
+        business_date: date | None = None,
+        status: str | None = None,
+    ) -> PortfolioControlStageListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        total, stages = await asyncio.gather(
+            self.repo.get_portfolio_control_stages_count(
+                portfolio_id=portfolio_id,
+                stage_name=stage_name,
+                business_date=business_date,
+                status=status,
+            ),
+            self.repo.get_portfolio_control_stages(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                stage_name=stage_name,
+                business_date=business_date,
+                status=status,
+            ),
+        )
+        return PortfolioControlStageListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                PortfolioControlStageRecord(
+                    stage_name=stage.stage_name,
+                    business_date=stage.business_date,
+                    epoch=stage.epoch,
+                    status=stage.status,
+                    last_source_event_type=stage.last_source_event_type,
+                    updated_at=stage.updated_at,
+                    is_blocking=self._is_controls_blocking(stage.status),
+                    operational_state=self._get_portfolio_control_stage_operational_state(
+                        stage.status
+                    ),
+                )
+                for stage in stages
             ],
         )
 

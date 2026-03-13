@@ -127,6 +127,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reconciliation_findings = schema["paths"][
         "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings"
     ]["get"]
+    control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -232,11 +233,27 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "example"
     ]
     assert findings_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    control_stage_name = next(
+        parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_name"
+    )
+    assert control_stage_name["description"].startswith("Optional control stage filter")
+    control_stage_status = next(
+        parameter
+        for parameter in control_stages["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert control_stage_status["description"].startswith("Optional control stage status filter")
+    control_stages_not_found = control_stages["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert control_stages_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
 
     reconciliation_run_schema = components["ReconciliationRunListResponse"]
     reconciliation_run_record = components["ReconciliationRunRecord"]
     reconciliation_finding_schema = components["ReconciliationFindingListResponse"]
     reconciliation_finding_record = components["ReconciliationFindingRecord"]
+    control_stage_schema = components["PortfolioControlStageListResponse"]
+    control_stage_record = components["PortfolioControlStageRecord"]
 
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
@@ -258,6 +275,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert reconciliation_finding_record["properties"]["detail"]["description"] == (
         "Structured detail describing the mismatch or control breach."
+    )
+    assert control_stage_schema["properties"]["items"]["description"] == (
+        "Durable portfolio-day control stage rows for support workflows."
+    )
+    assert control_stage_record["properties"]["last_source_event_type"]["description"] == (
+        "Last event type that updated the control stage row."
+    )
+    assert control_stage_record["properties"]["is_blocking"]["description"] == (
+        "True when the control stage blocks downstream publication or release decisions."
+    )
+    assert control_stage_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
     )
 
 

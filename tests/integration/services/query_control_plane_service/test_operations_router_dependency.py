@@ -506,6 +506,62 @@ async def test_reconciliation_findings_unexpected_maps_to_500(async_test_client)
     assert "reconciliation findings" in response.json()["detail"].lower()
 
 
+async def test_portfolio_control_stages_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_control_stages.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "stage_name": "FINANCIAL_RECONCILIATION",
+                "business_date": "2026-03-13",
+                "epoch": 3,
+                "status": "REQUIRES_REPLAY",
+                "last_source_event_type": "financial_reconciliation_completed",
+                "updated_at": "2026-03-13T10:15:09Z",
+                "is_blocking": True,
+                "operational_state": "BLOCKING",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/control-stages"
+        "?stage_name=FINANCIAL_RECONCILIATION&business_date=2026-03-13"
+        "&status_filter=REQUIRES_REPLAY"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["items"][0]["stage_name"] == "FINANCIAL_RECONCILIATION"
+    assert response.json()["items"][0]["is_blocking"] is True
+    assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+
+
+async def test_portfolio_control_stages_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_control_stages.side_effect = ValueError("not found")
+
+    response = await client.get(
+        "/support/portfolios/P404/control-stages?stage_name=FINANCIAL_RECONCILIATION"
+    )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_portfolio_control_stages_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_control_stages.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/control-stages")
+
+    assert response.status_code == 500
+    assert "portfolio control stages" in response.json()["detail"].lower()
+
+
 async def test_lineage_keys_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage_keys.side_effect = ValueError("not found")

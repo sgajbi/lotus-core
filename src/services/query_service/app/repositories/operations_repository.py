@@ -59,9 +59,7 @@ class OperationsRepository:
         )
 
     @staticmethod
-    def _analytics_export_job_priority(
-        status_column, updated_at_column, stale_threshold: datetime
-    ):
+    def _analytics_export_job_priority(status_column, updated_at_column, stale_threshold: datetime):
         return case(
             (status_column == "failed", 0),
             (
@@ -78,6 +76,13 @@ class OperationsRepository:
         return case(
             (status_column.in_(("FAILED", "REQUIRES_REPLAY")), 0),
             (status_column == "RUNNING", 1),
+            else_=9,
+        )
+
+    @staticmethod
+    def _portfolio_control_stage_priority(status_column):
+        return case(
+            (status_column.in_(("FAILED", "REQUIRES_REPLAY")), 0),
             else_=9,
         )
 
@@ -627,3 +632,58 @@ class OperationsRepository:
             .where(FinancialReconciliationFinding.run_id == run_id)
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_portfolio_control_stages_count(
+        self,
+        portfolio_id: str,
+        stage_name: Optional[str] = None,
+        business_date: Optional[date] = None,
+        status: Optional[str] = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(PipelineStageState)
+            .where(
+                PipelineStageState.portfolio_id == portfolio_id,
+                PipelineStageState.transaction_id.like("portfolio-stage:%"),
+            )
+        )
+        if stage_name:
+            stmt = stmt.where(PipelineStageState.stage_name == stage_name)
+        if business_date:
+            stmt = stmt.where(PipelineStageState.business_date == business_date)
+        if status:
+            stmt = stmt.where(PipelineStageState.status == status)
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_portfolio_control_stages(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        stage_name: Optional[str] = None,
+        business_date: Optional[date] = None,
+        status: Optional[str] = None,
+    ) -> list[PipelineStageState]:
+        stmt = select(PipelineStageState).where(
+            PipelineStageState.portfolio_id == portfolio_id,
+            PipelineStageState.transaction_id.like("portfolio-stage:%"),
+        )
+        if stage_name:
+            stmt = stmt.where(PipelineStageState.stage_name == stage_name)
+        if business_date:
+            stmt = stmt.where(PipelineStageState.business_date == business_date)
+        if status:
+            stmt = stmt.where(PipelineStageState.status == status)
+        stmt = (
+            stmt.order_by(
+                self._portfolio_control_stage_priority(PipelineStageState.status).asc(),
+                PipelineStageState.business_date.desc(),
+                PipelineStageState.epoch.desc(),
+                PipelineStageState.updated_at.desc(),
+                PipelineStageState.id.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())

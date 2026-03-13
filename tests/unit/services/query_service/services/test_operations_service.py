@@ -308,16 +308,13 @@ async def test_analytics_export_job_flags_running_staleness_and_backlog_age():
     updated_at = datetime(2026, 3, 13, 10, 5, tzinfo=timezone.utc)
     now = datetime(2026, 3, 13, 10, 30, tzinfo=timezone.utc)
 
+    assert OperationsService._is_analytics_export_job_stale("running", updated_at, now=now) is True
     assert (
-        OperationsService._is_analytics_export_job_stale("running", updated_at, now=now) is True
+        OperationsService._get_analytics_export_backlog_age_minutes("running", created_at, now=now)
+        == 30
     )
-    assert OperationsService._get_analytics_export_backlog_age_minutes(
-        "running", created_at, now=now
-    ) == 30
     assert (
-        OperationsService._get_analytics_export_backlog_age_minutes(
-            "failed", created_at, now=now
-        )
+        OperationsService._get_analytics_export_backlog_age_minutes("failed", created_at, now=now)
         is None
     )
     assert (
@@ -425,6 +422,53 @@ async def test_get_reconciliation_findings_raises_when_run_missing(
             run_id="recon_1234567890abcdef",
             limit=50,
         )
+
+
+async def test_get_portfolio_control_stages(service: OperationsService, mock_ops_repo: AsyncMock):
+    updated_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
+    mock_ops_repo.get_portfolio_control_stages_count.return_value = 1
+    mock_ops_repo.get_portfolio_control_stages.return_value = [
+        type(
+            "PipelineStageStub",
+            (),
+            {
+                "stage_name": "FINANCIAL_RECONCILIATION",
+                "business_date": date(2026, 3, 13),
+                "epoch": 3,
+                "status": "REQUIRES_REPLAY",
+                "last_source_event_type": "financial_reconciliation_completed",
+                "updated_at": updated_at,
+            },
+        )()
+    ]
+
+    response = await service.get_portfolio_control_stages(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="REQUIRES_REPLAY",
+    )
+
+    assert response.portfolio_id == "P1"
+    assert response.total == 1
+    assert response.items[0].stage_name == "FINANCIAL_RECONCILIATION"
+    assert response.items[0].business_date == date(2026, 3, 13)
+    assert response.items[0].epoch == 3
+    assert response.items[0].status == "REQUIRES_REPLAY"
+    assert response.items[0].last_source_event_type == "financial_reconciliation_completed"
+    assert response.items[0].updated_at == updated_at
+    assert response.items[0].is_blocking is True
+    assert response.items[0].operational_state == "BLOCKING"
+    mock_ops_repo.get_portfolio_control_stages.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="REQUIRES_REPLAY",
+    )
 
 
 async def test_get_support_overview_raises_when_portfolio_missing(

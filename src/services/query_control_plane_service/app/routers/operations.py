@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -10,6 +11,7 @@ from src.services.query_service.app.dtos.operations_dto import (
     CalculatorSloResponse,
     LineageKeyListResponse,
     LineageResponse,
+    PortfolioControlStageListResponse,
     ReconciliationFindingListResponse,
     ReconciliationRunListResponse,
     SupportJobListResponse,
@@ -115,6 +117,66 @@ async def get_calculator_slos(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while building calculator SLO snapshot.",
+        )
+
+
+@router.get(
+    "/support/portfolios/{portfolio_id}/control-stages",
+    response_model=PortfolioControlStageListResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
+    summary="List portfolio-day control stages for support workflows",
+    description=(
+        "What: List durable portfolio-day control stage rows for a portfolio.\n"
+        "How: Query control stage records with pagination and optional stage/date/status filters.\n"
+        "When: Use to inspect blocking portfolio-day controls and verify stage progression "
+        "over time."
+    ),
+)
+async def get_portfolio_control_stages(
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    stage_name: Optional[str] = Query(
+        None,
+        description="Optional control stage filter (e.g., FINANCIAL_RECONCILIATION).",
+        examples=["FINANCIAL_RECONCILIATION"],
+    ),
+    business_date: Optional[str] = Query(
+        None,
+        description="Optional business date filter in YYYY-MM-DD format.",
+        examples=["2026-03-13"],
+    ),
+    status_filter: Optional[str] = Query(
+        None,
+        description=(
+            "Optional control stage status filter " "(e.g., COMPLETED, FAILED, REQUIRES_REPLAY)."
+        ),
+        examples=["REQUIRES_REPLAY"],
+    ),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
+    service: OperationsService = Depends(get_operations_service),
+):
+    try:
+        parsed_business_date = date.fromisoformat(business_date) if business_date else None
+        return await service.get_portfolio_control_stages(
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            stage_name=stage_name,
+            business_date=parsed_business_date,
+            status=status_filter,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception:
+        logger.exception("Failed to list portfolio control stages for portfolio %s", portfolio_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected server error occurred while listing portfolio control stages.",
         )
 
 
