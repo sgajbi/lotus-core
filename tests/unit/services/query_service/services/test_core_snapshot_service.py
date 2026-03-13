@@ -438,6 +438,101 @@ async def test_resolve_projected_positions_handles_non_positive_quantity_branch(
     assert projected["SEC_NEG"]["market_value_base"] == Decimal("0")
 
 
+async def test_resolve_projected_positions_prices_new_security_with_fx(mock_dependencies):
+    (_, _, simulation_repo, price_repo, fx_repo, instrument_repo) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_NEW_EUR",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        )
+    ]
+    instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_EUR", "EUR", "EQUITY")]
+    price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency="EUR")]
+    fx_repo.get_fx_rates.side_effect = [
+        [SimpleNamespace(rate=Decimal("1.2"))],  # EUR -> USD portfolio
+        [SimpleNamespace(rate=Decimal("1.5"))],  # USD -> SGD reporting
+    ]
+    service = CoreSnapshotService(AsyncMock())
+
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        reporting_currency="SGD",
+        baseline_positions={},
+        include_zero=True,
+        include_cash=True,
+    )
+
+    assert projected["SEC_NEW_EUR"]["market_value_local"] == Decimal("20")
+    assert projected["SEC_NEW_EUR"]["market_value_base"] == Decimal("36")
+
+
+async def test_resolve_projected_positions_filters_cash_and_zero_quantity(mock_dependencies):
+    (_, _, simulation_repo, _, _, _) = mock_dependencies
+    simulation_repo.get_changes.return_value = []
+    service = CoreSnapshotService(AsyncMock())
+
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        reporting_currency="USD",
+        baseline_positions={
+            "SEC_CASH": {
+                "security_id": "SEC_CASH",
+                "quantity": Decimal("1"),
+                "baseline_quantity": Decimal("1"),
+                "market_value_base": Decimal("1"),
+                "market_value_local": Decimal("1"),
+                "currency": "USD",
+                "instrument_name": "Cash",
+                "asset_class": "CASH",
+                "sector": None,
+                "country_of_risk": None,
+                "isin": None,
+                "issuer_id": None,
+                "issuer_name": None,
+                "ultimate_parent_issuer_id": None,
+                "ultimate_parent_issuer_name": None,
+            },
+            "SEC_ZERO": {
+                "security_id": "SEC_ZERO",
+                "quantity": Decimal("0"),
+                "baseline_quantity": Decimal("0"),
+                "market_value_base": Decimal("0"),
+                "market_value_local": Decimal("0"),
+                "currency": "USD",
+                "instrument_name": "Zero",
+                "asset_class": "EQUITY",
+                "sector": None,
+                "country_of_risk": None,
+                "isin": None,
+                "issuer_id": None,
+                "issuer_name": None,
+                "ultimate_parent_issuer_id": None,
+                "ultimate_parent_issuer_name": None,
+            },
+        },
+        include_zero=False,
+        include_cash=False,
+    )
+
+    assert projected == {}
+
+
+async def test_get_instrument_enrichment_bulk_rejects_empty_request(mock_dependencies):
+    service = CoreSnapshotService(AsyncMock())
+
+    with pytest.raises(
+        CoreSnapshotBadRequestError,
+        match="security_ids must contain at least one value",
+    ):
+        await service.get_instrument_enrichment_bulk(["", "  "])
+
+
 async def test_static_helpers_cover_zero_total_and_delta_paths():
     items = {
         "SEC_1": {

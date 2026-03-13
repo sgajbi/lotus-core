@@ -111,3 +111,40 @@ async def test_analytics_timeseries_repository_methods() -> None:
         dimension_filters={"asset_class": {"Equity"}, "sector": {"Technology"}, "country": {"US"}},
     )
     assert position_snapshot_epoch == 2
+
+
+@pytest.mark.asyncio
+async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = AnalyticsTimeseriesRepository(db)
+
+    await repo.list_portfolio_timeseries_rows(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        page_size=10,
+        cursor_date=None,
+        snapshot_epoch=3,
+    )
+    portfolio_stmt = db.execute.await_args_list[0].args[0]
+    assert "portfolio_timeseries.epoch <= 3" in str(
+        portfolio_stmt.compile(compile_kwargs={"literal_binds": True})
+    )
+
+    await repo.list_position_timeseries_rows(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        page_size=10,
+        cursor_date=None,
+        cursor_security_id=None,
+        security_ids=[],
+        position_ids=[],
+        dimension_filters={},
+        snapshot_epoch=4,
+    )
+    position_stmt = db.execute.await_args_list[1].args[0]
+    assert "position_timeseries.epoch <= 4" in str(
+        position_stmt.compile(compile_kwargs={"literal_binds": True})
+    )

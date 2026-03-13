@@ -8,7 +8,7 @@ def test_get_outbox_runtime_settings_uses_default(monkeypatch):
     monkeypatch.delenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_BATCH_SIZE", raising=False)
 
-    import portfolio_common.outbox_dispatcher as module
+    import portfolio_common.outbox_settings as module
 
     settings = module.get_outbox_runtime_settings()
 
@@ -22,7 +22,7 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "77")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "7")
 
-    import portfolio_common.outbox_dispatcher as module
+    import portfolio_common.outbox_settings as module
 
     settings = module.get_outbox_runtime_settings()
 

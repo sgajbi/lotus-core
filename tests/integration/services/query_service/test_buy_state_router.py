@@ -133,3 +133,11 @@ async def test_get_position_lots_not_found(async_test_client):
     response = await client.get("/portfolios/P404/positions/US0378331005/lots")
     assert response.status_code == 404
     assert "portfolio missing" in response.json()["detail"]
+
+
+async def test_get_accrued_offsets_not_found(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_accrued_offsets.side_effect = ValueError("offsets missing")
+    response = await client.get("/portfolios/P404/positions/US0378331005/accrued-offsets")
+    assert response.status_code == 404
+    assert "offsets missing" in response.json()["detail"]
