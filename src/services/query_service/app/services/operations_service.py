@@ -419,6 +419,7 @@ class OperationsService:
                     started_at=run.started_at,
                     completed_at=run.completed_at,
                     failure_reason=run.failure_reason,
+                    is_blocking=self._is_controls_blocking(run.status),
                 )
                 for run in runs
             ],

@@ -398,6 +398,7 @@ async def test_reconciliation_runs_success(async_test_client):
                 "started_at": "2026-03-13T10:15:00Z",
                 "completed_at": "2026-03-13T10:15:09Z",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
+                "is_blocking": True,
             }
         ],
     }
@@ -409,6 +410,7 @@ async def test_reconciliation_runs_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"][0]["run_id"] == "recon_1234567890abcdef"
     assert response.json()["items"][0]["status"] == "FAILED"
+    assert response.json()["items"][0]["is_blocking"] is True
 
 
 async def test_reconciliation_runs_not_found_maps_to_404(async_test_client):

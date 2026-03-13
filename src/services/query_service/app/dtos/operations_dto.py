@@ -584,6 +584,14 @@ class ReconciliationRunRecord(BaseModel):
         description="Failure reason when the reconciliation run reaches FAILED state.",
         examples=["Tolerance exceeded for portfolio timeseries totals."],
     )
+    is_blocking: bool = Field(
+        ...,
+        description=(
+            "True when the run status blocks downstream publication or release decisions "
+            "(FAILED or REQUIRES_REPLAY)."
+        ),
+        examples=[True],
+    )
 
 
 class ReconciliationRunListResponse(BaseModel):

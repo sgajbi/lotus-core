@@ -232,6 +232,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reconciliation_run_record["properties"]["failure_reason"]["description"] == (
         "Failure reason when the reconciliation run reaches FAILED state."
     )
+    assert reconciliation_run_record["properties"]["is_blocking"]["description"].startswith(
+        "True when the run status blocks downstream publication"
+    )
     assert reconciliation_finding_schema["properties"]["items"]["description"] == (
         "Durable reconciliation findings for the requested run."
     )

@@ -341,6 +341,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.items[0].reconciliation_type == "transaction_cashflow"
     assert response.items[0].status == "FAILED"
     assert response.items[0].failure_reason == "Tolerance exceeded for portfolio totals."
+    assert response.items[0].is_blocking is True
 
 
 async def test_get_reconciliation_findings(service: OperationsService, mock_ops_repo: AsyncMock):
