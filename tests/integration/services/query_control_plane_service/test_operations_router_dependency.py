@@ -137,12 +137,15 @@ async def test_lineage_success(async_test_client):
         "latest_daily_snapshot_date": date(2025, 8, 31),
         "latest_valuation_job_date": date(2025, 8, 31),
         "latest_valuation_job_status": "DONE",
+        "has_artifact_gap": False,
+        "operational_state": "HEALTHY",
     }
 
     response = await client.get("/lineage/portfolios/P1/securities/S1")
 
     assert response.status_code == 200
     assert response.json()["security_id"] == "S1"
+    assert response.json()["operational_state"] == "HEALTHY"
 
 
 async def test_lineage_not_found_maps_to_404(async_test_client):

@@ -117,6 +117,13 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_not_found["detail"] == (
         "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
     )
+    lineage_response = schema["components"]["schemas"]["LineageResponse"]
+    assert lineage_response["properties"]["has_artifact_gap"]["description"].startswith(
+        "True when the current epoch shows missing or lagging downstream artifacts"
+    )
+    assert lineage_response["properties"]["operational_state"]["description"].startswith(
+        "Derived operator-facing lineage state for this key"
+    )
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"

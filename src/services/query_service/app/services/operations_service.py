@@ -353,6 +353,18 @@ class OperationsService:
             self.repo.get_latest_valuation_job(portfolio_id, security_id, position_state.epoch),
         )
 
+        latest_valuation_job_date = (
+            latest_valuation_job.valuation_date if latest_valuation_job else None
+        )
+        latest_valuation_job_status = (
+            latest_valuation_job.status if latest_valuation_job else None
+        )
+        has_artifact_gap = self._has_lineage_artifact_gap(
+            latest_position_history_date=latest_history_date,
+            latest_daily_snapshot_date=latest_snapshot_date,
+            latest_valuation_job_date=latest_valuation_job_date,
+            latest_valuation_job_status=latest_valuation_job_status,
+        )
         return LineageResponse(
             portfolio_id=portfolio_id,
             security_id=security_id,
@@ -361,11 +373,13 @@ class OperationsService:
             reprocessing_status=position_state.status,
             latest_position_history_date=latest_history_date,
             latest_daily_snapshot_date=latest_snapshot_date,
-            latest_valuation_job_date=(
-                latest_valuation_job.valuation_date if latest_valuation_job else None
-            ),
-            latest_valuation_job_status=(
-                latest_valuation_job.status if latest_valuation_job else None
+            latest_valuation_job_date=latest_valuation_job_date,
+            latest_valuation_job_status=latest_valuation_job_status,
+            has_artifact_gap=has_artifact_gap,
+            operational_state=self._get_lineage_key_operational_state(
+                reprocessing_status=position_state.status,
+                has_artifact_gap=has_artifact_gap,
+                latest_valuation_job_status=latest_valuation_job_status,
             ),
         )
 

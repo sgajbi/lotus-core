@@ -137,6 +137,28 @@ async def test_get_lineage_success(service: OperationsService, mock_ops_repo: As
     assert response.latest_position_history_date == date(2025, 8, 31)
     assert response.latest_daily_snapshot_date == date(2025, 8, 31)
     assert response.latest_valuation_job_status == "DONE"
+    assert response.has_artifact_gap is False
+    assert response.operational_state == "HEALTHY"
+
+
+async def test_get_lineage_valuation_blocked(service: OperationsService, mock_ops_repo: AsyncMock):
+    mock_ops_repo.get_position_state.return_value = type(
+        "PositionStateStub",
+        (),
+        {"epoch": 3, "watermark_date": date(2025, 8, 1), "status": "CURRENT"},
+    )()
+    mock_ops_repo.get_latest_position_history_date.return_value = date(2025, 8, 31)
+    mock_ops_repo.get_latest_daily_snapshot_date.return_value = date(2025, 8, 31)
+    mock_ops_repo.get_latest_valuation_job.return_value = type(
+        "ValuationJobStub",
+        (),
+        {"valuation_date": date(2025, 8, 31), "status": "FAILED"},
+    )()
+
+    response = await service.get_lineage("P1", "S1")
+
+    assert response.has_artifact_gap is True
+    assert response.operational_state == "VALUATION_BLOCKED"
 
 
 async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: AsyncMock):
