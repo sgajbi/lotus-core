@@ -15,6 +15,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
+from portfolio_common.logging_utils import normalize_lineage_value
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +37,7 @@ class ReconciliationRepository:
         correlation_id: str | None,
         tolerance: Decimal | None,
     ) -> tuple[FinancialReconciliationRun, bool]:
+        correlation_id = normalize_lineage_value(correlation_id)
         if dedupe_key is not None:
             existing = await self.get_run_by_dedupe_key(dedupe_key)
             if existing is not None:
