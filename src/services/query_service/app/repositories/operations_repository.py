@@ -839,6 +839,7 @@ class OperationsRepository:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
         stmt = (
             select(
+                ReprocessingJob.id,
                 ReprocessingJob.job_type,
                 impacted_date_expr.label("business_date"),
                 ReprocessingJob.status,
