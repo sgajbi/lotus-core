@@ -233,6 +233,58 @@ async def get_reprocessing_keys(
 
 
 @router.get(
+    "/support/portfolios/{portfolio_id}/reprocessing-jobs",
+    response_model=SupportJobListResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
+    summary="List durable replay jobs for support workflows",
+    description=(
+        "What: List durable replay jobs currently relevant to a portfolio.\n"
+        "How: Query reprocessing jobs linked to the portfolio's replay keys, with pagination and "
+        "optional status/security filters.\n"
+        "When: Use to inspect queued, stale, retried, or failed replay jobs without direct "
+        "database access."
+    ),
+)
+async def get_reprocessing_jobs(
+    portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    status_filter: Optional[str] = Query(
+        None,
+        description="Optional replay job status filter (e.g., PENDING, PROCESSING, FAILED).",
+        examples={"processing": {"summary": "Processing replay jobs", "value": "PROCESSING"}},
+    ),
+    security_id: Optional[str] = Query(
+        None,
+        description="Optional security identifier filter for one replay job stream.",
+        examples={"security": {"summary": "Single replay security", "value": "SEC-US-IBM"}},
+    ),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
+    service: OperationsService = Depends(get_operations_service),
+):
+    try:
+        return await service.get_reprocessing_jobs(
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            status=status_filter,
+            security_id=security_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception:
+        logger.exception("Failed to list reprocessing jobs for portfolio %s", portfolio_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected server error occurred while listing reprocessing jobs.",
+        )
+
+
+@router.get(
     "/support/portfolios/{portfolio_id}/valuation-jobs",
     response_model=SupportJobListResponse,
     responses={

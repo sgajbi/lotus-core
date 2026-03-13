@@ -15,6 +15,7 @@ from portfolio_common.database_models import (
     PortfolioValuationJob,
     PositionHistory,
     PositionState,
+    ReprocessingJob,
     Transaction,
 )
 from sqlalchemy import and_, case, func, select
@@ -745,3 +746,79 @@ class OperationsRepository:
             .limit(limit)
         )
         return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_reprocessing_jobs_count(
+        self,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        security_id: Optional[str] = None,
+    ) -> int:
+        security_id_expr = ReprocessingJob.payload["security_id"].as_string()
+        stmt = (
+            select(func.count())
+            .select_from(ReprocessingJob)
+            .where(
+                select(PositionState.portfolio_id)
+                .where(
+                    PositionState.portfolio_id == portfolio_id,
+                    PositionState.security_id == security_id_expr,
+                )
+                .exists()
+            )
+        )
+        if status:
+            stmt = stmt.where(ReprocessingJob.status == status)
+        if security_id:
+            stmt = stmt.where(security_id_expr == security_id)
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_reprocessing_jobs(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: Optional[str] = None,
+        security_id: Optional[str] = None,
+        stale_minutes: int = 15,
+    ):
+        security_id_expr = ReprocessingJob.payload["security_id"].as_string()
+        impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        stmt = (
+            select(
+                ReprocessingJob.job_type,
+                impacted_date_expr.label("business_date"),
+                ReprocessingJob.status,
+                security_id_expr.label("security_id"),
+                ReprocessingJob.attempt_count,
+                ReprocessingJob.updated_at,
+                ReprocessingJob.failure_reason,
+            )
+            .where(
+                select(PositionState.portfolio_id)
+                .where(
+                    PositionState.portfolio_id == portfolio_id,
+                    PositionState.security_id == security_id_expr,
+                )
+                .exists()
+            )
+        )
+        if status:
+            stmt = stmt.where(ReprocessingJob.status == status)
+        if security_id:
+            stmt = stmt.where(security_id_expr == security_id)
+        stmt = (
+            stmt.order_by(
+                self._support_job_priority(
+                    ReprocessingJob.status,
+                    ReprocessingJob.updated_at,
+                    stale_threshold,
+                ).asc(),
+                impacted_date_expr.asc(),
+                ReprocessingJob.created_at.asc(),
+                ReprocessingJob.id.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).all())

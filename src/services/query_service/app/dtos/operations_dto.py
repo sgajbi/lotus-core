@@ -383,8 +383,13 @@ class LineageKeyListResponse(BaseModel):
 
 
 class SupportJobRecord(BaseModel):
-    job_type: Literal["VALUATION", "AGGREGATION"] = Field(
-        ..., description="Type of support job.", examples=["VALUATION"]
+    job_type: Literal["VALUATION", "AGGREGATION", "RESET_WATERMARKS"] = Field(
+        ...,
+        description=(
+            "Type of support job. RESET_WATERMARKS represents a durable replay job used to "
+            "reset watermarks for valuation/timeseries recomputation."
+        ),
+        examples=["VALUATION", "RESET_WATERMARKS"],
     )
     business_date: date = Field(
         ...,
@@ -396,12 +401,15 @@ class SupportJobRecord(BaseModel):
     )
     security_id: Optional[str] = Field(
         None,
-        description="Security identifier for valuation jobs.",
-        examples=["AAPL.OQ"],
+        description=(
+            "Security identifier for security-scoped work such as valuation or durable replay "
+            "jobs."
+        ),
+        examples=["AAPL.OQ", "SEC-US-IBM"],
     )
     epoch: Optional[int] = Field(
         None,
-        description="Epoch for valuation jobs.",
+        description="Epoch for valuation jobs when the support row is epoch-scoped.",
         examples=[3],
     )
     attempt_count: Optional[int] = Field(

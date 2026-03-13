@@ -230,6 +230,49 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     )
 
 
+async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
+    updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
+    mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
+    mock_ops_repo.get_reprocessing_jobs.return_value = [
+        type(
+            "ReprocessingJobStub",
+            (),
+            {
+                "job_type": "RESET_WATERMARKS",
+                "business_date": "2025-08-15",
+                "status": "PROCESSING",
+                "security_id": "S1",
+                "attempt_count": 2,
+                "updated_at": updated_at,
+                "failure_reason": "timed out once",
+            },
+        )()
+    ]
+
+    response = await service.get_reprocessing_jobs(
+        "P1", skip=0, limit=20, status="PROCESSING", security_id="S1"
+    )
+
+    assert response.total == 1
+    assert response.items[0].job_type == "RESET_WATERMARKS"
+    assert response.items[0].security_id == "S1"
+    assert response.items[0].business_date == date(2025, 8, 15)
+    assert response.items[0].attempt_count == 2
+    assert response.items[0].updated_at == updated_at
+    assert response.items[0].is_retrying is True
+    assert response.items[0].is_stale_processing is True
+    assert response.items[0].failure_reason == "timed out once"
+    assert response.items[0].operational_state == "STALE_PROCESSING"
+    mock_ops_repo.get_reprocessing_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        security_id="S1",
+        stale_minutes=15,
+    )
+
+
 async def test_support_job_stale_flag_only_marks_old_processing():
     updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
 
@@ -369,6 +412,73 @@ async def test_support_job_retrying_only_for_active_retry_states():
     assert OperationsService._is_support_job_retrying("PENDING", 0) is False
 
 
+async def test_support_job_operational_state_branches():
+    updated_at = datetime.now(timezone.utc)
+    assert OperationsService._get_support_job_operational_state("FAILED", updated_at) == "FAILED"
+    assert OperationsService._get_support_job_operational_state("PENDING", updated_at) == "PENDING"
+    assert OperationsService._get_support_job_operational_state("DONE", updated_at) == "COMPLETED"
+
+
+async def test_analytics_export_operational_state_branches():
+    updated_at = datetime.now(timezone.utc)
+    assert OperationsService._normalize_analytics_export_status(None) is None
+    assert (
+        OperationsService._get_analytics_export_operational_state("FAILED", updated_at)
+        == "FAILED"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("accepted", updated_at)
+        == "ACCEPTED"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("completed", updated_at)
+        == "COMPLETED"
+    )
+
+
+async def test_reconciliation_and_reprocessing_operational_state_branches():
+    updated_at = datetime.now(timezone.utc)
+
+    assert OperationsService._get_reconciliation_operational_state("REQUIRES_REPLAY") == "BLOCKING"
+    assert OperationsService._get_reconciliation_operational_state("RUNNING") == "RUNNING"
+    assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
+    assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
+    assert (
+        OperationsService._get_portfolio_control_stage_operational_state("COMPLETED")
+        == "COMPLETED"
+    )
+    assert (
+        OperationsService._get_reprocessing_key_operational_state("CURRENT", updated_at)
+        == "CURRENT"
+    )
+
+
+async def test_stale_detection_helpers_cover_remaining_branches():
+    now = datetime(2026, 3, 13, 10, 30, tzinfo=timezone.utc)
+    stale = datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc)
+    fresh = datetime(2026, 3, 13, 10, 20, tzinfo=timezone.utc)
+    current_fresh = datetime.now(timezone.utc)
+
+    assert OperationsService._is_support_job_stale("PROCESSING", stale, now=now) is True
+    assert OperationsService._is_support_job_stale("PROCESSING", fresh, now=now) is False
+    assert OperationsService._is_support_job_stale("FAILED", stale, now=now) is False
+    assert OperationsService._is_analytics_export_job_stale("running", stale, now=now) is True
+    assert OperationsService._is_analytics_export_job_stale("running", fresh, now=now) is False
+    assert OperationsService._is_reprocessing_key_stale("REPROCESSING", stale, now=now) is True
+    assert (
+        OperationsService._get_support_job_operational_state("PROCESSING", current_fresh)
+        == "PROCESSING"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("running", current_fresh)
+        == "RUNNING"
+    )
+    assert (
+        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", current_fresh)
+        == "REPROCESSING"
+    )
+
+
 async def test_get_reconciliation_findings(service: OperationsService, mock_ops_repo: AsyncMock):
     created_at = datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc)
     mock_ops_repo.get_reconciliation_run.return_value = type(
@@ -472,7 +582,7 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
 
 
 async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: AsyncMock):
-    updated_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
+    updated_at = datetime.now(timezone.utc)
     mock_ops_repo.get_reprocessing_keys_count.return_value = 1
     mock_ops_repo.get_reprocessing_keys.return_value = [
         type(

@@ -614,6 +614,60 @@ async def test_reprocessing_keys_unexpected_maps_to_500(async_test_client):
     assert "reprocessing keys" in response.json()["detail"].lower()
 
 
+async def test_reprocessing_jobs_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_jobs.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "job_type": "RESET_WATERMARKS",
+                "business_date": "2026-03-10",
+                "status": "PROCESSING",
+                "security_id": "SEC-US-IBM",
+                "epoch": None,
+                "attempt_count": 2,
+                "is_retrying": True,
+                "updated_at": "2026-03-13T10:15:09Z",
+                "is_stale_processing": False,
+                "failure_reason": "timed out once",
+                "operational_state": "PROCESSING",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/reprocessing-jobs?status_filter=PROCESSING&security_id=SEC-US-IBM"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["items"][0]["job_type"] == "RESET_WATERMARKS"
+    assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"
+
+
+async def test_reprocessing_jobs_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_jobs.side_effect = ValueError("not found")
+
+    response = await client.get("/support/portfolios/P404/reprocessing-jobs")
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reprocessing_jobs_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_jobs.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/reprocessing-jobs")
+
+    assert response.status_code == 500
+    assert "reprocessing jobs" in response.json()["detail"].lower()
+
+
 async def test_lineage_keys_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage_keys.side_effect = ValueError("not found")

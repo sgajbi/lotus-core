@@ -647,6 +647,56 @@ class OperationsService:
             ],
         )
 
+    async def get_reprocessing_jobs(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: str | None = None,
+        security_id: str | None = None,
+    ) -> SupportJobListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        total, jobs = await asyncio.gather(
+            self.repo.get_reprocessing_jobs_count(
+                portfolio_id=portfolio_id,
+                status=status,
+                security_id=security_id,
+            ),
+            self.repo.get_reprocessing_jobs(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                security_id=security_id,
+                stale_minutes=stale_minutes,
+            ),
+        )
+        return SupportJobListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                SupportJobRecord(
+                    job_type=job.job_type,
+                    business_date=date.fromisoformat(job.business_date),
+                    status=job.status,
+                    security_id=job.security_id,
+                    epoch=None,
+                    attempt_count=job.attempt_count,
+                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
+                    updated_at=job.updated_at,
+                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
+                    failure_reason=job.failure_reason,
+                    operational_state=self._get_support_job_operational_state(
+                        job.status, job.updated_at
+                    ),
+                )
+                for job in jobs
+            ],
+        )
+
     @classmethod
     def _is_support_job_stale(
         cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
@@ -668,7 +718,8 @@ class OperationsService:
     def _is_reprocessing_key_stale(
         cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
     ) -> bool:
-        return cls._is_support_job_stale(status, updated_at, now)
+        normalized_status = "PROCESSING" if status == "REPROCESSING" else status
+        return cls._is_support_job_stale(normalized_status, updated_at, now)
 
     @staticmethod
     def _get_analytics_export_backlog_age_minutes(

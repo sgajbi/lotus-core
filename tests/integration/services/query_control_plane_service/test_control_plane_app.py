@@ -131,6 +131,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
         "get"
     ]
+    reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
+        "get"
+    ]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -141,6 +144,22 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "application/json"
     ]["example"]
     assert analytics_export_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    assert reprocessing_jobs["summary"] == "List durable replay jobs for support workflows"
+    reprocessing_jobs_status = next(
+        parameter
+        for parameter in reprocessing_jobs["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    status_filter_example = (
+        reprocessing_jobs_status.get("schema", {})
+        .get("examples", {})
+        .get("processing", {})
+        .get("value")
+        or reprocessing_jobs_status.get("examples", {}).get("processing", {}).get("value")
+        or reprocessing_jobs_status.get("example")
+        or reprocessing_jobs_status.get("schema", {}).get("example")
+    )
+    assert status_filter_example == "PROCESSING"
 
     components = schema["components"]["schemas"]
     calculator_slo = components["CalculatorSloResponse"]
