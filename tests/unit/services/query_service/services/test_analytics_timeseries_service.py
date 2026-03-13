@@ -634,6 +634,7 @@ async def test_create_export_job_completed() -> None:
     service.export_repo = SimpleNamespace(
         get_latest_by_fingerprint=AsyncMock(return_value=None),
         create_job=AsyncMock(return_value=row),
+        get_job=AsyncMock(return_value=row),
         mark_running=AsyncMock(
             side_effect=lambda *_args, **_kwargs: setattr(row, "status", "running")
         ),
@@ -759,6 +760,7 @@ async def test_create_export_job_marks_failed_on_input_error() -> None:
     service.export_repo = SimpleNamespace(
         get_latest_by_fingerprint=AsyncMock(return_value=None),
         create_job=AsyncMock(return_value=row),
+        get_job=AsyncMock(return_value=row),
         mark_running=AsyncMock(),
         mark_completed=AsyncMock(),
         mark_failed=AsyncMock(side_effect=lambda *_a, **_k: setattr(row, "status", "failed")),
@@ -777,6 +779,58 @@ async def test_create_export_job_marks_failed_on_input_error() -> None:
         )
     )
     assert response.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_create_export_job_marks_failed_on_unexpected_error_and_reraises() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        job_id="aexp_3",
+        dataset_type="position_timeseries",
+        portfolio_id="P1",
+        status="accepted",
+        request_fingerprint="fp3",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        started_at=None,
+        completed_at=None,
+    )
+    failed_messages: list[str] = []
+
+    async def _mark_failed(*_args, **kwargs):
+        row.status = "failed"
+        row.error_message = kwargs["error_message"]
+        failed_messages.append(kwargs["error_message"])
+
+    service.export_repo = SimpleNamespace(
+        get_latest_by_fingerprint=AsyncMock(return_value=None),
+        create_job=AsyncMock(return_value=row),
+        get_job=AsyncMock(return_value=row),
+        mark_running=AsyncMock(),
+        mark_completed=AsyncMock(),
+        mark_failed=AsyncMock(side_effect=_mark_failed),
+    )
+    service._collect_position_timeseries_for_export = AsyncMock(  # pylint: disable=protected-access
+        side_effect=RuntimeError("boom")
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await service.create_export_job(
+            AnalyticsExportCreateRequest(
+                dataset_type="position_timeseries",
+                portfolio_id="P1",
+                position_timeseries_request=PositionAnalyticsTimeseriesRequest(
+                    as_of_date="2025-12-31",
+                    period="one_month",
+                ),
+            )
+        )
+
+    assert row.status == "failed"
+    assert failed_messages == ["Unexpected analytics export processing failure."]
 
 
 @pytest.mark.asyncio

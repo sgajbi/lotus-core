@@ -5,12 +5,11 @@ import gzip
 import hashlib
 import hmac
 import json
+import logging
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
 from uuid import uuid4
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
@@ -18,6 +17,7 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_PAGE_DEPTH,
     ANALYTICS_EXPORT_RESULT_BYTES,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
@@ -46,6 +46,9 @@ class AnalyticsInputError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         self.code = code
         super().__init__(message)
+
+
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsTimeseriesService:
@@ -241,7 +244,8 @@ class AnalyticsTimeseriesService:
                 if valuation_date not in fx_rates:
                     raise AnalyticsInputError(
                         "INSUFFICIENT_DATA",
-                        f"Missing FX rate for {portfolio.base_currency}/{reporting_currency} on {valuation_date}.",
+                        "Missing FX rate for "
+                        f"{portfolio.base_currency}/{reporting_currency} on {valuation_date}.",
                     )
                 conversion_rate = fx_rates[valuation_date]
             quality = self._quality_status_from_epoch(int(row.epoch))
@@ -396,7 +400,8 @@ class AnalyticsTimeseriesService:
                 if row.valuation_date not in fx_rates:
                     raise AnalyticsInputError(
                         "INSUFFICIENT_DATA",
-                        f"Missing FX rate for {portfolio.base_currency}/{reporting_currency} on {row.valuation_date}.",
+                        "Missing FX rate for "
+                        f"{portfolio.base_currency}/{reporting_currency} on {row.valuation_date}.",
                     )
                 conversion_rate = fx_rates[row.valuation_date]
 
@@ -555,26 +560,28 @@ class AnalyticsTimeseriesService:
         if isinstance(value, list):
             return [AnalyticsTimeseriesService._jsonable(item) for item in value]
         if isinstance(value, dict):
-            return {str(key): AnalyticsTimeseriesService._jsonable(item) for key, item in value.items()}
+            return {
+                str(key): AnalyticsTimeseriesService._jsonable(item) for key, item in value.items()
+            }
         return value
 
-    async def create_export_job(
-        self, request: AnalyticsExportCreateRequest
-    ) -> AnalyticsExportJobResponse:
-        request_payload = request.model_dump(mode="json")
-        request_fingerprint = self._request_fingerprint(request_payload)
-
+    async def _reserve_export_job(
+        self,
+        *,
+        request: AnalyticsExportCreateRequest,
+        request_payload: dict,
+        request_fingerprint: str,
+    ) -> tuple[object, bool]:
         async with self.db.begin():
             existing = await self.export_repo.get_latest_by_fingerprint(
                 request_fingerprint=request_fingerprint,
                 dataset_type=request.dataset_type,
             )
             if existing is not None and existing.status in {"accepted", "running", "completed"}:
-                return self._to_export_response(existing)
+                return existing, True
 
-            job_id = f"aexp_{uuid4().hex[:24]}"
             row = await self.export_repo.create_job(
-                job_id=job_id,
+                job_id=f"aexp_{uuid4().hex[:24]}",
                 dataset_type=request.dataset_type,
                 portfolio_id=request.portfolio_id,
                 request_fingerprint=request_fingerprint,
@@ -582,48 +589,111 @@ class AnalyticsTimeseriesService:
                 result_format=request.result_format,
                 compression=request.compression,
             )
-            await self.export_repo.mark_running(row)
+            return row, False
 
-            started = perf_counter()
-            try:
-                if request.dataset_type == "portfolio_timeseries":
-                    assert request.portfolio_timeseries_request is not None
-                    data_rows, page_depth = await self._collect_portfolio_timeseries_for_export(
-                        portfolio_id=request.portfolio_id,
-                        request=request.portfolio_timeseries_request,
-                    )
-                else:
-                    assert request.position_timeseries_request is not None
-                    data_rows, page_depth = await self._collect_position_timeseries_for_export(
-                        portfolio_id=request.portfolio_id,
-                        request=request.position_timeseries_request,
-                    )
-                result_payload = {
-                    "job_id": job_id,
-                    "dataset_type": request.dataset_type,
-                    "generated_at": datetime.now(UTC).isoformat(),
-                    "contract_version": "rfc_063_v1",
-                    "data": self._jsonable(data_rows),
-                }
-                result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
-                ANALYTICS_EXPORT_RESULT_BYTES.labels(request.result_format, request.compression).observe(
-                    result_bytes
-                )
-                ANALYTICS_EXPORT_PAGE_DEPTH.labels(request.dataset_type).observe(page_depth)
-                await self.export_repo.mark_completed(
-                    row,
-                    result_payload=result_payload,
-                    result_row_count=len(data_rows),
-                )
-                ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
-            except AnalyticsInputError as exc:
-                await self.export_repo.mark_failed(row, error_message=str(exc))
-                ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
-            finally:
-                ANALYTICS_EXPORT_JOB_DURATION_SECONDS.labels(request.dataset_type).observe(
-                    perf_counter() - started
-                )
+    async def _mark_export_job_running(self, job_id: str) -> object:
+        async with self.db.begin():
+            row = await self.export_repo.get_job(job_id)
+            if row is None:
+                raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
+            await self.export_repo.mark_running(row)
+            return row
+
+    async def _mark_export_job_completed(
+        self,
+        job_id: str,
+        *,
+        result_payload: dict,
+        result_row_count: int,
+    ) -> object:
+        async with self.db.begin():
+            row = await self.export_repo.get_job(job_id)
+            if row is None:
+                raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
+            await self.export_repo.mark_completed(
+                row,
+                result_payload=result_payload,
+                result_row_count=result_row_count,
+            )
+            return row
+
+    async def _mark_export_job_failed(self, job_id: str, *, error_message: str) -> object:
+        async with self.db.begin():
+            row = await self.export_repo.get_job(job_id)
+            if row is None:
+                raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
+            await self.export_repo.mark_failed(row, error_message=error_message)
+            return row
+
+    async def create_export_job(
+        self, request: AnalyticsExportCreateRequest
+    ) -> AnalyticsExportJobResponse:
+        request_payload = request.model_dump(mode="json")
+        request_fingerprint = self._request_fingerprint(request_payload)
+        row, reused = await self._reserve_export_job(
+            request=request,
+            request_payload=request_payload,
+            request_fingerprint=request_fingerprint,
+        )
+        if reused:
             return self._to_export_response(row)
+
+        job_id = row.job_id
+        await self._mark_export_job_running(job_id)
+
+        started = perf_counter()
+        try:
+            if request.dataset_type == "portfolio_timeseries":
+                assert request.portfolio_timeseries_request is not None
+                data_rows, page_depth = await self._collect_portfolio_timeseries_for_export(
+                    portfolio_id=request.portfolio_id,
+                    request=request.portfolio_timeseries_request,
+                )
+            else:
+                assert request.position_timeseries_request is not None
+                data_rows, page_depth = await self._collect_position_timeseries_for_export(
+                    portfolio_id=request.portfolio_id,
+                    request=request.position_timeseries_request,
+                )
+            result_payload = {
+                "job_id": job_id,
+                "dataset_type": request.dataset_type,
+                "generated_at": datetime.now(UTC).isoformat(),
+                "contract_version": "rfc_063_v1",
+                "data": self._jsonable(data_rows),
+            }
+            result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
+            ANALYTICS_EXPORT_RESULT_BYTES.labels(
+                request.result_format, request.compression
+            ).observe(result_bytes)
+            ANALYTICS_EXPORT_PAGE_DEPTH.labels(request.dataset_type).observe(page_depth)
+            row = await self._mark_export_job_completed(
+                job_id,
+                result_payload=result_payload,
+                result_row_count=len(data_rows),
+            )
+            ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
+            return self._to_export_response(row)
+        except AnalyticsInputError as exc:
+            row = await self._mark_export_job_failed(job_id, error_message=str(exc))
+            ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
+            return self._to_export_response(row)
+        except Exception:
+            logger.exception(
+                "Analytics export job %s failed unexpectedly for dataset %s",
+                job_id,
+                request.dataset_type,
+            )
+            await self._mark_export_job_failed(
+                job_id,
+                error_message="Unexpected analytics export processing failure.",
+            )
+            ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
+            raise
+        finally:
+            ANALYTICS_EXPORT_JOB_DURATION_SECONDS.labels(request.dataset_type).observe(
+                perf_counter() - started
+            )
 
     async def get_export_job(self, job_id: str) -> AnalyticsExportJobResponse:
         row = await self.export_repo.get_job(job_id)
@@ -686,15 +756,15 @@ class AnalyticsTimeseriesService:
         page_token: str | None = None
         while True:
             page_depth += 1
-            page_request = request.page.model_copy(update={"page_token": page_token, "page_size": 2000})
+            page_request = request.page.model_copy(
+                update={"page_token": page_token, "page_size": 2000}
+            )
             paged_request = request.model_copy(update={"page": page_request})
             response = await self.get_portfolio_timeseries(
                 portfolio_id=portfolio_id,
                 request=paged_request,
             )
-            rows.extend(
-                [item.model_dump(mode="json") for item in response.observations]
-            )
+            rows.extend([item.model_dump(mode="json") for item in response.observations])
             page_token = response.page.next_page_token
             if not page_token:
                 break
@@ -708,7 +778,9 @@ class AnalyticsTimeseriesService:
         page_token: str | None = None
         while True:
             page_depth += 1
-            page_request = request.page.model_copy(update={"page_token": page_token, "page_size": 2000})
+            page_request = request.page.model_copy(
+                update={"page_token": page_token, "page_size": 2000}
+            )
             paged_request = request.model_copy(update={"page": page_request})
             response = await self.get_position_timeseries(
                 portfolio_id=portfolio_id,
