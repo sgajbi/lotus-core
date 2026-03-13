@@ -216,6 +216,7 @@ async def test_valuation_jobs_success(async_test_client):
         "limit": 100,
         "items": [
             {
+                "job_id": 101,
                 "job_type": "VALUATION",
                 "business_date": date(2025, 8, 31),
                 "status": "PENDING",
@@ -226,6 +227,7 @@ async def test_valuation_jobs_success(async_test_client):
                 "updated_at": "2025-08-31T10:15:00Z",
                 "is_stale_processing": False,
                 "failure_reason": None,
+                "is_terminal_failure": False,
                 "operational_state": "PENDING",
             }
         ],
@@ -259,6 +261,7 @@ async def test_aggregation_jobs_success(async_test_client):
         "limit": 100,
         "items": [
             {
+                "job_id": 202,
                 "job_type": "AGGREGATION",
                 "business_date": date(2025, 8, 31),
                 "status": "PROCESSING",
@@ -269,6 +272,7 @@ async def test_aggregation_jobs_success(async_test_client):
                 "updated_at": "2025-08-31T10:00:00Z",
                 "is_stale_processing": True,
                 "failure_reason": "timed out once",
+                "is_terminal_failure": False,
                 "operational_state": "STALE_PROCESSING",
             }
         ],
@@ -634,6 +638,7 @@ async def test_reprocessing_jobs_success(async_test_client):
         "limit": 100,
         "items": [
             {
+                "job_id": 303,
                 "job_type": "RESET_WATERMARKS",
                 "business_date": "2026-03-10",
                 "status": "PROCESSING",
@@ -644,6 +649,7 @@ async def test_reprocessing_jobs_success(async_test_client):
                 "updated_at": "2026-03-13T10:15:09Z",
                 "is_stale_processing": False,
                 "failure_reason": "timed out once",
+                "is_terminal_failure": False,
                 "operational_state": "PROCESSING",
             }
         ],

@@ -436,6 +436,7 @@ class OperationsService:
             limit=limit,
             items=[
                 SupportJobRecord(
+                    job_id=job.id,
                     job_type="VALUATION",
                     business_date=job.valuation_date,
                     status=job.status,
@@ -446,6 +447,7 @@ class OperationsService:
                     updated_at=job.updated_at,
                     is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
+                    is_terminal_failure=job.status == "FAILED",
                     operational_state=self._get_support_job_operational_state(
                         job.status, job.updated_at
                     ),
@@ -476,6 +478,7 @@ class OperationsService:
             limit=limit,
             items=[
                 SupportJobRecord(
+                    job_id=job.id,
                     job_type="AGGREGATION",
                     business_date=job.aggregation_date,
                     status=job.status,
@@ -486,6 +489,7 @@ class OperationsService:
                     updated_at=job.updated_at,
                     is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
+                    is_terminal_failure=job.status == "FAILED",
                     operational_state=self._get_support_job_operational_state(
                         job.status, job.updated_at
                     ),
@@ -748,6 +752,7 @@ class OperationsService:
             limit=limit,
             items=[
                 SupportJobRecord(
+                    job_id=job.id,
                     job_type=job.job_type,
                     business_date=date.fromisoformat(job.business_date),
                     status=job.status,
@@ -758,6 +763,7 @@ class OperationsService:
                     updated_at=job.updated_at,
                     is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
+                    is_terminal_failure=job.status == "FAILED",
                     operational_state=self._get_support_job_operational_state(
                         job.status, job.updated_at
                     ),

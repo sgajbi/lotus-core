@@ -445,6 +445,11 @@ class LineageKeyListResponse(BaseModel):
 
 
 class SupportJobRecord(BaseModel):
+    job_id: int = Field(
+        ...,
+        description="Durable database identifier for this job row.",
+        examples=[101],
+    )
     job_type: Literal["VALUATION", "AGGREGATION", "RESET_WATERMARKS"] = Field(
         ...,
         description=(
@@ -505,6 +510,11 @@ class SupportJobRecord(BaseModel):
         description="Failure reason (when status=FAILED).",
         examples=["Missing market price for security/date"],
     )
+    is_terminal_failure: bool = Field(
+        ...,
+        description="True when the durable job is in FAILED terminal state.",
+        examples=[False, True],
+    )
     operational_state: Literal[
         "FAILED",
         "STALE_PROCESSING",
@@ -529,6 +539,7 @@ class SupportJobListResponse(BaseModel):
         examples=[
             [
                 {
+                    "job_id": 101,
                     "job_type": "VALUATION",
                     "business_date": "2025-12-30",
                     "status": "PENDING",
@@ -539,6 +550,7 @@ class SupportJobListResponse(BaseModel):
                     "updated_at": "2025-12-30T10:15:09Z",
                     "is_stale_processing": False,
                     "failure_reason": None,
+                    "is_terminal_failure": False,
                     "operational_state": "PENDING",
                 }
             ]

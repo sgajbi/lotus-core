@@ -253,6 +253,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
             "ValuationJobStub",
             (),
             {
+                "id": 101,
                 "security_id": "S1",
                 "valuation_date": date(2025, 8, 31),
                 "status": "PENDING",
@@ -267,12 +268,14 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
     response = await service.get_valuation_jobs("P1", skip=0, limit=20, status="PENDING")
 
     assert response.total == 1
+    assert response.items[0].job_id == 101
     assert response.items[0].job_type == "VALUATION"
     assert response.items[0].security_id == "S1"
     assert response.items[0].business_date == date(2025, 8, 31)
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_processing is False
     assert response.items[0].is_retrying is False
+    assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "PENDING"
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
         portfolio_id="P1", skip=0, limit=20, status="PENDING", stale_minutes=15
@@ -287,6 +290,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
             "AggregationJobStub",
             (),
             {
+                "id": 202,
                 "aggregation_date": date(2025, 8, 31),
                 "status": "PROCESSING",
                 "attempt_count": 2,
@@ -299,6 +303,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     response = await service.get_aggregation_jobs("P1", skip=0, limit=20, status="PROCESSING")
 
     assert response.total == 1
+    assert response.items[0].job_id == 202
     assert response.items[0].job_type == "AGGREGATION"
     assert response.items[0].business_date == date(2025, 8, 31)
     assert response.items[0].attempt_count == 2
@@ -306,6 +311,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.items[0].is_stale_processing is True
     assert response.items[0].is_retrying is True
     assert response.items[0].failure_reason == "timed out once"
+    assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "STALE_PROCESSING"
     mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
         portfolio_id="P1", skip=0, limit=20, status="PROCESSING", stale_minutes=15
@@ -320,6 +326,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
             "ReprocessingJobStub",
             (),
             {
+                "id": 303,
                 "job_type": "RESET_WATERMARKS",
                 "business_date": "2025-08-15",
                 "status": "PROCESSING",
@@ -336,6 +343,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     )
 
     assert response.total == 1
+    assert response.items[0].job_id == 303
     assert response.items[0].job_type == "RESET_WATERMARKS"
     assert response.items[0].security_id == "S1"
     assert response.items[0].business_date == date(2025, 8, 15)
@@ -344,6 +352,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     assert response.items[0].is_retrying is True
     assert response.items[0].is_stale_processing is True
     assert response.items[0].failure_reason == "timed out once"
+    assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "STALE_PROCESSING"
     mock_ops_repo.get_reprocessing_jobs.assert_awaited_once_with(
         portfolio_id="P1",

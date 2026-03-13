@@ -184,6 +184,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Operational jobs for support workflows."
     )
     support_job_record = components["SupportJobRecord"]
+    assert support_job_record["properties"]["job_id"]["description"] == (
+        "Durable database identifier for this job row."
+    )
     assert support_job_record["properties"]["updated_at"]["description"] == (
         "UTC timestamp of the most recent durable lifecycle update for the job."
     )
@@ -192,6 +195,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert support_job_record["properties"]["is_stale_processing"]["description"].startswith(
         "True when the job is in PROCESSING state"
+    )
+    assert support_job_record["properties"]["is_terminal_failure"]["description"] == (
+        "True when the durable job is in FAILED terminal state."
     )
     assert support_job_record["properties"]["operational_state"]["description"] == (
         "Derived operator-facing lifecycle state used for support triage ordering."
