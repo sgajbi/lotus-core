@@ -35,9 +35,9 @@ class CorrelationIdFilter(logging.Filter):
         Returns:
             True to allow the record to be processed.
         """
-        record.correlation_id = correlation_id_var.get()
-        record.request_id = request_id_var.get()
-        record.trace_id = trace_id_var.get()
+        record.correlation_id = normalize_lineage_value(correlation_id_var.get())
+        record.request_id = normalize_lineage_value(request_id_var.get())
+        record.trace_id = normalize_lineage_value(trace_id_var.get())
         record.service = os.getenv("SERVICE_NAME", "lotus-core-service")
         record.environment = os.getenv("ENVIRONMENT", "local")
         return True
