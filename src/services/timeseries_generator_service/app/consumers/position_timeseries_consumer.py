@@ -13,7 +13,6 @@ from portfolio_common.events import (
     ValuationDayCompletedEvent,
 )
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
 from pydantic import ValidationError
@@ -148,9 +147,8 @@ class PositionTimeseriesConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
-            ):
+            ) as correlation_id:
                 event = self._parse_supported_event(event_data)
-                correlation_id = correlation_id_var.get()
 
                 logger.info(
                     "Processing position snapshot for %s on %s for epoch %s",

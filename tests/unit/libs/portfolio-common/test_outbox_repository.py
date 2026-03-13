@@ -74,3 +74,18 @@ async def test_create_outbox_event_raises_type_error_for_bad_payload(repository:
     # Act & Assert
     with pytest.raises(TypeError, match="payload must be a dict"):
         await repository.create_outbox_event(**event_details)
+
+
+async def test_create_outbox_event_normalizes_sentinel_correlation(
+    repository: OutboxRepository, mock_db_session: AsyncMock
+):
+    event = await repository.create_outbox_event(
+        aggregate_type="portfolio",
+        aggregate_id="P1",
+        event_type="evt",
+        payload={"x": 1},
+        topic="topic-1",
+        correlation_id="<not-set>",
+    )
+
+    assert event.correlation_id is None

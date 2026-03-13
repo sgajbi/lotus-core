@@ -6,6 +6,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ProcessedEvent
+from .logging_utils import normalize_lineage_value
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ class IdempotencyRepository:
             service_name: The name of the service that processed the event.
             correlation_id: The correlation ID for tracing the event flow.
         """
+        correlation_id = normalize_lineage_value(correlation_id)
+
         processed_event = ProcessedEvent(
             event_id=event_id,
             portfolio_id=portfolio_id,

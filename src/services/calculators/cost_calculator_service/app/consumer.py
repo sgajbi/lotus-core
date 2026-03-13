@@ -16,7 +16,6 @@ from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
@@ -205,8 +204,7 @@ class CostCalculatorConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=data.get("correlation_id"),
-            ):
-                correlation_id = correlation_id_var.get()
+            ) as correlation_id:
                 event = TransactionEvent.model_validate(data)
 
                 async for db in get_async_db_session():

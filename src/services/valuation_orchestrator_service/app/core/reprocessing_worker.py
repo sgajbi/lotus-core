@@ -1,7 +1,7 @@
 # src/services/valuation_orchestrator_service/app/core/reprocessing_worker.py
 import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from portfolio_common.db import get_async_db_session
 from portfolio_common.logging_utils import correlation_id_var
@@ -10,7 +10,11 @@ from portfolio_common.monitoring import (
     observe_reprocessing_worker_jobs_claimed,
     observe_reprocessing_worker_jobs_completed,
     observe_reprocessing_worker_jobs_failed,
+    observe_reprocessing_worker_jobs_noop,
     reprocessing_worker_batch_timer,
+    set_control_queue_failed_stored,
+    set_control_queue_oldest_pending_age_seconds,
+    set_control_queue_pending,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
@@ -33,11 +37,26 @@ class ReprocessingWorker:
         )
         self._poll_interval = runtime_settings.reprocessing_worker_poll_interval_seconds
         self._batch_size = runtime_settings.reprocessing_worker_batch_size
+        self._stale_timeout_minutes = runtime_settings.reprocessing_worker_stale_timeout_minutes
+        self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
 
     def stop(self):
         logger.info("Reprocessing worker shutdown signal received.")
         self._running = False
+
+    async def _update_queue_metrics(self, job_repo: ReprocessingJobRepository):
+        queue_stats = await job_repo.get_queue_stats("RESET_WATERMARKS")
+        set_control_queue_pending("reprocessing", queue_stats["pending_count"])
+        set_control_queue_failed_stored("reprocessing", queue_stats["failed_count"])
+        oldest_pending_created_at = queue_stats["oldest_pending_created_at"]
+        if oldest_pending_created_at is None:
+            set_control_queue_oldest_pending_age_seconds("reprocessing", 0.0)
+            return
+        age_seconds = (
+            datetime.now(timezone.utc) - oldest_pending_created_at.astimezone(timezone.utc)
+        ).total_seconds()
+        set_control_queue_oldest_pending_age_seconds("reprocessing", max(age_seconds, 0.0))
 
     async def _process_batch(self):
         """Processes one batch of pending RESET_WATERMARKS jobs."""
@@ -48,11 +67,16 @@ class ReprocessingWorker:
                     state_repo = PositionStateRepository(db)
                     valuation_repo = ValuationRepository(db)
 
-                    await job_repo.find_and_reset_stale_jobs()
+                    await job_repo.find_and_reset_stale_jobs(
+                        timeout_minutes=self._stale_timeout_minutes,
+                        max_attempts=self._max_attempts,
+                    )
+                    await self._update_queue_metrics(job_repo)
 
                     claimed_jobs = await job_repo.find_and_claim_jobs(
                         "RESET_WATERMARKS", self._batch_size
                     )
+                    await self._update_queue_metrics(job_repo)
                     if claimed_jobs:
                         observe_reprocessing_worker_jobs_claimed(
                             "RESET_WATERMARKS", len(claimed_jobs)
@@ -114,6 +138,10 @@ class ReprocessingWorker:
                                         f"security {security_id}."
                                     )
                             else:
+                                observe_reprocessing_worker_jobs_noop(
+                                    "RESET_WATERMARKS",
+                                    "no_impacted_portfolios",
+                                )
                                 logger.info(
                                     f"Job {job.id}: No portfolios found for "
                                     f"security {security_id}, skipping "

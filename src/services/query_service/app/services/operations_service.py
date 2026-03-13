@@ -1,14 +1,24 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.operations_dto import (
+    AnalyticsExportJobListResponse,
+    AnalyticsExportJobRecord,
     CalculatorSloBucket,
     CalculatorSloResponse,
     LineageKeyListResponse,
     LineageKeyRecord,
     LineageResponse,
+    PortfolioControlStageListResponse,
+    PortfolioControlStageRecord,
+    ReconciliationFindingListResponse,
+    ReconciliationFindingRecord,
+    ReconciliationRunListResponse,
+    ReconciliationRunRecord,
+    ReprocessingKeyListResponse,
+    ReprocessingKeyRecord,
     ReprocessingSloBucket,
     SupportJobListResponse,
     SupportJobRecord,
@@ -18,8 +28,69 @@ from ..repositories.operations_repository import OperationsRepository
 
 
 class OperationsService:
+    SUPPORT_JOB_STALE_THRESHOLD = timedelta(minutes=15)
+
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
+
+    @classmethod
+    def _get_support_job_operational_state(cls, status: str, updated_at: datetime | None) -> str:
+        if status == "FAILED":
+            return "FAILED"
+        if cls._is_support_job_stale(status, updated_at):
+            return "STALE_PROCESSING"
+        if status == "PROCESSING":
+            return "PROCESSING"
+        if status == "PENDING":
+            return "PENDING"
+        return "COMPLETED"
+
+    @staticmethod
+    def _is_support_job_retrying(status: str, attempt_count: int | None) -> bool:
+        return (attempt_count or 0) > 0 and status in {"PENDING", "PROCESSING"}
+
+    @staticmethod
+    def _normalize_analytics_export_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        return status.lower()
+
+    @classmethod
+    def _get_analytics_export_operational_state(
+        cls, status: str, updated_at: datetime | None
+    ) -> str:
+        status = cls._normalize_analytics_export_status(status) or ""
+        if status == "failed":
+            return "FAILED"
+        if cls._is_analytics_export_job_stale(status, updated_at):
+            return "STALE_RUNNING"
+        if status == "running":
+            return "RUNNING"
+        if status == "accepted":
+            return "ACCEPTED"
+        return "COMPLETED"
+
+    @classmethod
+    def _get_reconciliation_operational_state(cls, status: str | None) -> str:
+        if cls._is_controls_blocking(status):
+            return "BLOCKING"
+        if status == "RUNNING":
+            return "RUNNING"
+        return "COMPLETED"
+
+    @classmethod
+    def _get_portfolio_control_stage_operational_state(cls, status: str | None) -> str:
+        return "BLOCKING" if cls._is_controls_blocking(status) else "COMPLETED"
+
+    @classmethod
+    def _get_reprocessing_key_operational_state(
+        cls, status: str | None, updated_at: datetime | None
+    ) -> str:
+        if cls._is_reprocessing_key_stale(status, updated_at):
+            return "STALE_REPROCESSING"
+        if status == "REPROCESSING":
+            return "REPROCESSING"
+        return "CURRENT"
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
@@ -33,6 +104,7 @@ class OperationsService:
             active_reprocessing_keys,
             valuation_job_health,
             aggregation_job_health,
+            analytics_export_job_health,
             latest_transaction_date,
             latest_position_snapshot_date_unbounded,
             position_snapshot_history_mismatch_count,
@@ -45,6 +117,9 @@ class OperationsService:
                 portfolio_id, stale_minutes=15, failed_window_hours=24
             ),
             self.repo.get_aggregation_job_health_summary(
+                portfolio_id, stale_minutes=15, failed_window_hours=24
+            ),
+            self.repo.get_analytics_export_job_health_summary(
                 portfolio_id, stale_minutes=15, failed_window_hours=24
             ),
             self.repo.get_latest_transaction_date(portfolio_id),
@@ -72,6 +147,18 @@ class OperationsService:
             valuation_backlog_age_days = max(
                 0, (reference_date - valuation_job_health.oldest_open_job_date).days
             )
+        aggregation_backlog_age_days = None
+        if aggregation_job_health.oldest_open_job_date:
+            reference_date = latest_business_date or datetime.now(timezone.utc).date()
+            aggregation_backlog_age_days = max(
+                0, (reference_date - aggregation_job_health.oldest_open_job_date).days
+            )
+        analytics_export_backlog_age_minutes = None
+        if analytics_export_job_health.oldest_open_job_created_at:
+            delta = (
+                datetime.now(timezone.utc) - analytics_export_job_health.oldest_open_job_created_at
+            )
+            analytics_export_backlog_age_minutes = max(0, int(delta.total_seconds() // 60))
 
         controls_status = latest_control_stage.status if latest_control_stage else None
         controls_blocking = self._is_controls_blocking(controls_status)
@@ -84,9 +171,23 @@ class OperationsService:
             pending_valuation_jobs=valuation_job_health.pending_jobs,
             processing_valuation_jobs=valuation_job_health.processing_jobs,
             stale_processing_valuation_jobs=valuation_job_health.stale_processing_jobs,
+            failed_valuation_jobs=valuation_job_health.failed_jobs,
             oldest_pending_valuation_date=valuation_job_health.oldest_open_job_date,
             valuation_backlog_age_days=valuation_backlog_age_days,
             pending_aggregation_jobs=aggregation_job_health.pending_jobs,
+            processing_aggregation_jobs=aggregation_job_health.processing_jobs,
+            stale_processing_aggregation_jobs=aggregation_job_health.stale_processing_jobs,
+            failed_aggregation_jobs=aggregation_job_health.failed_jobs,
+            oldest_pending_aggregation_date=aggregation_job_health.oldest_open_job_date,
+            aggregation_backlog_age_days=aggregation_backlog_age_days,
+            pending_analytics_export_jobs=analytics_export_job_health.accepted_jobs,
+            processing_analytics_export_jobs=analytics_export_job_health.running_jobs,
+            stale_processing_analytics_export_jobs=analytics_export_job_health.stale_running_jobs,
+            failed_analytics_export_jobs=analytics_export_job_health.failed_jobs,
+            oldest_pending_analytics_export_created_at=(
+                analytics_export_job_health.oldest_open_job_created_at
+            ),
+            analytics_export_backlog_age_minutes=analytics_export_backlog_age_minutes,
             latest_transaction_date=latest_transaction_date,
             latest_booked_transaction_date=latest_booked_transaction_date,
             latest_position_snapshot_date=latest_position_snapshot_date_unbounded,
@@ -248,10 +349,15 @@ class OperationsService:
         self, portfolio_id: str, skip: int, limit: int, status: str | None = None
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
         total, jobs = await asyncio.gather(
             self.repo.get_valuation_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_valuation_jobs(
-                portfolio_id=portfolio_id, skip=skip, limit=limit, status=status
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                stale_minutes=stale_minutes,
             ),
         )
         return SupportJobListResponse(
@@ -267,7 +373,13 @@ class OperationsService:
                     security_id=job.security_id,
                     epoch=job.epoch,
                     attempt_count=job.attempt_count,
+                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
+                    updated_at=job.updated_at,
+                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
+                    operational_state=self._get_support_job_operational_state(
+                        job.status, job.updated_at
+                    ),
                 )
                 for job in jobs
             ],
@@ -277,10 +389,15 @@ class OperationsService:
         self, portfolio_id: str, skip: int, limit: int, status: str | None = None
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
         total, jobs = await asyncio.gather(
             self.repo.get_aggregation_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_aggregation_jobs(
-                portfolio_id=portfolio_id, skip=skip, limit=limit, status=status
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                stale_minutes=stale_minutes,
             ),
         )
         return SupportJobListResponse(
@@ -295,9 +412,321 @@ class OperationsService:
                     status=job.status,
                     security_id=None,
                     epoch=None,
-                    attempt_count=None,
-                    failure_reason=None,
+                    attempt_count=job.attempt_count,
+                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
+                    updated_at=job.updated_at,
+                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
+                    failure_reason=job.failure_reason,
+                    operational_state=self._get_support_job_operational_state(
+                        job.status, job.updated_at
+                    ),
                 )
                 for job in jobs
             ],
         )
+
+    async def get_analytics_export_jobs(
+        self, portfolio_id: str, skip: int, limit: int, status: str | None = None
+    ) -> AnalyticsExportJobListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        total, jobs = await asyncio.gather(
+            self.repo.get_analytics_export_jobs_count(portfolio_id=portfolio_id, status=status),
+            self.repo.get_analytics_export_jobs(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                stale_minutes=stale_minutes,
+            ),
+        )
+        return AnalyticsExportJobListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                AnalyticsExportJobRecord(
+                    job_id=job.job_id,
+                    dataset_type=job.dataset_type,
+                    status=job.status,
+                    created_at=job.created_at,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at,
+                    updated_at=job.updated_at,
+                    is_stale_running=self._is_analytics_export_job_stale(
+                        job.status, job.updated_at
+                    ),
+                    backlog_age_minutes=self._get_analytics_export_backlog_age_minutes(
+                        job.status, job.created_at
+                    ),
+                    result_row_count=job.result_row_count,
+                    error_message=job.error_message,
+                    is_terminal_failure=(
+                        self._normalize_analytics_export_status(job.status) == "failed"
+                    ),
+                    operational_state=self._get_analytics_export_operational_state(
+                        job.status, job.updated_at
+                    ),
+                )
+                for job in jobs
+            ],
+        )
+
+    async def get_reconciliation_runs(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        reconciliation_type: str | None = None,
+        status: str | None = None,
+    ) -> ReconciliationRunListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        total, runs = await asyncio.gather(
+            self.repo.get_reconciliation_runs_count(
+                portfolio_id=portfolio_id,
+                reconciliation_type=reconciliation_type,
+                status=status,
+            ),
+            self.repo.get_reconciliation_runs(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                reconciliation_type=reconciliation_type,
+                status=status,
+            ),
+        )
+        return ReconciliationRunListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                ReconciliationRunRecord(
+                    run_id=run.run_id,
+                    reconciliation_type=run.reconciliation_type,
+                    status=run.status,
+                    business_date=run.business_date,
+                    epoch=run.epoch,
+                    started_at=run.started_at,
+                    completed_at=run.completed_at,
+                    failure_reason=run.failure_reason,
+                    is_terminal_failure=run.status == "FAILED",
+                    is_blocking=self._is_controls_blocking(run.status),
+                    operational_state=self._get_reconciliation_operational_state(run.status),
+                )
+                for run in runs
+            ],
+        )
+
+    async def get_reconciliation_findings(
+        self, portfolio_id: str, run_id: str, limit: int
+    ) -> ReconciliationFindingListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        run = await self.repo.get_reconciliation_run(portfolio_id=portfolio_id, run_id=run_id)
+        if run is None:
+            raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
+        total, findings = await asyncio.gather(
+            self.repo.get_reconciliation_findings_count(run_id=run_id),
+            self.repo.get_reconciliation_findings(run_id=run_id, limit=limit),
+        )
+        return ReconciliationFindingListResponse(
+            run_id=run_id,
+            total=total,
+            items=[
+                ReconciliationFindingRecord(
+                    finding_id=finding.finding_id,
+                    finding_type=finding.finding_type,
+                    severity=finding.severity,
+                    security_id=finding.security_id,
+                    transaction_id=finding.transaction_id,
+                    business_date=finding.business_date,
+                    epoch=finding.epoch,
+                    created_at=finding.created_at,
+                    detail=finding.detail,
+                )
+                for finding in findings
+            ],
+        )
+
+    async def get_portfolio_control_stages(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        stage_name: str | None = None,
+        business_date: date | None = None,
+        status: str | None = None,
+    ) -> PortfolioControlStageListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        total, stages = await asyncio.gather(
+            self.repo.get_portfolio_control_stages_count(
+                portfolio_id=portfolio_id,
+                stage_name=stage_name,
+                business_date=business_date,
+                status=status,
+            ),
+            self.repo.get_portfolio_control_stages(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                stage_name=stage_name,
+                business_date=business_date,
+                status=status,
+            ),
+        )
+        return PortfolioControlStageListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                PortfolioControlStageRecord(
+                    stage_name=stage.stage_name,
+                    business_date=stage.business_date,
+                    epoch=stage.epoch,
+                    status=stage.status,
+                    last_source_event_type=stage.last_source_event_type,
+                    updated_at=stage.updated_at,
+                    is_blocking=self._is_controls_blocking(stage.status),
+                    operational_state=self._get_portfolio_control_stage_operational_state(
+                        stage.status
+                    ),
+                )
+                for stage in stages
+            ],
+        )
+
+    async def get_reprocessing_keys(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: str | None = None,
+        security_id: str | None = None,
+    ) -> ReprocessingKeyListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        total, keys = await asyncio.gather(
+            self.repo.get_reprocessing_keys_count(
+                portfolio_id=portfolio_id,
+                status=status,
+                security_id=security_id,
+            ),
+            self.repo.get_reprocessing_keys(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                security_id=security_id,
+                stale_minutes=stale_minutes,
+            ),
+        )
+        return ReprocessingKeyListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                ReprocessingKeyRecord(
+                    security_id=key.security_id,
+                    epoch=key.epoch,
+                    watermark_date=key.watermark_date,
+                    status=key.status,
+                    updated_at=key.updated_at,
+                    is_stale_reprocessing=self._is_reprocessing_key_stale(
+                        key.status,
+                        key.updated_at,
+                    ),
+                    operational_state=self._get_reprocessing_key_operational_state(
+                        key.status,
+                        key.updated_at,
+                    ),
+                )
+                for key in keys
+            ],
+        )
+
+    async def get_reprocessing_jobs(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: str | None = None,
+        security_id: str | None = None,
+    ) -> SupportJobListResponse:
+        await self._ensure_portfolio_exists(portfolio_id)
+        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        total, jobs = await asyncio.gather(
+            self.repo.get_reprocessing_jobs_count(
+                portfolio_id=portfolio_id,
+                status=status,
+                security_id=security_id,
+            ),
+            self.repo.get_reprocessing_jobs(
+                portfolio_id=portfolio_id,
+                skip=skip,
+                limit=limit,
+                status=status,
+                security_id=security_id,
+                stale_minutes=stale_minutes,
+            ),
+        )
+        return SupportJobListResponse(
+            portfolio_id=portfolio_id,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                SupportJobRecord(
+                    job_type=job.job_type,
+                    business_date=date.fromisoformat(job.business_date),
+                    status=job.status,
+                    security_id=job.security_id,
+                    epoch=None,
+                    attempt_count=job.attempt_count,
+                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
+                    updated_at=job.updated_at,
+                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
+                    failure_reason=job.failure_reason,
+                    operational_state=self._get_support_job_operational_state(
+                        job.status, job.updated_at
+                    ),
+                )
+                for job in jobs
+            ],
+        )
+
+    @classmethod
+    def _is_support_job_stale(
+        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+    ) -> bool:
+        if status != "PROCESSING" or updated_at is None:
+            return False
+        reference_now = now or datetime.now(timezone.utc)
+        return updated_at < reference_now - cls.SUPPORT_JOB_STALE_THRESHOLD
+
+    @classmethod
+    def _is_analytics_export_job_stale(
+        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+    ) -> bool:
+        normalized_status = cls._normalize_analytics_export_status(status)
+        normalized_status = "PROCESSING" if normalized_status == "running" else normalized_status
+        return cls._is_support_job_stale(normalized_status, updated_at, now)
+
+    @classmethod
+    def _is_reprocessing_key_stale(
+        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+    ) -> bool:
+        normalized_status = "PROCESSING" if status == "REPROCESSING" else status
+        return cls._is_support_job_stale(normalized_status, updated_at, now)
+
+    @staticmethod
+    def _get_analytics_export_backlog_age_minutes(
+        status: str | None, created_at: datetime | None, now: datetime | None = None
+    ) -> int | None:
+        normalized_status = OperationsService._normalize_analytics_export_status(status)
+        if normalized_status not in {"accepted", "running"} or created_at is None:
+            return None
+        reference_now = now or datetime.now(timezone.utc)
+        return max(0, int((reference_now - created_at).total_seconds() // 60))

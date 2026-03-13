@@ -49,7 +49,7 @@ async def test_fencer_returns_true_for_current_epoch(mock_dependencies, sample_e
     mock_state_repo = mock_dependencies["state_repo"]
     mock_state_repo.get_or_create_state.return_value = PositionState(epoch=1)
 
-    fencer = EpochFencer(mock_dependencies["db_session"])
+    fencer = EpochFencer(mock_dependencies["db_session"], service_name="test-service")
 
     # ACT
     is_valid = await fencer.check(sample_event)
@@ -73,7 +73,7 @@ async def test_fencer_returns_false_and_logs_for_stale_epoch(
         epoch=2
     )  # Current epoch is newer
 
-    fencer = EpochFencer(mock_dependencies["db_session"])
+    fencer = EpochFencer(mock_dependencies["db_session"], service_name="test-service")
 
     # ACT
     # Patch the Prometheus metric to avoid global state issues in tests
@@ -83,7 +83,7 @@ async def test_fencer_returns_false_and_logs_for_stale_epoch(
     # ASSERT
     assert is_valid is False
     mock_metric.labels.assert_called_once_with(
-        service_name="<not-set>",  # Default, can be overridden
+        service_name="test-service",
         topic="daily_position_snapshot_persisted",
         portfolio_id="P1",
         security_id="S1",

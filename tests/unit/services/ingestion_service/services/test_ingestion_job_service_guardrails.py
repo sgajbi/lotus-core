@@ -36,6 +36,23 @@ class _SingleSessionAsyncIterable:
         return self._session
 
 
+class _FakeCounterHandle:
+    def __init__(self):
+        self.calls: list[int] = []
+
+    def inc(self, count: int = 1):
+        self.calls.append(count)
+
+
+class _FakeCounterVec:
+    def __init__(self):
+        self.handles: dict[tuple[tuple[str, object], ...], _FakeCounterHandle] = {}
+
+    def labels(self, **labels):
+        key = tuple(sorted(labels.items()))
+        return self.handles.setdefault(key, _FakeCounterHandle())
+
+
 async def test_assert_retry_allowed_for_records_blocks_large_replay(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
@@ -394,3 +411,122 @@ async def test_get_reprocessing_queue_health_aggregates_by_job_type(
     assert response.total_failed_jobs == 2
     assert response.queues[0].job_type == "RESET_WATERMARKS"
     assert response.queues[0].oldest_pending_age_seconds > 0
+
+
+async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_metric(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FakeBegin:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class _FakeSession:
+        def __init__(self):
+            self.added = []
+
+        def add(self, row):
+            self.added.append(row)
+
+        def begin(self):
+            return _FakeBegin()
+
+    audit_counter = _FakeCounterVec()
+    duplicate_counter = _FakeCounterVec()
+    failure_counter = _FakeCounterVec()
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+    monkeypatch.setattr(service_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
+    monkeypatch.setattr(
+        service_module,
+        "INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL",
+        duplicate_counter,
+    )
+    monkeypatch.setattr(service_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
+
+    replay_id = await service.record_consumer_dlq_replay_audit(
+        recovery_path="ingestion_job_retry",
+        event_id="job:job_123",
+        replay_fingerprint="fp_123",
+        correlation_id="corr-123",
+        job_id="job_123",
+        endpoint="/ingest/transactions",
+        replay_status="duplicate_blocked",
+        dry_run=False,
+        replay_reason="duplicate",
+        requested_by="ops-token",
+    )
+
+    assert replay_id.startswith("replay_")
+    assert audit_counter.labels(
+        recovery_path="ingestion_job_retry",
+        replay_status="duplicate_blocked",
+    ).calls == [1]
+    assert duplicate_counter.labels(recovery_path="ingestion_job_retry").calls == [1]
+    assert failure_counter.handles == {}
+
+
+async def test_record_consumer_dlq_replay_audit_increments_failure_metric(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FakeBegin:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class _FakeSession:
+        def add(self, _row):
+            return None
+
+        def begin(self):
+            return _FakeBegin()
+
+    audit_counter = _FakeCounterVec()
+    duplicate_counter = _FakeCounterVec()
+    failure_counter = _FakeCounterVec()
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+    monkeypatch.setattr(service_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
+    monkeypatch.setattr(
+        service_module,
+        "INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL",
+        duplicate_counter,
+    )
+    monkeypatch.setattr(service_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
+
+    await service.record_consumer_dlq_replay_audit(
+        recovery_path="consumer_dlq_replay",
+        event_id="event_123",
+        replay_fingerprint="fp_456",
+        correlation_id="corr-456",
+        job_id="job_456",
+        endpoint="/ingest/transactions",
+        replay_status="failed",
+        dry_run=False,
+        replay_reason="publish exploded",
+        requested_by="ops-token",
+    )
+
+    assert audit_counter.labels(
+        recovery_path="consumer_dlq_replay",
+        replay_status="failed",
+    ).calls == [1]
+    assert failure_counter.labels(
+        recovery_path="consumer_dlq_replay",
+        replay_status="failed",
+    ).calls == [1]
+    assert duplicate_counter.handles == {}

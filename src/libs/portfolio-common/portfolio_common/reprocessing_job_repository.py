@@ -7,6 +7,7 @@ from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
+from .logging_utils import normalize_lineage_value
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .utils import async_timed
 
@@ -80,6 +81,7 @@ class ReprocessingJobRepository:
     async def create_job(
         self, job_type: str, payload: Dict[str, Any], correlation_id: str | None = None
     ) -> ReprocessingJob:
+        correlation_id = normalize_lineage_value(correlation_id)
         if (
             job_type == "RESET_WATERMARKS"
             and payload.get("security_id")
@@ -120,7 +122,7 @@ class ReprocessingJobRepository:
                     correlation_id = CASE
                         WHEN CAST(:earliest_impacted_date AS date)
                              < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
-                        THEN :correlation_id
+                        THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
                         WHEN reprocessing_jobs.correlation_id IS NULL
                         THEN :correlation_id
                         ELSE reprocessing_jobs.correlation_id
@@ -219,24 +221,67 @@ class ReprocessingJobRepository:
         return jobs
 
     @async_timed(repository="ReprocessingJobRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(self, timeout_minutes: int = 15) -> int:
+    async def find_and_reset_stale_jobs(
+        self, timeout_minutes: int = 15, max_attempts: int = 3
+    ) -> int:
         stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_job_ids_stmt = select(ReprocessingJob.id).where(
+        stale_jobs_stmt = select(ReprocessingJob.id, ReprocessingJob.attempt_count).where(
             ReprocessingJob.status == "PROCESSING",
             ReprocessingJob.updated_at < stale_cutoff,
         )
-        stale_job_ids = list((await self.db.execute(stale_job_ids_stmt)).scalars())
-        if not stale_job_ids:
+        stale_rows = (await self.db.execute(stale_jobs_stmt)).all()
+        if not stale_rows:
+            return 0
+
+        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+        if failed_job_ids:
+            failure_stmt = (
+                update(ReprocessingJob)
+                .where(ReprocessingJob.id.in_(failed_job_ids))
+                .values(
+                    status="FAILED",
+                    failure_reason="Stale processing timeout exceeded max attempts",
+                    updated_at=func.now(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.execute(failure_stmt)
+            logger.warning(
+                "Marked stale reprocessing jobs as FAILED after max attempts.",
+                extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+            )
+
+        if not reset_job_ids:
             return 0
 
         stmt = (
             update(ReprocessingJob)
-            .where(ReprocessingJob.id.in_(stale_job_ids))
+            .where(ReprocessingJob.id.in_(reset_job_ids))
             .values(status="PENDING", updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
         result = await self.db.execute(stmt)
         return result.rowcount
+
+    @async_timed(repository="ReprocessingJobRepository", method="get_queue_stats")
+    async def get_queue_stats(self, job_type: str | None = None) -> Dict[str, Any]:
+        stmt = select(
+            func.count().filter(ReprocessingJob.status == "PENDING").label("pending_count"),
+            func.count().filter(ReprocessingJob.status == "FAILED").label("failed_count"),
+            func.min(ReprocessingJob.created_at)
+            .filter(ReprocessingJob.status == "PENDING")
+            .label("oldest_pending_created_at"),
+        )
+        if job_type is not None:
+            stmt = stmt.where(ReprocessingJob.job_type == job_type)
+        row = (await self.db.execute(stmt)).one()
+        return {
+            "pending_count": int(row.pending_count or 0),
+            "failed_count": int(row.failed_count or 0),
+            "oldest_pending_created_at": row.oldest_pending_created_at,
+        }
 
     @async_timed(repository="ReprocessingJobRepository", method="update_job_status")
     async def update_job_status(

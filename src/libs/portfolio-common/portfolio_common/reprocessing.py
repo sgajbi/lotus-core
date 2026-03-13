@@ -25,7 +25,7 @@ class EpochFencer:
     stale messages from a previous, now-obsolete history are safely ignored.
     """
 
-    def __init__(self, db: AsyncSession, service_name: str = "<not-set>"):
+    def __init__(self, db: AsyncSession, service_name: str):
         self.db = db
         self.state_repo = PositionStateRepository(db)
         self.service_name = service_name

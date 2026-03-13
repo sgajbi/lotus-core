@@ -60,13 +60,17 @@ def configure_standard_http_app(
 
     @app.middleware("http")
     async def add_correlation_id_middleware(request: Request, call_next):
-        correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get(
-            "X-Correlation-ID"
+        correlation_id = normalize_lineage_value(
+            request.headers.get("X-Correlation-Id") or request.headers.get("X-Correlation-ID")
         )
+        request_id = normalize_lineage_value(request.headers.get("X-Request-Id"))
+        trace_id = normalize_lineage_value(request.headers.get("X-Trace-Id"))
         if not correlation_id:
             correlation_id = id_generator(service_prefix)
-        request_id = request.headers.get("X-Request-Id") or id_generator("REQ")
-        trace_id = request.headers.get("X-Trace-Id") or uuid4().hex
+        if not request_id:
+            request_id = id_generator("REQ")
+        if not trace_id:
+            trace_id = uuid4().hex
 
         correlation_token = correlation_id_var.set(correlation_id)
         request_token = request_id_var.set(request_id)

@@ -109,15 +109,35 @@ async def test_find_and_reset_stale_jobs(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
     """Verifies the UPDATE statement for resetting stale jobs."""
+    stale_result = MagicMock()
+    stale_result.all.return_value = [MagicMock(id=1, attempt_count=1)]
+    mock_db_session.execute.side_effect = [stale_result, mock_db_session.execute.return_value]
+
     await repository.find_and_reset_stale_jobs()
 
-    executed_stmt = mock_db_session.execute.call_args[0][0]
+    executed_stmt = mock_db_session.execute.call_args_list[1][0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PENDING'" in compiled_query
     assert "updated_at=now()" in compiled_query
-    assert "WHERE portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
+    assert "portfolio_aggregation_jobs.id IN" in compiled_query
+
+
+async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    stale_result = MagicMock()
+    stale_result.all.return_value = [MagicMock(id=1, attempt_count=3)]
+    failed_result = MagicMock()
+    mock_db_session.execute.side_effect = [stale_result, failed_result]
+
+    reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
+
+    assert reset_count == 0
+    failed_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_query = str(failed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SET status='FAILED'" in compiled_query
 
 
 async def test_get_all_position_timeseries_for_date_uses_latest_snapshot_epoch_per_security(
@@ -167,6 +187,21 @@ async def test_find_and_claim_eligible_jobs_prior_day_gate_does_not_require_curr
         in compiled_query
     )
     assert "portfolio_timeseries.epoch =" not in compiled_query
+
+
+async def test_find_and_claim_eligible_jobs_increments_attempt_count(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.find_and_claim_eligible_jobs(batch_size=5)
+
+    executed_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "UPDATE portfolio_aggregation_jobs" in compiled_query
+    assert "SET status='PROCESSING'" in compiled_query
+    assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
 
 
 async def test_find_and_claim_eligible_jobs_first_day_gate_is_directly_correlated(

@@ -78,7 +78,8 @@ Use this section when ingestion, replay, or event publication looks unhealthy.
 - `Replay Audit Outcomes`: replay results by recovery path and status
 - `Replay Pressure`: duplicate pressure, stale-skip pressure, and replay failures
 - `Outbox Backlog and Publish Pressure`: durable publication queue health
-- `Reprocessing Worker Throughput and Backlog`: claim/completion/failure balance and backlog age
+- `Reprocessing Worker Throughput and Backlog`: claim/completion/failure balance, explicit no-op replay outcomes, and backlog age
+- `Control Queue Pressure`: pending rows, terminal failures, and oldest pending age across the valuation, aggregation, and replay control queues
 
 ### Valuation and Timeseries
 
@@ -108,7 +109,9 @@ Use this section for control-plane completion.
 1. Check `Replay Stale Skip Rate`.
 2. Check `Replay Pressure`.
 3. Check `Reprocessing Worker Throughput and Backlog`.
-4. Check `Ingestion Backlog Age` and `Active Reprocessing Keys`.
+4. If `noop RESET_WATERMARKS / no_impacted_portfolios` is elevated, validate that replay requests are targeting real impacted holdings instead of broad security-wide resets.
+5. Check `Ingestion Backlog Age` and `Active Reprocessing Keys`.
+6. Check `Control Queue Pressure` to see whether replay backlog, durable failures, or pending age are isolated to replay or also spilling into valuation and aggregation queues.
 
 ### Workflow: Durable Events Are Not Moving
 

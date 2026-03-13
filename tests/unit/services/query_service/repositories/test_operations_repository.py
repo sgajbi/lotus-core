@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -125,6 +125,39 @@ async def test_get_aggregation_job_health_summary(
         "FILTER (WHERE portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING'))" in compiled
     )
     assert "FILTER (WHERE portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+
+
+async def test_get_analytics_export_job_health_summary(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_row = MagicMock(
+        accepted_jobs=2,
+        running_jobs=1,
+        stale_running_jobs=1,
+        failed_jobs=3,
+        failed_jobs_last_hours=2,
+        oldest_open_job_created_at=datetime(2025, 8, 10, 9, 0, tzinfo=timezone.utc),
+    )
+    mock_result = MagicMock()
+    mock_result.one.return_value = mock_row
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_analytics_export_job_health_summary(
+        "P1", stale_minutes=15, failed_window_hours=24
+    )
+
+    assert value.accepted_jobs == 2
+    assert value.running_jobs == 1
+    assert value.stale_running_jobs == 1
+    assert value.failed_jobs == 3
+    assert value.failed_jobs_last_hours == 2
+    assert value.oldest_open_job_created_at == datetime(2025, 8, 10, 9, 0, tzinfo=timezone.utc)
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from analytics_export_jobs" in compiled.lower()
+    assert "FILTER (WHERE analytics_export_jobs.status = 'accepted')" in compiled
+    assert "FILTER (WHERE analytics_export_jobs.status = 'running')" in compiled
+    assert "FILTER (WHERE analytics_export_jobs.status = 'failed')" in compiled
 
 
 async def test_get_latest_transaction_date(
@@ -329,7 +362,8 @@ async def test_get_valuation_jobs_query(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "ORDER BY portfolio_valuation_jobs.valuation_date DESC" in compiled
+    assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
 
 
@@ -359,7 +393,8 @@ async def test_get_aggregation_jobs_query(
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "ORDER BY portfolio_aggregation_jobs.aggregation_date DESC" in compiled
+    assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
 
 
@@ -445,3 +480,230 @@ async def test_get_aggregation_jobs_query_with_status(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+
+
+async def test_get_analytics_export_jobs_count_with_status(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 5)
+
+    value = await repository.get_analytics_export_jobs_count(portfolio_id="P1", status="failed")
+
+    assert value == 5
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.status = 'failed'" in compiled
+
+
+async def test_get_analytics_export_jobs_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["exp1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_analytics_export_jobs(
+        portfolio_id="P1", skip=1, limit=3, status="running"
+    )
+
+    assert value == ["exp1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.status = 'running'" in compiled
+    assert "CASE WHEN (analytics_export_jobs.status = 'failed')" in compiled
+    assert "analytics_export_jobs.created_at ASC" in compiled
+
+
+async def test_get_reconciliation_runs_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 3)
+
+    value = await repository.get_reconciliation_runs_count(
+        portfolio_id="P1",
+        reconciliation_type="transaction_cashflow",
+        status="FAILED",
+    )
+
+    assert value == 3
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
+    assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
+
+
+async def test_get_reconciliation_runs_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["run1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reconciliation_runs(
+        portfolio_id="P1",
+        skip=2,
+        limit=5,
+        reconciliation_type="transaction_cashflow",
+        status="COMPLETED",
+    )
+
+    assert value == ["run1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
+    assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
+    assert (
+        "CASE WHEN (financial_reconciliation_runs.status IN ('FAILED', 'REQUIRES_REPLAY'))"
+        in compiled
+    )
+    assert "financial_reconciliation_runs.started_at DESC" in compiled
+    assert "LIMIT 5 OFFSET 2" in compiled
+
+
+async def test_get_reconciliation_findings_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["finding1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reconciliation_findings(run_id="recon_123", limit=20)
+
+    assert value == ["finding1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_findings" in compiled.lower()
+    assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+    assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
+    assert "financial_reconciliation_findings.created_at DESC" in compiled
+    assert "LIMIT 20" in compiled
+
+
+async def test_get_reconciliation_run_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_run = object()
+    mock_execute_scalar_one_or_none(mock_db_session, mock_run)
+
+    value = await repository.get_reconciliation_run(portfolio_id="P1", run_id="recon_123")
+
+    assert value is mock_run
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled
+    assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
+
+
+async def test_get_reconciliation_findings_count(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 4)
+
+    value = await repository.get_reconciliation_findings_count(run_id="recon_123")
+
+    assert value == 4
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_findings" in compiled.lower()
+    assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+
+
+async def test_get_portfolio_control_stages_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 6)
+
+    value = await repository.get_portfolio_control_stages_count(
+        portfolio_id="P1",
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="REQUIRES_REPLAY",
+    )
+
+    assert value == 6
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from pipeline_stage_state" in compiled.lower()
+    assert "pipeline_stage_state.transaction_id LIKE 'portfolio-stage:%'" in compiled
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
+    assert "pipeline_stage_state.status = 'REQUIRES_REPLAY'" in compiled
+
+
+async def test_get_portfolio_control_stages_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["stage1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_portfolio_control_stages(
+        portfolio_id="P1",
+        skip=1,
+        limit=10,
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="FAILED",
+    )
+
+    assert value == ["stage1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from pipeline_stage_state" in compiled.lower()
+    assert "pipeline_stage_state.transaction_id LIKE 'portfolio-stage:%'" in compiled
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
+    assert "pipeline_stage_state.status = 'FAILED'" in compiled
+    assert "CASE WHEN (pipeline_stage_state.status IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
+    assert "pipeline_stage_state.business_date DESC" in compiled
+    assert "LIMIT 10 OFFSET 1" in compiled
+
+
+async def test_get_reprocessing_keys_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+
+    value = await repository.get_reprocessing_keys_count(
+        portfolio_id="P1",
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+    )
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from position_state" in compiled.lower()
+    assert "position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+
+
+async def test_get_reprocessing_keys_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["key1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reprocessing_keys(
+        portfolio_id="P1",
+        skip=3,
+        limit=7,
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+    )
+
+    assert value == ["key1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from position_state" in compiled.lower()
+    assert "position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+    assert "CASE WHEN (position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.updated_at ASC" in compiled
+    assert "LIMIT 7 OFFSET 3" in compiled

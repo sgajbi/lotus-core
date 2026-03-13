@@ -35,9 +35,21 @@ async def test_support_overview_success(async_test_client):
         "pending_valuation_jobs": 2,
         "processing_valuation_jobs": 1,
         "stale_processing_valuation_jobs": 0,
+        "failed_valuation_jobs": 0,
         "oldest_pending_valuation_date": date(2025, 8, 30),
         "valuation_backlog_age_days": 1,
         "pending_aggregation_jobs": 0,
+        "processing_aggregation_jobs": 0,
+        "stale_processing_aggregation_jobs": 0,
+        "failed_aggregation_jobs": 0,
+        "oldest_pending_aggregation_date": None,
+        "aggregation_backlog_age_days": None,
+        "pending_analytics_export_jobs": 2,
+        "processing_analytics_export_jobs": 1,
+        "stale_processing_analytics_export_jobs": 0,
+        "failed_analytics_export_jobs": 1,
+        "oldest_pending_analytics_export_created_at": "2025-08-31T10:00:00Z",
+        "analytics_export_backlog_age_minutes": 15,
         "latest_transaction_date": date(2025, 8, 31),
         "latest_booked_transaction_date": date(2025, 8, 31),
         "latest_position_snapshot_date": date(2025, 8, 31),
@@ -199,7 +211,11 @@ async def test_valuation_jobs_success(async_test_client):
                 "security_id": "S1",
                 "epoch": 1,
                 "attempt_count": 0,
+                "is_retrying": False,
+                "updated_at": "2025-08-31T10:15:00Z",
+                "is_stale_processing": False,
                 "failure_reason": None,
+                "operational_state": "PENDING",
             }
         ],
     }
@@ -208,6 +224,9 @@ async def test_valuation_jobs_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["items"][0]["job_type"] == "VALUATION"
+    assert response.json()["items"][0]["is_stale_processing"] is False
+    assert response.json()["items"][0]["is_retrying"] is False
+    assert response.json()["items"][0]["operational_state"] == "PENDING"
 
 
 async def test_valuation_jobs_unexpected_maps_to_500(async_test_client):
@@ -234,8 +253,12 @@ async def test_aggregation_jobs_success(async_test_client):
                 "status": "PROCESSING",
                 "security_id": None,
                 "epoch": None,
-                "attempt_count": None,
-                "failure_reason": None,
+                "attempt_count": 2,
+                "is_retrying": True,
+                "updated_at": "2025-08-31T10:00:00Z",
+                "is_stale_processing": True,
+                "failure_reason": "timed out once",
+                "operational_state": "STALE_PROCESSING",
             }
         ],
     }
@@ -244,6 +267,11 @@ async def test_aggregation_jobs_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["items"][0]["job_type"] == "AGGREGATION"
+    assert response.json()["items"][0]["attempt_count"] == 2
+    assert response.json()["items"][0]["is_stale_processing"] is True
+    assert response.json()["items"][0]["is_retrying"] is True
+    assert response.json()["items"][0]["failure_reason"] == "timed out once"
+    assert response.json()["items"][0]["operational_state"] == "STALE_PROCESSING"
 
 
 async def test_aggregation_jobs_unexpected_maps_to_500(async_test_client):
@@ -254,6 +282,53 @@ async def test_aggregation_jobs_unexpected_maps_to_500(async_test_client):
 
     assert response.status_code == 500
     assert "aggregation jobs" in response.json()["detail"].lower()
+
+
+async def test_analytics_export_jobs_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_analytics_export_jobs.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "job_id": "aexp_1234567890abcdef",
+                "dataset_type": "portfolio_timeseries",
+                "status": "FAILED",
+                "created_at": "2026-03-13T10:15:00Z",
+                "started_at": "2026-03-13T10:15:01Z",
+                "completed_at": "2026-03-13T10:15:02Z",
+                "updated_at": "2026-03-13T10:15:02Z",
+                "is_stale_running": False,
+                "backlog_age_minutes": None,
+                "result_row_count": None,
+                "error_message": "Unexpected analytics export processing failure.",
+                "is_terminal_failure": True,
+                "operational_state": "FAILED",
+            }
+        ],
+    }
+
+    response = await client.get("/support/portfolios/P1/analytics-export-jobs?status_filter=FAILED")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["job_id"] == "aexp_1234567890abcdef"
+    assert response.json()["items"][0]["dataset_type"] == "portfolio_timeseries"
+    assert response.json()["items"][0]["status"] == "FAILED"
+    assert response.json()["items"][0]["is_stale_running"] is False
+    assert response.json()["items"][0]["is_terminal_failure"] is True
+    assert response.json()["items"][0]["operational_state"] == "FAILED"
+
+
+async def test_analytics_export_jobs_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_analytics_export_jobs.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/analytics-export-jobs?status_filter=FAILED")
+
+    assert response.status_code == 500
+    assert "analytics export jobs" in response.json()["detail"].lower()
 
 
 async def test_lineage_keys_unexpected_maps_to_500(async_test_client):
@@ -304,6 +379,293 @@ async def test_aggregation_jobs_not_found_maps_to_404(async_test_client):
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+async def test_analytics_export_jobs_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_analytics_export_jobs.side_effect = ValueError("not found")
+
+    response = await client.get(
+        "/support/portfolios/P404/analytics-export-jobs?status_filter=FAILED"
+    )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reconciliation_runs_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_runs.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "run_id": "recon_1234567890abcdef",
+                "reconciliation_type": "transaction_cashflow",
+                "status": "FAILED",
+                "business_date": "2026-03-13",
+                "epoch": 3,
+                "started_at": "2026-03-13T10:15:00Z",
+                "completed_at": "2026-03-13T10:15:09Z",
+                "failure_reason": "Tolerance exceeded for portfolio totals.",
+                "is_terminal_failure": True,
+                "is_blocking": True,
+                "operational_state": "BLOCKING",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/reconciliation-runs?reconciliation_type=transaction_cashflow&status_filter=FAILED"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["run_id"] == "recon_1234567890abcdef"
+    assert response.json()["items"][0]["status"] == "FAILED"
+    assert response.json()["items"][0]["is_terminal_failure"] is True
+    assert response.json()["items"][0]["is_blocking"] is True
+    assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+
+
+async def test_reconciliation_runs_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_runs.side_effect = ValueError("not found")
+
+    response = await client.get(
+        "/support/portfolios/P404/reconciliation-runs?reconciliation_type=transaction_cashflow"
+    )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reconciliation_runs_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_runs.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/reconciliation-runs")
+
+    assert response.status_code == 500
+    assert "reconciliation runs" in response.json()["detail"].lower()
+
+
+async def test_reconciliation_findings_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_findings.return_value = {
+        "run_id": "recon_1234567890abcdef",
+        "total": 1,
+        "items": [
+            {
+                "finding_id": "rf_1234567890abcdef",
+                "finding_type": "missing_cashflow",
+                "severity": "ERROR",
+                "security_id": "SEC-US-IBM",
+                "transaction_id": "TXN-20260313-0042",
+                "business_date": "2026-03-13",
+                "epoch": 3,
+                "created_at": "2026-03-13T10:15:09Z",
+                "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/reconciliation-runs/recon_1234567890abcdef/findings?limit=50"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "recon_1234567890abcdef"
+    assert response.json()["items"][0]["finding_id"] == "rf_1234567890abcdef"
+
+
+async def test_reconciliation_findings_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_findings.side_effect = ValueError(
+        "Reconciliation run recon_404 not found for portfolio P404"
+    )
+
+    response = await client.get(
+        "/support/portfolios/P404/reconciliation-runs/recon_404/findings?limit=50"
+    )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reconciliation_findings_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reconciliation_findings.side_effect = RuntimeError("boom")
+
+    response = await client.get(
+        "/support/portfolios/P1/reconciliation-runs/recon_123/findings?limit=50"
+    )
+
+    assert response.status_code == 500
+    assert "reconciliation findings" in response.json()["detail"].lower()
+
+
+async def test_portfolio_control_stages_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_control_stages.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "stage_name": "FINANCIAL_RECONCILIATION",
+                "business_date": "2026-03-13",
+                "epoch": 3,
+                "status": "REQUIRES_REPLAY",
+                "last_source_event_type": "financial_reconciliation_completed",
+                "updated_at": "2026-03-13T10:15:09Z",
+                "is_blocking": True,
+                "operational_state": "BLOCKING",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/control-stages"
+        "?stage_name=FINANCIAL_RECONCILIATION&business_date=2026-03-13"
+        "&status_filter=REQUIRES_REPLAY"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["items"][0]["stage_name"] == "FINANCIAL_RECONCILIATION"
+    assert response.json()["items"][0]["is_blocking"] is True
+    assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+
+
+async def test_portfolio_control_stages_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_control_stages.side_effect = ValueError("not found")
+
+    response = await client.get(
+        "/support/portfolios/P404/control-stages?stage_name=FINANCIAL_RECONCILIATION"
+    )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_portfolio_control_stages_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_control_stages.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/control-stages")
+
+    assert response.status_code == 500
+    assert "portfolio control stages" in response.json()["detail"].lower()
+
+
+async def test_reprocessing_keys_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_keys.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "security_id": "SEC-US-IBM",
+                "epoch": 3,
+                "watermark_date": "2026-03-10",
+                "status": "REPROCESSING",
+                "updated_at": "2026-03-13T10:15:09Z",
+                "is_stale_reprocessing": False,
+                "operational_state": "REPROCESSING",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/reprocessing-keys"
+        "?status_filter=REPROCESSING&security_id=SEC-US-IBM"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"
+    assert response.json()["items"][0]["is_stale_reprocessing"] is False
+    assert response.json()["items"][0]["operational_state"] == "REPROCESSING"
+
+
+async def test_reprocessing_keys_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_keys.side_effect = ValueError("not found")
+
+    response = await client.get("/support/portfolios/P404/reprocessing-keys")
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reprocessing_keys_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_keys.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/reprocessing-keys")
+
+    assert response.status_code == 500
+    assert "reprocessing keys" in response.json()["detail"].lower()
+
+
+async def test_reprocessing_jobs_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_jobs.return_value = {
+        "portfolio_id": "P1",
+        "total": 1,
+        "skip": 0,
+        "limit": 100,
+        "items": [
+            {
+                "job_type": "RESET_WATERMARKS",
+                "business_date": "2026-03-10",
+                "status": "PROCESSING",
+                "security_id": "SEC-US-IBM",
+                "epoch": None,
+                "attempt_count": 2,
+                "is_retrying": True,
+                "updated_at": "2026-03-13T10:15:09Z",
+                "is_stale_processing": False,
+                "failure_reason": "timed out once",
+                "operational_state": "PROCESSING",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/reprocessing-jobs?status_filter=PROCESSING&security_id=SEC-US-IBM"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["items"][0]["job_type"] == "RESET_WATERMARKS"
+    assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"
+
+
+async def test_reprocessing_jobs_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_jobs.side_effect = ValueError("not found")
+
+    response = await client.get("/support/portfolios/P404/reprocessing-jobs")
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+async def test_reprocessing_jobs_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_reprocessing_jobs.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/portfolios/P1/reprocessing-jobs")
+
+    assert response.status_code == 500
+    assert "reprocessing jobs" in response.json()["detail"].lower()
 
 
 async def test_lineage_keys_not_found_maps_to_404(async_test_client):

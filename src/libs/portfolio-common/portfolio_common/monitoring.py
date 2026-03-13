@@ -125,6 +125,24 @@ _OUTBOX_BATCH_SECONDS = Histogram(
     buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
 )
 
+_CONTROL_QUEUE_PENDING = Gauge(
+    "control_queue_pending",
+    "Total number of pending rows in durable control queues.",
+    labelnames=("queue",),
+)
+
+_CONTROL_QUEUE_FAILED_STORED = Gauge(
+    "control_queue_failed_stored",
+    "Total number of terminal failed rows in durable control queues.",
+    labelnames=("queue",),
+)
+
+_CONTROL_QUEUE_OLDEST_PENDING_AGE_SECONDS = Gauge(
+    "control_queue_oldest_pending_age_seconds",
+    "Age in seconds of the oldest pending row in durable control queues.",
+    labelnames=("queue",),
+)
+
 
 def observe_outbox_published(aggregate_type: str, topic: str, count: int = 1) -> None:
     _OUTBOX_PUBLISHED.labels(aggregate_type, topic).inc(count)
@@ -153,6 +171,18 @@ def set_outbox_oldest_pending_age_seconds(age_seconds: float) -> None:
 def outbox_batch_timer():
     """Context manager that observes outbox batch duration."""
     return _OUTBOX_BATCH_SECONDS.time()
+
+
+def set_control_queue_pending(queue: str, total_pending: int) -> None:
+    _CONTROL_QUEUE_PENDING.labels(queue).set(total_pending)
+
+
+def set_control_queue_failed_stored(queue: str, total_failed: int) -> None:
+    _CONTROL_QUEUE_FAILED_STORED.labels(queue).set(total_failed)
+
+
+def set_control_queue_oldest_pending_age_seconds(queue: str, age_seconds: float) -> None:
+    _CONTROL_QUEUE_OLDEST_PENDING_AGE_SECONDS.labels(queue).set(age_seconds)
 
 
 # --------------------------------------------------------------------------------------
@@ -202,6 +232,12 @@ REPROCESSING_WORKER_JOBS_COMPLETED_TOTAL = Counter(
     "reprocessing_worker_jobs_completed_total",
     "Total number of reprocessing jobs completed by the worker.",
     ["job_type"],
+)
+
+REPROCESSING_WORKER_JOBS_NOOP_TOTAL = Counter(
+    "reprocessing_worker_jobs_noop_total",
+    "Total number of reprocessing jobs that completed without mutating any state.",
+    ["job_type", "reason"],
 )
 
 REPROCESSING_WORKER_JOBS_FAILED_TOTAL = Counter(
@@ -379,6 +415,10 @@ def observe_reprocessing_worker_jobs_claimed(job_type: str, count: int = 1) -> N
 
 def observe_reprocessing_worker_jobs_completed(job_type: str, count: int = 1) -> None:
     REPROCESSING_WORKER_JOBS_COMPLETED_TOTAL.labels(job_type).inc(count)
+
+
+def observe_reprocessing_worker_jobs_noop(job_type: str, reason: str, count: int = 1) -> None:
+    REPROCESSING_WORKER_JOBS_NOOP_TOTAL.labels(job_type, reason).inc(count)
 
 
 def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> None:

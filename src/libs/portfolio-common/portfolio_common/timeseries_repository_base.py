@@ -190,7 +190,11 @@ class TimeseriesRepositoryBase:
         update_query = (
             update(PortfolioAggregationJob)
             .where(PortfolioAggregationJob.id.in_(eligible_ids))
-            .values(status="PROCESSING", updated_at=func.now())
+            .values(
+                status="PROCESSING",
+                updated_at=func.now(),
+                attempt_count=PortfolioAggregationJob.attempt_count + 1,
+            )
             .returning(PortfolioAggregationJob)
         )
 
@@ -330,14 +334,47 @@ class TimeseriesRepositoryBase:
         return result.scalars().all()
 
     @async_timed(repository="TimeseriesRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(self, timeout_minutes: int = 15) -> int:
+    async def find_and_reset_stale_jobs(
+        self, timeout_minutes: int = 15, max_attempts: int = 3
+    ) -> int:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+        stale_jobs_stmt = select(
+            PortfolioAggregationJob.id,
+            PortfolioAggregationJob.attempt_count,
+        ).where(
+            PortfolioAggregationJob.status == "PROCESSING",
+            PortfolioAggregationJob.updated_at < stale_threshold,
+        )
+        stale_rows = (await self.db.execute(stale_jobs_stmt)).all()
+        if not stale_rows:
+            return 0
+
+        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+        if failed_job_ids:
+            failure_stmt = (
+                update(PortfolioAggregationJob)
+                .where(PortfolioAggregationJob.id.in_(failed_job_ids))
+                .values(
+                    status="FAILED",
+                    failure_reason="Stale processing timeout exceeded max attempts",
+                    updated_at=func.now(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.execute(failure_stmt)
+            logger.warning(
+                "Marked stale aggregation jobs as FAILED after max attempts.",
+                extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+            )
+
+        if not reset_job_ids:
+            return 0
+
         stmt = (
             update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.status == "PROCESSING",
-                PortfolioAggregationJob.updated_at < stale_threshold,
-            )
+            .where(PortfolioAggregationJob.id.in_(reset_job_ids))
             .values(status="PENDING", updated_at=func.now())
         )
 
@@ -349,6 +386,22 @@ class TimeseriesRepositoryBase:
                 reset_count,
             )
         return reset_count
+
+    @async_timed(repository="TimeseriesRepository", method="get_job_queue_stats")
+    async def get_job_queue_stats(self) -> dict:
+        stmt = select(
+            func.count().filter(PortfolioAggregationJob.status == "PENDING").label("pending_count"),
+            func.count().filter(PortfolioAggregationJob.status == "FAILED").label("failed_count"),
+            func.min(PortfolioAggregationJob.created_at)
+            .filter(PortfolioAggregationJob.status == "PENDING")
+            .label("oldest_pending_created_at"),
+        )
+        row = (await self.db.execute(stmt)).one()
+        return {
+            "pending_count": int(row.pending_count or 0),
+            "failed_count": int(row.failed_count or 0),
+            "oldest_pending_created_at": row.oldest_pending_created_at,
+        }
 
     @async_timed(repository="TimeseriesRepository", method="get_last_snapshot_before")
     async def get_last_snapshot_before(

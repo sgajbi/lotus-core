@@ -36,6 +36,26 @@ async def test_middleware_generates_correlation_id_when_missing(async_test_clien
     assert response.headers["X-Correlation-ID"] == "QCP-abc"
 
 
+async def test_middleware_replaces_unset_lineage_headers(async_test_client):
+    with patch(
+        "src.services.query_control_plane_service.app.main.generate_correlation_id",
+        side_effect=["QCP-abc", "REQ-abc"],
+    ):
+        response = await async_test_client.get(
+            "/openapi.json",
+            headers={
+                "X-Correlation-ID": "<not-set>",
+                "X-Request-Id": "",
+                "X-Trace-Id": "<not-set>",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == "QCP-abc"
+    assert response.headers["X-Request-Id"] == "REQ-abc"
+    assert response.headers["X-Trace-Id"] not in ("", "<not-set>")
+
+
 async def test_lifespan_logs_startup_and_shutdown():
     with patch("src.services.query_control_plane_service.app.main.logger.info") as logger_info:
         async with lifespan(app):
@@ -98,10 +118,56 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
     )
 
+    analytics_export_jobs = schema["paths"][
+        "/support/portfolios/{portfolio_id}/analytics-export-jobs"
+    ]["get"]
+    reconciliation_runs = schema["paths"]["/support/portfolios/{portfolio_id}/reconciliation-runs"][
+        "get"
+    ]
+    reconciliation_findings = schema["paths"][
+        "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings"
+    ]["get"]
+    control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
+    reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
+        "get"
+    ]
+    reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
+        "get"
+    ]
+    analytics_export_status = next(
+        parameter
+        for parameter in analytics_export_jobs["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert analytics_export_status["description"].startswith("Optional export job status filter")
+    analytics_export_not_found = analytics_export_jobs["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert analytics_export_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    assert reprocessing_jobs["summary"] == "List durable replay jobs for support workflows"
+    reprocessing_jobs_status = next(
+        parameter
+        for parameter in reprocessing_jobs["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    status_filter_example = (
+        reprocessing_jobs_status.get("schema", {})
+        .get("examples", {})
+        .get("processing", {})
+        .get("value")
+        or reprocessing_jobs_status.get("examples", {}).get("processing", {}).get("value")
+        or reprocessing_jobs_status.get("example")
+        or reprocessing_jobs_status.get("schema", {}).get("example")
+    )
+    assert status_filter_example == "PROCESSING"
+
     components = schema["components"]["schemas"]
     calculator_slo = components["CalculatorSloResponse"]
     lineage_keys = components["LineageKeyListResponse"]
     support_jobs = components["SupportJobListResponse"]
+    support_overview = components["SupportOverviewResponse"]
+    analytics_export_jobs_schema = components["AnalyticsExportJobListResponse"]
+    analytics_export_job_record = components["AnalyticsExportJobRecord"]
 
     assert calculator_slo["properties"]["valuation"]["description"] == (
         "Valuation calculator SLO snapshot for this portfolio."
@@ -109,6 +175,170 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_keys["properties"]["items"]["description"] == "Current lineage key states."
     assert support_jobs["properties"]["items"]["description"] == (
         "Operational jobs for support workflows."
+    )
+    support_job_record = components["SupportJobRecord"]
+    assert support_job_record["properties"]["updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable lifecycle update for the job."
+    )
+    assert support_job_record["properties"]["is_retrying"]["description"].startswith(
+        "True when the durable job has already consumed at least one retry attempt"
+    )
+    assert support_job_record["properties"]["is_stale_processing"]["description"].startswith(
+        "True when the job is in PROCESSING state"
+    )
+    assert support_job_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
+    )
+    assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
+        "Number of valuation jobs currently in FAILED terminal state."
+    )
+    assert support_overview["properties"]["oldest_pending_aggregation_date"]["description"] == (
+        "Oldest aggregation date among pending/processing jobs for backlog analysis."
+    )
+    assert support_overview["properties"]["aggregation_backlog_age_days"]["description"].startswith(
+        "Backlog age in days computed from oldest pending aggregation date"
+    )
+    assert support_overview["properties"]["pending_analytics_export_jobs"]["description"] == (
+        "Number of analytics export jobs currently waiting in ACCEPTED state."
+    )
+    assert support_overview["properties"]["failed_analytics_export_jobs"]["description"] == (
+        "Number of analytics export jobs currently in FAILED terminal state."
+    )
+    assert support_overview["properties"]["analytics_export_backlog_age_minutes"][
+        "description"
+    ].startswith("Backlog age in minutes from the oldest waiting/running analytics export job")
+    assert analytics_export_jobs_schema["properties"]["items"]["description"] == (
+        "Durable analytics export jobs for support workflows."
+    )
+    assert analytics_export_job_record["properties"]["dataset_type"]["description"] == (
+        "Analytics dataset exported by the job."
+    )
+    assert analytics_export_job_record["properties"]["updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable lifecycle update for the export job."
+    )
+    assert analytics_export_job_record["properties"]["is_stale_running"]["description"].startswith(
+        "True when the export job is in RUNNING state"
+    )
+    assert analytics_export_job_record["properties"]["is_terminal_failure"]["description"] == (
+        "True when the export job is durably in FAILED terminal state."
+    )
+    assert analytics_export_job_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
+    )
+    assert analytics_export_job_record["properties"]["backlog_age_minutes"][
+        "description"
+    ].startswith("Age in minutes from created_at to the current UTC time")
+    reconciliation_type = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "reconciliation_type"
+    )
+    assert reconciliation_type["description"].startswith("Optional reconciliation type filter")
+    reconciliation_status = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert reconciliation_status["description"].startswith("Optional run status filter")
+    run_id_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "run_id"
+    )
+    assert run_id_param["description"] == "Reconciliation run identifier."
+
+    reconciliation_not_found = reconciliation_runs["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert reconciliation_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    findings_not_found = reconciliation_findings["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert findings_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    control_stage_name = next(
+        parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_name"
+    )
+    assert control_stage_name["description"].startswith("Optional control stage filter")
+    control_stage_status = next(
+        parameter
+        for parameter in control_stages["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert control_stage_status["description"].startswith("Optional control stage status filter")
+    reprocessing_status = next(
+        parameter
+        for parameter in reprocessing_keys["parameters"]
+        if parameter["name"] == "status_filter"
+    )
+    assert reprocessing_status["description"].startswith("Optional replay key status filter")
+    reprocessing_security = next(
+        parameter
+        for parameter in reprocessing_keys["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert reprocessing_security["description"].startswith("Optional security identifier filter")
+    control_stages_not_found = control_stages["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert control_stages_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    reprocessing_keys_not_found = reprocessing_keys["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+
+    reconciliation_run_schema = components["ReconciliationRunListResponse"]
+    reconciliation_run_record = components["ReconciliationRunRecord"]
+    reconciliation_finding_schema = components["ReconciliationFindingListResponse"]
+    reconciliation_finding_record = components["ReconciliationFindingRecord"]
+    control_stage_schema = components["PortfolioControlStageListResponse"]
+    control_stage_record = components["PortfolioControlStageRecord"]
+    reprocessing_key_schema = components["ReprocessingKeyListResponse"]
+    reprocessing_key_record = components["ReprocessingKeyRecord"]
+
+    assert reconciliation_run_schema["properties"]["items"]["description"] == (
+        "Durable reconciliation runs for support workflows."
+    )
+    assert reconciliation_run_record["properties"]["failure_reason"]["description"] == (
+        "Failure reason when the reconciliation run reaches FAILED state."
+    )
+    assert reconciliation_run_record["properties"]["is_terminal_failure"]["description"] == (
+        "True when the reconciliation run is durably in FAILED terminal state."
+    )
+    assert reconciliation_run_record["properties"]["is_blocking"]["description"].startswith(
+        "True when the run status blocks downstream publication"
+    )
+    assert reconciliation_run_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
+    )
+    assert reconciliation_finding_schema["properties"]["items"]["description"] == (
+        "Durable reconciliation findings for the requested run."
+    )
+    assert reconciliation_finding_record["properties"]["detail"]["description"] == (
+        "Structured detail describing the mismatch or control breach."
+    )
+    assert control_stage_schema["properties"]["items"]["description"] == (
+        "Durable portfolio-day control stage rows for support workflows."
+    )
+    assert control_stage_record["properties"]["last_source_event_type"]["description"] == (
+        "Last event type that updated the control stage row."
+    )
+    assert control_stage_record["properties"]["is_blocking"]["description"] == (
+        "True when the control stage blocks downstream publication or release decisions."
+    )
+    assert control_stage_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
+    )
+    assert reprocessing_key_schema["properties"]["items"]["description"] == (
+        "Durable replay key rows for support workflows."
+    )
+    assert reprocessing_key_record["properties"]["updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable lifecycle update for the key."
+    )
+    assert reprocessing_key_record["properties"]["is_stale_reprocessing"]["description"].startswith(
+        "True when the key is still marked REPROCESSING"
+    )
+    assert reprocessing_key_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing lifecycle state used for support triage ordering."
     )
 
 
@@ -271,12 +501,8 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "/integration/benchmarks/{benchmark_id}/market-series"
     ]["post"]
     index_price_series = schema["paths"]["/integration/indices/{index_id}/price-series"]["post"]
-    benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"][
-        "post"
-    ]
-    risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"][
-        "post"
-    ]
+    benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"]["post"]
+    risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"]["post"]
 
     portfolio_param = next(
         parameter
@@ -287,9 +513,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Portfolio identifier whose effective benchmark assignment is requested."
     )
 
-    assignment_not_found = benchmark_assignment["responses"]["404"]["content"][
-        "application/json"
-    ]["example"]
+    assignment_not_found = benchmark_assignment["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     assert assignment_not_found["detail"] == (
         "No effective benchmark assignment found for portfolio and as_of_date."
     )
@@ -303,9 +529,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Benchmark identifier for the requested benchmark definition."
     )
 
-    definition_not_found = benchmark_definition["responses"]["404"]["content"][
-        "application/json"
-    ]["example"]
+    definition_not_found = benchmark_definition["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     assert definition_not_found["detail"] == (
         "No effective benchmark definition found for benchmark_id and as_of_date."
     )

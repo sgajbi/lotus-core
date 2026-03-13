@@ -1444,7 +1444,7 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "description": "Replay work-in-flight, backlog aging, and worker claim/completion/failure balance.",
+      "description": "Replay work-in-flight, backlog aging, worker claim/completion/failure balance, and explicit no-op outcomes where replay work correctly results in no impacted portfolios.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1568,16 +1568,156 @@
           "expr": "sum by (job_type) (rate(reprocessing_worker_jobs_failed_total[5m]))",
           "legendFormat": "failed {{job_type}}",
           "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (job_type, reason) (rate(reprocessing_worker_jobs_noop_total[5m]))",
+          "legendFormat": "noop {{job_type}} / {{reason}}",
+          "refId": "F"
         }
       ],
       "title": "Reprocessing Worker Throughput and Backlog",
       "type": "timeseries"
     },
     {
-      "collapsed": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Pending rows, terminal failures, and oldest pending age for the durable valuation, aggregation, and replay control queues.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 16,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*age.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "x": 0,
         "y": 46,
+        "w": 24,
+        "h": 8
+      },
+      "id": 174,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "control_queue_pending{queue=~\"valuation|aggregation|reprocessing\"}",
+          "legendFormat": "{{queue}} pending",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "control_queue_failed_stored{queue=~\"valuation|aggregation|reprocessing\"}",
+          "legendFormat": "{{queue}} failed",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "control_queue_oldest_pending_age_seconds{queue=~\"valuation|aggregation|reprocessing\"}",
+          "legendFormat": "{{queue}} oldest age",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Control Queue Pressure",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 54,
         "w": 24,
         "h": 1
       },
@@ -1645,7 +1785,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 47,
+        "y": 55,
         "w": 12,
         "h": 8
       },
@@ -1768,7 +1908,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 47,
+        "y": 55,
         "w": 12,
         "h": 8
       },
@@ -1803,7 +1943,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 55,
+        "y": 63,
         "w": 24,
         "h": 1
       },
@@ -1871,7 +2011,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 56,
+        "y": 64,
         "w": 12,
         "h": 8
       },
@@ -1972,7 +2112,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 56,
+        "y": 64,
         "w": 12,
         "h": 8
       },
@@ -2062,7 +2202,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 64,
+        "y": 72,
         "w": 24,
         "h": 8
       },

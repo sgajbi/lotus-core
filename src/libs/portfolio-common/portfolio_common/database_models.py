@@ -833,6 +833,8 @@ class PortfolioAggregationJob(Base):
     aggregation_date = Column(Date, nullable=False, index=True)
     status = Column(String, nullable=False, default="PENDING", index=True)
     correlation_id = Column(String, nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -1104,8 +1106,14 @@ class ReprocessingJob(Base):
 
     __table_args__ = (
         Index(
+            "uq_reprocessing_jobs_pending_reset_watermarks_security",
+            text("(payload->>'security_id')"),
+            unique=True,
+            postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),
+        ),
+        Index(
             "ix_reprocessing_jobs_pending_resetwatermarks_priority",
-            text("((payload->>'earliest_impacted_date')::date)"),
+            text("(payload->>'earliest_impacted_date')"),
             "created_at",
             "id",
             postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),
@@ -1145,6 +1153,20 @@ class AnalyticsExportJob(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_analytics_export_jobs_portfolio_status_created_at",
+            "portfolio_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_analytics_export_jobs_status_updated_at",
+            "status",
+            "updated_at",
+        ),
     )
 
 

@@ -35,6 +35,26 @@ async def test_middleware_generates_correlation_id_when_missing(async_test_clien
     assert response.headers["X-Correlation-ID"] == "QRY-abc"
 
 
+async def test_middleware_replaces_unset_lineage_headers(async_test_client):
+    with patch(
+        "src.services.query_service.app.main.generate_correlation_id",
+        side_effect=["QRY-abc", "REQ-abc"],
+    ):
+        response = await async_test_client.get(
+            "/openapi.json",
+            headers={
+                "X-Correlation-ID": "<not-set>",
+                "X-Request-Id": "",
+                "X-Trace-Id": "<not-set>",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == "QRY-abc"
+    assert response.headers["X-Request-Id"] == "REQ-abc"
+    assert response.headers["X-Trace-Id"] not in ("", "<not-set>")
+
+
 async def test_global_exception_handler_returns_standard_payload(async_test_client):
     async def boom():
         raise RuntimeError("boom")
@@ -164,8 +184,7 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         if parameter["name"] == "include_projected"
     )
     assert include_projected["description"] == (
-        "When true, includes future-dated projected position state "
-        "beyond current business_date."
+        "When true, includes future-dated projected position state " "beyond current business_date."
     )
 
     history_security_id = next(

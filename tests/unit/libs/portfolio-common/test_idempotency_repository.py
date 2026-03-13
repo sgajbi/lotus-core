@@ -97,3 +97,12 @@ async def test_mark_event_processed_adds_to_session(
     assert added_object.portfolio_id == portfolio_id
     assert added_object.service_name == service_name
     assert added_object.correlation_id == correlation_id
+
+
+async def test_mark_event_processed_normalizes_sentinel_correlation(
+    repository: IdempotencyRepository, mock_db_session: AsyncMock
+):
+    await repository.mark_event_processed("evt-1", "P1", "svc", "<not-set>")
+
+    added_object = mock_db_session.add.call_args.args[0]
+    assert added_object.correlation_id is None

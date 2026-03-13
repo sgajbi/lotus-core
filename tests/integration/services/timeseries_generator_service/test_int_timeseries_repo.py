@@ -122,7 +122,7 @@ async def test_find_and_reset_stale_aggregation_jobs(
     repo = TimeseriesRepository(async_db_session)
 
     # ACT
-    reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15)
+    reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
     await async_db_session.commit()
 
     # ASSERT
@@ -139,3 +139,19 @@ async def test_find_and_reset_stale_aggregation_jobs(
 
         job3 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P3_PENDING").one()
         assert job3.status == "PENDING"
+
+
+async def test_find_and_reset_stale_aggregation_jobs_marks_over_limit_rows_failed(
+    db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
+):
+    repo = TimeseriesRepository(async_db_session)
+
+    reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=0)
+    await async_db_session.commit()
+
+    assert reset_count == 0
+
+    with Session(db_engine) as session:
+        job1 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P1_STALE").one()
+        assert job1.status == "FAILED"
+        assert job1.failure_reason == "Stale processing timeout exceeded max attempts"

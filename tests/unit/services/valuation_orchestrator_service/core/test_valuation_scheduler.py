@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -247,6 +247,42 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     mock_observe_stale_skips.assert_called_once_with("watermark_advance", 1)
 
 
+async def test_scheduler_updates_queue_metrics(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    oldest_pending = datetime(2025, 8, 12, tzinfo=timezone.utc)
+    mock_repo.get_job_queue_stats.return_value = {
+        "pending_count": 4,
+        "failed_count": 2,
+        "oldest_pending_created_at": oldest_pending,
+    }
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_pending"
+        ) as mock_set_pending,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_failed_stored"
+        ) as mock_set_failed,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_oldest_pending_age_seconds"
+        ) as mock_set_oldest,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.datetime"
+        ) as mock_datetime,
+    ):
+        mock_datetime.now.return_value = datetime(2025, 8, 12, 0, 5, tzinfo=timezone.utc)
+        mock_datetime.side_effect = datetime
+
+        await scheduler._update_queue_metrics(AsyncMock())
+
+    mock_set_pending.assert_called_once_with("valuation", 4)
+    mock_set_failed.assert_called_once_with("valuation", 2)
+    mock_set_oldest.assert_called_once_with("valuation", 300.0)
+
+
 async def test_scheduler_normalizes_terminal_reprocessing_states(
     scheduler: ValuationScheduler,
     mock_dependencies: dict,
@@ -396,6 +432,28 @@ async def test_scheduler_omits_empty_correlation_header(
         headers=[],
     )
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_scheduler_reads_max_attempts_from_environment(
+    mock_kafka_producer: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("VALUATION_SCHEDULER_POLL_INTERVAL", "9")
+    monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "17")
+    monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "4")
+    monkeypatch.setenv("VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES", "12")
+    monkeypatch.setenv("VALUATION_SCHEDULER_MAX_ATTEMPTS", "6")
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_kafka_producer",
+        return_value=mock_kafka_producer,
+    ):
+        scheduler = ValuationScheduler()
+
+    assert scheduler._poll_interval == 9
+    assert scheduler._batch_size == 17
+    assert scheduler._dispatch_rounds_per_poll == 4
+    assert scheduler._stale_timeout_minutes == 12
+    assert scheduler._max_attempts == 6
 
 
 @patch.object(INSTRUMENT_REPROCESSING_TRIGGERS_PENDING, "set")
