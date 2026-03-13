@@ -120,7 +120,7 @@ class ReprocessingJobRepository:
                     correlation_id = CASE
                         WHEN CAST(:earliest_impacted_date AS date)
                              < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
-                        THEN :correlation_id
+                        THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
                         WHEN reprocessing_jobs.correlation_id IS NULL
                         THEN :correlation_id
                         ELSE reprocessing_jobs.correlation_id

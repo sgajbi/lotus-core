@@ -47,7 +47,13 @@ class InstrumentReprocessingStateRepository:
                         (
                             stmt.excluded.earliest_impacted_date
                             < InstrumentReprocessingState.earliest_impacted_date,
-                            stmt.excluded.correlation_id,
+                            case(
+                                (
+                                    stmt.excluded.correlation_id.is_not(None),
+                                    stmt.excluded.correlation_id,
+                                ),
+                                else_=InstrumentReprocessingState.correlation_id,
+                            ),
                         ),
                         (
                             InstrumentReprocessingState.correlation_id.is_(None),
