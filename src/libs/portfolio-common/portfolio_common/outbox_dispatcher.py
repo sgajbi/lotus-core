@@ -40,11 +40,26 @@ def _env_positive_int(name: str, default: int) -> int:
 
 @dataclass(frozen=True, slots=True)
 class OutboxRuntimeSettings:
+    poll_interval_seconds: int
+    batch_size: int
     max_retries: int
 
 
-def get_outbox_runtime_settings(*, max_retries_default: int = 3) -> OutboxRuntimeSettings:
+def get_outbox_runtime_settings(
+    *,
+    poll_interval_default: int = 5,
+    batch_size_default: int = 50,
+    max_retries_default: int = 3,
+) -> OutboxRuntimeSettings:
     return OutboxRuntimeSettings(
+        poll_interval_seconds=_env_positive_int(
+            "OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS",
+            poll_interval_default,
+        ),
+        batch_size=_env_positive_int(
+            "OUTBOX_DISPATCHER_BATCH_SIZE",
+            batch_size_default,
+        ),
         max_retries=_env_positive_int("OUTBOX_DISPATCHER_MAX_RETRIES", max_retries_default),
     )
 
@@ -60,17 +75,23 @@ class OutboxDispatcher:
     def __init__(
         self,
         kafka_producer: KafkaProducer,
-        poll_interval: int = 5,
-        batch_size: int = 50,
+        poll_interval: Optional[int] = None,
+        batch_size: Optional[int] = None,
         db_session_factory: Optional[sessionmaker] = None,
         max_retries: Optional[int] = None,
     ):
+        runtime_settings = get_outbox_runtime_settings()
         self._producer = kafka_producer
-        self._poll_interval = poll_interval
-        self._batch_size = batch_size
+        self._poll_interval = (
+            max(1, int(poll_interval))
+            if poll_interval is not None
+            else runtime_settings.poll_interval_seconds
+        )
+        self._batch_size = (
+            max(1, int(batch_size)) if batch_size is not None else runtime_settings.batch_size
+        )
         self._running = True
         self._session_factory = db_session_factory or SessionLocal
-        runtime_settings = get_outbox_runtime_settings()
         self._max_retries = (
             max(1, int(max_retries)) if max_retries is not None else runtime_settings.max_retries
         )
