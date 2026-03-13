@@ -1155,6 +1155,20 @@ class AnalyticsExportJob(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (
+        Index(
+            "ix_analytics_export_jobs_portfolio_status_created_at",
+            "portfolio_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_analytics_export_jobs_status_updated_at",
+            "status",
+            "updated_at",
+        ),
+    )
+
 
 class PipelineStageState(Base):
     """
