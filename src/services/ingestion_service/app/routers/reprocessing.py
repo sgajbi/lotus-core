@@ -18,6 +18,7 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
+from .job_bookkeeping import raise_post_publish_bookkeeping_failure
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -134,7 +135,6 @@ async def reprocess_transactions(
             ordered_unique_transaction_ids,
             idempotency_key=idempotency_key,
         )
-        await ingestion_job_service.mark_queued(job_result.job.job_id)
     except IngestionPublishError as exc:
         await ingestion_job_service.mark_failed(
             job_result.job.job_id,
@@ -148,6 +148,15 @@ async def reprocess_transactions(
             str(exc),
         )
         raise
+
+    try:
+        await ingestion_job_service.mark_queued(job_result.job.job_id)
+    except Exception as exc:
+        await raise_post_publish_bookkeeping_failure(
+            ingestion_job_service=ingestion_job_service,
+            job_id=job_result.job.job_id,
+            failure_reason=str(exc),
+        )
 
     logger.info(f"Successfully queued {num_to_reprocess} reprocessing requests.")
     return build_batch_ack(

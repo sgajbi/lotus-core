@@ -85,6 +85,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.replay_audit: dict[str, dict] = {}
             self.fail_mark_queued_job_ids: set[str] = set()
             self.fail_mark_retried_job_ids: set[str] = set()
+            self.fail_next_mark_queued = False
             self.mode = "normal"
             self.replay_window_start = None
             self.replay_window_end = None
@@ -130,6 +131,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
         async def mark_queued(self, job_id: str) -> None:
+            if self.fail_next_mark_queued:
+                self.fail_next_mark_queued = False
+                raise RuntimeError("queue state write failed")
             if job_id in self.fail_mark_queued_job_ids:
                 raise RuntimeError("queue state write failed")
             if job_id not in self.jobs:
@@ -153,6 +157,25 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             record.failure_reason = failure_reason
             record.completed_at = datetime.now(UTC)
             self.jobs[job_id] = record
+            self.failures.setdefault(job_id, []).append(
+                {
+                    "failure_id": f"fail_{len(self.failures.get(job_id, [])) + 1}",
+                    "job_id": job_id,
+                    "failure_phase": failure_phase,
+                    "failure_reason": failure_reason,
+                    "failed_record_keys": failed_record_keys or [],
+                    "failed_at": datetime.now(UTC),
+                }
+            )
+
+        async def record_failure_observation(
+            self,
+            job_id: str,
+            failure_reason: str,
+            *,
+            failure_phase: str,
+            failed_record_keys: list[str] | None = None,
+        ) -> None:
             self.failures.setdefault(job_id, []).append(
                 {
                     "failure_id": f"fail_{len(self.failures.get(job_id, [])) + 1}",
@@ -937,6 +960,45 @@ async def test_ingestion_job_failure_history_and_retry(
     assert retry_response.status_code == 200
     assert retry_response.json()["status"] == "queued"
     assert retry_response.json()["retry_count"] == 1
+
+
+async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_BOOKKEEPING_FAIL_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+
+    response = await async_test_client.post("/ingest/transactions", json=payload)
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
+    job_id = body["detail"]["job_id"]
+
+    job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert job.status == "accepted"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "queue_bookkeeping"
 
 
 async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(

@@ -39,6 +39,10 @@ class _FakeSession:
         self.executed_statements.append(statement)
         return _FakeResult(self.returned_row)
 
+    async def scalar(self, statement):
+        self.executed_statements.append(statement)
+        return self.returned_row
+
     def add(self, row: object) -> None:
         self.added_rows.append(row)
 
@@ -127,3 +131,34 @@ async def test_mark_retried_uses_atomic_increment_update(
     )
     assert "last_retried_at=:last_retried_at" in compiled_sql
     assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql
+
+
+async def test_record_failure_observation_preserves_job_status_and_records_failure(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    session = _FakeSession(
+        returned_row=SimpleNamespace(endpoint="transactions", entity_type="transaction")
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    await service.record_failure_observation(
+        "job_publish_bookkeeping",
+        "queue state write failed",
+        failure_phase="queue_bookkeeping",
+    )
+
+    assert len(session.executed_statements) == 1
+    compiled_sql = str(session.executed_statements[0])
+    assert "SELECT ingestion_jobs.id" in compiled_sql
+
+    assert len(session.added_rows) == 1
+    failure_row = session.added_rows[0]
+    assert isinstance(failure_row, DBIngestionJobFailure)
+    assert failure_row.job_id == "job_publish_bookkeeping"
+    assert failure_row.failure_phase == "queue_bookkeeping"
+    assert failure_row.failure_reason == "queue state write failed"

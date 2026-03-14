@@ -18,6 +18,7 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
+from .job_bookkeeping import raise_post_publish_bookkeeping_failure
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -115,7 +116,6 @@ async def ingest_instruments(
         await ingestion_service.publish_instruments(
             request.instruments, idempotency_key=idempotency_key
         )
-        await ingestion_job_service.mark_queued(job_result.job.job_id)
     except IngestionPublishError as exc:
         await ingestion_job_service.mark_failed(
             job_result.job.job_id,
@@ -126,6 +126,15 @@ async def ingest_instruments(
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise
+
+    try:
+        await ingestion_job_service.mark_queued(job_result.job.job_id)
+    except Exception as exc:
+        await raise_post_publish_bookkeeping_failure(
+            ingestion_job_service=ingestion_job_service,
+            job_id=job_result.job.job_id,
+            failure_reason=str(exc),
+        )
 
     logger.info("Instruments successfully queued.", extra={"num_instruments": num_instruments})
     return build_batch_ack(

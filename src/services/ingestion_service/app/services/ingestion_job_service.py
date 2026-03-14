@@ -488,6 +488,38 @@ class IngestionJobService:
                     failure_phase=failure_phase,
                 ).inc()
 
+    async def record_failure_observation(
+        self,
+        job_id: str,
+        failure_reason: str,
+        *,
+        failure_phase: str,
+        failed_record_keys: list[str] | None = None,
+    ) -> None:
+        async for db in get_async_db_session():
+            async with db.begin():
+                row = await db.scalar(
+                    select(DBIngestionJob)
+                    .where(DBIngestionJob.job_id == job_id)
+                    .limit(1)
+                )
+                if row is None:
+                    return
+                db.add(
+                    DBIngestionJobFailure(
+                        failure_id=f"fail_{uuid4().hex}",
+                        job_id=job_id,
+                        failure_phase=failure_phase,
+                        failure_reason=failure_reason,
+                        failed_record_keys=failed_record_keys or [],
+                    )
+                )
+                INGESTION_JOBS_FAILED_TOTAL.labels(
+                    endpoint=row.endpoint,
+                    entity_type=row.entity_type,
+                    failure_phase=failure_phase,
+                ).inc()
+
     async def mark_retried(self, job_id: str) -> None:
         async for db in get_async_db_session():
             async with db.begin():
