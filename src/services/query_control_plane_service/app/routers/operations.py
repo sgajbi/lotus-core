@@ -60,10 +60,20 @@ async def get_support_overview(
         description="Portfolio identifier.",
         examples=["PORT-OPS-001"],
     ),
+    stale_threshold_minutes: int = Query(
+        15,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale in-flight portfolio processing.",
+        examples=[15],
+    ),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
-        return await service.get_support_overview(portfolio_id)
+        return await service.get_support_overview(
+            portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception:

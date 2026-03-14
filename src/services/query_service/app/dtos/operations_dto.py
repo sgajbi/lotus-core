@@ -19,6 +19,11 @@ class SupportOverviewResponse(BaseModel):
         description="Current active epoch for the portfolio across position state keys.",
         examples=[3],
     )
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold in minutes used to classify stale in-flight portfolio processing.",
+        examples=[15],
+    )
     active_reprocessing_keys: int = Field(
         ...,
         description="Number of portfolio-security keys currently marked REPROCESSING.",
@@ -28,7 +33,7 @@ class SupportOverviewResponse(BaseModel):
         ...,
         description=(
             "Number of REPROCESSING portfolio-security keys whose last update is older than "
-            "the stale threshold (15 minutes)."
+            "the support stale threshold."
         ),
         examples=[1],
     )
@@ -60,7 +65,7 @@ class SupportOverviewResponse(BaseModel):
     )
     stale_processing_valuation_jobs: int = Field(
         ...,
-        description="Number of PROCESSING valuation jobs older than stale threshold (15 minutes).",
+        description="Number of PROCESSING valuation jobs older than the support stale threshold.",
         examples=[1],
     )
     failed_valuation_jobs: int = Field(
@@ -94,7 +99,7 @@ class SupportOverviewResponse(BaseModel):
     stale_processing_aggregation_jobs: int = Field(
         ...,
         description=(
-            "Number of PROCESSING aggregation jobs older than stale threshold " "(15 minutes)."
+            "Number of PROCESSING aggregation jobs older than the support stale threshold."
         ),
         examples=[0],
     )
@@ -130,7 +135,7 @@ class SupportOverviewResponse(BaseModel):
         ...,
         description=(
             "Number of analytics export jobs in RUNNING state whose last update is older than "
-            "the stale threshold (15 minutes)."
+            "the support stale threshold."
         ),
         examples=[0],
     )

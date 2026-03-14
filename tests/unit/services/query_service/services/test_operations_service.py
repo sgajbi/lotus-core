@@ -84,6 +84,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.portfolio_id == "P1"
     assert response.business_date == date(2025, 8, 30)
     assert response.current_epoch == 2
+    assert response.stale_threshold_minutes == 15
     assert response.active_reprocessing_keys == 1
     assert response.stale_reprocessing_keys == 1
     assert response.oldest_reprocessing_watermark_date == date(2025, 8, 18)
@@ -809,6 +810,66 @@ async def test_get_support_overview_raises_when_portfolio_missing(
         await service.get_support_overview("P404")
 
 
+async def test_get_support_overview_honors_custom_stale_threshold(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 1
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+    )
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+    )
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
+        2025, 8, 30
+    )
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
+
+    response = await service.get_support_overview("P1", stale_threshold_minutes=30)
+
+    assert response.stale_threshold_minutes == 30
+    mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
+        "P1", stale_minutes=30
+    )
+    mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
+        "P1", stale_minutes=30, failed_window_hours=24
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
+        "P1", stale_minutes=30, failed_window_hours=24
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.assert_awaited_once_with(
+        "P1", stale_minutes=30, failed_window_hours=24
+    )
+
+
 async def test_get_support_overview_without_business_date(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
@@ -851,6 +912,7 @@ async def test_get_support_overview_without_business_date(
     response = await service.get_support_overview("P1")
 
     assert response.business_date is None
+    assert response.stale_threshold_minutes == 15
     assert response.stale_reprocessing_keys == 0
     assert response.oldest_reprocessing_watermark_date is None
     assert response.reprocessing_backlog_age_days is None

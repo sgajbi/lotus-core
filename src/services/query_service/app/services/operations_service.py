@@ -202,7 +202,9 @@ class OperationsService:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
-    async def get_support_overview(self, portfolio_id: str) -> SupportOverviewResponse:
+    async def get_support_overview(
+        self, portfolio_id: str, stale_threshold_minutes: int = 15
+    ) -> SupportOverviewResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         (
             latest_business_date,
@@ -220,16 +222,16 @@ class OperationsService:
             self.repo.get_current_portfolio_epoch(portfolio_id),
             self.repo.get_reprocessing_health_summary(
                 portfolio_id,
-                stale_minutes=15,
+                stale_minutes=stale_threshold_minutes,
             ),
             self.repo.get_valuation_job_health_summary(
-                portfolio_id, stale_minutes=15, failed_window_hours=24
+                portfolio_id, stale_minutes=stale_threshold_minutes, failed_window_hours=24
             ),
             self.repo.get_aggregation_job_health_summary(
-                portfolio_id, stale_minutes=15, failed_window_hours=24
+                portfolio_id, stale_minutes=stale_threshold_minutes, failed_window_hours=24
             ),
             self.repo.get_analytics_export_job_health_summary(
-                portfolio_id, stale_minutes=15, failed_window_hours=24
+                portfolio_id, stale_minutes=stale_threshold_minutes, failed_window_hours=24
             ),
             self.repo.get_latest_transaction_date(portfolio_id),
             self.repo.get_latest_snapshot_date_for_current_epoch(portfolio_id),
@@ -285,6 +287,7 @@ class OperationsService:
             portfolio_id=portfolio_id,
             business_date=latest_business_date,
             current_epoch=current_epoch,
+            stale_threshold_minutes=stale_threshold_minutes,
             active_reprocessing_keys=reprocessing_health.active_keys,
             stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
             oldest_reprocessing_watermark_date=(
