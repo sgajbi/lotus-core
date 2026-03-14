@@ -108,6 +108,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "stale_threshold_minutes"
     )
     assert overview_stale_threshold["description"].startswith("Threshold in minutes")
+    overview_failed_window = next(
+        parameter
+        for parameter in overview["parameters"]
+        if parameter["name"] == "failed_window_hours"
+    )
+    assert overview_failed_window["description"].startswith("Window in hours")
 
     stale_threshold = next(
         parameter
@@ -235,6 +241,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale in-flight portfolio processing."
     )
+    assert support_overview["properties"]["failed_window_hours"]["description"] == (
+        "Window in hours used to count recent failed jobs on the support overview."
+    )
+    assert support_overview["properties"]["failed_valuation_jobs_within_window"][
+        "description"
+    ].startswith("Number of valuation jobs that moved to FAILED state within")
+    assert support_overview["properties"]["failed_aggregation_jobs_within_window"][
+        "description"
+    ].startswith("Number of aggregation jobs that moved to FAILED state within")
+    assert support_overview["properties"]["failed_analytics_export_jobs_within_window"][
+        "description"
+    ].startswith("Number of analytics export jobs that moved to FAILED state within")
     assert support_overview["properties"]["controls_last_updated_at"]["description"].startswith(
         "UTC timestamp of the most recent durable lifecycle update for the latest"
     )

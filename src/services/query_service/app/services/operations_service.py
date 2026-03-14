@@ -203,7 +203,10 @@ class OperationsService:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
     async def get_support_overview(
-        self, portfolio_id: str, stale_threshold_minutes: int = 15
+        self,
+        portfolio_id: str,
+        stale_threshold_minutes: int = 15,
+        failed_window_hours: int = 24,
     ) -> SupportOverviewResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         (
@@ -225,13 +228,19 @@ class OperationsService:
                 stale_minutes=stale_threshold_minutes,
             ),
             self.repo.get_valuation_job_health_summary(
-                portfolio_id, stale_minutes=stale_threshold_minutes, failed_window_hours=24
+                portfolio_id,
+                stale_minutes=stale_threshold_minutes,
+                failed_window_hours=failed_window_hours,
             ),
             self.repo.get_aggregation_job_health_summary(
-                portfolio_id, stale_minutes=stale_threshold_minutes, failed_window_hours=24
+                portfolio_id,
+                stale_minutes=stale_threshold_minutes,
+                failed_window_hours=failed_window_hours,
             ),
             self.repo.get_analytics_export_job_health_summary(
-                portfolio_id, stale_minutes=stale_threshold_minutes, failed_window_hours=24
+                portfolio_id,
+                stale_minutes=stale_threshold_minutes,
+                failed_window_hours=failed_window_hours,
             ),
             self.repo.get_latest_transaction_date(portfolio_id),
             self.repo.get_latest_snapshot_date_for_current_epoch(portfolio_id),
@@ -288,6 +297,7 @@ class OperationsService:
             business_date=latest_business_date,
             current_epoch=current_epoch,
             stale_threshold_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
             active_reprocessing_keys=reprocessing_health.active_keys,
             stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
             oldest_reprocessing_watermark_date=(
@@ -298,18 +308,23 @@ class OperationsService:
             processing_valuation_jobs=valuation_job_health.processing_jobs,
             stale_processing_valuation_jobs=valuation_job_health.stale_processing_jobs,
             failed_valuation_jobs=valuation_job_health.failed_jobs,
+            failed_valuation_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
             oldest_pending_valuation_date=valuation_job_health.oldest_open_job_date,
             valuation_backlog_age_days=valuation_backlog_age_days,
             pending_aggregation_jobs=aggregation_job_health.pending_jobs,
             processing_aggregation_jobs=aggregation_job_health.processing_jobs,
             stale_processing_aggregation_jobs=aggregation_job_health.stale_processing_jobs,
             failed_aggregation_jobs=aggregation_job_health.failed_jobs,
+            failed_aggregation_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
             oldest_pending_aggregation_date=aggregation_job_health.oldest_open_job_date,
             aggregation_backlog_age_days=aggregation_backlog_age_days,
             pending_analytics_export_jobs=analytics_export_job_health.accepted_jobs,
             processing_analytics_export_jobs=analytics_export_job_health.running_jobs,
             stale_processing_analytics_export_jobs=analytics_export_job_health.stale_running_jobs,
             failed_analytics_export_jobs=analytics_export_job_health.failed_jobs,
+            failed_analytics_export_jobs_within_window=(
+                analytics_export_job_health.failed_jobs_last_hours
+            ),
             oldest_pending_analytics_export_created_at=(
                 analytics_export_job_health.oldest_open_job_created_at
             ),

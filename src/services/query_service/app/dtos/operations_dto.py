@@ -24,6 +24,11 @@ class SupportOverviewResponse(BaseModel):
         description="Threshold in minutes used to classify stale in-flight portfolio processing.",
         examples=[15],
     )
+    failed_window_hours: int = Field(
+        ...,
+        description="Window in hours used to count recent failed jobs on the support overview.",
+        examples=[24],
+    )
     active_reprocessing_keys: int = Field(
         ...,
         description="Number of portfolio-security keys currently marked REPROCESSING.",
@@ -73,6 +78,14 @@ class SupportOverviewResponse(BaseModel):
         description="Number of valuation jobs currently in FAILED terminal state.",
         examples=[2],
     )
+    failed_valuation_jobs_within_window: int = Field(
+        ...,
+        description=(
+            "Number of valuation jobs that moved to FAILED state within the configured "
+            "failed-job window."
+        ),
+        examples=[1],
+    )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
         description="Oldest valuation date among pending/processing jobs for backlog analysis.",
@@ -108,6 +121,14 @@ class SupportOverviewResponse(BaseModel):
         description="Number of aggregation jobs currently in FAILED terminal state.",
         examples=[1],
     )
+    failed_aggregation_jobs_within_window: int = Field(
+        ...,
+        description=(
+            "Number of aggregation jobs that moved to FAILED state within the configured "
+            "failed-job window."
+        ),
+        examples=[0],
+    )
     oldest_pending_aggregation_date: Optional[date] = Field(
         None,
         description="Oldest aggregation date among pending/processing jobs for backlog analysis.",
@@ -142,6 +163,14 @@ class SupportOverviewResponse(BaseModel):
     failed_analytics_export_jobs: int = Field(
         ...,
         description="Number of analytics export jobs currently in FAILED terminal state.",
+        examples=[1],
+    )
+    failed_analytics_export_jobs_within_window: int = Field(
+        ...,
+        description=(
+            "Number of analytics export jobs that moved to FAILED state within the configured "
+            "failed-job window."
+        ),
         examples=[1],
     )
     oldest_pending_analytics_export_created_at: Optional[datetime] = Field(

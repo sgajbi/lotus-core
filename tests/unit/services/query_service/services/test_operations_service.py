@@ -85,6 +85,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.business_date == date(2025, 8, 30)
     assert response.current_epoch == 2
     assert response.stale_threshold_minutes == 15
+    assert response.failed_window_hours == 24
     assert response.active_reprocessing_keys == 1
     assert response.stale_reprocessing_keys == 1
     assert response.oldest_reprocessing_watermark_date == date(2025, 8, 18)
@@ -93,18 +94,21 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.processing_valuation_jobs == 2
     assert response.stale_processing_valuation_jobs == 1
     assert response.failed_valuation_jobs == 0
+    assert response.failed_valuation_jobs_within_window == 0
     assert response.oldest_pending_valuation_date == date(2025, 8, 20)
     assert response.valuation_backlog_age_days == 10
     assert response.pending_aggregation_jobs == 1
     assert response.processing_aggregation_jobs == 0
     assert response.stale_processing_aggregation_jobs == 0
     assert response.failed_aggregation_jobs == 0
+    assert response.failed_aggregation_jobs_within_window == 0
     assert response.oldest_pending_aggregation_date is None
     assert response.aggregation_backlog_age_days is None
     assert response.pending_analytics_export_jobs == 2
     assert response.processing_analytics_export_jobs == 1
     assert response.stale_processing_analytics_export_jobs == 0
     assert response.failed_analytics_export_jobs == 1
+    assert response.failed_analytics_export_jobs_within_window == 1
     assert response.oldest_pending_analytics_export_created_at == datetime(
         2025, 8, 30, 10, 0, tzinfo=timezone.utc
     )
@@ -853,20 +857,23 @@ async def test_get_support_overview_honors_custom_stale_threshold(
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
 
-    response = await service.get_support_overview("P1", stale_threshold_minutes=30)
+    response = await service.get_support_overview(
+        "P1", stale_threshold_minutes=30, failed_window_hours=48
+    )
 
     assert response.stale_threshold_minutes == 30
+    assert response.failed_window_hours == 48
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
         "P1", stale_minutes=30
     )
     mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30, failed_window_hours=24
+        "P1", stale_minutes=30, failed_window_hours=48
     )
     mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30, failed_window_hours=24
+        "P1", stale_minutes=30, failed_window_hours=48
     )
     mock_ops_repo.get_analytics_export_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30, failed_window_hours=24
+        "P1", stale_minutes=30, failed_window_hours=48
     )
 
 
@@ -913,6 +920,7 @@ async def test_get_support_overview_without_business_date(
 
     assert response.business_date is None
     assert response.stale_threshold_minutes == 15
+    assert response.failed_window_hours == 24
     assert response.stale_reprocessing_keys == 0
     assert response.oldest_reprocessing_watermark_date is None
     assert response.reprocessing_backlog_age_days is None
@@ -922,6 +930,7 @@ async def test_get_support_overview_without_business_date(
     assert response.processing_analytics_export_jobs == 0
     assert response.stale_processing_analytics_export_jobs == 0
     assert response.failed_analytics_export_jobs == 0
+    assert response.failed_analytics_export_jobs_within_window == 0
     assert response.oldest_pending_analytics_export_created_at is None
     assert response.analytics_export_backlog_age_minutes is None
     assert response.latest_booked_transaction_date is None
