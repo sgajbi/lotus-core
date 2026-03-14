@@ -219,6 +219,33 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
+    mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
+        "P1",
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=24,
+        reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=24,
+        reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.assert_awaited_once_with(
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=24,
+        reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
     mock_ops_repo.get_latest_transaction_date_as_of.assert_awaited_once_with(
         "P1",
         date(2025, 8, 30),
@@ -1731,25 +1758,31 @@ async def test_get_support_overview_honors_custom_stale_threshold(
     assert response.failed_window_hours == 48
     assert response.generated_at_utc.tzinfo == timezone.utc
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30, reference_now=response.generated_at_utc
+        "P1",
+        stale_minutes=30,
+        reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
         "P1",
         stale_minutes=30,
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
         "P1",
         stale_minutes=30,
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_analytics_export_job_health_summary.assert_awaited_once_with(
         "P1",
         stale_minutes=30,
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_latest_transaction_date_as_of.assert_awaited_once_with(
         "P1",
@@ -2092,17 +2125,22 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         as_of=response.generated_at_utc
     )
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=15, reference_now=response.generated_at_utc
+        "P1",
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
         "P1",
         stale_minutes=15,
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
         "P1",
         stale_minutes=15,
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )

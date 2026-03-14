@@ -65,6 +65,7 @@ async def test_get_reprocessing_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_row = MagicMock(
         active_keys=3,
         stale_reprocessing_keys=1,
@@ -81,7 +82,7 @@ async def test_get_reprocessing_health_summary(
     mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, oldest_key_result])
 
     value = await repository.get_reprocessing_health_summary(
-        "P1", stale_minutes=15, reference_now=reference_now
+        "P1", stale_minutes=15, reference_now=reference_now, as_of=as_of
     )
 
     assert value.active_keys == 3
@@ -96,9 +97,11 @@ async def test_get_reprocessing_health_summary(
     aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in aggregate_compiled.lower()
     assert "position_state.status = 'REPROCESSING'" in aggregate_compiled
+    assert "position_state.updated_at <= '2025-08-31 12:00:00+00:00'" in aggregate_compiled
     assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in aggregate_compiled
     oldest_stmt = mock_db_session.execute.call_args_list[1][0][0]
     oldest_compiled = str(oldest_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.updated_at <= '2025-08-31 12:00:00+00:00'" in oldest_compiled
     assert "order by position_state.watermark_date asc" in oldest_compiled.lower()
     assert "position_state.security_id" in oldest_compiled
 
@@ -107,6 +110,7 @@ async def test_get_valuation_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_row = MagicMock(
         pending_jobs=4,
         processing_jobs=2,
@@ -130,6 +134,7 @@ async def test_get_valuation_job_health_summary(
         stale_minutes=15,
         failed_window_hours=24,
         reference_now=reference_now,
+        as_of=as_of,
     )
 
     assert value.pending_jobs == 4
@@ -148,6 +153,10 @@ async def test_get_valuation_job_health_summary(
         "FILTER (WHERE portfolio_valuation_jobs.status IN ('PENDING', 'PROCESSING'))"
         in aggregate_compiled
     )
+    assert (
+        "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'"
+        in aggregate_compiled
+    )
     assert "FILTER (WHERE portfolio_valuation_jobs.status = 'FAILED')" in aggregate_compiled
     assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in aggregate_compiled
     assert (
@@ -156,6 +165,7 @@ async def test_get_valuation_job_health_summary(
     )
     oldest_stmt = mock_db_session.execute.call_args_list[1][0][0]
     oldest_compiled = str(oldest_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in oldest_compiled
     assert "order by portfolio_valuation_jobs.valuation_date asc" in oldest_compiled.lower()
     assert "portfolio_valuation_jobs.id" in oldest_compiled
 
@@ -164,6 +174,7 @@ async def test_get_aggregation_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_row = MagicMock(
         pending_jobs=5,
         processing_jobs=1,
@@ -186,6 +197,7 @@ async def test_get_aggregation_job_health_summary(
         stale_minutes=15,
         failed_window_hours=24,
         reference_now=reference_now,
+        as_of=as_of,
     )
 
     assert value.pending_jobs == 5
@@ -204,6 +216,10 @@ async def test_get_aggregation_job_health_summary(
         "FILTER (WHERE portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING'))"
         in aggregate_compiled
     )
+    assert (
+        "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'"
+        in aggregate_compiled
+    )
     assert "FILTER (WHERE portfolio_aggregation_jobs.status = 'FAILED')" in aggregate_compiled
     assert (
         "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'"
@@ -215,6 +231,10 @@ async def test_get_aggregation_job_health_summary(
     )
     oldest_stmt = mock_db_session.execute.call_args_list[1][0][0]
     oldest_compiled = str(oldest_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'"
+        in oldest_compiled
+    )
     assert "order by portfolio_aggregation_jobs.aggregation_date asc" in oldest_compiled.lower()
     assert "portfolio_aggregation_jobs.id" in oldest_compiled
 
@@ -223,6 +243,7 @@ async def test_get_analytics_export_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_row = MagicMock(
         accepted_jobs=2,
         running_jobs=1,
@@ -245,6 +266,7 @@ async def test_get_analytics_export_job_health_summary(
         stale_minutes=15,
         failed_window_hours=24,
         reference_now=reference_now,
+        as_of=as_of,
     )
 
     assert value.accepted_jobs == 2
@@ -258,6 +280,7 @@ async def test_get_analytics_export_job_health_summary(
     aggregate_stmt = mock_db_session.execute.call_args_list[0][0][0]
     aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in aggregate_compiled.lower()
+    assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in aggregate_compiled
     assert "FILTER (WHERE analytics_export_jobs.status = 'accepted')" in aggregate_compiled
     assert "FILTER (WHERE analytics_export_jobs.status = 'running')" in aggregate_compiled
     assert "FILTER (WHERE analytics_export_jobs.status = 'failed')" in aggregate_compiled
@@ -265,6 +288,7 @@ async def test_get_analytics_export_job_health_summary(
     assert "analytics_export_jobs.updated_at >= '2025-08-30 12:00:00+00:00'" in aggregate_compiled
     oldest_stmt = mock_db_session.execute.call_args_list[1][0][0]
     oldest_compiled = str(oldest_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in oldest_compiled
     assert "order by analytics_export_jobs.created_at asc" in oldest_compiled.lower()
     assert "analytics_export_jobs.request_fingerprint" in oldest_compiled
 

@@ -183,6 +183,7 @@ class OperationsRepository:
         portfolio_id: str,
         stale_minutes: int,
         reference_now: datetime,
+        as_of: Optional[datetime] = None,
     ) -> ReprocessingHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(
@@ -199,6 +200,8 @@ class OperationsRepository:
             .filter(PositionState.status == "REPROCESSING")
             .label("oldest_reprocessing_watermark_date"),
         ).where(PositionState.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(PositionState.updated_at <= as_of)
         row = (await self.db.execute(stmt)).one()
         oldest_key_stmt = (
             select(
@@ -217,6 +220,8 @@ class OperationsRepository:
             )
             .limit(1)
         )
+        if as_of is not None:
+            oldest_key_stmt = oldest_key_stmt.where(PositionState.updated_at <= as_of)
         oldest_key_row = (await self.db.execute(oldest_key_stmt)).one_or_none()
         return ReprocessingHealthSummary(
             active_keys=int(row.active_keys or 0),
@@ -237,6 +242,7 @@ class OperationsRepository:
         stale_minutes: int,
         failed_window_hours: int,
         reference_now: datetime,
+        as_of: Optional[datetime] = None,
     ) -> JobHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
@@ -264,6 +270,8 @@ class OperationsRepository:
             .filter(PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")))
             .label("oldest_open_job_date"),
         ).where(PortfolioValuationJob.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         row = (await self.db.execute(stmt)).one()
         oldest_job_stmt = (
             select(
@@ -282,6 +290,8 @@ class OperationsRepository:
             )
             .limit(1)
         )
+        if as_of is not None:
+            oldest_job_stmt = oldest_job_stmt.where(PortfolioValuationJob.updated_at <= as_of)
         oldest_job_row = (await self.db.execute(oldest_job_stmt)).one_or_none()
         return JobHealthSummary(
             pending_jobs=int(row.pending_jobs or 0),
@@ -303,6 +313,7 @@ class OperationsRepository:
         stale_minutes: int,
         failed_window_hours: int,
         reference_now: datetime,
+        as_of: Optional[datetime] = None,
     ) -> JobHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
@@ -330,6 +341,8 @@ class OperationsRepository:
             .filter(PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")))
             .label("oldest_open_job_date"),
         ).where(PortfolioAggregationJob.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         row = (await self.db.execute(stmt)).one()
         oldest_job_stmt = (
             select(
@@ -347,6 +360,8 @@ class OperationsRepository:
             )
             .limit(1)
         )
+        if as_of is not None:
+            oldest_job_stmt = oldest_job_stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         oldest_job_row = (await self.db.execute(oldest_job_stmt)).one_or_none()
         return JobHealthSummary(
             pending_jobs=int(row.pending_jobs or 0),
@@ -368,6 +383,7 @@ class OperationsRepository:
         stale_minutes: int,
         failed_window_hours: int,
         reference_now: datetime,
+        as_of: Optional[datetime] = None,
     ) -> ExportJobHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
@@ -391,6 +407,8 @@ class OperationsRepository:
             .filter(AnalyticsExportJob.status.in_(("accepted", "running")))
             .label("oldest_open_job_created_at"),
         ).where(AnalyticsExportJob.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
         row = (await self.db.execute(stmt)).one()
         oldest_job_stmt = (
             select(
@@ -408,6 +426,8 @@ class OperationsRepository:
             )
             .limit(1)
         )
+        if as_of is not None:
+            oldest_job_stmt = oldest_job_stmt.where(AnalyticsExportJob.updated_at <= as_of)
         oldest_job_row = (await self.db.execute(oldest_job_stmt)).one_or_none()
         return ExportJobHealthSummary(
             accepted_jobs=int(row.accepted_jobs or 0),

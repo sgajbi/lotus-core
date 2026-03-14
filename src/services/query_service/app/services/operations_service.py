@@ -260,24 +260,28 @@ class OperationsService:
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
             self.repo.get_valuation_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
                 failed_window_hours=failed_window_hours,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
             self.repo.get_aggregation_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
                 failed_window_hours=failed_window_hours,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
             self.repo.get_analytics_export_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
                 failed_window_hours=failed_window_hours,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
             self.repo.get_latest_transaction_date(portfolio_id, as_of=generated_at_utc),
             self.repo.get_latest_snapshot_date_for_current_epoch(
@@ -532,18 +536,21 @@ class OperationsService:
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
             self.repo.get_valuation_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
                 failed_window_hours=failed_window_hours,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
             self.repo.get_aggregation_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
                 failed_window_hours=failed_window_hours,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
         )
 
