@@ -492,6 +492,14 @@ class SupportJobRecord(BaseModel):
         ),
         examples=[False],
     )
+    correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier captured when the job was created, used to join "
+            "support triage with logs, events, and replay lineage."
+        ),
+        examples=["corr-valuation-20260313-001"],
+    )
     updated_at: Optional[datetime] = Field(
         None,
         description="UTC timestamp of the most recent durable lifecycle update for the job.",
@@ -547,6 +555,7 @@ class SupportJobListResponse(BaseModel):
                     "epoch": 3,
                     "attempt_count": 1,
                     "is_retrying": True,
+                    "correlation_id": "corr-valuation-20260313-001",
                     "updated_at": "2025-12-30T10:15:09Z",
                     "is_stale_processing": False,
                     "failure_reason": None,

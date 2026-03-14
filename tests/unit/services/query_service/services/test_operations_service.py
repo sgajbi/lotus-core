@@ -259,6 +259,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
                 "status": "PENDING",
                 "epoch": 1,
                 "attempt_count": 0,
+                "correlation_id": "corr-val-101",
                 "updated_at": updated_at,
                 "failure_reason": None,
             },
@@ -275,6 +276,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_processing is False
     assert response.items[0].is_retrying is False
+    assert response.items[0].correlation_id == "corr-val-101"
     assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "PENDING"
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
@@ -294,6 +296,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
                 "aggregation_date": date(2025, 8, 31),
                 "status": "PROCESSING",
                 "attempt_count": 2,
+                "correlation_id": "corr-agg-202",
                 "updated_at": updated_at,
                 "failure_reason": "timed out once",
             },
@@ -310,6 +313,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_processing is True
     assert response.items[0].is_retrying is True
+    assert response.items[0].correlation_id == "corr-agg-202"
     assert response.items[0].failure_reason == "timed out once"
     assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "STALE_PROCESSING"
@@ -332,6 +336,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
                 "status": "PROCESSING",
                 "security_id": "S1",
                 "attempt_count": 2,
+                "correlation_id": "corr-replay-303",
                 "updated_at": updated_at,
                 "failure_reason": "timed out once",
             },
@@ -350,6 +355,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     assert response.items[0].attempt_count == 2
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_retrying is True
+    assert response.items[0].correlation_id == "corr-replay-303"
     assert response.items[0].is_stale_processing is True
     assert response.items[0].failure_reason == "timed out once"
     assert response.items[0].is_terminal_failure is False

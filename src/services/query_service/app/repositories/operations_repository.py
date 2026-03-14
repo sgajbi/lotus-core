@@ -845,6 +845,7 @@ class OperationsRepository:
                 ReprocessingJob.status,
                 security_id_expr.label("security_id"),
                 ReprocessingJob.attempt_count,
+                ReprocessingJob.correlation_id,
                 ReprocessingJob.updated_at,
                 ReprocessingJob.failure_reason,
             )
