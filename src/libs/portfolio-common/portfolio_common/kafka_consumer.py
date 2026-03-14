@@ -224,7 +224,11 @@ class BaseConsumer(ABC):
                 value=dlq_payload,
                 headers=dlq_headers,
             )
-            self._producer.flush(timeout=5)
+            undelivered_count = self._producer.flush(timeout=5)
+            if undelivered_count:
+                raise RuntimeError(
+                    "DLQ delivery confirmation timed out before Kafka acknowledged the message."
+                )
             await self._record_consumer_dlq_event(
                 msg=msg,
                 error=error,

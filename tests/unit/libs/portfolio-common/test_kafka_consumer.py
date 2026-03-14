@@ -33,7 +33,9 @@ def mock_confluent_consumer() -> MagicMock:
 @pytest.fixture
 def mock_kafka_producer() -> MagicMock:
     """Provides a mock of the KafkaProducer used for the DLQ."""
-    return MagicMock()
+    mock = MagicMock()
+    mock.flush.return_value = 0
+    return mock
 
 
 @pytest.fixture
@@ -198,6 +200,40 @@ async def test_dlq_omits_unset_correlation_header(
     assert "correlation_id" not in dict(call_args["headers"])
     assert call_args["value"]["correlation_id"] is None
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
+
+
+async def test_dlq_flush_timeout_does_not_record_event(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key-timeout", {"data": "value-timeout"})
+    error = RuntimeError("downstream timeout")
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+    mock_kafka_producer.flush.return_value = 1
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        await test_consumer._send_to_dlq_async(mock_msg, error)
+
+    mock_kafka_producer.publish_message.assert_called_once()
+    mock_kafka_producer.flush.assert_called_once_with(timeout=5)
+    test_consumer._record_consumer_dlq_event.assert_not_awaited()
+    mock_log_error.assert_called_once()
+    assert "Could not send message to DLQ" in mock_log_error.call_args.args[0]
+
+
+async def test_dlq_publish_exception_does_not_record_event(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key-fail", {"data": "value-fail"})
+    error = ValueError("validation failed")
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("producer unavailable")
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        await test_consumer._send_to_dlq_async(mock_msg, error)
+
+    mock_kafka_producer.flush.assert_not_called()
+    test_consumer._record_consumer_dlq_event.assert_not_awaited()
+    mock_log_error.assert_called_once()
 
 
 async def test_classify_dlq_reason_code_deserialization():
