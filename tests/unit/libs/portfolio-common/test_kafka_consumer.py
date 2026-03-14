@@ -1,6 +1,6 @@
 # tests/unit/libs/portfolio-common/test_kafka_consumer.py
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.kafka_consumer import (
@@ -132,6 +132,32 @@ async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
     mock_confluent_consumer.commit.assert_not_called()
     test_consumer._send_to_dlq_async.assert_awaited_once()
     assert "DLQ publication failed" in mock_warning.call_args.args[0]
+
+
+async def test_run_loop_dlq_commit_failure_does_not_crash_or_re_dlq(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-dlq-commit", {"data": "value-dlq-commit"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    mock_confluent_consumer.commit.side_effect = RuntimeError("commit failed after dlq")
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+    assert (
+        "Offset commit failed after successful DLQ publication"
+        in mock_warning.call_args.args[0]
+    )
 
 
 async def test_run_loop_retryable_error_does_not_commit(

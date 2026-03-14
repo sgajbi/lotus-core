@@ -331,7 +331,22 @@ class BaseConsumer(ABC):
                 )
                 dlq_succeeded = await self._send_to_dlq_async(msg, e)
                 if dlq_succeeded:
-                    self._consumer.commit(message=msg, asynchronous=False)
+                    try:
+                        self._consumer.commit(message=msg, asynchronous=False)
+                    except Exception as commit_error:
+                        logger.warning(
+                            (
+                                "Offset commit failed after successful DLQ publication; "
+                                "offset will not be committed so Kafka can redeliver."
+                            ),
+                            exc_info=True,
+                            extra={
+                                "topic": self.topic,
+                                "consumer_group": self._consumer_config["group.id"],
+                                "message_key": msg.key().decode("utf-8") if msg.key() else None,
+                                "commit_error": str(commit_error),
+                            },
+                        )
                 else:
                     logger.warning(
                         (
