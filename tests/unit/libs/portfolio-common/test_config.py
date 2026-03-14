@@ -2,6 +2,7 @@ import importlib
 
 from portfolio_common.config import (
     _coerce_consumer_config_value,
+    _env_bool,
     _env_int,
     _sanitize_consumer_override_map,
     _validate_consumer_override_relationships,
@@ -51,6 +52,19 @@ def test_env_int_falls_back_for_out_of_range_value(caplog, monkeypatch):
     monkeypatch.setenv("TEST_INT_SETTING", "-1")
 
     assert _env_int("TEST_INT_SETTING", 7, minimum=0) == 7
+    assert "falling back to default" in caplog.text
+
+
+def test_env_bool_accepts_true_variants(monkeypatch):
+    monkeypatch.setenv("TEST_BOOL_SETTING", "YES")
+
+    assert _env_bool("TEST_BOOL_SETTING", False) is True
+
+
+def test_env_bool_falls_back_for_invalid_value(caplog, monkeypatch):
+    monkeypatch.setenv("TEST_BOOL_SETTING", "maybe")
+
+    assert _env_bool("TEST_BOOL_SETTING", False) is False
     assert "falling back to default" in caplog.text
 
 
@@ -106,6 +120,7 @@ def test_merged_defaults_and_group_overrides_drop_invalid_heartbeat_session_rela
 def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
     monkeypatch.setenv("BUSINESS_DATE_MAX_FUTURE_DAYS", "invalid")
     monkeypatch.setenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "0")
+    monkeypatch.setenv("BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", "maybe")
 
     import portfolio_common.config as config_module
 
@@ -113,3 +128,4 @@ def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
 
     assert reloaded.BUSINESS_DATE_MAX_FUTURE_DAYS == 0
     assert reloaded.CASHFLOW_RULE_CACHE_TTL_SECONDS == 300
+    assert reloaded.BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE is False

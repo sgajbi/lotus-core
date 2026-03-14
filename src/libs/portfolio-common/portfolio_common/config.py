@@ -44,6 +44,24 @@ def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
     return value
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    logger.warning(
+        "Invalid boolean env setting; falling back to default.",
+        extra={"setting": name, "raw_value": raw, "default": default},
+    )
+    return default
+
+
 # Database Configurations
 POSTGRES_USER = os.getenv("POSTGRES_USER", "user")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
@@ -127,10 +145,9 @@ KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC = os.getenv(
 # Business-date calendar and guardrail policy
 DEFAULT_BUSINESS_CALENDAR_CODE = os.getenv("DEFAULT_BUSINESS_CALENDAR_CODE", "GLOBAL")
 BUSINESS_DATE_MAX_FUTURE_DAYS = _env_int("BUSINESS_DATE_MAX_FUTURE_DAYS", 0, minimum=0)
-BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = os.getenv(
-    "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE",
-    "false",
-).strip().lower() in {"1", "true", "yes", "on"}
+BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = _env_bool(
+    "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", False
+)
 
 # Cashflow calculator runtime cache policy
 CASHFLOW_RULE_CACHE_TTL_SECONDS = _env_int("CASHFLOW_RULE_CACHE_TTL_SECONDS", 300, minimum=1)
