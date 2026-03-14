@@ -932,7 +932,10 @@ class OperationsRepository:
         stmt = (
             select(func.count())
             .select_from(ReprocessingJob)
-            .where(portfolio_scope_exists)
+            .where(
+                ReprocessingJob.job_type == "RESET_WATERMARKS",
+                portfolio_scope_exists,
+            )
         )
         if status:
             stmt = stmt.where(ReprocessingJob.status == status)
@@ -973,7 +976,10 @@ class OperationsRepository:
                 ReprocessingJob.updated_at,
                 ReprocessingJob.failure_reason,
             )
-            .where(portfolio_scope_exists)
+            .where(
+                ReprocessingJob.job_type == "RESET_WATERMARKS",
+                portfolio_scope_exists,
+            )
         )
         if status:
             stmt = stmt.where(ReprocessingJob.status == status)

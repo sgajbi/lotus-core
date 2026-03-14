@@ -803,6 +803,7 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
     assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
     assert "from position_history join position_state on" in compiled.lower()
     assert "position_history.position_date <=" in compiled.lower()
@@ -827,6 +828,7 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from reprocessing_jobs" in compiled.lower()
+    assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
     assert "from position_history join position_state on" in compiled.lower()
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
