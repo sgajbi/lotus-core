@@ -11,7 +11,10 @@ from src.services.ingestion_service.app.DTOs.portfolio_bundle_dto import (
 )
 from src.services.ingestion_service.app.DTOs.portfolio_dto import Portfolio
 from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
-from src.services.ingestion_service.app.services.ingestion_service import IngestionService
+from src.services.ingestion_service.app.services.ingestion_service import (
+    IngestionPublishError,
+    IngestionService,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -138,6 +141,60 @@ async def test_publish_transactions_rejects_empty_partition_key(
         await ingestion_service.publish_transactions(transactions)
 
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_failure(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transactions = [
+        Transaction(
+            transaction_id="T1",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        ),
+        Transaction(
+            transaction_id="T2",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        ),
+        Transaction(
+            transaction_id="T3",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        ),
+    ]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_transactions(transactions)
+
+    assert exc_info.value.failed_record_keys == ["T2", "T3"]
+    assert exc_info.value.published_record_count == 1
+    assert "Remaining unpublished record keys: T2, T3." in str(exc_info.value)
 
 
 async def test_publish_with_correlation_id(

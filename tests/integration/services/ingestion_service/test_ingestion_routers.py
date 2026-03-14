@@ -931,6 +931,76 @@ async def test_ingestion_job_failure_history_and_retry(
     assert retry_response.json()["retry_count"] == 1
 
 
+async def test_ingestion_job_failure_history_tracks_remaining_unpublished_batch_keys(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_BATCH_FAIL_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            },
+            {
+                "transaction_id": "TX_BATCH_FAIL_002",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:01:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            },
+            {
+                "transaction_id": "TX_BATCH_FAIL_003",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:02:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            },
+        ]
+    }
+
+    with pytest.raises(Exception, match="Failed to publish transaction"):
+        await async_test_client.post("/ingest/transactions", json=payload)
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed"},
+    )
+    assert jobs_response.status_code == 200
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    failure_history = await event_replay_test_client.get(
+        f"/ingestion/jobs/{failed_job_id}/failures"
+    )
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "TX_BATCH_FAIL_002",
+        "TX_BATCH_FAIL_003",
+    ]
+
+
 async def test_ingestion_job_partial_retry_dry_run(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
