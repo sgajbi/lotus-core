@@ -126,7 +126,12 @@ async def test_get_lineage_success(service: OperationsService, mock_ops_repo: As
     mock_ops_repo.get_latest_valuation_job.return_value = type(
         "ValuationJobStub",
         (),
-        {"valuation_date": date(2025, 8, 31), "status": "DONE"},
+        {
+            "id": 101,
+            "valuation_date": date(2025, 8, 31),
+            "status": "DONE",
+            "correlation_id": "corr-val-101",
+        },
     )()
 
     response = await service.get_lineage("P1", "S1")
@@ -136,7 +141,9 @@ async def test_get_lineage_success(service: OperationsService, mock_ops_repo: As
     assert response.epoch == 3
     assert response.latest_position_history_date == date(2025, 8, 31)
     assert response.latest_daily_snapshot_date == date(2025, 8, 31)
+    assert response.latest_valuation_job_id == 101
     assert response.latest_valuation_job_status == "DONE"
+    assert response.latest_valuation_job_correlation_id == "corr-val-101"
     assert response.has_artifact_gap is False
     assert response.operational_state == "HEALTHY"
 
@@ -152,7 +159,12 @@ async def test_get_lineage_valuation_blocked(service: OperationsService, mock_op
     mock_ops_repo.get_latest_valuation_job.return_value = type(
         "ValuationJobStub",
         (),
-        {"valuation_date": date(2025, 8, 31), "status": "FAILED"},
+        {
+            "id": 102,
+            "valuation_date": date(2025, 8, 31),
+            "status": "FAILED",
+            "correlation_id": "corr-val-102",
+        },
     )()
 
     response = await service.get_lineage("P1", "S1")
@@ -172,7 +184,9 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
             "latest_position_history_date": date(2025, 8, 31),
             "latest_daily_snapshot_date": date(2025, 8, 30),
             "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_id": 101,
             "latest_valuation_job_status": "DONE",
+            "latest_valuation_job_correlation_id": "corr-val-101",
         }
     ]
 
@@ -186,7 +200,9 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     assert response.items[0].latest_position_history_date == date(2025, 8, 31)
     assert response.items[0].latest_daily_snapshot_date == date(2025, 8, 30)
     assert response.items[0].latest_valuation_job_date == date(2025, 8, 31)
+    assert response.items[0].latest_valuation_job_id == 101
     assert response.items[0].latest_valuation_job_status == "DONE"
+    assert response.items[0].latest_valuation_job_correlation_id == "corr-val-101"
     assert response.items[0].has_artifact_gap is True
     assert response.items[0].operational_state == "ARTIFACT_GAP"
 
@@ -201,7 +217,9 @@ async def test_build_lineage_key_record_healthy_state(service: OperationsService
             "latest_position_history_date": date(2025, 8, 31),
             "latest_daily_snapshot_date": date(2025, 8, 31),
             "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_id": 101,
             "latest_valuation_job_status": "DONE",
+            "latest_valuation_job_correlation_id": "corr-val-101",
         }
     )
 
@@ -219,7 +237,9 @@ async def test_build_lineage_key_record_replaying_state(service: OperationsServi
             "latest_position_history_date": date(2025, 8, 31),
             "latest_daily_snapshot_date": date(2025, 8, 30),
             "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_id": 101,
             "latest_valuation_job_status": "DONE",
+            "latest_valuation_job_correlation_id": "corr-val-101",
         }
     )
 
@@ -237,7 +257,9 @@ async def test_build_lineage_key_record_valuation_blocked_state(service: Operati
             "latest_position_history_date": date(2025, 8, 31),
             "latest_daily_snapshot_date": date(2025, 8, 31),
             "latest_valuation_job_date": date(2025, 8, 31),
+            "latest_valuation_job_id": 102,
             "latest_valuation_job_status": "FAILED",
+            "latest_valuation_job_correlation_id": "corr-val-102",
         }
     )
 

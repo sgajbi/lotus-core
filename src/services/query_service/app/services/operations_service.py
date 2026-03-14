@@ -146,7 +146,9 @@ class OperationsService:
             latest_position_history_date=latest_position_history_date,
             latest_daily_snapshot_date=latest_daily_snapshot_date,
             latest_valuation_job_date=latest_valuation_job_date,
+            latest_valuation_job_id=key["latest_valuation_job_id"],
             latest_valuation_job_status=latest_valuation_job_status,
+            latest_valuation_job_correlation_id=key["latest_valuation_job_correlation_id"],
             has_artifact_gap=has_artifact_gap,
             operational_state=self._get_lineage_key_operational_state(
                 reprocessing_status=key["reprocessing_status"],
@@ -374,7 +376,11 @@ class OperationsService:
             latest_position_history_date=latest_history_date,
             latest_daily_snapshot_date=latest_snapshot_date,
             latest_valuation_job_date=latest_valuation_job_date,
+            latest_valuation_job_id=(latest_valuation_job.id if latest_valuation_job else None),
             latest_valuation_job_status=latest_valuation_job_status,
+            latest_valuation_job_correlation_id=(
+                latest_valuation_job.correlation_id if latest_valuation_job else None
+            ),
             has_artifact_gap=has_artifact_gap,
             operational_state=self._get_lineage_key_operational_state(
                 reprocessing_status=position_state.status,

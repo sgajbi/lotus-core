@@ -337,10 +337,23 @@ class LineageResponse(BaseModel):
         description="Latest valuation job business date for current epoch.",
         examples=["2025-12-30"],
     )
+    latest_valuation_job_id: Optional[int] = Field(
+        None,
+        description="Durable database identifier of the latest valuation job in the current epoch.",
+        examples=[101],
+    )
     latest_valuation_job_status: Optional[str] = Field(
         None,
         description="Status of the latest valuation job for current epoch.",
         examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
+    )
+    latest_valuation_job_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier of the latest valuation job in the current epoch, "
+            "used to bridge lineage triage to logs and scheduler dispatch."
+        ),
+        examples=["corr-val-20260314-001"],
     )
     has_artifact_gap: bool = Field(
         ...,
@@ -392,12 +405,25 @@ class LineageKeyRecord(BaseModel):
         ),
         examples=["2025-12-30"],
     )
+    latest_valuation_job_id: Optional[int] = Field(
+        None,
+        description="Durable database identifier of the latest valuation job in the current epoch.",
+        examples=[101],
+    )
     latest_valuation_job_status: Optional[str] = Field(
         None,
         description=(
             "Status of the latest valuation job recorded for the current epoch of this key."
         ),
         examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
+    )
+    latest_valuation_job_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier of the latest valuation job in the current epoch, "
+            "used to bridge lineage triage to logs and scheduler dispatch."
+        ),
+        examples=["corr-val-20260314-001"],
     )
     has_artifact_gap: bool = Field(
         ...,
@@ -435,7 +461,9 @@ class LineageKeyListResponse(BaseModel):
                     "latest_position_history_date": "2025-12-30",
                     "latest_daily_snapshot_date": "2025-12-30",
                     "latest_valuation_job_date": "2025-12-30",
+                    "latest_valuation_job_id": 101,
                     "latest_valuation_job_status": "DONE",
+                    "latest_valuation_job_correlation_id": "corr-val-20260314-001",
                     "has_artifact_gap": False,
                     "operational_state": "HEALTHY",
                 }

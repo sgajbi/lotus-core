@@ -463,8 +463,32 @@ class OperationsRepository:
             .correlate(PositionState)
             .scalar_subquery()
         )
+        latest_valuation_job_id = (
+            select(PortfolioValuationJob.id)
+            .where(
+                PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
+                PortfolioValuationJob.security_id == PositionState.security_id,
+                PortfolioValuationJob.epoch == PositionState.epoch,
+            )
+            .order_by(PortfolioValuationJob.valuation_date.desc(), PortfolioValuationJob.id.desc())
+            .limit(1)
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
         latest_valuation_job_status = (
             select(PortfolioValuationJob.status)
+            .where(
+                PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
+                PortfolioValuationJob.security_id == PositionState.security_id,
+                PortfolioValuationJob.epoch == PositionState.epoch,
+            )
+            .order_by(PortfolioValuationJob.valuation_date.desc(), PortfolioValuationJob.id.desc())
+            .limit(1)
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
+        latest_valuation_job_correlation_id = (
+            select(PortfolioValuationJob.correlation_id)
             .where(
                 PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
                 PortfolioValuationJob.security_id == PositionState.security_id,
@@ -483,7 +507,9 @@ class OperationsRepository:
             latest_position_history_date.label("latest_position_history_date"),
             latest_daily_snapshot_date.label("latest_daily_snapshot_date"),
             latest_valuation_job_date.label("latest_valuation_job_date"),
+            latest_valuation_job_id.label("latest_valuation_job_id"),
             latest_valuation_job_status.label("latest_valuation_job_status"),
+            latest_valuation_job_correlation_id.label("latest_valuation_job_correlation_id"),
         ).where(PositionState.portfolio_id == portfolio_id)
         if reprocessing_status:
             stmt = stmt.where(PositionState.status == reprocessing_status)

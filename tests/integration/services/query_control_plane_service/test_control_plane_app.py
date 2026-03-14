@@ -124,6 +124,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_response["properties"]["operational_state"]["description"].startswith(
         "Derived operator-facing lineage state for this key"
     )
+    assert lineage_response["properties"]["latest_valuation_job_id"]["description"] == (
+        "Durable database identifier of the latest valuation job in the current epoch."
+    )
+    assert lineage_response["properties"]["latest_valuation_job_correlation_id"][
+        "description"
+    ].startswith("Durable correlation identifier of the latest valuation job")
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
@@ -370,6 +376,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_key_record["properties"]["latest_valuation_job_status"]["description"] == (
         "Status of the latest valuation job recorded for the current epoch of this key."
     )
+    assert lineage_key_record["properties"]["latest_valuation_job_id"]["description"] == (
+        "Durable database identifier of the latest valuation job in the current epoch."
+    )
+    assert lineage_key_record["properties"]["latest_valuation_job_correlation_id"][
+        "description"
+    ].startswith("Durable correlation identifier of the latest valuation job")
     assert lineage_key_record["properties"]["has_artifact_gap"]["description"].startswith(
         "True when the current epoch shows missing or lagging downstream artifacts"
     )
