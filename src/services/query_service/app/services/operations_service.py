@@ -284,7 +284,10 @@ class OperationsService:
                 portfolio_id,
                 as_of=generated_at_utc,
             ),
-            self.repo.get_position_snapshot_history_mismatch_count(portfolio_id),
+            self.repo.get_position_snapshot_history_mismatch_count(
+                portfolio_id,
+                as_of=generated_at_utc,
+            ),
             self.repo.get_latest_financial_reconciliation_control_stage(
                 portfolio_id,
                 as_of=generated_at_utc,

@@ -499,7 +499,9 @@ class OperationsRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    async def get_position_snapshot_history_mismatch_count(self, portfolio_id: str) -> int:
+    async def get_position_snapshot_history_mismatch_count(
+        self, portfolio_id: str, as_of: Optional[datetime] = None
+    ) -> int:
         latest_history = (
             select(
                 PositionHistory.portfolio_id,
@@ -508,11 +510,12 @@ class OperationsRepository:
                 func.max(PositionHistory.position_date).label("latest_history_date"),
             )
             .where(PositionHistory.portfolio_id == portfolio_id)
-            .group_by(
-                PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
-            )
-            .subquery()
         )
+        if as_of is not None:
+            latest_history = latest_history.where(PositionHistory.created_at <= as_of)
+        latest_history = latest_history.group_by(
+            PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
+        ).subquery()
         latest_snapshot = (
             select(
                 DailyPositionSnapshot.portfolio_id,
@@ -521,13 +524,14 @@ class OperationsRepository:
                 func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
             )
             .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
-            .group_by(
-                DailyPositionSnapshot.portfolio_id,
-                DailyPositionSnapshot.security_id,
-                DailyPositionSnapshot.epoch,
-            )
-            .subquery()
         )
+        if as_of is not None:
+            latest_snapshot = latest_snapshot.where(DailyPositionSnapshot.created_at <= as_of)
+        latest_snapshot = latest_snapshot.group_by(
+            DailyPositionSnapshot.portfolio_id,
+            DailyPositionSnapshot.security_id,
+            DailyPositionSnapshot.epoch,
+        ).subquery()
         joined = latest_history.outerjoin(
             latest_snapshot,
             and_(
