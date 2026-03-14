@@ -1,9 +1,12 @@
+from __future__ import annotations
+
+import asyncio
 from datetime import date
 
 import pytest
 from portfolio_common.database_models import InstrumentReprocessingState
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.valuation_orchestrator_service.app.repositories import (
     instrument_reprocessing_state_repository as instrument_reprocessing_state_repo,
@@ -155,3 +158,53 @@ async def test_upsert_state_normalizes_sentinel_correlation(
     )
 
     assert row.correlation_id is None
+
+
+async def test_upsert_state_coalesces_concurrent_duplicate_arrivals(
+    clean_db, async_db_session: AsyncSession
+):
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    barrier_lock = asyncio.Lock()
+    barrier_ready = asyncio.Event()
+    barrier_count = 0
+
+    async def upsert_one(price_date: date, correlation_id: str | None) -> None:
+        nonlocal barrier_count
+        async with session_factory() as session:
+            repo = instrument_reprocessing_state_repo.InstrumentReprocessingStateRepository(session)
+            original_execute = session.execute
+
+            async def synchronized_execute(*args, **kwargs):
+                nonlocal barrier_count
+                async with barrier_lock:
+                    barrier_count += 1
+                    if barrier_count == 2:
+                        barrier_ready.set()
+                await barrier_ready.wait()
+                return await original_execute(*args, **kwargs)
+
+            session.execute = synchronized_execute
+            await repo.upsert_state("S-TRIGGER-CONC", price_date, correlation_id=correlation_id)
+            await session.commit()
+
+    await asyncio.gather(
+        upsert_one(date(2025, 8, 10), "corr-10"),
+        upsert_one(date(2025, 8, 8), "corr-08"),
+    )
+
+    async with session_factory() as verification_session:
+        rows = (
+            (
+                await verification_session.execute(
+                    select(InstrumentReprocessingState).where(
+                        InstrumentReprocessingState.security_id == "S-TRIGGER-CONC"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert len(rows) == 1
+    assert rows[0].earliest_impacted_date == date(2025, 8, 8)
+    assert rows[0].correlation_id == "corr-08"
