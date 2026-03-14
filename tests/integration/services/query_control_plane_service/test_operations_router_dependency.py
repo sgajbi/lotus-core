@@ -99,13 +99,14 @@ async def test_calculator_slos_success(async_test_client):
         "portfolio_id": "P1",
         "business_date": date(2025, 8, 31),
         "stale_threshold_minutes": 15,
+        "failed_window_hours": 48,
         "generated_at_utc": "2026-03-03T10:05:11Z",
         "valuation": {
             "pending_jobs": 2,
             "processing_jobs": 1,
             "stale_processing_jobs": 0,
             "failed_jobs": 0,
-            "failed_jobs_last_24h": 0,
+            "failed_jobs_within_window": 0,
             "oldest_open_job_date": date(2025, 8, 31),
             "backlog_age_days": 0,
         },
@@ -114,7 +115,7 @@ async def test_calculator_slos_success(async_test_client):
             "processing_jobs": 0,
             "stale_processing_jobs": 0,
             "failed_jobs": 0,
-            "failed_jobs_last_24h": 0,
+            "failed_jobs_within_window": 0,
             "oldest_open_job_date": date(2025, 8, 31),
             "backlog_age_days": 0,
         },
@@ -126,11 +127,19 @@ async def test_calculator_slos_success(async_test_client):
         },
     }
 
-    response = await client.get("/support/portfolios/P1/calculator-slos")
+    response = await client.get(
+        "/support/portfolios/P1/calculator-slos?stale_threshold_minutes=15&failed_window_hours=48"
+    )
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["failed_window_hours"] == 48
     assert response.json()["valuation"]["pending_jobs"] == 2
+    mock_service.get_calculator_slos.assert_awaited_once_with(
+        portfolio_id="P1",
+        stale_threshold_minutes=15,
+        failed_window_hours=48,
+    )
 
 
 async def test_calculator_slos_unexpected_maps_to_500(async_test_client):

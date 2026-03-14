@@ -115,11 +115,20 @@ async def get_calculator_slos(
         description="Threshold in minutes used to classify stale PROCESSING jobs.",
         examples=[15],
     ),
+    failed_window_hours: int = Query(
+        24,
+        ge=1,
+        le=720,
+        description="Window in hours used to count recent FAILED jobs.",
+        examples=[24],
+    ),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
         return await service.get_calculator_slos(
-            portfolio_id=portfolio_id, stale_threshold_minutes=stale_threshold_minutes
+            portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

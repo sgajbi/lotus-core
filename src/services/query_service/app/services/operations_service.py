@@ -337,7 +337,10 @@ class OperationsService:
         return status in {"FAILED", "REQUIRES_REPLAY"}
 
     async def get_calculator_slos(
-        self, portfolio_id: str, stale_threshold_minutes: int = 15
+        self,
+        portfolio_id: str,
+        stale_threshold_minutes: int = 15,
+        failed_window_hours: int = 24,
     ) -> CalculatorSloResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         (
@@ -354,12 +357,12 @@ class OperationsService:
             self.repo.get_valuation_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
-                failed_window_hours=24,
+                failed_window_hours=failed_window_hours,
             ),
             self.repo.get_aggregation_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
-                failed_window_hours=24,
+                failed_window_hours=failed_window_hours,
             ),
         )
 
@@ -384,13 +387,14 @@ class OperationsService:
             portfolio_id=portfolio_id,
             business_date=latest_business_date,
             stale_threshold_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
             generated_at_utc=datetime.now(timezone.utc),
             valuation=CalculatorSloBucket(
                 pending_jobs=valuation_job_health.pending_jobs,
                 processing_jobs=valuation_job_health.processing_jobs,
                 stale_processing_jobs=valuation_job_health.stale_processing_jobs,
                 failed_jobs=valuation_job_health.failed_jobs,
-                failed_jobs_last_24h=valuation_job_health.failed_jobs_last_hours,
+                failed_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
                 oldest_open_job_date=valuation_job_health.oldest_open_job_date,
                 backlog_age_days=valuation_backlog_age_days,
             ),
@@ -399,7 +403,7 @@ class OperationsService:
                 processing_jobs=aggregation_job_health.processing_jobs,
                 stale_processing_jobs=aggregation_job_health.stale_processing_jobs,
                 failed_jobs=aggregation_job_health.failed_jobs,
-                failed_jobs_last_24h=aggregation_job_health.failed_jobs_last_hours,
+                failed_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
                 oldest_open_job_date=aggregation_job_health.oldest_open_job_date,
                 backlog_age_days=aggregation_backlog_age_days,
             ),

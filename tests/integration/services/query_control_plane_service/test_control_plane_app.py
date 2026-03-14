@@ -115,6 +115,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "stale_threshold_minutes"
     )
     assert stale_threshold["description"].startswith("Threshold in minutes")
+    failed_window = next(
+        parameter
+        for parameter in calculator_slos["parameters"]
+        if parameter["name"] == "failed_window_hours"
+    )
+    assert failed_window["description"].startswith("Window in hours")
 
     not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
@@ -247,6 +253,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["reprocessing_backlog_age_days"][
         "description"
     ].startswith("Backlog age in days computed from oldest_reprocessing_watermark_date")
+    assert calculator_slo["properties"]["failed_window_hours"]["description"] == (
+        "Window in hours used to count recent failed jobs."
+    )
     assert support_overview["properties"]["pending_analytics_export_jobs"]["description"] == (
         "Number of analytics export jobs currently waiting in ACCEPTED state."
     )
@@ -281,6 +290,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "description"
     ].startswith("Age in minutes from created_at to the current UTC time")
     reprocessing_slo = components["ReprocessingSloBucket"]
+    calculator_bucket = components["CalculatorSloBucket"]
     assert reprocessing_slo["properties"]["stale_reprocessing_keys"]["description"].startswith(
         "Number of REPROCESSING position keys whose last update is older"
     )
@@ -289,6 +299,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     ] == "Oldest watermark date among position keys currently in REPROCESSING state."
     assert reprocessing_slo["properties"]["backlog_age_days"]["description"].startswith(
         "Age in days from oldest_reprocessing_watermark_date"
+    )
+    assert calculator_bucket["properties"]["failed_jobs_within_window"]["description"] == (
+        "Count of jobs that moved to FAILED state within the configured failed-job window."
     )
     reconciliation_run_record = components["ReconciliationRunRecord"]
     assert reconciliation_run_record["properties"]["correlation_id"]["description"].startswith(

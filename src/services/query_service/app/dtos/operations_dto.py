@@ -273,9 +273,11 @@ class CalculatorSloBucket(BaseModel):
         description="Count of jobs currently in FAILED terminal state.",
         examples=[0],
     )
-    failed_jobs_last_24h: int = Field(
+    failed_jobs_within_window: int = Field(
         ...,
-        description="Count of jobs that moved to FAILED state in the last 24 hours.",
+        description=(
+            "Count of jobs that moved to FAILED state within the configured failed-job window."
+        ),
         examples=[2],
     )
     oldest_open_job_date: Optional[date] = Field(
@@ -334,6 +336,11 @@ class CalculatorSloResponse(BaseModel):
         description="Threshold used to classify stale processing jobs.",
         examples=[15],
     )
+    failed_window_hours: int = Field(
+        ...,
+        description="Window in hours used to count recent failed jobs.",
+        examples=[24],
+    )
     generated_at_utc: datetime = Field(
         ...,
         description="UTC timestamp when this SLO snapshot was generated.",
@@ -348,7 +355,7 @@ class CalculatorSloResponse(BaseModel):
                 "processing_jobs": 3,
                 "stale_processing_jobs": 1,
                 "failed_jobs": 0,
-                "failed_jobs_last_24h": 2,
+                "failed_jobs_within_window": 2,
                 "oldest_open_job_date": "2026-02-25",
                 "backlog_age_days": 7,
             }
@@ -363,7 +370,7 @@ class CalculatorSloResponse(BaseModel):
                 "processing_jobs": 0,
                 "stale_processing_jobs": 0,
                 "failed_jobs": 0,
-                "failed_jobs_last_24h": 0,
+                "failed_jobs_within_window": 0,
                 "oldest_open_job_date": "2026-03-01",
                 "backlog_age_days": 1,
             }

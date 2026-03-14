@@ -1021,19 +1021,29 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         oldest_open_job_date=date(2025, 8, 25),
     )
 
-    response = await service.get_calculator_slos("P1", stale_threshold_minutes=15)
+    response = await service.get_calculator_slos(
+        "P1", stale_threshold_minutes=15, failed_window_hours=48
+    )
 
     assert response.portfolio_id == "P1"
     assert response.business_date == date(2025, 8, 30)
     assert response.stale_threshold_minutes == 15
+    assert response.failed_window_hours == 48
     assert response.valuation.pending_jobs == 7
     assert response.valuation.failed_jobs == 4
-    assert response.valuation.failed_jobs_last_24h == 2
+    assert response.valuation.failed_jobs_within_window == 2
     assert response.valuation.backlog_age_days == 10
     assert response.aggregation.pending_jobs == 5
     assert response.aggregation.failed_jobs == 1
+    assert response.aggregation.failed_jobs_within_window == 1
     assert response.aggregation.backlog_age_days == 5
     assert response.reprocessing.active_reprocessing_keys == 2
     assert response.reprocessing.stale_reprocessing_keys == 1
     assert response.reprocessing.oldest_reprocessing_watermark_date == date(2025, 8, 18)
     assert response.reprocessing.backlog_age_days == 12
+    mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
+        "P1", stale_minutes=15, failed_window_hours=48
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
+        "P1", stale_minutes=15, failed_window_hours=48
+    )
