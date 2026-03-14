@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -378,6 +378,45 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     )
 
 
+async def test_get_aggregation_jobs_honors_custom_stale_threshold(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    created_at = datetime(2025, 8, 31, 9, 45, tzinfo=timezone.utc)
+    updated_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    mock_ops_repo.get_aggregation_jobs_count.return_value = 1
+    mock_ops_repo.get_aggregation_jobs.return_value = [
+        type(
+            "AggregationJobStub",
+            (),
+            {
+                "id": 203,
+                "aggregation_date": date(2025, 8, 31),
+                "status": "PROCESSING",
+                "attempt_count": 1,
+                "correlation_id": "corr-agg-203",
+                "created_at": created_at,
+                "updated_at": updated_at,
+                "failure_reason": None,
+            },
+        )()
+    ]
+
+    response = await service.get_aggregation_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        stale_threshold_minutes=30,
+    )
+
+    assert response.stale_threshold_minutes == 30
+    assert response.items[0].is_stale_processing is False
+    assert response.items[0].operational_state == "PROCESSING"
+    mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
+        portfolio_id="P1", skip=0, limit=20, status="PROCESSING", stale_minutes=30
+    )
+
+
 async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
     created_at = datetime(2025, 8, 31, 9, 50, tzinfo=timezone.utc)
     updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
@@ -452,6 +491,15 @@ async def test_support_job_stale_flag_only_marks_old_processing():
     )
     assert (
         OperationsService._is_support_job_stale(
+            "PROCESSING",
+            updated_at,
+            now=datetime(2025, 8, 31, 10, 20, tzinfo=timezone.utc),
+            stale_threshold_minutes=30,
+        )
+        is False
+    )
+    assert (
+        OperationsService._is_support_job_stale(
             "FAILED",
             updated_at,
             now=datetime(2025, 8, 31, 11, 0, tzinfo=timezone.utc),
@@ -515,6 +563,15 @@ async def test_analytics_export_job_flags_running_staleness_and_backlog_age():
 
     assert OperationsService._is_analytics_export_job_stale("running", updated_at, now=now) is True
     assert (
+        OperationsService._is_analytics_export_job_stale(
+            "running",
+            updated_at,
+            now=now,
+            stale_threshold_minutes=30,
+        )
+        is False
+    )
+    assert (
         OperationsService._get_analytics_export_backlog_age_minutes("running", created_at, now=now)
         == 30
     )
@@ -525,6 +582,15 @@ async def test_analytics_export_job_flags_running_staleness_and_backlog_age():
     assert (
         OperationsService._get_analytics_export_operational_state("running", updated_at)
         == "STALE_RUNNING"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state(
+            "running",
+            updated_at,
+            now=now,
+            stale_threshold_minutes=30,
+        )
+        == "RUNNING"
     )
 
 
@@ -813,6 +879,49 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
         status="REPROCESSING",
         security_id="SEC-US-IBM",
         stale_minutes=15,
+    )
+
+
+async def test_get_reprocessing_keys_honors_custom_stale_threshold(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    created_at = datetime(2026, 3, 13, 9, 30, tzinfo=timezone.utc)
+    updated_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    mock_ops_repo.get_reprocessing_keys_count.return_value = 1
+    mock_ops_repo.get_reprocessing_keys.return_value = [
+        type(
+            "ReprocessingKeyStub",
+            (),
+            {
+                "security_id": "SEC-US-IBM",
+                "epoch": 3,
+                "watermark_date": date(2026, 3, 10),
+                "status": "REPROCESSING",
+                "created_at": created_at,
+                "updated_at": updated_at,
+            },
+        )()
+    ]
+
+    response = await service.get_reprocessing_keys(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+        stale_threshold_minutes=30,
+    )
+
+    assert response.stale_threshold_minutes == 30
+    assert response.items[0].is_stale_reprocessing is False
+    assert response.items[0].operational_state == "REPROCESSING"
+    mock_ops_repo.get_reprocessing_keys.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+        stale_minutes=30,
     )
 
 

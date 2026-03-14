@@ -32,8 +32,6 @@ from ..support_policy import (
 
 
 class OperationsService:
-    SUPPORT_JOB_STALE_THRESHOLD = timedelta(minutes=DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES)
-
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
 
@@ -43,10 +41,11 @@ class OperationsService:
         status: str,
         updated_at: datetime | None,
         now: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
         if status == "FAILED":
             return "FAILED"
-        if cls._is_support_job_stale(status, updated_at, now):
+        if cls._is_support_job_stale(status, updated_at, now, stale_threshold_minutes):
             return "STALE_PROCESSING"
         if status == "PROCESSING":
             return "PROCESSING"
@@ -66,12 +65,18 @@ class OperationsService:
 
     @classmethod
     def _get_analytics_export_operational_state(
-        cls, status: str, updated_at: datetime | None, now: datetime | None = None
+        cls,
+        status: str,
+        updated_at: datetime | None,
+        now: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
         status = cls._normalize_analytics_export_status(status) or ""
         if status == "failed":
             return "FAILED"
-        if cls._is_analytics_export_job_stale(status, updated_at, now):
+        if cls._is_analytics_export_job_stale(
+            status, updated_at, now, stale_threshold_minutes
+        ):
             return "STALE_RUNNING"
         if status == "running":
             return "RUNNING"
@@ -101,9 +106,15 @@ class OperationsService:
 
     @classmethod
     def _get_reprocessing_key_operational_state(
-        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+        cls,
+        status: str | None,
+        updated_at: datetime | None,
+        now: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
-        if cls._is_reprocessing_key_stale(status, updated_at, now):
+        if cls._is_reprocessing_key_stale(
+            status, updated_at, now, stale_threshold_minutes
+        ):
             return "STALE_REPROCESSING"
         if status == "REPROCESSING":
             return "REPROCESSING"
@@ -189,6 +200,7 @@ class OperationsService:
         updated_at: datetime | None,
         failure_reason: str | None,
         reference_now: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobRecord:
         return SupportJobRecord(
             job_id=job_id,
@@ -202,11 +214,19 @@ class OperationsService:
             correlation_id=correlation_id,
             created_at=created_at,
             updated_at=updated_at,
-            is_stale_processing=self._is_support_job_stale(status, updated_at, reference_now),
+            is_stale_processing=self._is_support_job_stale(
+                status,
+                updated_at,
+                reference_now,
+                stale_threshold_minutes,
+            ),
             failure_reason=failure_reason,
             is_terminal_failure=status == "FAILED",
             operational_state=self._get_support_job_operational_state(
-                status, updated_at, reference_now
+                status,
+                updated_at,
+                reference_now,
+                stale_threshold_minutes,
             ),
         )
 
@@ -583,6 +603,7 @@ class OperationsService:
                     updated_at=job.updated_at,
                     failure_reason=job.failure_reason,
                     reference_now=generated_at_utc,
+                    stale_threshold_minutes=stale_threshold_minutes,
                 )
                 for job in jobs
             ],
@@ -630,6 +651,7 @@ class OperationsService:
                     updated_at=job.updated_at,
                     failure_reason=job.failure_reason,
                     reference_now=generated_at_utc,
+                    stale_threshold_minutes=stale_threshold_minutes,
                 )
                 for job in jobs
             ],
@@ -674,7 +696,10 @@ class OperationsService:
                     completed_at=job.completed_at,
                     updated_at=job.updated_at,
                     is_stale_running=self._is_analytics_export_job_stale(
-                        job.status, job.updated_at, generated_at_utc
+                        job.status,
+                        job.updated_at,
+                        generated_at_utc,
+                        stale_threshold_minutes,
                     ),
                     backlog_age_minutes=self._get_analytics_export_backlog_age_minutes(
                         job.status, job.created_at, generated_at_utc
@@ -685,7 +710,10 @@ class OperationsService:
                         self._normalize_analytics_export_status(job.status) == "failed"
                     ),
                     operational_state=self._get_analytics_export_operational_state(
-                        job.status, job.updated_at, generated_at_utc
+                        job.status,
+                        job.updated_at,
+                        generated_at_utc,
+                        stale_threshold_minutes,
                     ),
                 )
                 for job in jobs
@@ -872,11 +900,13 @@ class OperationsService:
                         key.status,
                         key.updated_at,
                         generated_at_utc,
+                        stale_threshold_minutes,
                     ),
                     operational_state=self._get_reprocessing_key_operational_state(
                         key.status,
                         key.updated_at,
                         generated_at_utc,
+                        stale_threshold_minutes,
                     ),
                 )
                 for key in keys
@@ -931,6 +961,7 @@ class OperationsService:
                     updated_at=job.updated_at,
                     failure_reason=job.failure_reason,
                     reference_now=generated_at_utc,
+                    stale_threshold_minutes=stale_threshold_minutes,
                 )
                 for job in jobs
             ],
@@ -938,27 +969,49 @@ class OperationsService:
 
     @classmethod
     def _is_support_job_stale(
-        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+        cls,
+        status: str | None,
+        updated_at: datetime | None,
+        now: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
         if status != "PROCESSING" or updated_at is None:
             return False
         reference_now = now or datetime.now(timezone.utc)
-        return updated_at < reference_now - cls.SUPPORT_JOB_STALE_THRESHOLD
+        return updated_at < reference_now - timedelta(minutes=stale_threshold_minutes)
 
     @classmethod
     def _is_analytics_export_job_stale(
-        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+        cls,
+        status: str | None,
+        updated_at: datetime | None,
+        now: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
         normalized_status = cls._normalize_analytics_export_status(status)
         normalized_status = "PROCESSING" if normalized_status == "running" else normalized_status
-        return cls._is_support_job_stale(normalized_status, updated_at, now)
+        return cls._is_support_job_stale(
+            normalized_status,
+            updated_at,
+            now,
+            stale_threshold_minutes,
+        )
 
     @classmethod
     def _is_reprocessing_key_stale(
-        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
+        cls,
+        status: str | None,
+        updated_at: datetime | None,
+        now: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
         normalized_status = "PROCESSING" if status == "REPROCESSING" else status
-        return cls._is_support_job_stale(normalized_status, updated_at, now)
+        return cls._is_support_job_stale(
+            normalized_status,
+            updated_at,
+            now,
+            stale_threshold_minutes,
+        )
 
     @staticmethod
     def _get_analytics_export_backlog_age_minutes(
