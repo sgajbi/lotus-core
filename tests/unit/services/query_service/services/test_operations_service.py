@@ -465,6 +465,16 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PENDING",
+        business_date=None,
+        security_id=None,
+        job_id=None,
+        correlation_id=None,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -516,6 +526,15 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_aggregation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PROCESSING",
+        business_date=None,
+        job_id=None,
+        correlation_id=None,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -563,6 +582,7 @@ async def test_get_aggregation_jobs_honors_custom_stale_threshold(
         correlation_id=None,
         stale_minutes=30,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -721,6 +741,14 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         request_fingerprint=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="FAILED",
+        job_id=None,
+        request_fingerprint=None,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -746,6 +774,7 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
         security_id=None,
         job_id=8801,
         correlation_id=None,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -758,6 +787,7 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -783,6 +813,7 @@ async def test_get_valuation_jobs_forwards_security_filter(
         security_id="SEC-US-IBM",
         job_id=None,
         correlation_id=None,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -795,6 +826,7 @@ async def test_get_valuation_jobs_forwards_security_filter(
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -820,6 +852,7 @@ async def test_get_valuation_jobs_forwards_correlation_filter(
         security_id=None,
         job_id=None,
         correlation_id="corr-val-8801",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -832,6 +865,7 @@ async def test_get_valuation_jobs_forwards_correlation_filter(
         correlation_id="corr-val-8801",
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -857,6 +891,7 @@ async def test_get_valuation_jobs_forwards_business_date_filter(
         security_id=None,
         job_id=None,
         correlation_id=None,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -869,6 +904,7 @@ async def test_get_valuation_jobs_forwards_business_date_filter(
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -893,6 +929,7 @@ async def test_get_aggregation_jobs_forwards_business_date_filter(
         business_date=date(2025, 8, 31),
         job_id=None,
         correlation_id=None,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -904,6 +941,7 @@ async def test_get_aggregation_jobs_forwards_business_date_filter(
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -927,6 +965,7 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         status="FAILED",
         job_id="aexp_1234567890abcdef",
         request_fingerprint=None,
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -937,6 +976,7 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         request_fingerprint=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -961,6 +1001,7 @@ async def test_get_aggregation_jobs_forwards_correlation_filter(
         business_date=None,
         job_id=None,
         correlation_id="corr-agg-4402",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -972,6 +1013,7 @@ async def test_get_aggregation_jobs_forwards_correlation_filter(
         correlation_id="corr-agg-4402",
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -995,6 +1037,7 @@ async def test_get_analytics_export_jobs_forwards_request_fingerprint_filter(
         status=None,
         job_id=None,
         request_fingerprint="fp_portfolio_timeseries_pf001_20260313_v1",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1005,6 +1048,7 @@ async def test_get_analytics_export_jobs_forwards_request_fingerprint_filter(
         request_fingerprint="fp_portfolio_timeseries_pf001_20260313_v1",
         stale_minutes=30,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 

@@ -847,12 +847,15 @@ class OperationsRepository:
         security_id: Optional[str] = None,
         job_id: Optional[int] = None,
         correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         stmt = (
             select(func.count())
             .select_from(PortfolioValuationJob)
             .where(PortfolioValuationJob.portfolio_id == portfolio_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(PortfolioValuationJob.status == status)
         if business_date:
@@ -877,12 +880,15 @@ class OperationsRepository:
         correlation_id: Optional[str] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
+        as_of: Optional[datetime] = None,
     ) -> list[PortfolioValuationJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PortfolioValuationJob).where(
             PortfolioValuationJob.portfolio_id == portfolio_id
         )
+        if as_of is not None:
+            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(PortfolioValuationJob.status == status)
         if business_date:
@@ -916,12 +922,15 @@ class OperationsRepository:
         business_date: Optional[date] = None,
         job_id: Optional[int] = None,
         correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         stmt = (
             select(func.count())
             .select_from(PortfolioAggregationJob)
             .where(PortfolioAggregationJob.portfolio_id == portfolio_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(PortfolioAggregationJob.status == status)
         if business_date:
@@ -943,12 +952,15 @@ class OperationsRepository:
         correlation_id: Optional[str] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
+        as_of: Optional[datetime] = None,
     ) -> list[PortfolioAggregationJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PortfolioAggregationJob).where(
             PortfolioAggregationJob.portfolio_id == portfolio_id
         )
+        if as_of is not None:
+            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(PortfolioAggregationJob.status == status)
         if business_date:
@@ -979,12 +991,15 @@ class OperationsRepository:
         status: Optional[str] = None,
         job_id: Optional[str] = None,
         request_fingerprint: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         stmt = (
             select(func.count())
             .select_from(AnalyticsExportJob)
             .where(AnalyticsExportJob.portfolio_id == portfolio_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(AnalyticsExportJob.status == status)
         if job_id:
@@ -1003,10 +1018,13 @@ class OperationsRepository:
         request_fingerprint: Optional[str] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
+        as_of: Optional[datetime] = None,
     ) -> list[AnalyticsExportJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(AnalyticsExportJob).where(AnalyticsExportJob.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(AnalyticsExportJob.status == status)
         if job_id:

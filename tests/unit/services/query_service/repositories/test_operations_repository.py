@@ -716,13 +716,17 @@ async def test_get_valuation_jobs_count_with_status(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one(mock_db_session, 7)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
 
-    value = await repository.get_valuation_jobs_count(portfolio_id="P1", status="PENDING")
+    value = await repository.get_valuation_jobs_count(
+        portfolio_id="P1", status="PENDING", as_of=as_of
+    )
 
     assert value == 7
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in compiled.lower()
+    assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
 
 
@@ -730,6 +734,7 @@ async def test_get_valuation_jobs_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["job1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
@@ -740,12 +745,14 @@ async def test_get_valuation_jobs_query(
         limit=20,
         status=None,
         reference_now=reference_now,
+        as_of=as_of,
     )
 
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
@@ -755,13 +762,17 @@ async def test_get_aggregation_jobs_count_with_status(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one(mock_db_session, 4)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
 
-    value = await repository.get_aggregation_jobs_count(portfolio_id="P1", status="PROCESSING")
+    value = await repository.get_aggregation_jobs_count(
+        portfolio_id="P1", status="PROCESSING", as_of=as_of
+    )
 
     assert value == 4
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_aggregation_jobs" in compiled.lower()
+    assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
 
 
@@ -769,6 +780,7 @@ async def test_get_aggregation_jobs_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["agg1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
@@ -779,12 +791,14 @@ async def test_get_aggregation_jobs_query(
         limit=5,
         status=None,
         reference_now=reference_now,
+        as_of=as_of,
     )
 
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
@@ -987,17 +1001,20 @@ async def test_get_analytics_export_jobs_count_with_status(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one(mock_db_session, 5)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
 
     value = await repository.get_analytics_export_jobs_count(
         portfolio_id="P1",
         status="failed",
         request_fingerprint="pf-001:positions:csv",
+        as_of=as_of,
     )
 
     assert value == 5
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "analytics_export_jobs.status = 'failed'" in compiled
     assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
 
@@ -1006,6 +1023,7 @@ async def test_get_analytics_export_jobs_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["exp1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
@@ -1017,12 +1035,14 @@ async def test_get_analytics_export_jobs_query(
         status="running",
         request_fingerprint="pf-001:positions:csv",
         reference_now=reference_now,
+        as_of=as_of,
     )
 
     assert value == ["exp1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "analytics_export_jobs.status = 'running'" in compiled
     assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
     assert "CASE WHEN (analytics_export_jobs.status = 'failed')" in compiled
