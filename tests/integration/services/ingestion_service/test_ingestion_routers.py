@@ -46,6 +46,9 @@ from src.services.ingestion_service.app.routers import (
     portfolios as portfolios_router,
 )
 from src.services.ingestion_service.app.routers import (
+    reference_data as reference_data_router,
+)
+from src.services.ingestion_service.app.routers import (
     reprocessing as reprocessing_router,
 )
 from src.services.ingestion_service.app.routers import (
@@ -686,7 +689,46 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
             return None
 
+    class FakeReferenceDataIngestionService:
+        def __init__(self):
+            self.persisted: dict[str, list[dict]] = {
+                "benchmark_assignments": [],
+                "benchmark_definitions": [],
+            }
+
+        async def upsert_portfolio_benchmark_assignments(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["benchmark_assignments"].extend(records)
+
+        async def upsert_benchmark_definitions(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["benchmark_definitions"].extend(records)
+
+        async def upsert_benchmark_compositions(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_indices(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_index_price_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_index_return_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_benchmark_return_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_risk_free_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
+            return None
+
     fake_job_service = FakeIngestionJobService()
+    fake_reference_data_service = FakeReferenceDataIngestionService()
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -713,11 +755,20 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[reprocessing_router.get_ingestion_job_service] = (
         lambda: fake_job_service
     )
+    app.dependency_overrides[reference_data_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
+    )
+    app.dependency_overrides[reference_data_router.get_reference_data_ingestion_service] = (
+        lambda: fake_reference_data_service
+    )
     event_replay_app.dependency_overrides[ingestion_operations_router.get_ingestion_job_service] = (
         lambda: fake_job_service
     )
 
-    yield {"fake_job_service": fake_job_service}
+    yield {
+        "fake_job_service": fake_job_service,
+        "fake_reference_data_service": fake_reference_data_service,
+    }
 
     for target_app in target_apps:
         target_app.dependency_overrides.pop(get_kafka_producer, None)
@@ -730,6 +781,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(business_dates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
+    app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)
+    app.dependency_overrides.pop(
+        reference_data_router.get_reference_data_ingestion_service,
+        None,
+    )
     event_replay_app.dependency_overrides.pop(
         ingestion_operations_router.get_ingestion_job_service,
         None,
@@ -999,6 +1055,46 @@ async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failure_phase"] == "queue_bookkeeping"
+
+
+async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    payload = {
+        "benchmark_definitions": [
+            {
+                "benchmark_id": "BMK_WORLD_60_40",
+                "benchmark_name": "World 60/40",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    }
+
+    response = await async_test_client.post("/ingest/benchmark-definitions", json=payload)
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
+    job_id = body["detail"]["job_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_definitions"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["benchmark_id"] == "BMK_WORLD_60_40"
+
+    job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert job.status == "accepted"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist_bookkeeping"
 
 
 async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(
