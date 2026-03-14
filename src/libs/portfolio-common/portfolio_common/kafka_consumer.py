@@ -187,7 +187,7 @@ class BaseConsumer(ABC):
             if token is not None:
                 correlation_id_var.reset(token)
 
-    async def _send_to_dlq_async(self, msg: Message, error: Exception):
+    async def _send_to_dlq_async(self, msg: Message, error: Exception) -> bool:
         """
         Sends a message that failed processing to the Dead-Letter Queue.
         """
@@ -197,7 +197,7 @@ class BaseConsumer(ABC):
             ).inc()
 
         if not self._producer or not self.dlq_topic:
-            return
+            return False
 
         try:
             correlation_id = normalize_lineage_value(correlation_id_var.get())
@@ -238,8 +238,10 @@ class BaseConsumer(ABC):
             logger.warning(
                 f"Message with key '{dlq_payload['original_key']}' sent to DLQ '{self.dlq_topic}'."
             )
+            return True
         except Exception as e:
             logger.error(f"FATAL: Could not send message to DLQ. Error: {e}", exc_info=True)
+            return False
 
     async def _record_consumer_dlq_event(
         self,
@@ -330,8 +332,21 @@ class BaseConsumer(ABC):
                 logger.error(
                     f"Terminal error processing message for topic {self.topic}: {e}", exc_info=True
                 )
-                await self._send_to_dlq_async(msg, e)
-                self._consumer.commit(message=msg, asynchronous=False)
+                dlq_succeeded = await self._send_to_dlq_async(msg, e)
+                if dlq_succeeded:
+                    self._consumer.commit(message=msg, asynchronous=False)
+                else:
+                    logger.warning(
+                        (
+                            "DLQ publication failed; offset will not be committed "
+                            "so Kafka can redeliver."
+                        ),
+                        extra={
+                            "topic": self.topic,
+                            "consumer_group": self._consumer_config["group.id"],
+                            "message_key": msg.key().decode("utf-8") if msg.key() else None,
+                        },
+                    )
 
             finally:
                 duration = time.monotonic() - start_time

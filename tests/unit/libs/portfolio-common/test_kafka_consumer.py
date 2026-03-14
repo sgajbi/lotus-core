@@ -101,7 +101,7 @@ async def test_run_loop_failure_sends_to_dlq_and_commits(
         raise ValueError("Processing failed!")
 
     test_consumer.process_message_mock.side_effect = fail_and_stop
-    test_consumer._send_to_dlq_async = AsyncMock()
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
 
     # ACT
     await test_consumer.run()
@@ -110,6 +110,28 @@ async def test_run_loop_failure_sends_to_dlq_and_commits(
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
     test_consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key2b", {"data": "value2b"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=False)
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    mock_confluent_consumer.commit.assert_not_called()
+    test_consumer._send_to_dlq_async.assert_awaited_once()
+    assert "DLQ publication failed" in mock_warning.call_args.args[0]
 
 
 async def test_run_loop_retryable_error_does_not_commit(
@@ -156,11 +178,12 @@ async def test_dlq_payload_is_correct(
         try:
             raise error
         except ValueError as e:
-            await test_consumer._send_to_dlq_async(mock_msg, e)
+            result = await test_consumer._send_to_dlq_async(mock_msg, e)
     finally:
         correlation_id_var.reset(token)
 
     # ASSERT
+    assert result is True
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
 
@@ -192,10 +215,11 @@ async def test_dlq_omits_unset_correlation_header(
         try:
             raise error
         except ValueError as exc:
-            await test_consumer._send_to_dlq_async(mock_msg, exc)
+            result = await test_consumer._send_to_dlq_async(mock_msg, exc)
     finally:
         correlation_id_var.reset(token)
 
+    assert result is True
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
     assert "correlation_id" not in dict(call_args["headers"])
     assert call_args["value"]["correlation_id"] is None
@@ -211,8 +235,9 @@ async def test_dlq_flush_timeout_does_not_record_event(
     mock_kafka_producer.flush.return_value = 1
 
     with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
-        await test_consumer._send_to_dlq_async(mock_msg, error)
+        result = await test_consumer._send_to_dlq_async(mock_msg, error)
 
+    assert result is False
     mock_kafka_producer.publish_message.assert_called_once()
     mock_kafka_producer.flush.assert_called_once_with(timeout=5)
     test_consumer._record_consumer_dlq_event.assert_not_awaited()
@@ -229,8 +254,9 @@ async def test_dlq_publish_exception_does_not_record_event(
     mock_kafka_producer.publish_message.side_effect = RuntimeError("producer unavailable")
 
     with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
-        await test_consumer._send_to_dlq_async(mock_msg, error)
+        result = await test_consumer._send_to_dlq_async(mock_msg, error)
 
+    assert result is False
     mock_kafka_producer.flush.assert_not_called()
     test_consumer._record_consumer_dlq_event.assert_not_awaited()
     mock_log_error.assert_called_once()
