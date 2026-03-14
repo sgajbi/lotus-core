@@ -19,6 +19,14 @@ from src.services.query_service.app.dtos.operations_dto import (
     SupportOverviewResponse,
 )
 from src.services.query_service.app.services.operations_service import OperationsService
+from src.services.query_service.app.support_policy import (
+    CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
+    CALCULATOR_SLO_STALE_THRESHOLD_DESCRIPTION,
+    DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+    DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+    SUPPORT_FAILED_WINDOW_DESCRIPTION,
+    SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +69,17 @@ async def get_support_overview(
         examples=["PORT-OPS-001"],
     ),
     stale_threshold_minutes: int = Query(
-        15,
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         ge=1,
         le=1440,
-        description="Threshold in minutes used to classify stale in-flight portfolio processing.",
+        description=SUPPORT_STALE_THRESHOLD_DESCRIPTION,
         examples=[15],
     ),
     failed_window_hours: int = Query(
-        24,
+        DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
         ge=1,
         le=720,
-        description="Window in hours used to count recent FAILED jobs on the support overview.",
+        description=SUPPORT_FAILED_WINDOW_DESCRIPTION,
         examples=[24],
     ),
     service: OperationsService = Depends(get_operations_service),
@@ -117,17 +125,17 @@ async def get_calculator_slos(
         examples=["PORT-OPS-001"],
     ),
     stale_threshold_minutes: int = Query(
-        15,
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         ge=1,
         le=1440,
-        description="Threshold in minutes used to classify stale PROCESSING jobs.",
+        description=CALCULATOR_SLO_STALE_THRESHOLD_DESCRIPTION,
         examples=[15],
     ),
     failed_window_hours: int = Query(
-        24,
+        DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
         ge=1,
         le=720,
-        description="Window in hours used to count recent FAILED jobs.",
+        description=CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
         examples=[24],
     ),
     service: OperationsService = Depends(get_operations_service),

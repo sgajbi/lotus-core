@@ -3,6 +3,12 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from ..support_policy import (
+    CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
+    SUPPORT_FAILED_WINDOW_DESCRIPTION,
+    SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+)
+
 
 class SupportOverviewResponse(BaseModel):
     portfolio_id: str = Field(..., description="Unique portfolio identifier.", examples=["PF-001"])
@@ -21,12 +27,12 @@ class SupportOverviewResponse(BaseModel):
     )
     stale_threshold_minutes: int = Field(
         ...,
-        description="Threshold in minutes used to classify stale in-flight portfolio processing.",
+        description=SUPPORT_STALE_THRESHOLD_DESCRIPTION,
         examples=[15],
     )
     failed_window_hours: int = Field(
         ...,
-        description="Window in hours used to count recent failed jobs on the support overview.",
+        description=SUPPORT_FAILED_WINDOW_DESCRIPTION,
         examples=[24],
     )
     active_reprocessing_keys: int = Field(
@@ -367,7 +373,7 @@ class CalculatorSloResponse(BaseModel):
     )
     failed_window_hours: int = Field(
         ...,
-        description="Window in hours used to count recent failed jobs.",
+        description=CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
         examples=[24],
     )
     generated_at_utc: datetime = Field(

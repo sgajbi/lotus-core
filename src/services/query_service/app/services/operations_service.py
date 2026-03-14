@@ -25,10 +25,14 @@ from ..dtos.operations_dto import (
     SupportOverviewResponse,
 )
 from ..repositories.operations_repository import OperationsRepository
+from ..support_policy import (
+    DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+    DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+)
 
 
 class OperationsService:
-    SUPPORT_JOB_STALE_THRESHOLD = timedelta(minutes=15)
+    SUPPORT_JOB_STALE_THRESHOLD = timedelta(minutes=DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES)
 
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
@@ -205,8 +209,8 @@ class OperationsService:
     async def get_support_overview(
         self,
         portfolio_id: str,
-        stale_threshold_minutes: int = 15,
-        failed_window_hours: int = 24,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> SupportOverviewResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         (
@@ -354,8 +358,8 @@ class OperationsService:
     async def get_calculator_slos(
         self,
         portfolio_id: str,
-        stale_threshold_minutes: int = 15,
-        failed_window_hours: int = 24,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> CalculatorSloResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         (
