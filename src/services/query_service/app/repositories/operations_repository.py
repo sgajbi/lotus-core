@@ -1037,12 +1037,15 @@ class OperationsRepository:
         dedupe_key: Optional[str] = None,
         reconciliation_type: Optional[str] = None,
         status: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         stmt = (
             select(func.count())
             .select_from(FinancialReconciliationRun)
             .where(FinancialReconciliationRun.portfolio_id == portfolio_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
         if run_id:
             stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
         if correlation_id:
@@ -1068,10 +1071,13 @@ class OperationsRepository:
         dedupe_key: Optional[str] = None,
         reconciliation_type: Optional[str] = None,
         status: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> list[FinancialReconciliationRun]:
         stmt = select(FinancialReconciliationRun).where(
             FinancialReconciliationRun.portfolio_id == portfolio_id
         )
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
         if run_id:
             stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
         if correlation_id:
@@ -1112,6 +1118,7 @@ class OperationsRepository:
         finding_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> list[FinancialReconciliationFinding]:
         severity_rank = case(
             (FinancialReconciliationFinding.severity == "ERROR", 0),
@@ -1123,6 +1130,8 @@ class OperationsRepository:
             select(FinancialReconciliationFinding)
             .where(FinancialReconciliationFinding.run_id == run_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
         if finding_id:
             stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
         if security_id:
@@ -1146,12 +1155,15 @@ class OperationsRepository:
         finding_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         stmt = (
             select(func.count())
             .select_from(FinancialReconciliationFinding)
             .where(FinancialReconciliationFinding.run_id == run_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
         if finding_id:
             stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
         if security_id:

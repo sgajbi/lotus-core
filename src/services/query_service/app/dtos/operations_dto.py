@@ -1190,6 +1190,11 @@ class ReconciliationRunRecord(BaseModel):
 
 class ReconciliationRunListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this reconciliation-run support snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(
         ..., description="Total reconciliation runs matching the filter.", examples=[8]
     )
@@ -1285,6 +1290,13 @@ class ReconciliationFindingRecord(BaseModel):
 class ReconciliationFindingListResponse(BaseModel):
     run_id: str = Field(
         ..., description="Reconciliation run identifier.", examples=["recon_1234567890abcdef"]
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description=(
+            "UTC timestamp when this reconciliation-finding support snapshot was generated."
+        ),
+        examples=["2026-03-14T10:50:00Z"],
     )
     total: int = Field(..., description="Total findings returned for the run.", examples=[2])
     items: list[ReconciliationFindingRecord] = Field(

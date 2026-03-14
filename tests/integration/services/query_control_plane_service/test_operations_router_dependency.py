@@ -596,6 +596,7 @@ async def test_reconciliation_runs_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reconciliation_runs.return_value = {
         "portfolio_id": "P1",
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
         "skip": 0,
         "limit": 100,
@@ -628,6 +629,7 @@ async def test_reconciliation_runs_success(async_test_client):
     )
 
     assert response.status_code == 200
+    assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["run_id"] == "recon_1234567890abcdef"
     assert response.json()["items"][0]["status"] == "FAILED"
     assert response.json()["items"][0]["requested_by"] == "pipeline_orchestrator_service"
@@ -678,6 +680,7 @@ async def test_reconciliation_findings_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reconciliation_findings.return_value = {
         "run_id": "recon_1234567890abcdef",
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
         "items": [
             {
@@ -704,6 +707,7 @@ async def test_reconciliation_findings_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["run_id"] == "recon_1234567890abcdef"
+    assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["finding_id"] == "rf_1234567890abcdef"
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"

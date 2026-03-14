@@ -1034,6 +1034,7 @@ async def test_get_reconciliation_runs_count_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one(mock_db_session, 3)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
 
     value = await repository.get_reconciliation_runs_count(
         portfolio_id="P1",
@@ -1043,12 +1044,14 @@ async def test_get_reconciliation_runs_count_with_filters(
         dedupe_key="recon:transaction_cashflow:P1:2025-08-30:2",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
+        as_of=as_of,
     )
 
     assert value == 3
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_runs.correlation_id = 'corr-recon-123'" in compiled
     assert (
@@ -1069,6 +1072,7 @@ async def test_get_reconciliation_runs_query(
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["run1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
 
     value = await repository.get_reconciliation_runs(
         portfolio_id="P1",
@@ -1080,12 +1084,14 @@ async def test_get_reconciliation_runs_query(
         dedupe_key="recon:transaction_cashflow:P1:2025-08-30:2",
         reconciliation_type="transaction_cashflow",
         status="COMPLETED",
+        as_of=as_of,
     )
 
     assert value == ["run1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_runs.correlation_id = 'corr-recon-123'" in compiled
     assert (
@@ -1112,6 +1118,7 @@ async def test_get_reconciliation_findings_query(
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["finding1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
 
     value = await repository.get_reconciliation_findings(
         run_id="recon_123",
@@ -1119,6 +1126,7 @@ async def test_get_reconciliation_findings_query(
         finding_id="rf_123",
         security_id="SEC-US-IBM",
         transaction_id="txn_0001",
+        as_of=as_of,
     )
 
     assert value == ["finding1"]
@@ -1126,6 +1134,7 @@ async def test_get_reconciliation_findings_query(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+    assert "financial_reconciliation_findings.created_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
     assert "financial_reconciliation_findings.security_id = 'SEC-US-IBM'" in compiled
     assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
@@ -1154,12 +1163,14 @@ async def test_get_reconciliation_findings_count(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one(mock_db_session, 4)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
 
     value = await repository.get_reconciliation_findings_count(
         run_id="recon_123",
         finding_id="rf_123",
         security_id="SEC-US-IBM",
         transaction_id="txn_0001",
+        as_of=as_of,
     )
 
     assert value == 4
@@ -1167,6 +1178,7 @@ async def test_get_reconciliation_findings_count(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+    assert "financial_reconciliation_findings.created_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
     assert "financial_reconciliation_findings.security_id = 'SEC-US-IBM'" in compiled
     assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled

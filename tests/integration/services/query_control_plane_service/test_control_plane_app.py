@@ -702,6 +702,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
     )
+    assert reconciliation_run_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this reconciliation-run support snapshot was generated."
+    )
     assert reconciliation_run_record["properties"]["requested_by"]["description"] == (
         "Principal or subsystem that requested the reconciliation run."
     )
@@ -722,6 +725,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert reconciliation_finding_schema["properties"]["items"]["description"] == (
         "Durable reconciliation findings for the requested run."
+    )
+    assert reconciliation_finding_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this reconciliation-finding support snapshot was generated."
     )
     assert reconciliation_finding_record["properties"]["detail"]["description"] == (
         "Structured detail describing the mismatch or control breach."

@@ -926,6 +926,7 @@ class OperationsService:
         status: str | None = None,
     ) -> ReconciliationRunListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        generated_at_utc = datetime.now(timezone.utc)
         total, runs = await asyncio.gather(
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
@@ -935,6 +936,7 @@ class OperationsService:
                 dedupe_key=dedupe_key,
                 reconciliation_type=reconciliation_type,
                 status=status,
+                as_of=generated_at_utc,
             ),
             self.repo.get_reconciliation_runs(
                 portfolio_id=portfolio_id,
@@ -946,10 +948,12 @@ class OperationsService:
                 dedupe_key=dedupe_key,
                 reconciliation_type=reconciliation_type,
                 status=status,
+                as_of=generated_at_utc,
             ),
         )
         return ReconciliationRunListResponse(
             portfolio_id=portfolio_id,
+            generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,
@@ -984,6 +988,7 @@ class OperationsService:
         transaction_id: str | None = None,
     ) -> ReconciliationFindingListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        generated_at_utc = datetime.now(timezone.utc)
         run = await self.repo.get_reconciliation_run(portfolio_id=portfolio_id, run_id=run_id)
         if run is None:
             raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
@@ -993,6 +998,7 @@ class OperationsService:
                 finding_id=finding_id,
                 security_id=security_id,
                 transaction_id=transaction_id,
+                as_of=generated_at_utc,
             ),
             self.repo.get_reconciliation_findings(
                 run_id=run_id,
@@ -1000,10 +1006,12 @@ class OperationsService:
                 finding_id=finding_id,
                 security_id=security_id,
                 transaction_id=transaction_id,
+                as_of=generated_at_utc,
             ),
         )
         return ReconciliationFindingListResponse(
             run_id=run_id,
+            generated_at_utc=generated_at_utc,
             total=total,
             items=[
                 ReconciliationFindingRecord(

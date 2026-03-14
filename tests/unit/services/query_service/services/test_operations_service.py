@@ -1082,6 +1082,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     )
 
     assert response.total == 1
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.items[0].run_id == "recon_1234567890abcdef"
     assert response.items[0].reconciliation_type == "transaction_cashflow"
     assert response.items[0].status == "FAILED"
@@ -1100,6 +1101,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1111,6 +1113,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
+        as_of=response.generated_at_utc,
     )
 
 
@@ -1137,6 +1140,7 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
         dedupe_key=None,
         reconciliation_type=None,
         status="FAILED",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1148,6 +1152,7 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
         dedupe_key=None,
         reconciliation_type=None,
         status="FAILED",
+        as_of=response.generated_at_utc,
     )
 
 
@@ -1175,6 +1180,7 @@ async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
         dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type=None,
         status="FAILED",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1186,6 +1192,7 @@ async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
         dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type=None,
         status="FAILED",
+        as_of=response.generated_at_utc,
     )
 
 
@@ -1308,6 +1315,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     )
 
     assert response.run_id == "recon_1234567890abcdef"
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 7
     assert response.items[0].finding_id == "rf_1234567890abcdef"
     assert response.items[0].severity == "ERROR"
@@ -1317,6 +1325,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
         finding_id="rf_1234567890abcdef",
         security_id="SEC-US-IBM",
         transaction_id="TXN-20260313-0042",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_reconciliation_findings.assert_awaited_once_with(
         run_id="recon_1234567890abcdef",
@@ -1324,6 +1333,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
         finding_id="rf_1234567890abcdef",
         security_id="SEC-US-IBM",
         transaction_id="TXN-20260313-0042",
+        as_of=response.generated_at_utc,
     )
     assert response.items[0].is_blocking is True
     assert response.items[0].operational_state == "BLOCKING"
