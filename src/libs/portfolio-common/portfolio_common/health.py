@@ -127,16 +127,16 @@ def create_health_router(*dependencies: str) -> APIRouter:
         },
     )
     async def readiness_probe():
-        checks_to_run = [dep_map[dep][1] for dep in dependencies if dep in dep_map]
-
-        results = await asyncio.gather(*[check() for check in checks_to_run])
+        resolved_dependencies = [
+            (dep_map[dep][0], dep_map[dep][1]) for dep in dependencies if dep in dep_map
+        ]
+        results = await asyncio.gather(*[check() for _, check in resolved_dependencies])
 
         all_ok = all(results)
 
         dep_status = {
-            dep_map[dep][0]: "ok" if results[i] else "unavailable"
-            for i, dep in enumerate(dependencies)
-            if dep in dep_map
+            dependency_name: "ok" if results[i] else "unavailable"
+            for i, (dependency_name, _) in enumerate(resolved_dependencies)
         }
 
         if all_ok:
