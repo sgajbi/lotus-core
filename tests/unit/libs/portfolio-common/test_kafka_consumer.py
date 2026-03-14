@@ -374,3 +374,39 @@ async def test_consumer_ignores_invalid_runtime_overrides(monkeypatch):
     assert "unsupported.key" not in consumer._consumer_config
     assert consumer._consumer_config["enable.auto.commit"] is False
     assert consumer._consumer_config["session.timeout.ms"] == 45000
+
+
+async def test_shutdown_logs_flush_timeout_without_raising(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_kafka_producer.flush.return_value = 2
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        test_consumer.shutdown()
+
+    mock_confluent_consumer.close.assert_called_once()
+    mock_kafka_producer.flush.assert_called_once_with(timeout=5)
+    assert (
+        "DLQ producer flush left undelivered messages during shutdown."
+        in mock_log_error.call_args.args[0]
+    )
+
+
+async def test_shutdown_logs_close_and_flush_failures_without_raising(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_confluent_consumer.close.side_effect = RuntimeError("close failed")
+    mock_kafka_producer.flush.side_effect = RuntimeError("flush failed")
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        test_consumer.shutdown()
+
+    assert mock_log_error.call_count == 2
+    assert "Consumer close failed during shutdown." == mock_log_error.call_args_list[0].args[0]
+    assert "DLQ producer flush failed during shutdown." == mock_log_error.call_args_list[1].args[0]

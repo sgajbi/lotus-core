@@ -399,7 +399,36 @@ class BaseConsumer(ABC):
         logger.info(f"Shutting down consumer for topic '{self.topic}'...")
         self._running = False
         if self._consumer:
-            self._consumer.close()
+            try:
+                self._consumer.close()
+            except Exception:
+                logger.error(
+                    "Consumer close failed during shutdown.",
+                    exc_info=True,
+                    extra={
+                        "topic": self.topic,
+                        "consumer_group": self._consumer_config["group.id"],
+                    },
+                )
         if self._producer:
-            self._producer.flush()
+            try:
+                undelivered_count = self._producer.flush(timeout=5)
+                if undelivered_count:
+                    logger.error(
+                        "DLQ producer flush left undelivered messages during shutdown.",
+                        extra={
+                            "topic": self.topic,
+                            "consumer_group": self._consumer_config["group.id"],
+                            "undelivered_count": undelivered_count,
+                        },
+                    )
+            except Exception:
+                logger.error(
+                    "DLQ producer flush failed during shutdown.",
+                    exc_info=True,
+                    extra={
+                        "topic": self.topic,
+                        "consumer_group": self._consumer_config["group.id"],
+                    },
+                )
         logger.info(f"Consumer for topic '{self.topic}' has been closed.")
