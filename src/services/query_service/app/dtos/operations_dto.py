@@ -928,6 +928,7 @@ class SupportJobRecord(BaseModel):
     )
     operational_state: Literal[
         "FAILED",
+        "SKIPPED",
         "STALE_PROCESSING",
         "PROCESSING",
         "PENDING",
@@ -935,7 +936,7 @@ class SupportJobRecord(BaseModel):
     ] = Field(
         ...,
         description=("Derived operator-facing lifecycle state used for support triage ordering."),
-        examples=["STALE_PROCESSING"],
+        examples=["STALE_PROCESSING", "SKIPPED"],
     )
 
 

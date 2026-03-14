@@ -45,6 +45,8 @@ class OperationsService:
     ) -> str:
         if status == "FAILED":
             return "FAILED"
+        if status.startswith("SKIPPED"):
+            return "SKIPPED"
         if cls._is_support_job_stale(status, updated_at, now, stale_threshold_minutes):
             return "STALE_PROCESSING"
         if status == "PROCESSING":

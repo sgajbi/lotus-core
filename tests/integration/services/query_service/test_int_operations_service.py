@@ -1144,6 +1144,56 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     assert response.items[0].operational_state == "STALE_PROCESSING"
 
 
+async def test_valuation_jobs_expose_skipped_operational_state(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P9S",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P9S",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add(
+        PortfolioValuationJob(
+            portfolio_id="P9S",
+            security_id="SEC-VAL-SKIPPED",
+            valuation_date=date(2025, 8, 20),
+            epoch=2,
+            status="SKIPPED_NO_POSITION",
+            correlation_id="corr-valuation-skipped",
+            failure_reason="No position existed on valuation date.",
+            attempt_count=1,
+            created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+        )
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_valuation_jobs("P9S", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].status == "SKIPPED_NO_POSITION"
+    assert response.items[0].failure_reason == "No position existed on valuation date."
+    assert response.items[0].is_terminal_failure is False
+    assert response.items[0].is_stale_processing is False
+    assert response.items[0].operational_state == "SKIPPED"
+
+
 async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):

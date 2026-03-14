@@ -1287,6 +1287,10 @@ async def test_support_job_retrying_only_for_active_retry_states():
 async def test_support_job_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
     assert OperationsService._get_support_job_operational_state("FAILED", updated_at) == "FAILED"
+    assert (
+        OperationsService._get_support_job_operational_state("SKIPPED_NO_POSITION", updated_at)
+        == "SKIPPED"
+    )
     assert OperationsService._get_support_job_operational_state("PENDING", updated_at) == "PENDING"
     assert (
         OperationsService._get_support_job_operational_state("COMPLETE", updated_at)
