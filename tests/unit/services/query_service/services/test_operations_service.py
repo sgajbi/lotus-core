@@ -80,6 +80,9 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
             "business_date": date(2025, 8, 30),
             "epoch": 2,
             "status": "COMPLETED",
+            "last_source_event_type": "financial_reconciliation_completed",
+            "created_at": datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
+            "ready_emitted_at": datetime(2025, 8, 30, 10, 14, tzinfo=timezone.utc),
             "updated_at": datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
         },
     )()
@@ -131,6 +134,13 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.position_snapshot_history_mismatch_count == 0
     assert response.controls_business_date == date(2025, 8, 30)
     assert response.controls_stage_id == 701
+    assert response.controls_last_source_event_type == "financial_reconciliation_completed"
+    assert response.controls_created_at == datetime(
+        2025, 8, 30, 10, 10, tzinfo=timezone.utc
+    )
+    assert response.controls_ready_emitted_at == datetime(
+        2025, 8, 30, 10, 14, tzinfo=timezone.utc
+    )
     assert response.controls_epoch == 2
     assert response.controls_status == "COMPLETED"
     assert response.controls_last_updated_at == datetime(
@@ -1181,6 +1191,9 @@ async def test_get_support_overview_without_business_date(
     assert response.latest_booked_position_snapshot_date is None
     assert response.controls_status is None
     assert response.controls_stage_id is None
+    assert response.controls_last_source_event_type is None
+    assert response.controls_created_at is None
+    assert response.controls_ready_emitted_at is None
     assert response.controls_last_updated_at is None
     assert response.controls_blocking is False
     assert response.publish_allowed is True
@@ -1240,6 +1253,9 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
             "business_date": date(2025, 8, 30),
             "epoch": 2,
             "status": "REQUIRES_REPLAY",
+            "last_source_event_type": "financial_reconciliation_completed",
+            "created_at": datetime(2025, 8, 30, 10, 40, tzinfo=timezone.utc),
+            "ready_emitted_at": None,
             "updated_at": datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
         },
     )()
@@ -1247,6 +1263,11 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     response = await service.get_support_overview("P1")
 
     assert response.controls_stage_id == 702
+    assert response.controls_last_source_event_type == "financial_reconciliation_completed"
+    assert response.controls_created_at == datetime(
+        2025, 8, 30, 10, 40, tzinfo=timezone.utc
+    )
+    assert response.controls_ready_emitted_at is None
     assert response.controls_status == "REQUIRES_REPLAY"
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc

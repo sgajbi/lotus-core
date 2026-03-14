@@ -279,6 +279,30 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=[701],
     )
+    controls_last_source_event_type: Optional[str] = Field(
+        None,
+        description=(
+            "Most recent durable source event type recorded on the latest portfolio-day "
+            "financial reconciliation control stage."
+        ),
+        examples=["financial_reconciliation_completed"],
+    )
+    controls_created_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp when the latest portfolio-day financial reconciliation control "
+            "stage row was first created."
+        ),
+        examples=["2026-03-13T10:10:00Z"],
+    )
+    controls_ready_emitted_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp when the latest portfolio-day financial reconciliation control "
+            "stage emitted readiness, if readiness has been emitted."
+        ),
+        examples=["2026-03-13T10:15:05Z"],
+    )
     controls_epoch: Optional[int] = Field(
         None,
         description=(

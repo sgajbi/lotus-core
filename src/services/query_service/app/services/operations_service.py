@@ -385,6 +385,15 @@ class OperationsService:
                 latest_control_stage.business_date if latest_control_stage else None
             ),
             controls_stage_id=(latest_control_stage.id if latest_control_stage else None),
+            controls_last_source_event_type=(
+                latest_control_stage.last_source_event_type if latest_control_stage else None
+            ),
+            controls_created_at=(
+                latest_control_stage.created_at if latest_control_stage else None
+            ),
+            controls_ready_emitted_at=(
+                latest_control_stage.ready_emitted_at if latest_control_stage else None
+            ),
             controls_epoch=latest_control_stage.epoch if latest_control_stage else None,
             controls_status=controls_status,
             controls_last_updated_at=(

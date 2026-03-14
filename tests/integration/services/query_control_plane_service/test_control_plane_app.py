@@ -286,6 +286,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["controls_stage_id"]["description"].startswith(
         "Durable database identifier of the latest portfolio-day financial reconciliation"
     )
+    assert support_overview["properties"]["controls_last_source_event_type"][
+        "description"
+    ].startswith("Most recent durable source event type recorded on the latest")
+    assert support_overview["properties"]["controls_created_at"]["description"].startswith(
+        "UTC timestamp when the latest portfolio-day financial reconciliation control"
+    )
+    assert support_overview["properties"]["controls_ready_emitted_at"]["description"].startswith(
+        "UTC timestamp when the latest portfolio-day financial reconciliation control"
+    )
     assert support_overview["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale in-flight portfolio processing."
     )

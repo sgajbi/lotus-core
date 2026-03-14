@@ -71,6 +71,9 @@ async def test_support_overview_success(async_test_client):
         "position_snapshot_history_mismatch_count": 0,
         "controls_business_date": date(2025, 8, 31),
         "controls_stage_id": 701,
+        "controls_last_source_event_type": "financial_reconciliation_completed",
+        "controls_created_at": "2025-08-31T10:10:00Z",
+        "controls_ready_emitted_at": "2025-08-31T10:15:00Z",
         "controls_epoch": 3,
         "controls_status": "COMPLETED",
         "controls_last_updated_at": "2025-08-31T10:16:00Z",
@@ -91,6 +94,12 @@ async def test_support_overview_success(async_test_client):
     assert response.json()["oldest_pending_valuation_job_id"] == 8801
     assert response.json()["oldest_pending_analytics_export_job_id"] == "aexp_0001"
     assert response.json()["controls_stage_id"] == 701
+    assert (
+        response.json()["controls_last_source_event_type"]
+        == "financial_reconciliation_completed"
+    )
+    assert response.json()["controls_created_at"] == "2025-08-31T10:10:00Z"
+    assert response.json()["controls_ready_emitted_at"] == "2025-08-31T10:15:00Z"
     assert response.json()["controls_last_updated_at"] == "2025-08-31T10:16:00Z"
     assert response.json()["publish_allowed"] is True
     assert "X-Correlation-ID" in response.headers
