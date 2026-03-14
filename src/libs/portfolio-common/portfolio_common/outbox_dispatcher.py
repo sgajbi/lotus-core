@@ -162,10 +162,17 @@ class OutboxDispatcher:
                             )
 
                     try:
-                        self._producer.flush(timeout=10)
+                        undelivered_count = self._producer.flush(timeout=10)
                         logger.info(
                             f"OutboxDispatcher: Flush complete for {len(events_to_process)} events."
                         )
+                        if undelivered_count:
+                            for event in events_to_process:
+                                if event.id not in delivery_ack:
+                                    delivery_ack[event.id] = False
+                                    delivery_errs[event.id] = (
+                                        "Kafka flush timed out before delivery callback."
+                                    )
                     except Exception as e:
                         logger.error("OutboxDispatcher: Kafka flush failed.", exc_info=True)
                         for event in events_to_process:

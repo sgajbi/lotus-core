@@ -194,3 +194,49 @@ async def test_synchronous_publish_failure_does_not_abort_accounted_batch(db_eng
 
     assert [row.status for row in rows] == ["PROCESSED", "PENDING", "PROCESSED"]
     assert rows[1].retry_count == 1
+
+
+async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, clean_db):
+    """
+    GIVEN a batch where flush times out without delivery callbacks for one queued row
+    WHEN the dispatcher processes the batch
+    THEN callback-less rows are kept PENDING with retry accounting instead of disappearing.
+    """
+    mock_producer = MagicMock(spec=KafkaProducer)
+
+    with Session(db_engine) as session:
+        with session.begin():
+            for i in range(2):
+                evt = OutboxEvent(
+                    aggregate_type="FlushTimeoutTest",
+                    aggregate_id=f"agg-flush-timeout-{uuid.uuid4()}",
+                    status="PENDING",
+                    event_type="TestEvent",
+                    payload=json.dumps({"i": i}),
+                    topic="test.topic",
+                )
+                session.add(evt)
+            session.flush()
+            ids = [r.id for r in session.query(OutboxEvent.id).order_by(OutboxEvent.id).all()]
+
+    def _flush(timeout=10):
+        first_call = mock_producer.publish_message.call_args_list[0]
+        cb = first_call.kwargs["on_delivery"]
+        cb(first_call.kwargs["outbox_id"], True, None)
+        return 1
+
+    mock_producer.flush.side_effect = _flush
+
+    dispatcher = OutboxDispatcher(kafka_producer=mock_producer, poll_interval=0.1, batch_size=5)
+    dispatcher._process_batch_sync()
+
+    with Session(db_engine) as session:
+        rows = session.execute(
+            text(
+                "SELECT id, status, retry_count FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
+            ),
+            {"ids": ids},
+        ).all()
+
+    assert [row.status for row in rows] == ["PROCESSED", "PENDING"]
+    assert rows[1].retry_count == 1
