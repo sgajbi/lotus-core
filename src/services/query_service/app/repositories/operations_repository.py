@@ -566,7 +566,10 @@ class OperationsRepository:
             )
         )
         if as_of is not None:
-            stmt = stmt.where(FinancialReconciliationRun.started_at <= as_of)
+            stmt = stmt.where(
+                FinancialReconciliationRun.started_at <= as_of,
+                FinancialReconciliationRun.updated_at <= as_of,
+            )
         stmt = stmt.order_by(
             self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
             FinancialReconciliationRun.started_at.desc(),

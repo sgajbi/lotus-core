@@ -724,6 +724,7 @@ async def test_get_latest_reconciliation_run_for_portfolio_day_honors_as_of(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "financial_reconciliation_runs.started_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "financial_reconciliation_runs.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
 async def test_get_reconciliation_finding_summary_honors_as_of(
