@@ -343,6 +343,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reconciliation_finding_record["properties"]["detail"]["description"] == (
         "Structured detail describing the mismatch or control breach."
     )
+    assert reconciliation_finding_record["properties"]["is_blocking"]["description"].startswith(
+        "True when the finding represents a publication-blocking control breach"
+    )
+    assert reconciliation_finding_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing state for support triage of reconciliation findings."
+    )
     assert control_stage_schema["properties"]["items"]["description"] == (
         "Durable portfolio-day control stage rows for support workflows."
     )

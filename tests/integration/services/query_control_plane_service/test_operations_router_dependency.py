@@ -492,6 +492,8 @@ async def test_reconciliation_findings_success(async_test_client):
                 "epoch": 3,
                 "created_at": "2026-03-13T10:15:09Z",
                 "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+                "is_blocking": True,
+                "operational_state": "BLOCKING",
             }
         ],
     }
@@ -503,6 +505,8 @@ async def test_reconciliation_findings_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["run_id"] == "recon_1234567890abcdef"
     assert response.json()["items"][0]["finding_id"] == "rf_1234567890abcdef"
+    assert response.json()["items"][0]["is_blocking"] is True
+    assert response.json()["items"][0]["operational_state"] == "BLOCKING"
 
 
 async def test_reconciliation_findings_not_found_maps_to_404(async_test_client):

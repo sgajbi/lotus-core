@@ -847,6 +847,19 @@ class ReconciliationFindingRecord(BaseModel):
         description="Structured detail describing the mismatch or control breach.",
         examples=[{"expected_cashflow_count": 1, "observed_cashflow_count": 0}],
     )
+    is_blocking: bool = Field(
+        ...,
+        description=(
+            "True when the finding represents a publication-blocking control breach "
+            "(currently severity ERROR)."
+        ),
+        examples=[True, False],
+    )
+    operational_state: Literal["BLOCKING", "NON_BLOCKING"] = Field(
+        ...,
+        description="Derived operator-facing state for support triage of reconciliation findings.",
+        examples=["BLOCKING"],
+    )
 
 
 class ReconciliationFindingListResponse(BaseModel):
@@ -869,6 +882,8 @@ class ReconciliationFindingListResponse(BaseModel):
                     "epoch": 3,
                     "created_at": "2026-03-13T10:15:09Z",
                     "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+                    "is_blocking": True,
+                    "operational_state": "BLOCKING",
                 }
             ]
         ],

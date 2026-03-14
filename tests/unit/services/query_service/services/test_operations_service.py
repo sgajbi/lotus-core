@@ -572,6 +572,15 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
         OperationsService._get_reprocessing_key_operational_state("CURRENT", updated_at)
         == "CURRENT"
     )
+    assert OperationsService._is_reconciliation_finding_blocking("ERROR") is True
+    assert OperationsService._is_reconciliation_finding_blocking("WARNING") is False
+    assert (
+        OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
+    )
+    assert (
+        OperationsService._get_reconciliation_finding_operational_state("INFO")
+        == "NON_BLOCKING"
+    )
 
 
 async def test_stale_detection_helpers_cover_remaining_branches():
@@ -637,6 +646,8 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     assert response.items[0].finding_id == "rf_1234567890abcdef"
     assert response.items[0].severity == "ERROR"
     assert response.items[0].detail == {"expected_cashflow_count": 1, "observed_cashflow_count": 0}
+    assert response.items[0].is_blocking is True
+    assert response.items[0].operational_state == "BLOCKING"
 
 
 async def test_get_reconciliation_findings_raises_when_run_missing(

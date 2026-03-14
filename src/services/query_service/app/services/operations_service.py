@@ -82,6 +82,14 @@ class OperationsService:
     def _get_portfolio_control_stage_operational_state(cls, status: str | None) -> str:
         return "BLOCKING" if cls._is_controls_blocking(status) else "COMPLETED"
 
+    @staticmethod
+    def _is_reconciliation_finding_blocking(severity: str | None) -> bool:
+        return severity == "ERROR"
+
+    @classmethod
+    def _get_reconciliation_finding_operational_state(cls, severity: str | None) -> str:
+        return "BLOCKING" if cls._is_reconciliation_finding_blocking(severity) else "NON_BLOCKING"
+
     @classmethod
     def _get_reprocessing_key_operational_state(
         cls, status: str | None, updated_at: datetime | None
@@ -626,6 +634,10 @@ class OperationsService:
                     epoch=finding.epoch,
                     created_at=finding.created_at,
                     detail=finding.detail,
+                    is_blocking=self._is_reconciliation_finding_blocking(finding.severity),
+                    operational_state=self._get_reconciliation_finding_operational_state(
+                        finding.severity
+                    ),
                 )
                 for finding in findings
             ],
