@@ -4,13 +4,17 @@ from unittest.mock import patch
 import pytest
 from portfolio_common.database_models import (
     BusinessDate,
+    DailyPositionSnapshot,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
     PortfolioValuationJob,
+    PositionHistory,
     PositionState,
+    ReprocessingJob,
+    Transaction,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -616,3 +620,303 @@ async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
     assert response.items[0].watermark_date == date(2025, 8, 18)
     assert response.items[0].status == "REPROCESSING"
     assert response.items[0].operational_state == "STALE_REPROCESSING"
+
+
+async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P7",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P7",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PositionState(
+                portfolio_id="P7",
+                security_id="SEC-JOB-OLD",
+                epoch=2,
+                watermark_date=date(2025, 8, 18),
+                status="CURRENT",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PositionState(
+                portfolio_id="P7",
+                security_id="SEC-JOB-LATE",
+                epoch=5,
+                watermark_date=date(2025, 8, 31),
+                status="CURRENT",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="TXN-JOB-OLD",
+                portfolio_id="P7",
+                instrument_id="INST-JOB-OLD",
+                security_id="SEC-JOB-OLD",
+                transaction_type="BUY",
+                quantity=10,
+                price=100,
+                gross_transaction_amount=1000,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2025, 8, 18, 9, 0, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="TXN-JOB-LATE",
+                portfolio_id="P7",
+                instrument_id="INST-JOB-LATE",
+                security_id="SEC-JOB-LATE",
+                transaction_type="BUY",
+                quantity=10,
+                price=100,
+                gross_transaction_amount=1000,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2025, 8, 31, 9, 0, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PositionHistory(
+                transaction_id="TXN-JOB-OLD",
+                portfolio_id="P7",
+                security_id="SEC-JOB-OLD",
+                position_date=date(2025, 8, 18),
+                epoch=2,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PositionHistory(
+                transaction_id="TXN-JOB-LATE",
+                portfolio_id="P7",
+                security_id="SEC-JOB-LATE",
+                position_date=date(2025, 8, 31),
+                epoch=5,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "SEC-JOB-OLD",
+                    "earliest_impacted_date": "2025-08-18",
+                },
+                status="PROCESSING",
+                correlation_id="corr-job-old",
+                created_at=datetime(2025, 8, 30, 9, 15, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "SEC-JOB-LATE",
+                    "earliest_impacted_date": "2025-08-31",
+                },
+                status="FAILED",
+                correlation_id="corr-job-late",
+                failure_reason="late replay failure",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_reprocessing_jobs("P7", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].job_type == "RESET_WATERMARKS"
+    assert response.items[0].security_id == "SEC-JOB-OLD"
+    assert response.items[0].business_date == date(2025, 8, 18)
+    assert response.items[0].correlation_id == "corr-job-old"
+    assert response.items[0].operational_state == "STALE_PROCESSING"
+
+
+async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P8",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P8",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PositionState(
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-OLD",
+                epoch=2,
+                watermark_date=date(2025, 8, 18),
+                status="CURRENT",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PositionState(
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-LATE",
+                epoch=5,
+                watermark_date=date(2025, 8, 31),
+                status="CURRENT",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="TXN-LINEAGE-OLD",
+                portfolio_id="P8",
+                instrument_id="INST-LINEAGE-OLD",
+                security_id="SEC-LINEAGE-OLD",
+                transaction_type="BUY",
+                quantity=10,
+                price=100,
+                gross_transaction_amount=1000,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2025, 8, 20, 9, 0, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="TXN-LINEAGE-LATE",
+                portfolio_id="P8",
+                instrument_id="INST-LINEAGE-LATE",
+                security_id="SEC-LINEAGE-LATE",
+                transaction_type="BUY",
+                quantity=10,
+                price=100,
+                gross_transaction_amount=1000,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2025, 8, 31, 9, 0, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PositionHistory(
+                transaction_id="TXN-LINEAGE-OLD",
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-OLD",
+                position_date=date(2025, 8, 20),
+                epoch=2,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PositionHistory(
+                transaction_id="TXN-LINEAGE-LATE",
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-LATE",
+                position_date=date(2025, 8, 31),
+                epoch=5,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-OLD",
+                date=date(2025, 8, 20),
+                epoch=2,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                market_price=100,
+                market_value=1000,
+                valuation_status="VALUED_CURRENT",
+                created_at=datetime(2025, 8, 30, 10, 5, tzinfo=timezone.utc),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-LATE",
+                date=date(2025, 8, 31),
+                epoch=5,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                market_price=100,
+                market_value=1000,
+                valuation_status="VALUED_CURRENT",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-OLD",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="COMPLETE",
+                correlation_id="corr-lineage-old",
+                created_at=datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P8",
+                security_id="SEC-LINEAGE-LATE",
+                valuation_date=date(2025, 8, 31),
+                epoch=5,
+                status="FAILED",
+                correlation_id="corr-lineage-late",
+                failure_reason="late lineage failure",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_lineage_keys("P8", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].security_id == "SEC-LINEAGE-OLD"
+    assert response.items[0].epoch == 2
+    assert response.items[0].latest_position_history_date == date(2025, 8, 20)
+    assert response.items[0].latest_daily_snapshot_date == date(2025, 8, 20)
+    assert response.items[0].latest_valuation_job_date == date(2025, 8, 20)
+    assert response.items[0].latest_valuation_job_correlation_id == "corr-lineage-old"
+    assert response.items[0].operational_state == "HEALTHY"
