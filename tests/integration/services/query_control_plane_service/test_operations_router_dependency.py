@@ -690,7 +690,8 @@ async def test_reconciliation_findings_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/reconciliation-runs/recon_1234567890abcdef/findings"
-        "?finding_id=rf_1234567890abcdef&limit=50"
+        "?finding_id=rf_1234567890abcdef&security_id=SEC-US-IBM"
+        "&transaction_id=TXN-20260313-0042&limit=50"
     )
 
     assert response.status_code == 200
@@ -703,6 +704,8 @@ async def test_reconciliation_findings_success(async_test_client):
         run_id="recon_1234567890abcdef",
         limit=50,
         finding_id="rf_1234567890abcdef",
+        security_id="SEC-US-IBM",
+        transaction_id="TXN-20260313-0042",
     )
 
 

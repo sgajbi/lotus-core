@@ -872,7 +872,11 @@ async def test_get_reconciliation_findings_query(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_reconciliation_findings(
-        run_id="recon_123", limit=20, finding_id="rf_123"
+        run_id="recon_123",
+        limit=20,
+        finding_id="rf_123",
+        security_id="SEC-US-IBM",
+        transaction_id="txn_0001",
     )
 
     assert value == ["finding1"]
@@ -881,6 +885,8 @@ async def test_get_reconciliation_findings_query(
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
+    assert "financial_reconciliation_findings.security_id = 'SEC-US-IBM'" in compiled
+    assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
     assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
     assert "financial_reconciliation_findings.created_at DESC" in compiled
     assert "LIMIT 20" in compiled
@@ -908,7 +914,10 @@ async def test_get_reconciliation_findings_count(
     mock_execute_scalar_one(mock_db_session, 4)
 
     value = await repository.get_reconciliation_findings_count(
-        run_id="recon_123", finding_id="rf_123"
+        run_id="recon_123",
+        finding_id="rf_123",
+        security_id="SEC-US-IBM",
+        transaction_id="txn_0001",
     )
 
     assert value == 4
@@ -917,6 +926,8 @@ async def test_get_reconciliation_findings_count(
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
+    assert "financial_reconciliation_findings.security_id = 'SEC-US-IBM'" in compiled
+    assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
 
 
 async def test_get_reconciliation_finding_summary(

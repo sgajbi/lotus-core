@@ -942,15 +942,26 @@ class OperationsService:
         run_id: str,
         limit: int,
         finding_id: str | None = None,
+        security_id: str | None = None,
+        transaction_id: str | None = None,
     ) -> ReconciliationFindingListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         run = await self.repo.get_reconciliation_run(portfolio_id=portfolio_id, run_id=run_id)
         if run is None:
             raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
         total, findings = await asyncio.gather(
-            self.repo.get_reconciliation_findings_count(run_id=run_id, finding_id=finding_id),
+            self.repo.get_reconciliation_findings_count(
+                run_id=run_id,
+                finding_id=finding_id,
+                security_id=security_id,
+                transaction_id=transaction_id,
+            ),
             self.repo.get_reconciliation_findings(
-                run_id=run_id, limit=limit, finding_id=finding_id
+                run_id=run_id,
+                limit=limit,
+                finding_id=finding_id,
+                security_id=security_id,
+                transaction_id=transaction_id,
             ),
         )
         return ReconciliationFindingListResponse(

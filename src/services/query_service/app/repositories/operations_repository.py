@@ -1024,7 +1024,12 @@ class OperationsRepository:
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_reconciliation_findings(
-        self, run_id: str, limit: int, finding_id: Optional[str] = None
+        self,
+        run_id: str,
+        limit: int,
+        finding_id: Optional[str] = None,
+        security_id: Optional[str] = None,
+        transaction_id: Optional[str] = None,
     ) -> list[FinancialReconciliationFinding]:
         severity_rank = case(
             (FinancialReconciliationFinding.severity == "ERROR", 0),
@@ -1038,6 +1043,10 @@ class OperationsRepository:
         )
         if finding_id:
             stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
+        if security_id:
+            stmt = stmt.where(FinancialReconciliationFinding.security_id == security_id)
+        if transaction_id:
+            stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
         stmt = (
             stmt.order_by(
                 severity_rank.asc(),
@@ -1050,7 +1059,11 @@ class OperationsRepository:
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def get_reconciliation_findings_count(
-        self, run_id: str, finding_id: Optional[str] = None
+        self,
+        run_id: str,
+        finding_id: Optional[str] = None,
+        security_id: Optional[str] = None,
+        transaction_id: Optional[str] = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -1059,6 +1072,10 @@ class OperationsRepository:
         )
         if finding_id:
             stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
+        if security_id:
+            stmt = stmt.where(FinancialReconciliationFinding.security_id == security_id)
+        if transaction_id:
+            stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_finding_summary(

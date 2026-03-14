@@ -600,6 +600,24 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         finding_id_param["description"]
         == "Optional durable reconciliation finding identifier filter."
     )
+    finding_security_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert (
+        finding_security_param["description"]
+        == "Optional security identifier filter for reconciliation findings."
+    )
+    finding_transaction_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "transaction_id"
+    )
+    assert (
+        finding_transaction_param["description"]
+        == "Optional transaction identifier filter for reconciliation findings."
+    )
 
     reconciliation_not_found = reconciliation_runs["responses"]["404"]["content"][
         "application/json"

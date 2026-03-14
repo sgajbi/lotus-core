@@ -1198,6 +1198,8 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
         run_id="recon_1234567890abcdef",
         limit=50,
         finding_id="rf_1234567890abcdef",
+        security_id="SEC-US-IBM",
+        transaction_id="TXN-20260313-0042",
     )
 
     assert response.run_id == "recon_1234567890abcdef"
@@ -1208,11 +1210,15 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     mock_ops_repo.get_reconciliation_findings_count.assert_awaited_once_with(
         run_id="recon_1234567890abcdef",
         finding_id="rf_1234567890abcdef",
+        security_id="SEC-US-IBM",
+        transaction_id="TXN-20260313-0042",
     )
     mock_ops_repo.get_reconciliation_findings.assert_awaited_once_with(
         run_id="recon_1234567890abcdef",
         limit=50,
         finding_id="rf_1234567890abcdef",
+        security_id="SEC-US-IBM",
+        transaction_id="TXN-20260313-0042",
     )
     assert response.items[0].is_blocking is True
     assert response.items[0].operational_state == "BLOCKING"
