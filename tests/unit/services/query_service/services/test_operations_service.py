@@ -345,6 +345,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
         skip=0,
         limit=20,
         status="PENDING",
+        job_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -393,6 +394,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
         skip=0,
         limit=20,
         status="PROCESSING",
+        job_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -437,6 +439,7 @@ async def test_get_aggregation_jobs_honors_custom_stale_threshold(
         skip=0,
         limit=20,
         status="PROCESSING",
+        job_id=None,
         stale_minutes=30,
         reference_now=response.generated_at_utc,
     )
@@ -491,6 +494,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         limit=20,
         status="PROCESSING",
         security_id="S1",
+        job_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -582,6 +586,69 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         skip=0,
         limit=20,
         status="FAILED",
+        job_id=None,
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_valuation_jobs_forwards_job_id_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_valuation_jobs.return_value = []
+
+    response = await service.get_valuation_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        job_id=8801,
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PENDING",
+        job_id=8801,
+    )
+    mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        job_id=8801,
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_analytics_export_jobs_forwards_job_id_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_analytics_export_jobs_count.return_value = 0
+    mock_ops_repo.get_analytics_export_jobs.return_value = []
+
+    response = await service.get_analytics_export_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="FAILED",
+        job_id="aexp_1234567890abcdef",
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="FAILED",
+        job_id="aexp_1234567890abcdef",
+    )
+    mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="FAILED",
+        job_id="aexp_1234567890abcdef",
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )

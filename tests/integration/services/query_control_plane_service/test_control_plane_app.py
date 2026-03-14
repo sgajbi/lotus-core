@@ -184,6 +184,35 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
             if parameter["name"] == "stale_threshold_minutes"
         )
         assert listing_stale_threshold["description"].startswith("Threshold in minutes")
+    valuation_job_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "job_id"
+    )
+    assert valuation_job_id["description"] == "Optional durable valuation job id filter."
+    aggregation_job_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "job_id"
+    )
+    assert aggregation_job_id["description"] == "Optional durable aggregation job id filter."
+    analytics_export_job_id = next(
+        parameter
+        for parameter in analytics_export_jobs["parameters"]
+        if parameter["name"] == "job_id"
+    )
+    assert (
+        analytics_export_job_id["description"]
+        == "Optional durable analytics export job identifier filter."
+    )
+    replay_job_id = next(
+        parameter for parameter in reprocessing_jobs["parameters"] if parameter["name"] == "job_id"
+    )
+    assert replay_job_id["description"] == "Optional durable replay job id filter."
     analytics_export_not_found = analytics_export_jobs["responses"]["404"]["content"][
         "application/json"
     ]["example"]

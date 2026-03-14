@@ -708,7 +708,10 @@ class OperationsRepository:
         return list((await self.db.execute(stmt)).mappings().all())
 
     async def get_valuation_jobs_count(
-        self, portfolio_id: str, status: Optional[str] = None
+        self,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        job_id: Optional[int] = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -717,6 +720,8 @@ class OperationsRepository:
         )
         if status:
             stmt = stmt.where(PortfolioValuationJob.status == status)
+        if job_id is not None:
+            stmt = stmt.where(PortfolioValuationJob.id == job_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_valuation_jobs(
@@ -725,6 +730,7 @@ class OperationsRepository:
         skip: int,
         limit: int,
         status: Optional[str] = None,
+        job_id: Optional[int] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
     ) -> list[PortfolioValuationJob]:
@@ -735,6 +741,8 @@ class OperationsRepository:
         )
         if status:
             stmt = stmt.where(PortfolioValuationJob.status == status)
+        if job_id is not None:
+            stmt = stmt.where(PortfolioValuationJob.id == job_id)
         stmt = (
             stmt.order_by(
                 self._support_job_priority(
@@ -752,7 +760,10 @@ class OperationsRepository:
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def get_aggregation_jobs_count(
-        self, portfolio_id: str, status: Optional[str] = None
+        self,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        job_id: Optional[int] = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -761,6 +772,8 @@ class OperationsRepository:
         )
         if status:
             stmt = stmt.where(PortfolioAggregationJob.status == status)
+        if job_id is not None:
+            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_aggregation_jobs(
@@ -769,6 +782,7 @@ class OperationsRepository:
         skip: int,
         limit: int,
         status: Optional[str] = None,
+        job_id: Optional[int] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
     ) -> list[PortfolioAggregationJob]:
@@ -779,6 +793,8 @@ class OperationsRepository:
         )
         if status:
             stmt = stmt.where(PortfolioAggregationJob.status == status)
+        if job_id is not None:
+            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
         stmt = (
             stmt.order_by(
                 self._support_job_priority(
@@ -796,7 +812,10 @@ class OperationsRepository:
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def get_analytics_export_jobs_count(
-        self, portfolio_id: str, status: Optional[str] = None
+        self,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        job_id: Optional[str] = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -805,6 +824,8 @@ class OperationsRepository:
         )
         if status:
             stmt = stmt.where(AnalyticsExportJob.status == status)
+        if job_id:
+            stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_analytics_export_jobs(
@@ -813,6 +834,7 @@ class OperationsRepository:
         skip: int,
         limit: int,
         status: Optional[str] = None,
+        job_id: Optional[str] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
     ) -> list[AnalyticsExportJob]:
@@ -821,6 +843,8 @@ class OperationsRepository:
         stmt = select(AnalyticsExportJob).where(AnalyticsExportJob.portfolio_id == portfolio_id)
         if status:
             stmt = stmt.where(AnalyticsExportJob.status == status)
+        if job_id:
+            stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
         stmt = (
             stmt.order_by(
                 self._analytics_export_job_priority(
@@ -1028,6 +1052,7 @@ class OperationsRepository:
         portfolio_id: str,
         status: Optional[str] = None,
         security_id: Optional[str] = None,
+        job_id: Optional[int] = None,
     ) -> int:
         security_id_expr = ReprocessingJob.payload["security_id"].as_string()
         impacted_date_expr = cast(
@@ -1051,6 +1076,8 @@ class OperationsRepository:
             stmt = stmt.where(ReprocessingJob.status == status)
         if security_id:
             stmt = stmt.where(security_id_expr == security_id)
+        if job_id is not None:
+            stmt = stmt.where(ReprocessingJob.id == job_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reprocessing_jobs(
@@ -1060,6 +1087,7 @@ class OperationsRepository:
         limit: int,
         status: Optional[str] = None,
         security_id: Optional[str] = None,
+        job_id: Optional[int] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
     ):
@@ -1095,6 +1123,8 @@ class OperationsRepository:
             stmt = stmt.where(ReprocessingJob.status == status)
         if security_id:
             stmt = stmt.where(security_id_expr == security_id)
+        if job_id is not None:
+            stmt = stmt.where(ReprocessingJob.id == job_id)
         stmt = (
             stmt.order_by(
                 self._support_job_priority(

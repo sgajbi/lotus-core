@@ -581,18 +581,24 @@ class OperationsService:
         skip: int,
         limit: int,
         status: str | None = None,
+        job_id: int | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         total, jobs = await asyncio.gather(
-            self.repo.get_valuation_jobs_count(portfolio_id=portfolio_id, status=status),
+            self.repo.get_valuation_jobs_count(
+                portfolio_id=portfolio_id,
+                status=status,
+                job_id=job_id,
+            ),
             self.repo.get_valuation_jobs(
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
                 status=status,
+                job_id=job_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),
@@ -630,18 +636,24 @@ class OperationsService:
         skip: int,
         limit: int,
         status: str | None = None,
+        job_id: int | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         total, jobs = await asyncio.gather(
-            self.repo.get_aggregation_jobs_count(portfolio_id=portfolio_id, status=status),
+            self.repo.get_aggregation_jobs_count(
+                portfolio_id=portfolio_id,
+                status=status,
+                job_id=job_id,
+            ),
             self.repo.get_aggregation_jobs(
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
                 status=status,
+                job_id=job_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),
@@ -679,18 +691,24 @@ class OperationsService:
         skip: int,
         limit: int,
         status: str | None = None,
+        job_id: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> AnalyticsExportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         total, jobs = await asyncio.gather(
-            self.repo.get_analytics_export_jobs_count(portfolio_id=portfolio_id, status=status),
+            self.repo.get_analytics_export_jobs_count(
+                portfolio_id=portfolio_id,
+                status=status,
+                job_id=job_id,
+            ),
             self.repo.get_analytics_export_jobs(
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
                 status=status,
+                job_id=job_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),
@@ -938,6 +956,7 @@ class OperationsService:
         limit: int,
         status: str | None = None,
         security_id: str | None = None,
+        job_id: int | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
@@ -948,6 +967,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 status=status,
                 security_id=security_id,
+                job_id=job_id,
             ),
             self.repo.get_reprocessing_jobs(
                 portfolio_id=portfolio_id,
@@ -955,6 +975,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 security_id=security_id,
+                job_id=job_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),

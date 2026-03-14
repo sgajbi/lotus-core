@@ -295,6 +295,11 @@ async def get_reprocessing_keys(
 )
 async def get_reprocessing_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    job_id: Optional[int] = Query(
+        None,
+        description="Optional durable replay job id filter.",
+        examples=[303],
+    ),
     status_filter: Optional[str] = Query(
         None,
         description="Optional replay job status filter (e.g., PENDING, PROCESSING, FAILED).",
@@ -321,6 +326,7 @@ async def get_reprocessing_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            job_id=job_id,
             status=status_filter,
             security_id=security_id,
             stale_threshold_minutes=stale_threshold_minutes,
@@ -353,6 +359,11 @@ async def get_reprocessing_jobs(
 )
 async def get_valuation_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    job_id: Optional[int] = Query(
+        None,
+        description="Optional durable valuation job id filter.",
+        examples=[8801],
+    ),
     job_status: Optional[str] = Query(
         None,
         alias="status",
@@ -375,6 +386,7 @@ async def get_valuation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            job_id=job_id,
             status=job_status,
             stale_threshold_minutes=stale_threshold_minutes,
         )
@@ -406,6 +418,11 @@ async def get_valuation_jobs(
 )
 async def get_aggregation_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    job_id: Optional[int] = Query(
+        None,
+        description="Optional durable aggregation job id filter.",
+        examples=[4402],
+    ),
     job_status: Optional[str] = Query(
         None,
         alias="status",
@@ -428,6 +445,7 @@ async def get_aggregation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            job_id=job_id,
             status=job_status,
             stale_threshold_minutes=stale_threshold_minutes,
         )
@@ -459,6 +477,11 @@ async def get_aggregation_jobs(
 )
 async def get_analytics_export_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    job_id: Optional[str] = Query(
+        None,
+        description="Optional durable analytics export job identifier filter.",
+        examples=["aexp_20260313_00012"],
+    ),
     status_filter: Optional[str] = Query(
         None,
         description="Optional export job status filter (e.g., accepted, running, failed).",
@@ -480,6 +503,7 @@ async def get_analytics_export_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            job_id=job_id,
             status=status_filter,
             stale_threshold_minutes=stale_threshold_minutes,
         )

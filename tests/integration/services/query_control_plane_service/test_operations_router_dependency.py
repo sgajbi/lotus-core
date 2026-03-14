@@ -293,7 +293,8 @@ async def test_valuation_jobs_success(async_test_client):
     }
 
     response = await client.get(
-        "/support/portfolios/P1/valuation-jobs?status=PENDING&stale_threshold_minutes=30"
+        "/support/portfolios/P1/valuation-jobs"
+        "?job_id=101&status=PENDING&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -307,6 +308,7 @@ async def test_valuation_jobs_success(async_test_client):
         portfolio_id="P1",
         skip=0,
         limit=100,
+        job_id=101,
         status="PENDING",
         stale_threshold_minutes=30,
     )
@@ -353,7 +355,8 @@ async def test_aggregation_jobs_success(async_test_client):
     }
 
     response = await client.get(
-        "/support/portfolios/P1/aggregation-jobs?status=PROCESSING&stale_threshold_minutes=30"
+        "/support/portfolios/P1/aggregation-jobs"
+        "?job_id=202&status=PROCESSING&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -368,6 +371,7 @@ async def test_aggregation_jobs_success(async_test_client):
         portfolio_id="P1",
         skip=0,
         limit=100,
+        job_id=202,
         status="PROCESSING",
         stale_threshold_minutes=30,
     )
@@ -414,7 +418,7 @@ async def test_analytics_export_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/analytics-export-jobs"
-        "?status_filter=FAILED&stale_threshold_minutes=30"
+        "?job_id=aexp_1234567890abcdef&status_filter=FAILED&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -433,6 +437,7 @@ async def test_analytics_export_jobs_success(async_test_client):
         portfolio_id="P1",
         skip=0,
         limit=100,
+        job_id="aexp_1234567890abcdef",
         status="FAILED",
         stale_threshold_minutes=30,
     )
@@ -795,7 +800,7 @@ async def test_reprocessing_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/reprocessing-jobs"
-        "?status_filter=PROCESSING&security_id=SEC-US-IBM&stale_threshold_minutes=30"
+        "?job_id=303&status_filter=PROCESSING&security_id=SEC-US-IBM&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -807,6 +812,7 @@ async def test_reprocessing_jobs_success(async_test_client):
         portfolio_id="P1",
         skip=0,
         limit=100,
+        job_id=303,
         status="PROCESSING",
         security_id="SEC-US-IBM",
         stale_threshold_minutes=30,
