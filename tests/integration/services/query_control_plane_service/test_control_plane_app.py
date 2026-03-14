@@ -244,6 +244,10 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_job_record["properties"]["backlog_age_minutes"][
         "description"
     ].startswith("Age in minutes from created_at to the current UTC time")
+    reconciliation_run_record = components["ReconciliationRunRecord"]
+    assert reconciliation_run_record["properties"]["correlation_id"]["description"].startswith(
+        "Durable correlation identifier captured for the reconciliation run"
+    )
     reconciliation_type = next(
         parameter
         for parameter in reconciliation_runs["parameters"]

@@ -709,6 +709,14 @@ class ReconciliationRunRecord(BaseModel):
         description="UTC timestamp when reconciliation execution completed.",
         examples=["2026-03-13T10:15:09Z"],
     )
+    correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier captured for the reconciliation run, used to join "
+            "support triage with logs and upstream control requests."
+        ),
+        examples=["corr-recon-20260313-001"],
+    )
     failure_reason: Optional[str] = Field(
         None,
         description="Failure reason when the reconciliation run reaches FAILED state.",
@@ -754,6 +762,7 @@ class ReconciliationRunListResponse(BaseModel):
                     "epoch": 3,
                     "started_at": "2026-03-13T10:15:00Z",
                     "completed_at": "2026-03-13T10:15:09Z",
+                    "correlation_id": "corr-recon-20260313-001",
                     "failure_reason": None,
                     "is_terminal_failure": False,
                     "is_blocking": False,

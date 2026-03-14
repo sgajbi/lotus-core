@@ -479,6 +479,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
                 "epoch": 3,
                 "started_at": started_at,
                 "completed_at": completed_at,
+                "correlation_id": "corr-recon-20260313-001",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
             },
         )()
@@ -496,6 +497,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.items[0].run_id == "recon_1234567890abcdef"
     assert response.items[0].reconciliation_type == "transaction_cashflow"
     assert response.items[0].status == "FAILED"
+    assert response.items[0].correlation_id == "corr-recon-20260313-001"
     assert response.items[0].failure_reason == "Tolerance exceeded for portfolio totals."
     assert response.items[0].is_terminal_failure is True
     assert response.items[0].is_blocking is True

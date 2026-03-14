@@ -585,6 +585,7 @@ class OperationsService:
                     epoch=run.epoch,
                     started_at=run.started_at,
                     completed_at=run.completed_at,
+                    correlation_id=run.correlation_id,
                     failure_reason=run.failure_reason,
                     is_terminal_failure=run.status == "FAILED",
                     is_blocking=self._is_controls_blocking(run.status),
