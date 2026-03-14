@@ -3,6 +3,7 @@ import importlib
 import pytest
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
+from portfolio_common.db import get_async_database_url, get_sync_database_url
 
 
 class _FakeSyncSession:
@@ -71,6 +72,20 @@ def test_sessionlocal_creates_sync_engine_lazily(monkeypatch):
 
     assert isinstance(session, _FakeSyncSession)
     assert len(sync_calls) == 1
+
+
+def test_sync_database_url_normalizes_postgres_scheme(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://user:pass@host:5432/dbname")
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+
+    assert get_sync_database_url() == "postgresql://user:pass@host:5432/dbname"
+
+
+def test_async_database_url_normalizes_postgres_scheme(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://user:pass@host:5432/dbname")
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+
+    assert get_async_database_url() == "postgresql+asyncpg://user:pass@host:5432/dbname"
 
 
 @pytest.mark.asyncio
