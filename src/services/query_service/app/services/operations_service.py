@@ -298,7 +298,8 @@ class OperationsService:
             if latest_reconciliation_run is not None:
                 latest_reconciliation_finding_summary = (
                     await self.repo.get_reconciliation_finding_summary(
-                        latest_reconciliation_run.run_id
+                        latest_reconciliation_run.run_id,
+                        as_of=latest_control_stage.updated_at,
                     )
                 )
 

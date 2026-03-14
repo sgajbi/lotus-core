@@ -726,6 +726,39 @@ async def test_get_latest_reconciliation_run_for_portfolio_day_honors_as_of(
     assert "financial_reconciliation_runs.started_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
+async def test_get_reconciliation_finding_summary_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    aggregate_result = MagicMock()
+    aggregate_result.one.return_value = MagicMock(total_findings=3, blocking_findings=2)
+    top_blocking_result = MagicMock()
+    top_blocking_result.one_or_none.return_value = MagicMock(
+        finding_id="finding-1",
+        finding_type="valuation_mismatch",
+        security_id="SEC-1",
+        transaction_id="txn-1",
+    )
+    mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, top_blocking_result])
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_reconciliation_finding_summary("run-1", as_of=as_of)
+
+    assert value.total_findings == 3
+    assert value.blocking_findings == 2
+    aggregate_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    top_blocking_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
+    top_blocking_compiled = str(top_blocking_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "financial_reconciliation_findings.created_at <= '2025-08-30 11:00:00+00:00'"
+        in aggregate_compiled
+    )
+    assert (
+        "financial_reconciliation_findings.created_at <= '2025-08-30 11:00:00+00:00'"
+        in top_blocking_compiled
+    )
+
+
 async def test_get_lineage_keys_query_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

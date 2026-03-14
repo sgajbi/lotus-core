@@ -1093,7 +1093,7 @@ class OperationsRepository:
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_finding_summary(
-        self, run_id: str
+        self, run_id: str, as_of: Optional[datetime] = None
     ) -> ReconciliationFindingSummary:
         aggregate_stmt = (
             select(
@@ -1105,6 +1105,10 @@ class OperationsRepository:
             .select_from(FinancialReconciliationFinding)
             .where(FinancialReconciliationFinding.run_id == run_id)
         )
+        if as_of is not None:
+            aggregate_stmt = aggregate_stmt.where(
+                FinancialReconciliationFinding.created_at <= as_of
+            )
         row = (await self.db.execute(aggregate_stmt)).one()
         top_blocking_stmt = (
             select(
@@ -1117,12 +1121,15 @@ class OperationsRepository:
                 FinancialReconciliationFinding.run_id == run_id,
                 FinancialReconciliationFinding.severity == "ERROR",
             )
-            .order_by(
-                FinancialReconciliationFinding.created_at.desc(),
-                FinancialReconciliationFinding.id.desc(),
-            )
-            .limit(1)
         )
+        if as_of is not None:
+            top_blocking_stmt = top_blocking_stmt.where(
+                FinancialReconciliationFinding.created_at <= as_of
+            )
+        top_blocking_stmt = top_blocking_stmt.order_by(
+            FinancialReconciliationFinding.created_at.desc(),
+            FinancialReconciliationFinding.id.desc(),
+        ).limit(1)
         top_blocking_row = (await self.db.execute(top_blocking_stmt)).one_or_none()
         return ReconciliationFindingSummary(
             total_findings=int(row.total_findings or 0),

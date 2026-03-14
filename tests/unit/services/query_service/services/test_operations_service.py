@@ -1840,6 +1840,10 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         epoch=2,
         as_of=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
     )
+    mock_ops_repo.get_reconciliation_finding_summary.assert_awaited_once_with(
+        "recon_failed_20250830",
+        as_of=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+    )
 
 
 async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):
