@@ -1,4 +1,5 @@
 import importlib
+import logging
 
 from portfolio_common.config import (
     _coerce_consumer_config_value,
@@ -42,6 +43,7 @@ def test_accepts_integer_string_for_integer_consumer_setting():
 
 
 def test_env_int_falls_back_for_invalid_value(caplog, monkeypatch):
+    caplog.set_level(logging.WARNING)
     monkeypatch.setenv("TEST_INT_SETTING", "bad")
 
     assert _env_int("TEST_INT_SETTING", 7, minimum=0) == 7
@@ -49,6 +51,7 @@ def test_env_int_falls_back_for_invalid_value(caplog, monkeypatch):
 
 
 def test_env_int_falls_back_for_out_of_range_value(caplog, monkeypatch):
+    caplog.set_level(logging.WARNING)
     monkeypatch.setenv("TEST_INT_SETTING", "-1")
 
     assert _env_int("TEST_INT_SETTING", 7, minimum=0) == 7
@@ -62,6 +65,7 @@ def test_env_bool_accepts_true_variants(monkeypatch):
 
 
 def test_env_bool_falls_back_for_invalid_value(caplog, monkeypatch):
+    caplog.set_level(logging.WARNING)
     monkeypatch.setenv("TEST_BOOL_SETTING", "maybe")
 
     assert _env_bool("TEST_BOOL_SETTING", False) is False

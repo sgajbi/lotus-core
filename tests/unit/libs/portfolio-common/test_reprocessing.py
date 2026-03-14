@@ -1,4 +1,5 @@
 # tests/unit/libs/portfolio-common/test_reprocessing.py
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -67,6 +68,7 @@ async def test_fencer_returns_false_and_logs_for_stale_epoch(
     WHEN the fencer checks the event
     THEN it should return False and log a warning.
     """
+    caplog.set_level(logging.WARNING)
     # ARRANGE
     mock_state_repo = mock_dependencies["state_repo"]
     mock_state_repo.get_or_create_state.return_value = PositionState(
@@ -98,6 +100,7 @@ async def test_fencer_can_be_configured_with_service_name(mock_dependencies, sam
     WHEN it drops a stale event
     THEN the metric should be labeled with the correct service name.
     """
+    caplog.set_level(logging.WARNING)
     # ARRANGE
     mock_state_repo = mock_dependencies["state_repo"]
     mock_state_repo.get_or_create_state.return_value = PositionState(epoch=2)

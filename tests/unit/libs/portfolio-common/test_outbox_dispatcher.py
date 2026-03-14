@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,6 +35,7 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
 
 
 def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "nope")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "0")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "-4")
