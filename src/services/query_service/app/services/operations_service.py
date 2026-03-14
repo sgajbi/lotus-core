@@ -282,7 +282,10 @@ class OperationsService:
             self.repo.get_latest_transaction_date(portfolio_id),
             self.repo.get_latest_snapshot_date_for_current_epoch(portfolio_id),
             self.repo.get_position_snapshot_history_mismatch_count(portfolio_id),
-            self.repo.get_latest_financial_reconciliation_control_stage(portfolio_id),
+            self.repo.get_latest_financial_reconciliation_control_stage(
+                portfolio_id,
+                as_of=generated_at_utc,
+            ),
         )
         latest_reconciliation_run = None
         latest_reconciliation_finding_summary: ReconciliationFindingSummary | None = None

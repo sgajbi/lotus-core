@@ -204,6 +204,10 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     )
     assert response.controls_blocking is False
     assert response.publish_allowed is True
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.assert_awaited_once()
+    control_call = mock_ops_repo.get_latest_financial_reconciliation_control_stage.await_args
+    assert control_call.args == ("P1",)
+    assert control_call.kwargs["as_of"] == response.generated_at_utc
 
 
 async def test_get_lineage_raises_when_state_missing(
@@ -1834,6 +1838,10 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     )
     assert response.controls_blocking is True
     assert response.publish_allowed is False
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.assert_awaited_once()
+    control_call = mock_ops_repo.get_latest_financial_reconciliation_control_stage.await_args
+    assert control_call.args == ("P1",)
+    assert control_call.kwargs["as_of"] == response.generated_at_utc
     mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.assert_awaited_once_with(
         portfolio_id="P1",
         business_date=date(2025, 8, 30),

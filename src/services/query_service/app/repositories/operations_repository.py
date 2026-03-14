@@ -533,7 +533,7 @@ class OperationsRepository:
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_latest_financial_reconciliation_control_stage(
-        self, portfolio_id: str
+        self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[PipelineStageState]:
         stmt = (
             select(PipelineStageState)
@@ -541,13 +541,14 @@ class OperationsRepository:
                 PipelineStageState.portfolio_id == portfolio_id,
                 PipelineStageState.stage_name == "FINANCIAL_RECONCILIATION",
             )
-            .order_by(
-                PipelineStageState.business_date.desc(),
-                PipelineStageState.epoch.desc(),
-                PipelineStageState.id.desc(),
-            )
-            .limit(1)
         )
+        if as_of is not None:
+            stmt = stmt.where(PipelineStageState.updated_at <= as_of)
+        stmt = stmt.order_by(
+            PipelineStageState.business_date.desc(),
+            PipelineStageState.epoch.desc(),
+            PipelineStageState.id.desc(),
+        ).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_reconciliation_run_for_portfolio_day(
