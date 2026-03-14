@@ -470,7 +470,10 @@ class OperationsRepository:
             .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
         )
         if as_of is not None:
-            stmt = stmt.where(DailyPositionSnapshot.created_at <= as_of)
+            stmt = stmt.where(
+                DailyPositionSnapshot.created_at <= as_of,
+                PositionState.updated_at <= as_of,
+            )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_snapshot_date_for_current_epoch_as_of(
@@ -495,7 +498,10 @@ class OperationsRepository:
             )
         )
         if snapshot_as_of is not None:
-            stmt = stmt.where(DailyPositionSnapshot.created_at <= snapshot_as_of)
+            stmt = stmt.where(
+                DailyPositionSnapshot.created_at <= snapshot_as_of,
+                PositionState.updated_at <= snapshot_as_of,
+            )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_position_snapshot_history_mismatch_count(
