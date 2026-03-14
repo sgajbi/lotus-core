@@ -115,6 +115,16 @@ _CONSUMER_ALLOWED_TYPES: dict[str, type] = {
     "queued.max.messages.kbytes": int,
 }
 _AUTO_OFFSET_RESET_ALLOWED_VALUES = {"earliest", "latest", "error"}
+_POSITIVE_INT_CONSUMER_KEYS = {
+    "session.timeout.ms",
+    "heartbeat.interval.ms",
+    "max.poll.interval.ms",
+    "fetch.min.bytes",
+    "fetch.max.bytes",
+    "max.partition.fetch.bytes",
+    "queued.min.messages",
+    "queued.max.messages.kbytes",
+}
 
 
 def _coerce_consumer_config_value(key: str, value: object) -> object:
@@ -133,10 +143,14 @@ def _coerce_consumer_config_value(key: str, value: object) -> object:
         if isinstance(value, bool):
             raise ValueError(f"Expected int for '{key}', got {value!r}")
         if isinstance(value, int):
-            return value
-        if isinstance(value, str):
-            return int(value.strip())
-        raise ValueError(f"Expected int for '{key}', got {value!r}")
+            coerced = value
+        elif isinstance(value, str):
+            coerced = int(value.strip())
+        else:
+            raise ValueError(f"Expected int for '{key}', got {value!r}")
+        if key in _POSITIVE_INT_CONSUMER_KEYS and coerced <= 0:
+            raise ValueError(f"Expected positive int for '{key}', got {value!r}")
+        return coerced
     if expected is str:
         if isinstance(value, str):
             if key == "auto.offset.reset":
@@ -173,6 +187,29 @@ def _sanitize_consumer_override_map(raw: object, *, context: str) -> dict[str, o
     return sanitized
 
 
+def _validate_consumer_override_relationships(
+    overrides: dict[str, object], *, context: str
+) -> dict[str, object]:
+    validated = dict(overrides)
+    session_timeout = validated.get("session.timeout.ms")
+    heartbeat_interval = validated.get("heartbeat.interval.ms")
+    if (
+        isinstance(session_timeout, int)
+        and isinstance(heartbeat_interval, int)
+        and heartbeat_interval >= session_timeout
+    ):
+        logger.warning(
+            "Ignoring invalid Kafka consumer heartbeat/session relationship.",
+            extra={
+                "context": context,
+                "heartbeat.interval.ms": heartbeat_interval,
+                "session.timeout.ms": session_timeout,
+            },
+        )
+        validated.pop("heartbeat.interval.ms", None)
+    return validated
+
+
 def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
     """
     Loads optional runtime Kafka consumer tuning from environment variables.
@@ -186,8 +223,11 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
         try:
             defaults = json.loads(defaults_raw)
             merged.update(
-                _sanitize_consumer_override_map(
-                    defaults, context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON"
+                _validate_consumer_override_relationships(
+                    _sanitize_consumer_override_map(
+                        defaults, context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON"
+                    ),
+                    context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
                 )
             )
         except Exception as exc:
@@ -201,9 +241,18 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
                 group_cfg = parsed.get(group_id)
                 if group_cfg is not None:
                     merged.update(
-                        _sanitize_consumer_override_map(
-                            group_cfg,
-                            context=f"LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON[{group_id}]",
+                        _validate_consumer_override_relationships(
+                            _sanitize_consumer_override_map(
+                                group_cfg,
+                                context=(
+                                    "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON"
+                                    f"[{group_id}]"
+                                ),
+                            ),
+                            context=(
+                                "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON"
+                                f"[{group_id}]"
+                            ),
                         )
                     )
             else:
