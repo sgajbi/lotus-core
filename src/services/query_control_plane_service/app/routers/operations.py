@@ -542,6 +542,11 @@ async def get_analytics_export_jobs(
 )
 async def get_reconciliation_runs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    run_id: Optional[str] = Query(
+        None,
+        description="Optional durable reconciliation run identifier filter.",
+        examples=["recon_1234567890abcdef"],
+    ),
     reconciliation_type: Optional[str] = Query(
         None,
         description="Optional reconciliation type filter (e.g., transaction_cashflow).",
@@ -561,6 +566,7 @@ async def get_reconciliation_runs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            run_id=run_id,
             reconciliation_type=reconciliation_type,
             status=status_filter,
         )

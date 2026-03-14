@@ -786,6 +786,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         "P1",
         skip=0,
         limit=20,
+        run_id="recon_1234567890abcdef",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -801,6 +802,20 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.items[0].is_terminal_failure is True
     assert response.items[0].is_blocking is True
     assert response.items[0].operational_state == "BLOCKING"
+    mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        run_id="recon_1234567890abcdef",
+        reconciliation_type="transaction_cashflow",
+        status="FAILED",
+    )
+    mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        run_id="recon_1234567890abcdef",
+        reconciliation_type="transaction_cashflow",
+        status="FAILED",
+    )
 
 
 async def test_support_job_retrying_only_for_active_retry_states():

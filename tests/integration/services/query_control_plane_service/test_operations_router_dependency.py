@@ -606,7 +606,8 @@ async def test_reconciliation_runs_success(async_test_client):
     }
 
     response = await client.get(
-        "/support/portfolios/P1/reconciliation-runs?reconciliation_type=transaction_cashflow&status_filter=FAILED"
+        "/support/portfolios/P1/reconciliation-runs"
+        "?run_id=recon_1234567890abcdef&reconciliation_type=transaction_cashflow&status_filter=FAILED"
     )
 
     assert response.status_code == 200
@@ -621,6 +622,14 @@ async def test_reconciliation_runs_success(async_test_client):
     assert response.json()["items"][0]["is_terminal_failure"] is True
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+    mock_service.get_reconciliation_runs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        run_id="recon_1234567890abcdef",
+        reconciliation_type="transaction_cashflow",
+        status="FAILED",
+    )
 
 
 async def test_reconciliation_runs_not_found_maps_to_404(async_test_client):

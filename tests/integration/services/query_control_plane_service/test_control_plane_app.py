@@ -487,6 +487,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         for parameter in reconciliation_runs["parameters"]
         if parameter["name"] == "reconciliation_type"
     )
+    reconciliation_run_id = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "run_id"
+    )
+    assert (
+        reconciliation_run_id["description"]
+        == "Optional durable reconciliation run identifier filter."
+    )
     assert reconciliation_type["description"].startswith("Optional reconciliation type filter")
     reconciliation_status = next(
         parameter

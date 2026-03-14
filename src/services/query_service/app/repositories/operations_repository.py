@@ -925,6 +925,7 @@ class OperationsRepository:
     async def get_reconciliation_runs_count(
         self,
         portfolio_id: str,
+        run_id: Optional[str] = None,
         reconciliation_type: Optional[str] = None,
         status: Optional[str] = None,
     ) -> int:
@@ -933,6 +934,8 @@ class OperationsRepository:
             .select_from(FinancialReconciliationRun)
             .where(FinancialReconciliationRun.portfolio_id == portfolio_id)
         )
+        if run_id:
+            stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
@@ -944,12 +947,15 @@ class OperationsRepository:
         portfolio_id: str,
         skip: int,
         limit: int,
+        run_id: Optional[str] = None,
         reconciliation_type: Optional[str] = None,
         status: Optional[str] = None,
     ) -> list[FinancialReconciliationRun]:
         stmt = select(FinancialReconciliationRun).where(
             FinancialReconciliationRun.portfolio_id == portfolio_id
         )
+        if run_id:
+            stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:

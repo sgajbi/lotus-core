@@ -868,6 +868,7 @@ class OperationsService:
         portfolio_id: str,
         skip: int,
         limit: int,
+        run_id: str | None = None,
         reconciliation_type: str | None = None,
         status: str | None = None,
     ) -> ReconciliationRunListResponse:
@@ -875,6 +876,7 @@ class OperationsService:
         total, runs = await asyncio.gather(
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
+                run_id=run_id,
                 reconciliation_type=reconciliation_type,
                 status=status,
             ),
@@ -882,6 +884,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
+                run_id=run_id,
                 reconciliation_type=reconciliation_type,
                 status=status,
             ),

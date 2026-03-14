@@ -751,6 +751,7 @@ async def test_get_reconciliation_runs_count_with_filters(
 
     value = await repository.get_reconciliation_runs_count(
         portfolio_id="P1",
+        run_id="recon_123",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -759,6 +760,7 @@ async def test_get_reconciliation_runs_count_with_filters(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
     assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
 
@@ -774,6 +776,7 @@ async def test_get_reconciliation_runs_query(
         portfolio_id="P1",
         skip=2,
         limit=5,
+        run_id="recon_123",
         reconciliation_type="transaction_cashflow",
         status="COMPLETED",
     )
@@ -782,6 +785,7 @@ async def test_get_reconciliation_runs_query(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
     assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
     assert (
