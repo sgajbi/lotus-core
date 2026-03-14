@@ -1,3 +1,10 @@
+import importlib
+
+import portfolio_common.db as db_module
+import sqlalchemy
+import sqlalchemy.ext.asyncio as sa_async
+
+import src.services.query_service.app.services.capabilities_service as capabilities_module
 from src.services.query_service.app.services.capabilities_service import CapabilitiesService
 
 
@@ -172,3 +179,27 @@ def test_resolve_as_of_date_falls_back_when_db_access_fails(monkeypatch):
 
     resolved = CapabilitiesService._resolve_as_of_date()
     assert resolved.isoformat() >= "2026-01-01"
+
+
+def test_capabilities_service_import_does_not_create_db_engines(monkeypatch):
+    sync_calls = []
+    async_calls = []
+
+    monkeypatch.setattr(
+        sqlalchemy,
+        "create_engine",
+        lambda *args, **kwargs: sync_calls.append((args, kwargs)) or object(),
+    )
+    monkeypatch.setattr(
+        sa_async,
+        "create_async_engine",
+        lambda *args, **kwargs: async_calls.append((args, kwargs)) or object(),
+    )
+
+    importlib.reload(db_module)
+    importlib.reload(capabilities_module)
+
+    assert db_module._engine is None
+    assert db_module._async_engine is None
+    assert sync_calls == []
+    assert async_calls == []
