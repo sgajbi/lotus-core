@@ -1,4 +1,5 @@
 # tests/integration/services/calculators/position-valuation-calculator/test_valuation_repository.py
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -846,6 +847,63 @@ async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
     assert len(jobs) == 1
     assert jobs[0].epoch == 3
     assert jobs[0].correlation_id == "corr-newer"
+
+
+async def test_upsert_job_deduplicates_concurrent_duplicate_scheduler_pressure(
+    async_db_session: AsyncSession, clean_db
+):
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    barrier_lock = asyncio.Lock()
+    barrier_ready = asyncio.Event()
+    barrier_count = 0
+
+    async def upsert_one() -> None:
+        nonlocal barrier_count
+        async with session_factory() as session:
+            repo = ValuationJobRepository(session)
+            original_get_latest_epoch = repo.get_latest_epoch_for_scope
+
+            async def synchronized_get_latest_epoch_for_scope(**kwargs):
+                nonlocal barrier_count
+                result = await original_get_latest_epoch(**kwargs)
+                async with barrier_lock:
+                    barrier_count += 1
+                    if barrier_count == 2:
+                        barrier_ready.set()
+                await barrier_ready.wait()
+                return result
+
+            repo.get_latest_epoch_for_scope = synchronized_get_latest_epoch_for_scope  # type: ignore[method-assign]
+            await repo.upsert_job(
+                portfolio_id="P-VAL-CONC",
+                security_id="S-VAL-CONC",
+                valuation_date=date(2025, 8, 14),
+                epoch=4,
+                correlation_id="corr-val-conc",
+            )
+            await session.commit()
+
+    await asyncio.gather(upsert_one(), upsert_one())
+
+    async with session_factory() as verification_session:
+        jobs = (
+            (
+                await verification_session.execute(
+                    select(PortfolioValuationJob).where(
+                        PortfolioValuationJob.portfolio_id == "P-VAL-CONC",
+                        PortfolioValuationJob.security_id == "S-VAL-CONC",
+                        PortfolioValuationJob.valuation_date == date(2025, 8, 14),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert len(jobs) == 1
+    assert jobs[0].epoch == 4
+    assert jobs[0].status == "PENDING"
+    assert jobs[0].correlation_id == "corr-val-conc"
 
 
 async def test_get_latest_business_date_falls_back_to_processing_dates_when_calendar_is_empty(
