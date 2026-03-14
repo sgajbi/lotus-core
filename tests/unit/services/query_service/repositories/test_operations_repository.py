@@ -1020,6 +1020,7 @@ async def test_get_reprocessing_keys_count_with_filters(
         portfolio_id="P1",
         status="REPROCESSING",
         security_id="SEC-US-IBM",
+        watermark_date=date(2025, 8, 1),
     )
 
     assert value == 2
@@ -1028,6 +1029,7 @@ async def test_get_reprocessing_keys_count_with_filters(
     assert "from position_state" in compiled.lower()
     assert "position_state.status = 'REPROCESSING'" in compiled
     assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+    assert "position_state.watermark_date = '2025-08-01'" in compiled
 
 
 async def test_get_reprocessing_keys_query(
@@ -1044,6 +1046,7 @@ async def test_get_reprocessing_keys_query(
         limit=7,
         status="REPROCESSING",
         security_id="SEC-US-IBM",
+        watermark_date=date(2025, 8, 1),
         reference_now=reference_now,
     )
 
@@ -1053,6 +1056,7 @@ async def test_get_reprocessing_keys_query(
     assert "from position_state" in compiled.lower()
     assert "position_state.status = 'REPROCESSING'" in compiled
     assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+    assert "position_state.watermark_date = '2025-08-01'" in compiled
     assert "CASE WHEN (position_state.status = 'REPROCESSING'" in compiled
     assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "position_state.updated_at ASC" in compiled

@@ -828,7 +828,8 @@ async def test_reprocessing_keys_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/reprocessing-keys"
-        "?status_filter=REPROCESSING&security_id=SEC-US-IBM&stale_threshold_minutes=30"
+        "?status_filter=REPROCESSING&security_id=SEC-US-IBM"
+        "&watermark_date=2026-03-10&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -844,6 +845,7 @@ async def test_reprocessing_keys_success(async_test_client):
         limit=100,
         status="REPROCESSING",
         security_id="SEC-US-IBM",
+        watermark_date=date(2026, 3, 10),
         stale_threshold_minutes=30,
     )
 

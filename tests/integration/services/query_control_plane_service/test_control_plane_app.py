@@ -631,6 +631,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "security_id"
     )
     assert reprocessing_security["description"].startswith("Optional security identifier filter")
+    reprocessing_watermark_date = next(
+        parameter
+        for parameter in reprocessing_keys["parameters"]
+        if parameter["name"] == "watermark_date"
+    )
+    assert (
+        reprocessing_watermark_date["description"]
+        == "Optional replay watermark date filter in YYYY-MM-DD format."
+    )
     control_stages_not_found = control_stages["responses"]["404"]["content"]["application/json"][
         "example"
     ]

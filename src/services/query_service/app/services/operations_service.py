@@ -1037,6 +1037,7 @@ class OperationsService:
         limit: int,
         status: str | None = None,
         security_id: str | None = None,
+        watermark_date: date | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> ReprocessingKeyListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
@@ -1047,6 +1048,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 status=status,
                 security_id=security_id,
+                watermark_date=watermark_date,
             ),
             self.repo.get_reprocessing_keys(
                 portfolio_id=portfolio_id,
@@ -1054,6 +1056,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 security_id=security_id,
+                watermark_date=watermark_date,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),

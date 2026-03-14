@@ -234,7 +234,8 @@ async def get_portfolio_control_stages(
     summary="List durable replay keys for support workflows",
     description=(
         "What: List durable portfolio-security replay keys for a portfolio.\n"
-        "How: Query `position_state` rows with pagination and optional status/security filters.\n"
+        "How: Query `position_state` rows with pagination and optional status, security, and "
+        "watermark-date filters.\n"
         "When: Use to inspect stuck or stale REPROCESSING keys and verify replay normalization "
         "after recovery."
     ),
@@ -251,6 +252,11 @@ async def get_reprocessing_keys(
         description="Optional security identifier filter for one replay key.",
         examples=["SEC-US-IBM"],
     ),
+    watermark_date: Optional[str] = Query(
+        None,
+        description="Optional replay watermark date filter in YYYY-MM-DD format.",
+        examples=["2026-03-10"],
+    ),
     stale_threshold_minutes: int = Query(
         DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         ge=1,
@@ -263,12 +269,14 @@ async def get_reprocessing_keys(
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
+        parsed_watermark_date = date.fromisoformat(watermark_date) if watermark_date else None
         return await service.get_reprocessing_keys(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
             status=status_filter,
             security_id=security_id,
+            watermark_date=parsed_watermark_date,
             stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:

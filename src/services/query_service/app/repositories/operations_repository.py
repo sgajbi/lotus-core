@@ -1176,6 +1176,7 @@ class OperationsRepository:
         portfolio_id: str,
         status: Optional[str] = None,
         security_id: Optional[str] = None,
+        watermark_date: Optional[date] = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -1186,6 +1187,8 @@ class OperationsRepository:
             stmt = stmt.where(PositionState.status == status)
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
+        if watermark_date:
+            stmt = stmt.where(PositionState.watermark_date == watermark_date)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reprocessing_keys(
@@ -1195,6 +1198,7 @@ class OperationsRepository:
         limit: int,
         status: Optional[str] = None,
         security_id: Optional[str] = None,
+        watermark_date: Optional[date] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
     ) -> list[PositionState]:
@@ -1205,6 +1209,8 @@ class OperationsRepository:
             stmt = stmt.where(PositionState.status == status)
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
+        if watermark_date:
+            stmt = stmt.where(PositionState.watermark_date == watermark_date)
         stmt = (
             stmt.order_by(
                 self._reprocessing_key_priority(

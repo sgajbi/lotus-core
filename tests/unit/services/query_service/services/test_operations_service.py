@@ -1335,6 +1335,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
         limit=50,
         status="REPROCESSING",
         security_id="SEC-US-IBM",
+        watermark_date=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -1379,7 +1380,41 @@ async def test_get_reprocessing_keys_honors_custom_stale_threshold(
         limit=50,
         status="REPROCESSING",
         security_id="SEC-US-IBM",
+        watermark_date=None,
         stale_minutes=30,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_reprocessing_keys_forwards_watermark_date_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_reprocessing_keys_count.return_value = 0
+    mock_ops_repo.get_reprocessing_keys.return_value = []
+
+    response = await service.get_reprocessing_keys(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        status="REPROCESSING",
+        watermark_date=date(2026, 3, 10),
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_reprocessing_keys_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="REPROCESSING",
+        security_id=None,
+        watermark_date=date(2026, 3, 10),
+    )
+    mock_ops_repo.get_reprocessing_keys.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=50,
+        status="REPROCESSING",
+        security_id=None,
+        watermark_date=date(2026, 3, 10),
+        stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
 
