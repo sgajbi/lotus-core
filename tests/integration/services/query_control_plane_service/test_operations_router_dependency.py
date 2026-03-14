@@ -91,6 +91,10 @@ async def test_support_overview_success(async_test_client):
         "controls_latest_reconciliation_failure_reason": None,
         "controls_latest_reconciliation_total_findings": 2,
         "controls_latest_reconciliation_blocking_findings": 1,
+        "controls_latest_blocking_finding_id": "rf_1234567890abcdef",
+        "controls_latest_blocking_finding_type": "missing_cashflow",
+        "controls_latest_blocking_finding_security_id": "SEC-US-IBM",
+        "controls_latest_blocking_finding_transaction_id": "txn_0001",
         "controls_last_updated_at": "2025-08-31T10:16:00Z",
         "controls_blocking": False,
         "publish_allowed": True,
@@ -138,6 +142,10 @@ async def test_support_overview_success(async_test_client):
     assert response.json()["controls_latest_reconciliation_failure_reason"] is None
     assert response.json()["controls_latest_reconciliation_total_findings"] == 2
     assert response.json()["controls_latest_reconciliation_blocking_findings"] == 1
+    assert response.json()["controls_latest_blocking_finding_id"] == "rf_1234567890abcdef"
+    assert response.json()["controls_latest_blocking_finding_type"] == "missing_cashflow"
+    assert response.json()["controls_latest_blocking_finding_security_id"] == "SEC-US-IBM"
+    assert response.json()["controls_latest_blocking_finding_transaction_id"] == "txn_0001"
     assert response.json()["controls_last_updated_at"] == "2025-08-31T10:16:00Z"
     assert response.json()["publish_allowed"] is True
     assert "X-Correlation-ID" in response.headers

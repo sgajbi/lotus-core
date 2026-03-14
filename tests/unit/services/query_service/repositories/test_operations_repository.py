@@ -845,19 +845,37 @@ async def test_get_reconciliation_finding_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_row = MagicMock(total_findings=4, blocking_findings=2)
-    mock_result = MagicMock()
-    mock_result.one.return_value = mock_row
-    mock_db_session.execute = AsyncMock(return_value=mock_result)
+    aggregate_result = MagicMock()
+    aggregate_result.one.return_value = mock_row
+    top_blocking_result = MagicMock()
+    top_blocking_result.one_or_none.return_value = MagicMock(
+        finding_id="rf_1234567890abcdef",
+        finding_type="missing_cashflow",
+        security_id="SEC-US-IBM",
+        transaction_id="txn_0001",
+    )
+    mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, top_blocking_result])
 
     value = await repository.get_reconciliation_finding_summary(run_id="recon_123")
 
     assert value.total_findings == 4
     assert value.blocking_findings == 2
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from financial_reconciliation_findings" in compiled.lower()
-    assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
-    assert "FILTER (WHERE financial_reconciliation_findings.severity = 'ERROR')" in compiled
+    assert value.top_blocking_finding_id == "rf_1234567890abcdef"
+    assert value.top_blocking_finding_type == "missing_cashflow"
+    assert value.top_blocking_finding_security_id == "SEC-US-IBM"
+    assert value.top_blocking_finding_transaction_id == "txn_0001"
+    aggregate_stmt = mock_db_session.execute.call_args_list[0][0][0]
+    aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_findings" in aggregate_compiled.lower()
+    assert "financial_reconciliation_findings.run_id = 'recon_123'" in aggregate_compiled
+    assert (
+        "FILTER (WHERE financial_reconciliation_findings.severity = 'ERROR')"
+        in aggregate_compiled
+    )
+    top_blocking_stmt = mock_db_session.execute.call_args_list[1][0][0]
+    top_blocking_compiled = str(top_blocking_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "financial_reconciliation_findings.severity = 'ERROR'" in top_blocking_compiled
+    assert "financial_reconciliation_findings.created_at DESC" in top_blocking_compiled
 
 
 async def test_get_portfolio_control_stages_count_with_filters(

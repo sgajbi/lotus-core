@@ -436,6 +436,38 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=[1],
     )
+    controls_latest_blocking_finding_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable identifier of the most recent blocking reconciliation finding on the "
+            "latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["rf_1234567890abcdef"],
+    )
+    controls_latest_blocking_finding_type: Optional[str] = Field(
+        None,
+        description=(
+            "Finding type for the most recent blocking reconciliation finding on the "
+            "latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["missing_cashflow"],
+    )
+    controls_latest_blocking_finding_security_id: Optional[str] = Field(
+        None,
+        description=(
+            "Security identifier attached to the most recent blocking reconciliation "
+            "finding on the latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["SEC-US-IBM"],
+    )
+    controls_latest_blocking_finding_transaction_id: Optional[str] = Field(
+        None,
+        description=(
+            "Transaction identifier attached to the most recent blocking reconciliation "
+            "finding on the latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["txn_20260313_0001"],
+    )
     controls_last_updated_at: Optional[datetime] = Field(
         None,
         description=(

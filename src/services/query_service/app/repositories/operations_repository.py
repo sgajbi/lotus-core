@@ -61,6 +61,10 @@ class ReprocessingHealthSummary:
 class ReconciliationFindingSummary:
     total_findings: int
     blocking_findings: int
+    top_blocking_finding_id: Optional[str]
+    top_blocking_finding_type: Optional[str]
+    top_blocking_finding_security_id: Optional[str]
+    top_blocking_finding_transaction_id: Optional[str]
 
 
 class OperationsRepository:
@@ -1004,7 +1008,7 @@ class OperationsRepository:
     async def get_reconciliation_finding_summary(
         self, run_id: str
     ) -> ReconciliationFindingSummary:
-        stmt = (
+        aggregate_stmt = (
             select(
                 func.count().label("total_findings"),
                 func.count()
@@ -1014,10 +1018,40 @@ class OperationsRepository:
             .select_from(FinancialReconciliationFinding)
             .where(FinancialReconciliationFinding.run_id == run_id)
         )
-        row = (await self.db.execute(stmt)).one()
+        row = (await self.db.execute(aggregate_stmt)).one()
+        top_blocking_stmt = (
+            select(
+                FinancialReconciliationFinding.finding_id,
+                FinancialReconciliationFinding.finding_type,
+                FinancialReconciliationFinding.security_id,
+                FinancialReconciliationFinding.transaction_id,
+            )
+            .where(
+                FinancialReconciliationFinding.run_id == run_id,
+                FinancialReconciliationFinding.severity == "ERROR",
+            )
+            .order_by(
+                FinancialReconciliationFinding.created_at.desc(),
+                FinancialReconciliationFinding.id.desc(),
+            )
+            .limit(1)
+        )
+        top_blocking_row = (await self.db.execute(top_blocking_stmt)).one_or_none()
         return ReconciliationFindingSummary(
             total_findings=int(row.total_findings or 0),
             blocking_findings=int(row.blocking_findings or 0),
+            top_blocking_finding_id=(
+                top_blocking_row.finding_id if top_blocking_row else None
+            ),
+            top_blocking_finding_type=(
+                top_blocking_row.finding_type if top_blocking_row else None
+            ),
+            top_blocking_finding_security_id=(
+                top_blocking_row.security_id if top_blocking_row else None
+            ),
+            top_blocking_finding_transaction_id=(
+                top_blocking_row.transaction_id if top_blocking_row else None
+            ),
         )
 
     async def get_portfolio_control_stages_count(

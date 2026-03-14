@@ -110,6 +110,10 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_reconciliation_finding_summary.return_value = ReconciliationFindingSummary(
         total_findings=2,
         blocking_findings=1,
+        top_blocking_finding_id="rf_1234567890abcdef",
+        top_blocking_finding_type="missing_cashflow",
+        top_blocking_finding_security_id="SEC-US-IBM",
+        top_blocking_finding_transaction_id="txn_0001",
     )
 
     response = await service.get_support_overview("P1")
@@ -191,6 +195,10 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.controls_latest_reconciliation_failure_reason is None
     assert response.controls_latest_reconciliation_total_findings == 2
     assert response.controls_latest_reconciliation_blocking_findings == 1
+    assert response.controls_latest_blocking_finding_id == "rf_1234567890abcdef"
+    assert response.controls_latest_blocking_finding_type == "missing_cashflow"
+    assert response.controls_latest_blocking_finding_security_id == "SEC-US-IBM"
+    assert response.controls_latest_blocking_finding_transaction_id == "txn_0001"
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 10, 15, tzinfo=timezone.utc
     )
@@ -1271,6 +1279,10 @@ async def test_get_support_overview_without_business_date(
     assert response.controls_latest_reconciliation_failure_reason is None
     assert response.controls_latest_reconciliation_total_findings is None
     assert response.controls_latest_reconciliation_blocking_findings is None
+    assert response.controls_latest_blocking_finding_id is None
+    assert response.controls_latest_blocking_finding_type is None
+    assert response.controls_latest_blocking_finding_security_id is None
+    assert response.controls_latest_blocking_finding_transaction_id is None
     assert response.controls_last_updated_at is None
     assert response.controls_blocking is False
     assert response.publish_allowed is True
@@ -1359,6 +1371,10 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     mock_ops_repo.get_reconciliation_finding_summary.return_value = ReconciliationFindingSummary(
         total_findings=3,
         blocking_findings=2,
+        top_blocking_finding_id="rf_failed_20250830_01",
+        top_blocking_finding_type="valuation_mismatch",
+        top_blocking_finding_security_id="SEC-US-MSFT",
+        top_blocking_finding_transaction_id="txn_0099",
     )
 
     response = await service.get_support_overview("P1")
@@ -1392,6 +1408,10 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     )
     assert response.controls_latest_reconciliation_total_findings == 3
     assert response.controls_latest_reconciliation_blocking_findings == 2
+    assert response.controls_latest_blocking_finding_id == "rf_failed_20250830_01"
+    assert response.controls_latest_blocking_finding_type == "valuation_mismatch"
+    assert response.controls_latest_blocking_finding_security_id == "SEC-US-MSFT"
+    assert response.controls_latest_blocking_finding_transaction_id == "txn_0099"
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc
     )

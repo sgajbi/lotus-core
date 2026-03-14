@@ -465,6 +465,26 @@ class OperationsService:
                 if latest_reconciliation_finding_summary
                 else None
             ),
+            controls_latest_blocking_finding_id=(
+                latest_reconciliation_finding_summary.top_blocking_finding_id
+                if latest_reconciliation_finding_summary
+                else None
+            ),
+            controls_latest_blocking_finding_type=(
+                latest_reconciliation_finding_summary.top_blocking_finding_type
+                if latest_reconciliation_finding_summary
+                else None
+            ),
+            controls_latest_blocking_finding_security_id=(
+                latest_reconciliation_finding_summary.top_blocking_finding_security_id
+                if latest_reconciliation_finding_summary
+                else None
+            ),
+            controls_latest_blocking_finding_transaction_id=(
+                latest_reconciliation_finding_summary.top_blocking_finding_transaction_id
+                if latest_reconciliation_finding_summary
+                else None
+            ),
             controls_last_updated_at=(
                 latest_control_stage.updated_at if latest_control_stage else None
             ),
