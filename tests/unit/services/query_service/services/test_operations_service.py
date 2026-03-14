@@ -49,6 +49,8 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
         failed_jobs_last_hours=0,
         oldest_open_job_date=date(2025, 8, 20),
         oldest_open_job_id=8801,
+        oldest_open_job_correlation_id="corr-val-8801",
+        oldest_open_security_id="SEC-US-IBM",
     )
     mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=1,
@@ -58,6 +60,8 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
         oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
     )
     mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
         accepted_jobs=2,
@@ -124,6 +128,8 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.failed_valuation_jobs_within_window == 0
     assert response.oldest_pending_valuation_date == date(2025, 8, 20)
     assert response.oldest_pending_valuation_job_id == 8801
+    assert response.oldest_pending_valuation_security_id == "SEC-US-IBM"
+    assert response.oldest_pending_valuation_correlation_id == "corr-val-8801"
     assert response.valuation_backlog_age_days == 10
     assert response.pending_aggregation_jobs == 1
     assert response.processing_aggregation_jobs == 0
@@ -132,6 +138,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.failed_aggregation_jobs_within_window == 0
     assert response.oldest_pending_aggregation_date is None
     assert response.oldest_pending_aggregation_job_id is None
+    assert response.oldest_pending_aggregation_correlation_id is None
     assert response.aggregation_backlog_age_days is None
     assert response.pending_analytics_export_jobs == 2
     assert response.processing_analytics_export_jobs == 1
@@ -1087,6 +1094,8 @@ async def test_get_support_overview_honors_custom_stale_threshold(
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
         oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
     )
     mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
@@ -1096,6 +1105,8 @@ async def test_get_support_overview_honors_custom_stale_threshold(
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
         oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
     )
     mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
         accepted_jobs=0,
@@ -1168,6 +1179,8 @@ async def test_get_support_overview_without_business_date(
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
         oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
     )
     mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
@@ -1177,6 +1190,8 @@ async def test_get_support_overview_without_business_date(
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
         oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
     )
     mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
         accepted_jobs=0,
@@ -1217,6 +1232,9 @@ async def test_get_support_overview_without_business_date(
     assert response.oldest_pending_analytics_export_job_id is None
     assert response.oldest_pending_analytics_export_request_fingerprint is None
     assert response.analytics_export_backlog_age_minutes is None
+    assert response.oldest_pending_valuation_security_id is None
+    assert response.oldest_pending_valuation_correlation_id is None
+    assert response.oldest_pending_aggregation_correlation_id is None
     assert response.latest_booked_transaction_date is None
     assert response.latest_booked_position_snapshot_date is None
     assert response.controls_status is None
@@ -1257,6 +1275,8 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
         oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
     )
     mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
@@ -1266,6 +1286,8 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         failed_jobs_last_hours=0,
         oldest_open_job_date=None,
         oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
     )
     mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
         accepted_jobs=0,
@@ -1350,6 +1372,8 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         failed_jobs_last_hours=2,
         oldest_open_job_date=date(2025, 8, 20),
         oldest_open_job_id=8802,
+        oldest_open_job_correlation_id="corr-val-8802",
+        oldest_open_security_id="SEC-US-MSFT",
     )
     mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=5,
@@ -1359,6 +1383,8 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         failed_jobs_last_hours=1,
         oldest_open_job_date=date(2025, 8, 25),
         oldest_open_job_id=4402,
+        oldest_open_job_correlation_id="corr-agg-4402",
+        oldest_open_security_id=None,
     )
 
     response = await service.get_calculator_slos(
@@ -1373,11 +1399,13 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
     assert response.valuation.failed_jobs == 4
     assert response.valuation.failed_jobs_within_window == 2
     assert response.valuation.oldest_open_job_id == 8802
+    assert response.valuation.oldest_open_job_correlation_id == "corr-val-8802"
     assert response.valuation.backlog_age_days == 10
     assert response.aggregation.pending_jobs == 5
     assert response.aggregation.failed_jobs == 1
     assert response.aggregation.failed_jobs_within_window == 1
     assert response.aggregation.oldest_open_job_id == 4402
+    assert response.aggregation.oldest_open_job_correlation_id == "corr-agg-4402"
     assert response.aggregation.backlog_age_days == 5
     assert response.reprocessing.active_reprocessing_keys == 2
     assert response.reprocessing.stale_reprocessing_keys == 1

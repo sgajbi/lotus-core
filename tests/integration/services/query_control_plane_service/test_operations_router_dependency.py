@@ -48,6 +48,8 @@ async def test_support_overview_success(async_test_client):
         "failed_valuation_jobs_within_window": 0,
         "oldest_pending_valuation_date": date(2025, 8, 30),
         "oldest_pending_valuation_job_id": 8801,
+        "oldest_pending_valuation_security_id": "SEC-US-IBM",
+        "oldest_pending_valuation_correlation_id": "corr-val-8801",
         "valuation_backlog_age_days": 1,
         "pending_aggregation_jobs": 0,
         "processing_aggregation_jobs": 0,
@@ -56,6 +58,7 @@ async def test_support_overview_success(async_test_client):
         "failed_aggregation_jobs_within_window": 0,
         "oldest_pending_aggregation_date": None,
         "oldest_pending_aggregation_job_id": None,
+        "oldest_pending_aggregation_correlation_id": None,
         "aggregation_backlog_age_days": None,
         "pending_analytics_export_jobs": 2,
         "processing_analytics_export_jobs": 1,
@@ -101,6 +104,8 @@ async def test_support_overview_success(async_test_client):
     assert response.json()["oldest_reprocessing_epoch"] == 3
     assert response.json()["oldest_reprocessing_updated_at"] == "2025-08-31T09:45:00Z"
     assert response.json()["oldest_pending_valuation_job_id"] == 8801
+    assert response.json()["oldest_pending_valuation_security_id"] == "SEC-US-IBM"
+    assert response.json()["oldest_pending_valuation_correlation_id"] == "corr-val-8801"
     assert response.json()["oldest_pending_analytics_export_job_id"] == "aexp_0001"
     assert response.json()["controls_stage_id"] == 701
     assert (
@@ -153,6 +158,7 @@ async def test_calculator_slos_success(async_test_client):
             "failed_jobs_within_window": 0,
             "oldest_open_job_date": date(2025, 8, 31),
             "oldest_open_job_id": 8801,
+            "oldest_open_job_correlation_id": "corr-val-8801",
             "backlog_age_days": 0,
         },
         "aggregation": {
@@ -163,6 +169,7 @@ async def test_calculator_slos_success(async_test_client):
             "failed_jobs_within_window": 0,
             "oldest_open_job_date": date(2025, 8, 31),
             "oldest_open_job_id": 4401,
+            "oldest_open_job_correlation_id": "corr-agg-4401",
             "backlog_age_days": 0,
         },
         "reprocessing": {
@@ -185,6 +192,10 @@ async def test_calculator_slos_success(async_test_client):
     assert response.json()["failed_window_hours"] == 48
     assert response.json()["valuation"]["pending_jobs"] == 2
     assert response.json()["valuation"]["oldest_open_job_id"] == 8801
+    assert response.json()["valuation"]["oldest_open_job_correlation_id"] == "corr-val-8801"
+    assert (
+        response.json()["aggregation"]["oldest_open_job_correlation_id"] == "corr-agg-4401"
+    )
     mock_service.get_calculator_slos.assert_awaited_once_with(
         portfolio_id="P1",
         stale_threshold_minutes=15,

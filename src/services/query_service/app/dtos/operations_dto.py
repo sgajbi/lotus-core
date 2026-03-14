@@ -131,6 +131,19 @@ class SupportOverviewResponse(BaseModel):
         description="Durable job id for the oldest open valuation job in the backlog.",
         examples=[8801],
     )
+    oldest_pending_valuation_security_id: Optional[str] = Field(
+        None,
+        description="Security identifier for the oldest open valuation job in the backlog.",
+        examples=["SEC-US-IBM"],
+    )
+    oldest_pending_valuation_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the oldest open valuation job in the "
+            "backlog."
+        ),
+        examples=["corr-val-20260313-001"],
+    )
     valuation_backlog_age_days: Optional[int] = Field(
         None,
         description=(
@@ -178,6 +191,14 @@ class SupportOverviewResponse(BaseModel):
         None,
         description="Durable job id for the oldest open aggregation job in the backlog.",
         examples=[4402],
+    )
+    oldest_pending_aggregation_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the oldest open aggregation job in the "
+            "backlog."
+        ),
+        examples=["corr-agg-20260313-001"],
     )
     aggregation_backlog_age_days: Optional[int] = Field(
         None,
@@ -438,6 +459,14 @@ class CalculatorSloBucket(BaseModel):
         description="Durable job id for the oldest open job contributing to this backlog.",
         examples=[8801],
     )
+    oldest_open_job_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the oldest open job contributing to this "
+            "backlog."
+        ),
+        examples=["corr-val-20260313-001"],
+    )
     backlog_age_days: Optional[int] = Field(
         None,
         description=(
@@ -529,6 +558,7 @@ class CalculatorSloResponse(BaseModel):
                 "failed_jobs_within_window": 2,
                 "oldest_open_job_date": "2026-02-25",
                 "oldest_open_job_id": 8801,
+                "oldest_open_job_correlation_id": "corr-val-20260313-001",
                 "backlog_age_days": 7,
             }
         ],
@@ -545,6 +575,7 @@ class CalculatorSloResponse(BaseModel):
                 "failed_jobs_within_window": 0,
                 "oldest_open_job_date": "2026-03-01",
                 "oldest_open_job_id": 4402,
+                "oldest_open_job_correlation_id": "corr-agg-20260313-001",
                 "backlog_age_days": 1,
             }
         ],

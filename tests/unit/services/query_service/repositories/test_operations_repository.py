@@ -118,7 +118,11 @@ async def test_get_valuation_job_health_summary(
     aggregate_result = MagicMock()
     aggregate_result.one.return_value = mock_row
     oldest_job_result = MagicMock()
-    oldest_job_result.scalar_one_or_none.return_value = 8801
+    oldest_job_result.one_or_none.return_value = MagicMock(
+        id=8801,
+        security_id="SEC-US-IBM",
+        correlation_id="corr-val-8801",
+    )
     mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, oldest_job_result])
 
     value = await repository.get_valuation_job_health_summary(
@@ -135,6 +139,8 @@ async def test_get_valuation_job_health_summary(
     assert value.failed_jobs_last_hours == 1
     assert value.oldest_open_job_date == date(2025, 8, 1)
     assert value.oldest_open_job_id == 8801
+    assert value.oldest_open_job_correlation_id == "corr-val-8801"
+    assert value.oldest_open_security_id == "SEC-US-IBM"
     aggregate_stmt = mock_db_session.execute.call_args_list[0][0][0]
     aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in aggregate_compiled.lower()
@@ -169,7 +175,10 @@ async def test_get_aggregation_job_health_summary(
     aggregate_result = MagicMock()
     aggregate_result.one.return_value = mock_row
     oldest_job_result = MagicMock()
-    oldest_job_result.scalar_one_or_none.return_value = 4402
+    oldest_job_result.one_or_none.return_value = MagicMock(
+        id=4402,
+        correlation_id="corr-agg-4402",
+    )
     mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, oldest_job_result])
 
     value = await repository.get_aggregation_job_health_summary(
@@ -186,6 +195,8 @@ async def test_get_aggregation_job_health_summary(
     assert value.failed_jobs_last_hours == 1
     assert value.oldest_open_job_date == date(2025, 8, 10)
     assert value.oldest_open_job_id == 4402
+    assert value.oldest_open_job_correlation_id == "corr-agg-4402"
+    assert value.oldest_open_security_id is None
     aggregate_stmt = mock_db_session.execute.call_args_list[0][0][0]
     aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_aggregation_jobs" in aggregate_compiled.lower()

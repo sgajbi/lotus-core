@@ -355,9 +355,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["oldest_pending_valuation_job_id"][
         "description"
     ] == "Durable job id for the oldest open valuation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_valuation_security_id"][
+        "description"
+    ] == "Security identifier for the oldest open valuation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_valuation_correlation_id"][
+        "description"
+    ] == "Durable correlation identifier for the oldest open valuation job in the backlog."
     assert support_overview["properties"]["oldest_pending_aggregation_job_id"][
         "description"
     ] == "Durable job id for the oldest open aggregation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_aggregation_correlation_id"][
+        "description"
+    ] == "Durable correlation identifier for the oldest open aggregation job in the backlog."
     assert support_overview["properties"]["oldest_pending_analytics_export_job_id"][
         "description"
     ] == "Durable job id for the oldest open analytics export job in the backlog."
@@ -432,6 +441,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert calculator_bucket["properties"]["oldest_open_job_id"]["description"] == (
         "Durable job id for the oldest open job contributing to this backlog."
     )
+    assert calculator_bucket["properties"]["oldest_open_job_correlation_id"][
+        "description"
+    ] == "Durable correlation identifier for the oldest open job contributing to this backlog."
     assert calculator_bucket["properties"]["failed_jobs_within_window"]["description"] == (
         "Count of jobs that moved to FAILED state within the configured failed-job window."
     )

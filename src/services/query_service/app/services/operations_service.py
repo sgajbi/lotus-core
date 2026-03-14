@@ -361,6 +361,10 @@ class OperationsService:
             failed_valuation_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
             oldest_pending_valuation_date=valuation_job_health.oldest_open_job_date,
             oldest_pending_valuation_job_id=valuation_job_health.oldest_open_job_id,
+            oldest_pending_valuation_security_id=valuation_job_health.oldest_open_security_id,
+            oldest_pending_valuation_correlation_id=(
+                valuation_job_health.oldest_open_job_correlation_id
+            ),
             valuation_backlog_age_days=valuation_backlog_age_days,
             pending_aggregation_jobs=aggregation_job_health.pending_jobs,
             processing_aggregation_jobs=aggregation_job_health.processing_jobs,
@@ -369,6 +373,9 @@ class OperationsService:
             failed_aggregation_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
             oldest_pending_aggregation_date=aggregation_job_health.oldest_open_job_date,
             oldest_pending_aggregation_job_id=aggregation_job_health.oldest_open_job_id,
+            oldest_pending_aggregation_correlation_id=(
+                aggregation_job_health.oldest_open_job_correlation_id
+            ),
             aggregation_backlog_age_days=aggregation_backlog_age_days,
             pending_analytics_export_jobs=analytics_export_job_health.accepted_jobs,
             processing_analytics_export_jobs=analytics_export_job_health.running_jobs,
@@ -502,6 +509,9 @@ class OperationsService:
                 failed_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
                 oldest_open_job_date=valuation_job_health.oldest_open_job_date,
                 oldest_open_job_id=valuation_job_health.oldest_open_job_id,
+                oldest_open_job_correlation_id=(
+                    valuation_job_health.oldest_open_job_correlation_id
+                ),
                 backlog_age_days=valuation_backlog_age_days,
             ),
             aggregation=CalculatorSloBucket(
@@ -512,6 +522,9 @@ class OperationsService:
                 failed_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
                 oldest_open_job_date=aggregation_job_health.oldest_open_job_date,
                 oldest_open_job_id=aggregation_job_health.oldest_open_job_id,
+                oldest_open_job_correlation_id=(
+                    aggregation_job_health.oldest_open_job_correlation_id
+                ),
                 backlog_age_days=aggregation_backlog_age_days,
             ),
             reprocessing=ReprocessingSloBucket(
