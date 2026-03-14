@@ -395,6 +395,30 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["corr-recon-20260313-001"],
     )
+    controls_latest_reconciliation_requested_by: Optional[str] = Field(
+        None,
+        description=(
+            "Principal or subsystem that requested the latest reconciliation run on the "
+            "same portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["pipeline_orchestrator_service"],
+    )
+    controls_latest_reconciliation_dedupe_key: Optional[str] = Field(
+        None,
+        description=(
+            "Stable deduplication key for the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["recon:transaction_cashflow:PF-001:2025-08-31:3"],
+    )
+    controls_latest_reconciliation_failure_reason: Optional[str] = Field(
+        None,
+        description=(
+            "Failure reason recorded on the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["Tolerance exceeded for portfolio totals."],
+    )
     controls_last_updated_at: Optional[datetime] = Field(
         None,
         description=(

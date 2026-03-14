@@ -101,6 +101,9 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
             "reconciliation_type": "transaction_cashflow",
             "status": "COMPLETED",
             "correlation_id": "corr-recon-20250830-001",
+            "requested_by": "pipeline_orchestrator_service",
+            "dedupe_key": "recon:transaction_cashflow:P1:2025-08-30:2",
+            "failure_reason": None,
         },
     )()
 
@@ -172,6 +175,15 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.controls_latest_reconciliation_type == "transaction_cashflow"
     assert response.controls_latest_reconciliation_status == "COMPLETED"
     assert response.controls_latest_reconciliation_correlation_id == "corr-recon-20250830-001"
+    assert (
+        response.controls_latest_reconciliation_requested_by
+        == "pipeline_orchestrator_service"
+    )
+    assert (
+        response.controls_latest_reconciliation_dedupe_key
+        == "recon:transaction_cashflow:P1:2025-08-30:2"
+    )
+    assert response.controls_latest_reconciliation_failure_reason is None
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 10, 15, tzinfo=timezone.utc
     )
@@ -1247,6 +1259,9 @@ async def test_get_support_overview_without_business_date(
     assert response.controls_latest_reconciliation_type is None
     assert response.controls_latest_reconciliation_status is None
     assert response.controls_latest_reconciliation_correlation_id is None
+    assert response.controls_latest_reconciliation_requested_by is None
+    assert response.controls_latest_reconciliation_dedupe_key is None
+    assert response.controls_latest_reconciliation_failure_reason is None
     assert response.controls_last_updated_at is None
     assert response.controls_blocking is False
     assert response.publish_allowed is True
@@ -1327,6 +1342,9 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
             "reconciliation_type": "transaction_cashflow",
             "status": "FAILED",
             "correlation_id": "corr-recon-20250830-failed",
+            "requested_by": "pipeline_orchestrator_service",
+            "dedupe_key": "recon:transaction_cashflow:P1:2025-08-30:2",
+            "failure_reason": "Tolerance exceeded for portfolio totals.",
         },
     )()
 
@@ -1346,6 +1364,18 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     assert (
         response.controls_latest_reconciliation_correlation_id
         == "corr-recon-20250830-failed"
+    )
+    assert (
+        response.controls_latest_reconciliation_requested_by
+        == "pipeline_orchestrator_service"
+    )
+    assert (
+        response.controls_latest_reconciliation_dedupe_key
+        == "recon:transaction_cashflow:P1:2025-08-30:2"
+    )
+    assert (
+        response.controls_latest_reconciliation_failure_reason
+        == "Tolerance exceeded for portfolio totals."
     )
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc

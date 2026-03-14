@@ -433,6 +433,21 @@ class OperationsService:
                 if latest_reconciliation_run
                 else None
             ),
+            controls_latest_reconciliation_requested_by=(
+                latest_reconciliation_run.requested_by
+                if latest_reconciliation_run
+                else None
+            ),
+            controls_latest_reconciliation_dedupe_key=(
+                latest_reconciliation_run.dedupe_key
+                if latest_reconciliation_run
+                else None
+            ),
+            controls_latest_reconciliation_failure_reason=(
+                latest_reconciliation_run.failure_reason
+                if latest_reconciliation_run
+                else None
+            ),
             controls_last_updated_at=(
                 latest_control_stage.updated_at if latest_control_stage else None
             ),

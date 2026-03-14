@@ -86,6 +86,9 @@ async def test_support_overview_success(async_test_client):
         "controls_latest_reconciliation_type": "transaction_cashflow",
         "controls_latest_reconciliation_status": "COMPLETED",
         "controls_latest_reconciliation_correlation_id": "corr-recon-20250831-001",
+        "controls_latest_reconciliation_requested_by": "pipeline_orchestrator_service",
+        "controls_latest_reconciliation_dedupe_key": "recon:transaction_cashflow:P1:2025-08-31:3",
+        "controls_latest_reconciliation_failure_reason": None,
         "controls_last_updated_at": "2025-08-31T10:16:00Z",
         "controls_blocking": False,
         "publish_allowed": True,
@@ -122,6 +125,15 @@ async def test_support_overview_success(async_test_client):
         response.json()["controls_latest_reconciliation_correlation_id"]
         == "corr-recon-20250831-001"
     )
+    assert (
+        response.json()["controls_latest_reconciliation_requested_by"]
+        == "pipeline_orchestrator_service"
+    )
+    assert (
+        response.json()["controls_latest_reconciliation_dedupe_key"]
+        == "recon:transaction_cashflow:P1:2025-08-31:3"
+    )
+    assert response.json()["controls_latest_reconciliation_failure_reason"] is None
     assert response.json()["controls_last_updated_at"] == "2025-08-31T10:16:00Z"
     assert response.json()["publish_allowed"] is True
     assert "X-Correlation-ID" in response.headers

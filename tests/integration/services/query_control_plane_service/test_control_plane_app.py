@@ -310,6 +310,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["controls_latest_reconciliation_correlation_id"][
         "description"
     ].startswith("Durable correlation identifier for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_requested_by"][
+        "description"
+    ].startswith("Principal or subsystem that requested the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_dedupe_key"][
+        "description"
+    ].startswith("Stable deduplication key for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_failure_reason"][
+        "description"
+    ].startswith("Failure reason recorded on the latest reconciliation run")
     assert support_overview["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale in-flight portfolio processing."
     )
