@@ -677,7 +677,8 @@ async def test_reconciliation_findings_success(async_test_client):
     }
 
     response = await client.get(
-        "/support/portfolios/P1/reconciliation-runs/recon_1234567890abcdef/findings?limit=50"
+        "/support/portfolios/P1/reconciliation-runs/recon_1234567890abcdef/findings"
+        "?finding_id=rf_1234567890abcdef&limit=50"
     )
 
     assert response.status_code == 200
@@ -685,6 +686,12 @@ async def test_reconciliation_findings_success(async_test_client):
     assert response.json()["items"][0]["finding_id"] == "rf_1234567890abcdef"
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+    mock_service.get_reconciliation_findings.assert_awaited_once_with(
+        portfolio_id="P1",
+        run_id="recon_1234567890abcdef",
+        limit=50,
+        finding_id="rf_1234567890abcdef",
+    )
 
 
 async def test_reconciliation_findings_not_found_maps_to_404(async_test_client):

@@ -604,6 +604,11 @@ async def get_reconciliation_findings(
         description="Reconciliation run identifier.",
         examples=["recon_1234567890abcdef"],
     ),
+    finding_id: Optional[str] = Query(
+        None,
+        description="Optional durable reconciliation finding identifier filter.",
+        examples=["rf_1234567890abcdef"],
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum findings to return.", examples=[100]
     ),
@@ -614,6 +619,7 @@ async def get_reconciliation_findings(
             portfolio_id=portfolio_id,
             run_id=run_id,
             limit=limit,
+            finding_id=finding_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

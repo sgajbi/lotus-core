@@ -803,13 +803,16 @@ async def test_get_reconciliation_findings_query(
     mock_result.scalars.return_value.all.return_value = ["finding1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    value = await repository.get_reconciliation_findings(run_id="recon_123", limit=20)
+    value = await repository.get_reconciliation_findings(
+        run_id="recon_123", limit=20, finding_id="rf_123"
+    )
 
     assert value == ["finding1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+    assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
     assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
     assert "financial_reconciliation_findings.created_at DESC" in compiled
     assert "LIMIT 20" in compiled
@@ -836,13 +839,16 @@ async def test_get_reconciliation_findings_count(
 ):
     mock_execute_scalar_one(mock_db_session, 4)
 
-    value = await repository.get_reconciliation_findings_count(run_id="recon_123")
+    value = await repository.get_reconciliation_findings_count(
+        run_id="recon_123", finding_id="rf_123"
+    )
 
     assert value == 4
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+    assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
 
 
 async def test_get_reconciliation_finding_summary(

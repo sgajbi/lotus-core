@@ -509,6 +509,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "run_id"
     )
     assert run_id_param["description"] == "Reconciliation run identifier."
+    finding_id_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "finding_id"
+    )
+    assert (
+        finding_id_param["description"]
+        == "Optional durable reconciliation finding identifier filter."
+    )
 
     reconciliation_not_found = reconciliation_runs["responses"]["404"]["content"][
         "application/json"

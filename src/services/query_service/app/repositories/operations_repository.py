@@ -982,7 +982,7 @@ class OperationsRepository:
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_reconciliation_findings(
-        self, run_id: str, limit: int
+        self, run_id: str, limit: int, finding_id: Optional[str] = None
     ) -> list[FinancialReconciliationFinding]:
         severity_rank = case(
             (FinancialReconciliationFinding.severity == "ERROR", 0),
@@ -993,7 +993,11 @@ class OperationsRepository:
         stmt = (
             select(FinancialReconciliationFinding)
             .where(FinancialReconciliationFinding.run_id == run_id)
-            .order_by(
+        )
+        if finding_id:
+            stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
+        stmt = (
+            stmt.order_by(
                 severity_rank.asc(),
                 FinancialReconciliationFinding.finding_type.asc(),
                 FinancialReconciliationFinding.created_at.desc(),
@@ -1003,12 +1007,16 @@ class OperationsRepository:
         )
         return list((await self.db.execute(stmt)).scalars().all())
 
-    async def get_reconciliation_findings_count(self, run_id: str) -> int:
+    async def get_reconciliation_findings_count(
+        self, run_id: str, finding_id: Optional[str] = None
+    ) -> int:
         stmt = (
             select(func.count())
             .select_from(FinancialReconciliationFinding)
             .where(FinancialReconciliationFinding.run_id == run_id)
         )
+        if finding_id:
+            stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_finding_summary(

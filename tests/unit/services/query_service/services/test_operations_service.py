@@ -931,6 +931,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
         portfolio_id="P1",
         run_id="recon_1234567890abcdef",
         limit=50,
+        finding_id="rf_1234567890abcdef",
     )
 
     assert response.run_id == "recon_1234567890abcdef"
@@ -938,6 +939,15 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     assert response.items[0].finding_id == "rf_1234567890abcdef"
     assert response.items[0].severity == "ERROR"
     assert response.items[0].detail == {"expected_cashflow_count": 1, "observed_cashflow_count": 0}
+    mock_ops_repo.get_reconciliation_findings_count.assert_awaited_once_with(
+        run_id="recon_1234567890abcdef",
+        finding_id="rf_1234567890abcdef",
+    )
+    mock_ops_repo.get_reconciliation_findings.assert_awaited_once_with(
+        run_id="recon_1234567890abcdef",
+        limit=50,
+        finding_id="rf_1234567890abcdef",
+    )
     assert response.items[0].is_blocking is True
     assert response.items[0].operational_state == "BLOCKING"
 
