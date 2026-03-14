@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.services.valuation_orchestrator_service.app.repositories import (
     instrument_reprocessing_state_repository as instrument_reprocessing_state_repo,
 )
+from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (
+    ValuationRepository,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -208,3 +211,46 @@ async def test_upsert_state_coalesces_concurrent_duplicate_arrivals(
     assert len(rows) == 1
     assert rows[0].earliest_impacted_date == date(2025, 8, 8)
     assert rows[0].correlation_id == "corr-08"
+
+
+async def test_claim_instrument_reprocessing_triggers_does_not_double_claim_under_concurrency(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        InstrumentReprocessingState(
+            security_id="S-TRIGGER-CLAIM",
+            earliest_impacted_date=date(2025, 8, 8),
+            correlation_id="corr-trigger-claim",
+        )
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def claim_one():
+        async with session_factory() as session:
+            repo = ValuationRepository(session)
+            claimed = await repo.claim_instrument_reprocessing_triggers(batch_size=1)
+            await session.commit()
+            return claimed
+
+    first_claim, second_claim = await asyncio.gather(claim_one(), claim_one())
+    all_claimed = [*first_claim, *second_claim]
+
+    assert len(all_claimed) == 1
+    assert [state.security_id for state in all_claimed] == ["S-TRIGGER-CLAIM"]
+
+    async with session_factory() as verification_session:
+        remaining_rows = (
+            (
+                await verification_session.execute(
+                    select(InstrumentReprocessingState).where(
+                        InstrumentReprocessingState.security_id == "S-TRIGGER-CLAIM"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert remaining_rows == []
