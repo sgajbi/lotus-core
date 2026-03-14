@@ -481,3 +481,138 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
     assert response.items[0].transaction_id == "TXN-VISIBLE"
     assert response.items[0].is_blocking is True
     assert response.items[0].operational_state == "BLOCKING"
+
+
+async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    old_transaction_id = PipelineStageRepository.build_portfolio_stage_key(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="P5",
+        business_date=date(2025, 8, 30),
+    )
+    late_transaction_id = PipelineStageRepository.build_portfolio_stage_key(
+        stage_name="FINANCIAL_RECONCILIATION",
+        portfolio_id="P5",
+        business_date=date(2025, 8, 31),
+    )
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P5",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P5",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add_all(
+        [
+            PipelineStageState(
+                stage_name="FINANCIAL_RECONCILIATION",
+                transaction_id=old_transaction_id,
+                portfolio_id="P5",
+                security_id=None,
+                business_date=date(2025, 8, 30),
+                epoch=2,
+                status="COMPLETED",
+                cost_event_seen=False,
+                cashflow_event_seen=False,
+                ready_emitted_at=datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
+                last_source_event_type="financial_reconciliation_completed",
+                created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 20, tzinfo=timezone.utc),
+            ),
+            PipelineStageState(
+                stage_name="FINANCIAL_RECONCILIATION",
+                transaction_id=late_transaction_id,
+                portfolio_id="P5",
+                security_id=None,
+                business_date=date(2025, 8, 31),
+                epoch=3,
+                status="FAILED",
+                cost_event_seen=False,
+                cashflow_event_seen=False,
+                ready_emitted_at=None,
+                last_source_event_type="financial_reconciliation_completed",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_portfolio_control_stages("P5", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].business_date == date(2025, 8, 30)
+    assert response.items[0].epoch == 2
+    assert response.items[0].status == "COMPLETED"
+    assert response.items[0].last_source_event_type == "financial_reconciliation_completed"
+    assert response.items[0].operational_state == "COMPLETED"
+
+
+async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P6",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P6",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add_all(
+        [
+            PositionState(
+                portfolio_id="P6",
+                security_id="SEC-KEY-OLD",
+                epoch=2,
+                watermark_date=date(2025, 8, 18),
+                status="REPROCESSING",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PositionState(
+                portfolio_id="P6",
+                security_id="SEC-KEY-LATE",
+                epoch=5,
+                watermark_date=date(2025, 8, 31),
+                status="REPROCESSING",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_reprocessing_keys("P6", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].security_id == "SEC-KEY-OLD"
+    assert response.items[0].epoch == 2
+    assert response.items[0].watermark_date == date(2025, 8, 18)
+    assert response.items[0].status == "REPROCESSING"
+    assert response.items[0].operational_state == "STALE_REPROCESSING"
