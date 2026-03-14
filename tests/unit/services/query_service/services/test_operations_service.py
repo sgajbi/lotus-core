@@ -268,6 +268,7 @@ async def test_build_lineage_key_record_valuation_blocked_state(service: Operati
 
 
 async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
+    created_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
     updated_at = datetime(2025, 8, 31, 10, 15, tzinfo=timezone.utc)
     mock_ops_repo.get_valuation_jobs_count.return_value = 1
     mock_ops_repo.get_valuation_jobs.return_value = [
@@ -282,6 +283,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
                 "epoch": 1,
                 "attempt_count": 0,
                 "correlation_id": "corr-val-101",
+                "created_at": created_at,
                 "updated_at": updated_at,
                 "failure_reason": None,
             },
@@ -295,6 +297,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
     assert response.items[0].job_type == "VALUATION"
     assert response.items[0].security_id == "S1"
     assert response.items[0].business_date == date(2025, 8, 31)
+    assert response.items[0].created_at == created_at
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_processing is False
     assert response.items[0].is_retrying is False
@@ -307,6 +310,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
 
 
 async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
+    created_at = datetime(2025, 8, 31, 9, 45, tzinfo=timezone.utc)
     updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
     mock_ops_repo.get_aggregation_jobs_count.return_value = 1
     mock_ops_repo.get_aggregation_jobs.return_value = [
@@ -319,6 +323,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
                 "status": "PROCESSING",
                 "attempt_count": 2,
                 "correlation_id": "corr-agg-202",
+                "created_at": created_at,
                 "updated_at": updated_at,
                 "failure_reason": "timed out once",
             },
@@ -332,6 +337,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.items[0].job_type == "AGGREGATION"
     assert response.items[0].business_date == date(2025, 8, 31)
     assert response.items[0].attempt_count == 2
+    assert response.items[0].created_at == created_at
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_processing is True
     assert response.items[0].is_retrying is True
@@ -345,6 +351,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
 
 
 async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
+    created_at = datetime(2025, 8, 31, 9, 50, tzinfo=timezone.utc)
     updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
     mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
     mock_ops_repo.get_reprocessing_jobs.return_value = [
@@ -359,6 +366,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
                 "security_id": "S1",
                 "attempt_count": 2,
                 "correlation_id": "corr-replay-303",
+                "created_at": created_at,
                 "updated_at": updated_at,
                 "failure_reason": "timed out once",
             },
@@ -375,6 +383,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     assert response.items[0].security_id == "S1"
     assert response.items[0].business_date == date(2025, 8, 15)
     assert response.items[0].attempt_count == 2
+    assert response.items[0].created_at == created_at
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_retrying is True
     assert response.items[0].correlation_id == "corr-replay-303"

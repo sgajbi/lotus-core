@@ -872,6 +872,7 @@ class OperationsRepository:
                 security_id_expr.label("security_id"),
                 ReprocessingJob.attempt_count,
                 ReprocessingJob.correlation_id,
+                ReprocessingJob.created_at,
                 ReprocessingJob.updated_at,
                 ReprocessingJob.failure_reason,
             )

@@ -202,6 +202,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_job_record["properties"]["correlation_id"]["description"].startswith(
         "Durable correlation identifier captured when the job was created"
     )
+    assert support_job_record["properties"]["created_at"]["description"] == (
+        "UTC timestamp when the durable job row was first created."
+    )
     assert support_job_record["properties"]["is_stale_processing"]["description"].startswith(
         "True when the job is in PROCESSING state"
     )

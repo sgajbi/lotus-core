@@ -528,6 +528,11 @@ class SupportJobRecord(BaseModel):
         ),
         examples=["corr-valuation-20260313-001"],
     )
+    created_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the durable job row was first created.",
+        examples=["2026-03-13T10:10:00Z"],
+    )
     updated_at: Optional[datetime] = Field(
         None,
         description="UTC timestamp of the most recent durable lifecycle update for the job.",
@@ -584,6 +589,7 @@ class SupportJobListResponse(BaseModel):
                     "attempt_count": 1,
                     "is_retrying": True,
                     "correlation_id": "corr-valuation-20260313-001",
+                    "created_at": "2025-12-30T10:10:00Z",
                     "updated_at": "2025-12-30T10:15:09Z",
                     "is_stale_processing": False,
                     "failure_reason": None,
