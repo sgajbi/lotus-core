@@ -773,6 +773,7 @@ class OperationsRepository:
         self,
         portfolio_id: str,
         status: Optional[str] = None,
+        security_id: Optional[str] = None,
         job_id: Optional[int] = None,
         correlation_id: Optional[str] = None,
     ) -> int:
@@ -783,6 +784,8 @@ class OperationsRepository:
         )
         if status:
             stmt = stmt.where(PortfolioValuationJob.status == status)
+        if security_id:
+            stmt = stmt.where(PortfolioValuationJob.security_id == security_id)
         if job_id is not None:
             stmt = stmt.where(PortfolioValuationJob.id == job_id)
         if correlation_id:
@@ -795,6 +798,7 @@ class OperationsRepository:
         skip: int,
         limit: int,
         status: Optional[str] = None,
+        security_id: Optional[str] = None,
         job_id: Optional[int] = None,
         correlation_id: Optional[str] = None,
         stale_minutes: int = 15,
@@ -807,6 +811,8 @@ class OperationsRepository:
         )
         if status:
             stmt = stmt.where(PortfolioValuationJob.status == status)
+        if security_id:
+            stmt = stmt.where(PortfolioValuationJob.security_id == security_id)
         if job_id is not None:
             stmt = stmt.where(PortfolioValuationJob.id == job_id)
         if correlation_id:

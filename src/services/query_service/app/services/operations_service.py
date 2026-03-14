@@ -689,6 +689,7 @@ class OperationsService:
         skip: int,
         limit: int,
         status: str | None = None,
+        security_id: str | None = None,
         job_id: int | None = None,
         correlation_id: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
@@ -700,6 +701,7 @@ class OperationsService:
             self.repo.get_valuation_jobs_count(
                 portfolio_id=portfolio_id,
                 status=status,
+                security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,
             ),
@@ -708,6 +710,7 @@ class OperationsService:
                 skip=skip,
                 limit=limit,
                 status=status,
+                security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,
                 stale_minutes=stale_minutes,

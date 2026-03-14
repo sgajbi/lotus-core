@@ -411,6 +411,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
         skip=0,
         limit=20,
         status="PENDING",
+        security_id=None,
         job_id=None,
         correlation_id=None,
         stale_minutes=15,
@@ -681,6 +682,7 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
     mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
         status="PENDING",
+        security_id=None,
         job_id=8801,
         correlation_id=None,
     )
@@ -689,7 +691,43 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
         skip=0,
         limit=20,
         status="PENDING",
+        security_id=None,
         job_id=8801,
+        correlation_id=None,
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_valuation_jobs_forwards_security_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_valuation_jobs.return_value = []
+
+    response = await service.get_valuation_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        security_id="SEC-US-IBM",
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PENDING",
+        security_id="SEC-US-IBM",
+        job_id=None,
+        correlation_id=None,
+    )
+    mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        security_id="SEC-US-IBM",
+        job_id=None,
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
@@ -714,6 +752,7 @@ async def test_get_valuation_jobs_forwards_correlation_filter(
     mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
         status="PENDING",
+        security_id=None,
         job_id=None,
         correlation_id="corr-val-8801",
     )
@@ -722,6 +761,7 @@ async def test_get_valuation_jobs_forwards_correlation_filter(
         skip=0,
         limit=20,
         status="PENDING",
+        security_id=None,
         job_id=None,
         correlation_id="corr-val-8801",
         stale_minutes=15,

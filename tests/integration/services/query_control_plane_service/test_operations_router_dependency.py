@@ -357,7 +357,8 @@ async def test_valuation_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/valuation-jobs"
-        "?job_id=101&correlation_id=corr-val-101&status=PENDING&stale_threshold_minutes=30"
+        "?job_id=101&security_id=S1&correlation_id=corr-val-101"
+        "&status=PENDING&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -372,6 +373,7 @@ async def test_valuation_jobs_success(async_test_client):
         skip=0,
         limit=100,
         job_id=101,
+        security_id="S1",
         correlation_id="corr-val-101",
         status="PENDING",
         stale_threshold_minutes=30,

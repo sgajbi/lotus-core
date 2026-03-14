@@ -294,13 +294,18 @@ async def test_support_job_queries_honor_job_id_filters(
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
 
     await repository.get_valuation_jobs_count(
-        "P1", status="PENDING", job_id=8801, correlation_id="corr-val-8801"
+        "P1",
+        status="PENDING",
+        security_id="SEC-US-IBM",
+        job_id=8801,
+        correlation_id="corr-val-8801",
     )
     await repository.get_valuation_jobs(
         "P1",
         skip=0,
         limit=10,
         status="PENDING",
+        security_id="SEC-US-IBM",
         job_id=8801,
         correlation_id="corr-val-8801",
         reference_now=reference_now,
@@ -354,8 +359,10 @@ async def test_support_job_queries_honor_job_id_filters(
         str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
         for call in mock_db_session.execute.call_args_list
     ]
+    assert "portfolio_valuation_jobs.security_id = 'SEC-US-IBM'" in compiled_statements[0]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[0]
     assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[0]
+    assert "portfolio_valuation_jobs.security_id = 'SEC-US-IBM'" in compiled_statements[1]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[1]
     assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[1]
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[2]

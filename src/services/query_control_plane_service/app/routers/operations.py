@@ -365,8 +365,8 @@ async def get_reprocessing_jobs(
     summary="List valuation jobs for support workflows",
     description=(
         "What: List valuation jobs for a portfolio with support filters.\n"
-        "How: Query valuation job records with pagination and optional id, status, and "
-        "correlation filtering.\n"
+        "How: Query valuation job records with pagination and optional id, security, status, "
+        "and correlation filtering.\n"
         "When: Use to triage stuck valuation workloads and verify drain progress."
     ),
 )
@@ -376,6 +376,11 @@ async def get_valuation_jobs(
         None,
         description="Optional durable valuation job id filter.",
         examples=[8801],
+    ),
+    security_id: Optional[str] = Query(
+        None,
+        description="Optional security identifier filter for one valuation job stream.",
+        examples=["SEC-US-IBM"],
     ),
     correlation_id: Optional[str] = Query(
         None,
@@ -405,6 +410,7 @@ async def get_valuation_jobs(
             skip=skip,
             limit=limit,
             job_id=job_id,
+            security_id=security_id,
             correlation_id=correlation_id,
             status=job_status,
             stale_threshold_minutes=stale_threshold_minutes,
