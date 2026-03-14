@@ -64,6 +64,7 @@ def mock_kafka_producer() -> MagicMock:
     """Provides a mock KafkaProducer."""
     mock = MagicMock(spec=KafkaProducer)
     mock.publish_message = MagicMock()
+    mock.flush.return_value = 0
     return mock
 
 
@@ -1847,6 +1848,33 @@ async def test_reprocess_transactions_deduplicates_transaction_ids_at_ingress(
         for call in mock_kafka_producer.publish_message.call_args_list
     ]
     assert published_ids == ["TXN1", "TXN2"]
+
+
+async def test_reprocess_transactions_records_remaining_unpublished_keys_on_partial_failure(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(Exception, match="Failed to publish reprocessing request"):
+        await async_test_client.post(
+            "/reprocess/transactions",
+            json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
+        )
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed"},
+    )
+    assert jobs_response.status_code == 200
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    failure_history = await event_replay_test_client.get(
+        f"/ingestion/jobs/{failed_job_id}/failures"
+    )
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["TXN2", "TXN3"]
 
 
 @pytest.mark.parametrize(

@@ -197,6 +197,36 @@ async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_
     assert "Remaining unpublished record keys: T2, T3." in str(exc_info.value)
 
 
+async def test_publish_reprocessing_requests_reports_remaining_unpublished_keys_on_batch_failure(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transaction_ids = ["TX1", "TX2", "TX3"]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_reprocessing_requests(transaction_ids)
+
+    assert exc_info.value.failed_record_keys == ["TX2", "TX3"]
+    assert exc_info.value.published_record_count == 1
+    assert "Failed to publish reprocessing request 'TX2'" in str(exc_info.value)
+
+
+async def test_publish_reprocessing_requests_fails_on_flush_timeout(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transaction_ids = ["TX1", "TX2"]
+    mock_kafka_producer.flush.return_value = 1
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_reprocessing_requests(transaction_ids)
+
+    assert exc_info.value.failed_record_keys == ["TX1", "TX2"]
+    assert (
+        "Delivery confirmation timed out for reprocessing request delivery confirmation."
+        in str(exc_info.value)
+    )
+
+
 async def test_publish_with_correlation_id(
     ingestion_service: IngestionService, mock_kafka_producer: MagicMock
 ):

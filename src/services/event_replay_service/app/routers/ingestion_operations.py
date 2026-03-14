@@ -43,8 +43,6 @@ from src.services.ingestion_service.app.DTOs.portfolio_dto import PortfolioInges
 from src.services.ingestion_service.app.DTOs.reprocessing_dto import ReprocessingRequest
 from src.services.ingestion_service.app.DTOs.transaction_dto import TransactionIngestionRequest
 from src.services.ingestion_service.app.ops_controls import require_ops_token
-from src.services.ingestion_service.app.request_metadata import get_request_lineage
-from src.services.ingestion_service.app.routers.reprocessing import REPROCESSING_REQUESTED_TOPIC
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
     get_ingestion_job_service,
@@ -249,20 +247,10 @@ async def _replay_job_payload(
         return
     if endpoint == "/reprocess/transactions":
         request_model = ReprocessingRequest.model_validate(payload)
-        correlation_id, _, _ = get_request_lineage()
-        headers: list[tuple[str, bytes]] = []
-        if correlation_id:
-            headers.append(("correlation_id", correlation_id.encode("utf-8")))
-        if idempotency_key:
-            headers.append(("idempotency_key", idempotency_key.encode("utf-8")))
-        for txn_id in request_model.transaction_ids:
-            kafka_producer.publish_message(
-                topic=REPROCESSING_REQUESTED_TOPIC,
-                key=txn_id,
-                value={"transaction_id": txn_id},
-                headers=headers or None,
-            )
-        kafka_producer.flush(timeout=5)
+        await ingestion_service.publish_reprocessing_requests(
+            request_model.transaction_ids,
+            idempotency_key=idempotency_key,
+        )
         return
     raise ValueError(f"Retry not supported for endpoint '{endpoint}'.")
 

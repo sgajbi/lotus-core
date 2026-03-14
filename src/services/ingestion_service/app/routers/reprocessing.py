@@ -2,7 +2,6 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
 from ..ack_response import build_batch_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
@@ -14,12 +13,14 @@ from ..request_metadata import (
     resolve_idempotency_key,
 )
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
+from ..services.ingestion_service import (
+    IngestionPublishError,
+    IngestionService,
+    get_ingestion_service,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# Define the new topic name
-REPROCESSING_REQUESTED_TOPIC = "transactions_reprocessing_requested"
 REPROCESSING_BLOCKED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_REPLAY_BLOCKED",
@@ -71,7 +72,7 @@ REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE = {
 async def reprocess_transactions(
     request: ReprocessingRequest,
     http_request: Request,
-    kafka_producer: KafkaProducer = Depends(get_kafka_producer),
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     """
@@ -126,31 +127,25 @@ async def reprocess_transactions(
             accepted_count=job_result.job.accepted_count,
             idempotency_key=idempotency_key,
         )
-    headers: list[tuple[str, bytes]] = []
-    if correlation_id:
-        headers.append(("correlation_id", correlation_id.encode("utf-8")))
-    if idempotency_key:
-        headers.append(("idempotency_key", idempotency_key.encode("utf-8")))
-
     logger.info(f"Received request to reprocess {num_to_reprocess} transaction(s).")
 
     try:
-        for txn_id in ordered_unique_transaction_ids:
-            event_payload = {"transaction_id": txn_id}
-            kafka_producer.publish_message(
-                topic=REPROCESSING_REQUESTED_TOPIC,
-                key=txn_id,  # Key by transaction_id for partitioning
-                value=event_payload,
-                headers=headers or None,
-            )
-
-        kafka_producer.flush(timeout=5)
+        await ingestion_service.publish_reprocessing_requests(
+            ordered_unique_transaction_ids,
+            idempotency_key=idempotency_key,
+        )
         await ingestion_job_service.mark_queued(job_result.job.job_id)
+    except IngestionPublishError as exc:
+        await ingestion_job_service.mark_failed(
+            job_result.job.job_id,
+            str(exc),
+            failed_record_keys=exc.failed_record_keys,
+        )
+        raise
     except Exception as exc:
         await ingestion_job_service.mark_failed(
             job_result.job.job_id,
             str(exc),
-            failed_record_keys=ordered_unique_transaction_ids,
         )
         raise
 

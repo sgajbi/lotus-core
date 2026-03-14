@@ -22,6 +22,8 @@ from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
 from ..DTOs.portfolio_dto import Portfolio
 from ..DTOs.transaction_dto import Transaction
 
+KAFKA_REPROCESSING_REQUESTED_TOPIC = "transactions_reprocessing_requested"
+
 
 class IngestionPublishError(RuntimeError):
     def __init__(
@@ -79,6 +81,22 @@ class IngestionService:
             ),
             failed_record_keys=unpublished_record_keys,
             published_record_count=published_record_count,
+        )
+
+    @staticmethod
+    def _raise_flush_timeout_error(
+        *,
+        entity_label: str,
+        record_keys: list[str],
+    ) -> None:
+        record_key_list = ", ".join(record_keys)
+        raise IngestionPublishError(
+            (
+                f"Delivery confirmation timed out for {entity_label}. Affected record keys: "
+                f"{record_key_list}."
+            ),
+            failed_record_keys=record_keys,
+            published_record_count=0,
         )
 
     async def publish_business_dates(
@@ -316,6 +334,40 @@ class IngestionService:
             ) from exc
 
         return published_counts
+
+    async def publish_reprocessing_requests(
+        self,
+        transaction_ids: List[str],
+        idempotency_key: str | None = None,
+    ) -> None:
+        """Publishes transaction reprocessing requests with batch failure accounting."""
+        headers = self._get_headers(idempotency_key)
+        for idx, txn_id in enumerate(transaction_ids):
+            try:
+                self._kafka_producer.publish_message(
+                    topic=KAFKA_REPROCESSING_REQUESTED_TOPIC,
+                    key=txn_id,
+                    value={"transaction_id": txn_id},
+                    headers=headers,
+                )
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_REPROCESSING_REQUESTED_TOPIC).inc()
+            except Exception as exc:
+                try:
+                    self._raise_batch_publish_error(
+                        entity_label="reprocessing request",
+                        failed_key=txn_id,
+                        record_keys=transaction_ids,
+                        failure_index=idx,
+                    )
+                except IngestionPublishError as publish_exc:
+                    raise publish_exc from exc
+
+        undelivered_count = self._kafka_producer.flush(timeout=5)
+        if undelivered_count:
+            self._raise_flush_timeout_error(
+                entity_label="reprocessing request delivery confirmation",
+                record_keys=transaction_ids,
+            )
 
 
 def get_ingestion_service(
