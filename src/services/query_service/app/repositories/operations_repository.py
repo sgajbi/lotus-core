@@ -578,6 +578,39 @@ class OperationsRepository:
             .correlate(PositionState)
             .scalar_subquery()
         )
+        has_artifact_gap = case(
+            (latest_position_history_date.is_(None), False),
+            (
+                latest_daily_snapshot_date.is_(None),
+                True,
+            ),
+            (
+                latest_daily_snapshot_date < latest_position_history_date,
+                True,
+            ),
+            (
+                latest_valuation_job_date.is_(None),
+                True,
+            ),
+            (
+                latest_valuation_job_date < latest_position_history_date,
+                True,
+            ),
+            (
+                latest_valuation_job_status.in_(("FAILED", "PENDING", "PROCESSING")),
+                True,
+            ),
+            else_=False,
+        )
+        lineage_priority = case(
+            (PositionState.status == "REPROCESSING", 0),
+            (
+                and_(has_artifact_gap.is_(True), latest_valuation_job_status == "FAILED"),
+                1,
+            ),
+            (has_artifact_gap.is_(True), 2),
+            else_=9,
+        )
         stmt = select(
             PositionState.security_id,
             PositionState.epoch,
@@ -594,7 +627,15 @@ class OperationsRepository:
             stmt = stmt.where(PositionState.status == reprocessing_status)
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
-        stmt = stmt.order_by(PositionState.security_id.asc()).offset(skip).limit(limit)
+        stmt = (
+            stmt.order_by(
+                lineage_priority.asc(),
+                latest_position_history_date.desc().nullslast(),
+                PositionState.security_id.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
         return list((await self.db.execute(stmt)).mappings().all())
 
     async def get_valuation_jobs_count(

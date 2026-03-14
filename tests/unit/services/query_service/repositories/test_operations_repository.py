@@ -377,7 +377,10 @@ async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_
     assert value == ["k1", "k2"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "ORDER BY position_state.security_id ASC" in compiled
+    assert "CASE WHEN (position_state.status = 'REPROCESSING') THEN 0" in compiled
+    assert "max(position_history.position_date)" in compiled
+    assert "DESC NULLS LAST" in compiled
+    assert "position_state.security_id ASC" in compiled
     assert "LIMIT 10 OFFSET 5" in compiled
     assert "latest_position_history_date" in compiled
     assert "latest_daily_snapshot_date" in compiled
