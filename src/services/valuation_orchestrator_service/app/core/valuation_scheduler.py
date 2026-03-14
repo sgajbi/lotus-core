@@ -50,12 +50,14 @@ class ValuationScheduler:
         self._stale_timeout_minutes = runtime_settings.valuation_scheduler_stale_timeout_minutes
         self._max_attempts = runtime_settings.valuation_scheduler_max_attempts
         self._running = True
+        self._stop_event = asyncio.Event()
         self._producer: KafkaProducer = get_kafka_producer()
 
     def stop(self):
         """Signals the scheduler to gracefully shut down."""
         logger.info("Valuation scheduler shutdown signal received.")
         self._running = False
+        self._stop_event.set()
 
     @staticmethod
     def _build_backfill_correlation_id(
@@ -404,7 +406,10 @@ class ValuationScheduler:
                 logger.error("Error in scheduler polling loop.", exc_info=True)
 
             try:
-                await asyncio.sleep(self._poll_interval)
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
+                break
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 break
 

@@ -40,10 +40,12 @@ class ReprocessingWorker:
         self._stale_timeout_minutes = runtime_settings.reprocessing_worker_stale_timeout_minutes
         self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
+        self._stop_event = asyncio.Event()
 
     def stop(self):
         logger.info("Reprocessing worker shutdown signal received.")
         self._running = False
+        self._stop_event.set()
 
     async def _update_queue_metrics(self, job_repo: ReprocessingJobRepository):
         queue_stats = await job_repo.get_queue_stats("RESET_WATERMARKS")
@@ -187,7 +189,10 @@ class ReprocessingWorker:
                 logger.error("Error in reprocessing worker polling loop.", exc_info=True)
 
             try:
-                await asyncio.sleep(self._poll_interval)
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
+                break
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 break
 

@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -185,3 +187,49 @@ async def test_scheduler_updates_queue_metrics():
     mock_set_pending.assert_called_once_with("aggregation", 3)
     mock_set_failed.assert_called_once_with("aggregation", 1)
     mock_set_oldest.assert_called_once_with("aggregation", 120.0)
+
+
+async def test_scheduler_stop_interrupts_poll_sleep(
+    mock_kafka_producer: MagicMock,
+):
+    with patch(
+        "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
+        return_value=mock_kafka_producer,
+    ):
+        scheduler = AggregationScheduler(poll_interval=60)
+
+    batch_started = asyncio.Event()
+    mock_repo = AsyncMock(spec=TimeseriesRepository)
+    mock_repo.find_and_claim_eligible_jobs.return_value = []
+
+    async def update_queue_metrics(repo):
+        batch_started.set()
+
+    class _DbSession:
+        @asynccontextmanager
+        async def begin(self):
+            yield self
+
+    mock_db_session = _DbSession()
+
+    async def get_session_gen():
+        yield mock_db_session
+
+    with (
+        patch(
+            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.TimeseriesRepository",
+            return_value=mock_repo,
+        ),
+        patch.object(scheduler, "_update_queue_metrics", side_effect=update_queue_metrics),
+    ):
+        task = asyncio.create_task(scheduler.run())
+        await batch_started.wait()
+        await asyncio.sleep(0)
+
+        scheduler.stop()
+
+        await asyncio.wait_for(task, timeout=0.2)

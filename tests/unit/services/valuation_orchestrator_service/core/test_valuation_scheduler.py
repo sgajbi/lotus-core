@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -547,3 +548,43 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
         correlation_id="corr-trigger-1",
     )
     mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(scheduler._batch_size)
+
+
+async def test_scheduler_stop_interrupts_poll_sleep(
+    scheduler: ValuationScheduler,
+):
+    batch_started = asyncio.Event()
+
+    async def mark_started(*args, **kwargs):
+        batch_started.set()
+
+    async def get_session_gen():
+        yield AsyncMock(spec=AsyncSession)
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch.object(scheduler, "_update_reprocessing_metrics", side_effect=mark_started),
+        patch.object(scheduler, "_update_queue_metrics", new=AsyncMock()),
+        patch.object(scheduler, "_process_instrument_level_triggers", new=AsyncMock()),
+        patch.object(scheduler, "_create_backfill_jobs", new=AsyncMock()),
+        patch.object(scheduler, "_advance_watermarks", new=AsyncMock()),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
+        ) as mock_repo_factory,
+    ):
+        mock_repo = AsyncMock()
+        mock_repo.find_and_claim_eligible_jobs.return_value = []
+        mock_repo.find_and_reset_stale_jobs.return_value = 0
+        mock_repo_factory.return_value = mock_repo
+
+        scheduler._poll_interval = 60
+        task = asyncio.create_task(scheduler.run())
+        await batch_started.wait()
+        await asyncio.sleep(0)
+
+        scheduler.stop()
+
+        await asyncio.wait_for(task, timeout=0.2)

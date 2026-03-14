@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -362,3 +363,21 @@ async def test_worker_processes_job_under_job_correlation_context(mock_dependenc
 
     assert observed_correlation_ids == ["corr-reset-17"]
     assert correlation_id_var.get() == "<not-set>"
+
+
+async def test_worker_stop_interrupts_poll_sleep():
+    worker = ReprocessingWorker(poll_interval=60)
+    batch_started = asyncio.Event()
+
+    async def process_once():
+        batch_started.set()
+
+    worker._process_batch = process_once  # type: ignore[method-assign]
+
+    task = asyncio.create_task(worker.run())
+    await batch_started.wait()
+    await asyncio.sleep(0)
+
+    worker.stop()
+
+    await asyncio.wait_for(task, timeout=0.2)

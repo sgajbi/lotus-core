@@ -34,11 +34,13 @@ class AggregationScheduler:
         self._stale_timeout_minutes = runtime_settings.aggregation_scheduler_stale_timeout_minutes
         self._max_attempts = runtime_settings.aggregation_scheduler_max_attempts
         self._running = True
+        self._stop_event = asyncio.Event()
         self._producer: KafkaProducer = get_kafka_producer()
 
     def stop(self):
         logger.info("Aggregation scheduler shutdown signal received.")
         self._running = False
+        self._stop_event.set()
 
     async def _update_queue_metrics(self, repo: TimeseriesRepository):
         queue_stats = await repo.get_job_queue_stats()
@@ -117,7 +119,10 @@ class AggregationScheduler:
                 logger.error("Error in scheduler polling loop.", exc_info=True)
 
             try:
-                await asyncio.sleep(self._poll_interval)
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
+                break
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 break
 
