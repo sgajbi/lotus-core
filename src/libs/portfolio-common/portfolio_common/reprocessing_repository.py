@@ -14,6 +14,18 @@ from .logging_utils import correlation_id_var, normalize_lineage_value
 logger = logging.getLogger(__name__)
 
 
+class ReprocessingReplayError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        failed_transaction_ids: list[str],
+        published_record_count: int = 0,
+    ):
+        super().__init__(message)
+        self.failed_transaction_ids = failed_transaction_ids
+        self.published_record_count = published_record_count
+
+
 class ReprocessingRepository:
     """
     Handles the logic for reprocessing financial data by republishing events.
@@ -22,6 +34,42 @@ class ReprocessingRepository:
     def __init__(self, db: AsyncSession, kafka_producer: KafkaProducer):
         self.db = db
         self.kafka_producer = kafka_producer
+
+    @staticmethod
+    def _raise_partial_replay_error(
+        *,
+        failed_transaction_id: str,
+        ordered_transaction_ids: list[str],
+        failure_index: int,
+    ) -> None:
+        unpublished_transaction_ids = ordered_transaction_ids[failure_index:]
+        published_record_count = failure_index
+        earlier_records = (
+            f"{published_record_count} earlier transaction(s) were already republished"
+            if published_record_count
+            else "no earlier transactions were republished"
+        )
+        remaining_ids = ", ".join(unpublished_transaction_ids)
+        raise ReprocessingReplayError(
+            (
+                f"Failed to republish transaction '{failed_transaction_id}' after "
+                f"{earlier_records}. Remaining transaction ids: {remaining_ids}."
+            ),
+            failed_transaction_ids=unpublished_transaction_ids,
+            published_record_count=published_record_count,
+        )
+
+    @staticmethod
+    def _raise_flush_timeout_error(*, ordered_transaction_ids: list[str]) -> None:
+        remaining_ids = ", ".join(ordered_transaction_ids)
+        raise ReprocessingReplayError(
+            (
+                "Delivery confirmation timed out while republishing transactions. "
+                f"Affected transaction ids: {remaining_ids}."
+            ),
+            failed_transaction_ids=ordered_transaction_ids,
+            published_record_count=0,
+        )
 
     async def reprocess_transactions_by_ids(self, transaction_ids: List[str]) -> int:
         """
@@ -65,7 +113,9 @@ class ReprocessingRepository:
             [("correlation_id", (correlation_id or "").encode("utf-8"))] if correlation_id else []
         )
 
-        for txn in transactions_to_replay:
+        replayed_transaction_ids = [txn.transaction_id for txn in transactions_to_replay]
+
+        for idx, txn in enumerate(transactions_to_replay):
             # Convert the DB model to the Pydantic event model
             event_to_publish = TransactionEvent.model_validate(txn)
 
@@ -77,14 +127,28 @@ class ReprocessingRepository:
                 },
             )
 
-            self.kafka_producer.publish_message(
-                topic=KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
-                key=txn.portfolio_id,
-                value=event_to_publish.model_dump(mode="json"),
-                headers=headers,
-            )
+            try:
+                self.kafka_producer.publish_message(
+                    topic=KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
+                    key=txn.portfolio_id,
+                    value=event_to_publish.model_dump(mode="json"),
+                    headers=headers,
+                )
+            except Exception as exc:
+                try:
+                    self._raise_partial_replay_error(
+                        failed_transaction_id=txn.transaction_id,
+                        ordered_transaction_ids=replayed_transaction_ids,
+                        failure_index=idx,
+                    )
+                except ReprocessingReplayError as replay_exc:
+                    raise replay_exc from exc
 
-        self.kafka_producer.flush()
+        undelivered_count = self.kafka_producer.flush()
+        if undelivered_count:
+            self._raise_flush_timeout_error(
+                ordered_transaction_ids=replayed_transaction_ids,
+            )
         logger.info(f"Successfully republished {len(transactions_to_replay)} transaction event(s).")
 
         return len(transactions_to_replay)

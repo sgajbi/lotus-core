@@ -8,7 +8,10 @@ from portfolio_common.config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import correlation_id_var
-from portfolio_common.reprocessing_repository import ReprocessingRepository
+from portfolio_common.reprocessing_repository import (
+    ReprocessingReplayError,
+    ReprocessingRepository,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
@@ -23,7 +26,9 @@ def mock_db_session() -> AsyncMock:
 @pytest.fixture
 def mock_kafka_producer() -> MagicMock:
     """Provides a mock KafkaProducer."""
-    return MagicMock(spec=KafkaProducer)
+    mock = MagicMock(spec=KafkaProducer)
+    mock.flush.return_value = 0
+    return mock
 
 
 @pytest.fixture
@@ -244,3 +249,112 @@ async def test_reprocess_transactions_omits_not_set_correlation_header(
 
     assert count == 1
     assert mock_kafka_producer.publish_message.call_args.kwargs["headers"] == []
+
+
+async def test_reprocess_transactions_reports_remaining_ids_on_partial_publish_failure(
+    repository: ReprocessingRepository, mock_db_session: AsyncMock, mock_kafka_producer: MagicMock
+):
+    mock_transactions = [
+        DBTransaction(
+            transaction_id="TXN_A",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        ),
+        DBTransaction(
+            transaction_id="TXN_B",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        ),
+        DBTransaction(
+            transaction_id="TXN_C",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        ),
+    ]
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_db_session.execute.return_value = mock_result
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(ReprocessingReplayError) as exc_info:
+        await repository.reprocess_transactions_by_ids(["TXN_A", "TXN_B", "TXN_C"])
+
+    assert exc_info.value.failed_transaction_ids == ["TXN_B", "TXN_C"]
+    assert exc_info.value.published_record_count == 1
+    assert "Remaining transaction ids: TXN_B, TXN_C." in str(exc_info.value)
+
+
+async def test_reprocess_transactions_fails_on_flush_timeout(
+    repository: ReprocessingRepository, mock_db_session: AsyncMock, mock_kafka_producer: MagicMock
+):
+    mock_transactions = [
+        DBTransaction(
+            transaction_id="TXN_A",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        ),
+        DBTransaction(
+            transaction_id="TXN_B",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=10,
+            price=100,
+            gross_transaction_amount=1000,
+            currency="USD",
+            trade_currency="USD",
+            trade_fee=Decimal("0.0"),
+        ),
+    ]
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_db_session.execute.return_value = mock_result
+    mock_kafka_producer.flush.return_value = 1
+
+    with pytest.raises(ReprocessingReplayError) as exc_info:
+        await repository.reprocess_transactions_by_ids(["TXN_A", "TXN_B"])
+
+    assert exc_info.value.failed_transaction_ids == ["TXN_A", "TXN_B"]
+    assert "Delivery confirmation timed out while republishing transactions." in str(
+        exc_info.value
+    )
