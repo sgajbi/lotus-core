@@ -223,6 +223,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["aggregation_backlog_age_days"]["description"].startswith(
         "Backlog age in days computed from oldest pending aggregation date"
     )
+    assert support_overview["properties"]["stale_reprocessing_keys"]["description"].startswith(
+        "Number of REPROCESSING portfolio-security keys whose last update is older"
+    )
+    assert support_overview["properties"]["oldest_reprocessing_watermark_date"][
+        "description"
+    ].startswith("Oldest replay watermark date among portfolio-security keys")
+    assert support_overview["properties"]["reprocessing_backlog_age_days"][
+        "description"
+    ].startswith("Backlog age in days computed from oldest_reprocessing_watermark_date")
     assert support_overview["properties"]["pending_analytics_export_jobs"]["description"] == (
         "Number of analytics export jobs currently waiting in ACCEPTED state."
     )
@@ -256,6 +265,16 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_job_record["properties"]["backlog_age_minutes"][
         "description"
     ].startswith("Age in minutes from created_at to the current UTC time")
+    reprocessing_slo = components["ReprocessingSloBucket"]
+    assert reprocessing_slo["properties"]["stale_reprocessing_keys"]["description"].startswith(
+        "Number of REPROCESSING position keys whose last update is older"
+    )
+    assert reprocessing_slo["properties"]["oldest_reprocessing_watermark_date"][
+        "description"
+    ] == "Oldest watermark date among position keys currently in REPROCESSING state."
+    assert reprocessing_slo["properties"]["backlog_age_days"]["description"].startswith(
+        "Age in days from oldest_reprocessing_watermark_date"
+    )
     reconciliation_run_record = components["ReconciliationRunRecord"]
     assert reconciliation_run_record["properties"]["correlation_id"]["description"].startswith(
         "Durable correlation identifier captured for the reconciliation run"

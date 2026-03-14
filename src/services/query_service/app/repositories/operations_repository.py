@@ -42,6 +42,13 @@ class ExportJobHealthSummary:
     oldest_open_job_created_at: Optional[datetime]
 
 
+@dataclass(frozen=True)
+class ReprocessingHealthSummary:
+    active_keys: int
+    stale_reprocessing_keys: int
+    oldest_reprocessing_watermark_date: Optional[date]
+
+
 class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -118,6 +125,33 @@ class OperationsRepository:
             )
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_reprocessing_health_summary(
+        self,
+        portfolio_id: str,
+        stale_minutes: int,
+    ) -> ReprocessingHealthSummary:
+        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        stmt = select(
+            func.count()
+            .filter(PositionState.status == "REPROCESSING")
+            .label("active_keys"),
+            func.count()
+            .filter(
+                PositionState.status == "REPROCESSING",
+                PositionState.updated_at < stale_threshold,
+            )
+            .label("stale_reprocessing_keys"),
+            func.min(PositionState.watermark_date)
+            .filter(PositionState.status == "REPROCESSING")
+            .label("oldest_reprocessing_watermark_date"),
+        ).where(PositionState.portfolio_id == portfolio_id)
+        row = (await self.db.execute(stmt)).one()
+        return ReprocessingHealthSummary(
+            active_keys=int(row.active_keys or 0),
+            stale_reprocessing_keys=int(row.stale_reprocessing_keys or 0),
+            oldest_reprocessing_watermark_date=row.oldest_reprocessing_watermark_date,
+        )
 
     async def get_valuation_job_health_summary(
         self,

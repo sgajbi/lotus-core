@@ -24,6 +24,30 @@ class SupportOverviewResponse(BaseModel):
         description="Number of portfolio-security keys currently marked REPROCESSING.",
         examples=[2],
     )
+    stale_reprocessing_keys: int = Field(
+        ...,
+        description=(
+            "Number of REPROCESSING portfolio-security keys whose last update is older than "
+            "the stale threshold (15 minutes)."
+        ),
+        examples=[1],
+    )
+    oldest_reprocessing_watermark_date: Optional[date] = Field(
+        None,
+        description=(
+            "Oldest replay watermark date among portfolio-security keys currently marked "
+            "REPROCESSING."
+        ),
+        examples=["2025-11-03"],
+    )
+    reprocessing_backlog_age_days: Optional[int] = Field(
+        None,
+        description=(
+            "Backlog age in days computed from oldest_reprocessing_watermark_date to "
+            "business_date (or current UTC date when business_date is missing)."
+        ),
+        examples=[119],
+    )
     pending_valuation_jobs: int = Field(
         ...,
         description="Number of pending/processing valuation jobs for the portfolio.",
@@ -254,6 +278,27 @@ class ReprocessingSloBucket(BaseModel):
         description="Number of position keys currently in REPROCESSING state.",
         examples=[4],
     )
+    stale_reprocessing_keys: int = Field(
+        ...,
+        description=(
+            "Number of REPROCESSING position keys whose last update is older than the stale "
+            "threshold."
+        ),
+        examples=[1],
+    )
+    oldest_reprocessing_watermark_date: Optional[date] = Field(
+        None,
+        description="Oldest watermark date among position keys currently in REPROCESSING state.",
+        examples=["2026-02-25"],
+    )
+    backlog_age_days: Optional[int] = Field(
+        None,
+        description=(
+            "Age in days from oldest_reprocessing_watermark_date to business_date "
+            "(or current UTC date when business_date is unavailable)."
+        ),
+        examples=[7],
+    )
 
 
 class CalculatorSloResponse(BaseModel):
@@ -306,7 +351,14 @@ class CalculatorSloResponse(BaseModel):
     reprocessing: ReprocessingSloBucket = Field(
         ...,
         description="Reprocessing SLO snapshot for this portfolio.",
-        examples=[{"active_reprocessing_keys": 4}],
+        examples=[
+            {
+                "active_reprocessing_keys": 4,
+                "stale_reprocessing_keys": 1,
+                "oldest_reprocessing_watermark_date": "2026-02-25",
+                "backlog_age_days": 7,
+            }
+        ],
     )
 
 

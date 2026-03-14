@@ -32,6 +32,9 @@ async def test_support_overview_success(async_test_client):
         "business_date": date(2025, 8, 31),
         "current_epoch": 3,
         "active_reprocessing_keys": 1,
+        "stale_reprocessing_keys": 1,
+        "oldest_reprocessing_watermark_date": date(2025, 8, 20),
+        "reprocessing_backlog_age_days": 11,
         "pending_valuation_jobs": 2,
         "processing_valuation_jobs": 1,
         "stale_processing_valuation_jobs": 0,
@@ -105,7 +108,12 @@ async def test_calculator_slos_success(async_test_client):
             "oldest_open_job_date": date(2025, 8, 31),
             "backlog_age_days": 0,
         },
-        "reprocessing": {"active_reprocessing_keys": 0},
+        "reprocessing": {
+            "active_reprocessing_keys": 0,
+            "stale_reprocessing_keys": 0,
+            "oldest_reprocessing_watermark_date": None,
+            "backlog_age_days": None,
+        },
     }
 
     response = await client.get("/support/portfolios/P1/calculator-slos")

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.repositories.operations_repository import (
     ExportJobHealthSummary,
     JobHealthSummary,
+    ReprocessingHealthSummary,
 )
 from src.services.query_service.app.services.operations_service import OperationsService
 
@@ -32,7 +33,11 @@ def service(mock_ops_repo: AsyncMock) -> OperationsService:
 async def test_get_support_overview(service: OperationsService, mock_ops_repo: AsyncMock):
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_current_portfolio_epoch.return_value = 2
-    mock_ops_repo.get_active_reprocessing_keys_count.return_value = 1
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=1,
+        stale_reprocessing_keys=1,
+        oldest_reprocessing_watermark_date=date(2025, 8, 18),
+    )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=4,
         processing_jobs=2,
@@ -74,6 +79,9 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.business_date == date(2025, 8, 30)
     assert response.current_epoch == 2
     assert response.active_reprocessing_keys == 1
+    assert response.stale_reprocessing_keys == 1
+    assert response.oldest_reprocessing_watermark_date == date(2025, 8, 18)
+    assert response.reprocessing_backlog_age_days == 12
     assert response.pending_valuation_jobs == 4
     assert response.processing_valuation_jobs == 2
     assert response.stale_processing_valuation_jobs == 1
@@ -796,7 +804,11 @@ async def test_get_support_overview_without_business_date(
 ):
     mock_ops_repo.get_latest_business_date.return_value = None
     mock_ops_repo.get_current_portfolio_epoch.return_value = 1
-    mock_ops_repo.get_active_reprocessing_keys_count.return_value = 0
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+    )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
         processing_jobs=0,
@@ -829,6 +841,9 @@ async def test_get_support_overview_without_business_date(
     response = await service.get_support_overview("P1")
 
     assert response.business_date is None
+    assert response.stale_reprocessing_keys == 0
+    assert response.oldest_reprocessing_watermark_date is None
+    assert response.reprocessing_backlog_age_days is None
     assert response.valuation_backlog_age_days is None
     assert response.aggregation_backlog_age_days is None
     assert response.pending_analytics_export_jobs == 0
@@ -851,7 +866,11 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
 ):
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_current_portfolio_epoch.return_value = 2
-    mock_ops_repo.get_active_reprocessing_keys_count.return_value = 0
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+    )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
         processing_jobs=0,
@@ -896,7 +915,11 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
 
 async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
-    mock_ops_repo.get_active_reprocessing_keys_count.return_value = 2
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=2,
+        stale_reprocessing_keys=1,
+        oldest_reprocessing_watermark_date=date(2025, 8, 18),
+    )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=7,
         processing_jobs=3,
@@ -927,3 +950,6 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
     assert response.aggregation.failed_jobs == 1
     assert response.aggregation.backlog_age_days == 5
     assert response.reprocessing.active_reprocessing_keys == 2
+    assert response.reprocessing.stale_reprocessing_keys == 1
+    assert response.reprocessing.oldest_reprocessing_watermark_date == date(2025, 8, 18)
+    assert response.reprocessing.backlog_age_days == 12

@@ -207,7 +207,7 @@ class OperationsService:
         (
             latest_business_date,
             current_epoch,
-            active_reprocessing_keys,
+            reprocessing_health,
             valuation_job_health,
             aggregation_job_health,
             analytics_export_job_health,
@@ -218,7 +218,10 @@ class OperationsService:
         ) = await asyncio.gather(
             self.repo.get_latest_business_date(),
             self.repo.get_current_portfolio_epoch(portfolio_id),
-            self.repo.get_active_reprocessing_keys_count(portfolio_id),
+            self.repo.get_reprocessing_health_summary(
+                portfolio_id,
+                stale_minutes=15,
+            ),
             self.repo.get_valuation_job_health_summary(
                 portfolio_id, stale_minutes=15, failed_window_hours=24
             ),
@@ -265,6 +268,15 @@ class OperationsService:
                 datetime.now(timezone.utc) - analytics_export_job_health.oldest_open_job_created_at
             )
             analytics_export_backlog_age_minutes = max(0, int(delta.total_seconds() // 60))
+        reprocessing_backlog_age_days = None
+        if reprocessing_health.oldest_reprocessing_watermark_date:
+            reference_date = latest_business_date or datetime.now(timezone.utc).date()
+            reprocessing_backlog_age_days = max(
+                0,
+                (
+                    reference_date - reprocessing_health.oldest_reprocessing_watermark_date
+                ).days,
+            )
 
         controls_status = latest_control_stage.status if latest_control_stage else None
         controls_blocking = self._is_controls_blocking(controls_status)
@@ -273,7 +285,12 @@ class OperationsService:
             portfolio_id=portfolio_id,
             business_date=latest_business_date,
             current_epoch=current_epoch,
-            active_reprocessing_keys=active_reprocessing_keys,
+            active_reprocessing_keys=reprocessing_health.active_keys,
+            stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
+            oldest_reprocessing_watermark_date=(
+                reprocessing_health.oldest_reprocessing_watermark_date
+            ),
+            reprocessing_backlog_age_days=reprocessing_backlog_age_days,
             pending_valuation_jobs=valuation_job_health.pending_jobs,
             processing_valuation_jobs=valuation_job_health.processing_jobs,
             stale_processing_valuation_jobs=valuation_job_health.stale_processing_jobs,
@@ -318,12 +335,15 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         (
             latest_business_date,
-            active_reprocessing_keys,
+            reprocessing_health,
             valuation_job_health,
             aggregation_job_health,
         ) = await asyncio.gather(
             self.repo.get_latest_business_date(),
-            self.repo.get_active_reprocessing_keys_count(portfolio_id),
+            self.repo.get_reprocessing_health_summary(
+                portfolio_id,
+                stale_minutes=stale_threshold_minutes,
+            ),
             self.repo.get_valuation_job_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
@@ -345,6 +365,11 @@ class OperationsService:
         aggregation_backlog_age_days = (
             max(0, (reference_date - aggregation_job_health.oldest_open_job_date).days)
             if aggregation_job_health.oldest_open_job_date is not None
+            else None
+        )
+        reprocessing_backlog_age_days = (
+            max(0, (reference_date - reprocessing_health.oldest_reprocessing_watermark_date).days)
+            if reprocessing_health.oldest_reprocessing_watermark_date is not None
             else None
         )
 
@@ -371,7 +396,14 @@ class OperationsService:
                 oldest_open_job_date=aggregation_job_health.oldest_open_job_date,
                 backlog_age_days=aggregation_backlog_age_days,
             ),
-            reprocessing=ReprocessingSloBucket(active_reprocessing_keys=active_reprocessing_keys),
+            reprocessing=ReprocessingSloBucket(
+                active_reprocessing_keys=reprocessing_health.active_keys,
+                stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
+                oldest_reprocessing_watermark_date=(
+                    reprocessing_health.oldest_reprocessing_watermark_date
+                ),
+                backlog_age_days=reprocessing_backlog_age_days,
+            ),
         )
 
     async def get_lineage(self, portfolio_id: str, security_id: str) -> LineageResponse:
