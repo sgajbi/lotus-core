@@ -319,8 +319,12 @@ class OperationsService:
             controls_business_date=(
                 latest_control_stage.business_date if latest_control_stage else None
             ),
+            controls_stage_id=(latest_control_stage.id if latest_control_stage else None),
             controls_epoch=latest_control_stage.epoch if latest_control_stage else None,
             controls_status=controls_status,
+            controls_last_updated_at=(
+                latest_control_stage.updated_at if latest_control_stage else None
+            ),
             controls_blocking=controls_blocking,
             publish_allowed=not controls_blocking,
         )

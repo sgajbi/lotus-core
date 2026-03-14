@@ -198,6 +198,14 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["2025-12-30"],
     )
+    controls_stage_id: Optional[int] = Field(
+        None,
+        description=(
+            "Durable database identifier of the latest portfolio-day financial reconciliation "
+            "control stage."
+        ),
+        examples=[701],
+    )
     controls_epoch: Optional[int] = Field(
         None,
         description=(
@@ -212,6 +220,14 @@ class SupportOverviewResponse(BaseModel):
             "(for example COMPLETED, REQUIRES_REPLAY, FAILED)."
         ),
         examples=["COMPLETED"],
+    )
+    controls_last_updated_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent durable lifecycle update for the latest "
+            "portfolio-day financial reconciliation control stage."
+        ),
+        examples=["2026-03-13T10:15:09Z"],
     )
     controls_blocking: bool = Field(
         ...,

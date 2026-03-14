@@ -70,7 +70,13 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
         "ControlStageStub",
         (),
-        {"business_date": date(2025, 8, 30), "epoch": 2, "status": "COMPLETED"},
+        {
+            "id": 701,
+            "business_date": date(2025, 8, 30),
+            "epoch": 2,
+            "status": "COMPLETED",
+            "updated_at": datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
+        },
     )()
 
     response = await service.get_support_overview("P1")
@@ -108,8 +114,12 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)
     assert response.position_snapshot_history_mismatch_count == 0
     assert response.controls_business_date == date(2025, 8, 30)
+    assert response.controls_stage_id == 701
     assert response.controls_epoch == 2
     assert response.controls_status == "COMPLETED"
+    assert response.controls_last_updated_at == datetime(
+        2025, 8, 30, 10, 15, tzinfo=timezone.utc
+    )
     assert response.controls_blocking is False
     assert response.publish_allowed is True
 
@@ -855,6 +865,8 @@ async def test_get_support_overview_without_business_date(
     assert response.latest_booked_transaction_date is None
     assert response.latest_booked_position_snapshot_date is None
     assert response.controls_status is None
+    assert response.controls_stage_id is None
+    assert response.controls_last_updated_at is None
     assert response.controls_blocking is False
     assert response.publish_allowed is True
     mock_ops_repo.get_latest_transaction_date_as_of.assert_not_awaited()
@@ -903,12 +915,22 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
         "ControlStageStub",
         (),
-        {"business_date": date(2025, 8, 30), "epoch": 2, "status": "REQUIRES_REPLAY"},
+        {
+            "id": 702,
+            "business_date": date(2025, 8, 30),
+            "epoch": 2,
+            "status": "REQUIRES_REPLAY",
+            "updated_at": datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+        },
     )()
 
     response = await service.get_support_overview("P1")
 
+    assert response.controls_stage_id == 702
     assert response.controls_status == "REQUIRES_REPLAY"
+    assert response.controls_last_updated_at == datetime(
+        2025, 8, 30, 11, 0, tzinfo=timezone.utc
+    )
     assert response.controls_blocking is True
     assert response.publish_allowed is False
 

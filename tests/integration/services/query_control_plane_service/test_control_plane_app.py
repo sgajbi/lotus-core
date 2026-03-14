@@ -217,6 +217,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
         "Number of valuation jobs currently in FAILED terminal state."
     )
+    assert support_overview["properties"]["controls_stage_id"]["description"].startswith(
+        "Durable database identifier of the latest portfolio-day financial reconciliation"
+    )
+    assert support_overview["properties"]["controls_last_updated_at"]["description"].startswith(
+        "UTC timestamp of the most recent durable lifecycle update for the latest"
+    )
     assert support_overview["properties"]["oldest_pending_aggregation_date"]["description"] == (
         "Oldest aggregation date among pending/processing jobs for backlog analysis."
     )

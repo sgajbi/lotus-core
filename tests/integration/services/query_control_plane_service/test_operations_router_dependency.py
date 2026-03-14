@@ -59,8 +59,10 @@ async def test_support_overview_success(async_test_client):
         "latest_booked_position_snapshot_date": date(2025, 8, 31),
         "position_snapshot_history_mismatch_count": 0,
         "controls_business_date": date(2025, 8, 31),
+        "controls_stage_id": 701,
         "controls_epoch": 3,
         "controls_status": "COMPLETED",
+        "controls_last_updated_at": "2025-08-31T10:16:00Z",
         "controls_blocking": False,
         "publish_allowed": True,
     }
@@ -69,6 +71,8 @@ async def test_support_overview_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["controls_stage_id"] == 701
+    assert response.json()["controls_last_updated_at"] == "2025-08-31T10:16:00Z"
     assert response.json()["publish_allowed"] is True
     assert "X-Correlation-ID" in response.headers
 
