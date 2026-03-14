@@ -254,6 +254,8 @@ async def test_valuation_jobs_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_valuation_jobs.return_value = {
         "portfolio_id": "P1",
+        "stale_threshold_minutes": 30,
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
         "skip": 0,
         "limit": 100,
@@ -278,13 +280,24 @@ async def test_valuation_jobs_success(async_test_client):
         ],
     }
 
-    response = await client.get("/support/portfolios/P1/valuation-jobs?status=PENDING")
+    response = await client.get(
+        "/support/portfolios/P1/valuation-jobs?status=PENDING&stale_threshold_minutes=30"
+    )
 
     assert response.status_code == 200
+    assert response.json()["stale_threshold_minutes"] == 30
+    assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["job_type"] == "VALUATION"
     assert response.json()["items"][0]["is_stale_processing"] is False
     assert response.json()["items"][0]["is_retrying"] is False
     assert response.json()["items"][0]["operational_state"] == "PENDING"
+    mock_service.get_valuation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        status="PENDING",
+        stale_threshold_minutes=30,
+    )
 
 
 async def test_valuation_jobs_unexpected_maps_to_500(async_test_client):
@@ -301,6 +314,8 @@ async def test_aggregation_jobs_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_aggregation_jobs.return_value = {
         "portfolio_id": "P1",
+        "stale_threshold_minutes": 30,
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
         "skip": 0,
         "limit": 100,
@@ -325,15 +340,25 @@ async def test_aggregation_jobs_success(async_test_client):
         ],
     }
 
-    response = await client.get("/support/portfolios/P1/aggregation-jobs?status=PROCESSING")
+    response = await client.get(
+        "/support/portfolios/P1/aggregation-jobs?status=PROCESSING&stale_threshold_minutes=30"
+    )
 
     assert response.status_code == 200
+    assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["items"][0]["job_type"] == "AGGREGATION"
     assert response.json()["items"][0]["attempt_count"] == 2
     assert response.json()["items"][0]["is_stale_processing"] is True
     assert response.json()["items"][0]["is_retrying"] is True
     assert response.json()["items"][0]["failure_reason"] == "timed out once"
     assert response.json()["items"][0]["operational_state"] == "STALE_PROCESSING"
+    mock_service.get_aggregation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        status="PROCESSING",
+        stale_threshold_minutes=30,
+    )
 
 
 async def test_aggregation_jobs_unexpected_maps_to_500(async_test_client):
@@ -350,6 +375,8 @@ async def test_analytics_export_jobs_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_analytics_export_jobs.return_value = {
         "portfolio_id": "P1",
+        "stale_threshold_minutes": 30,
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
         "skip": 0,
         "limit": 100,
@@ -373,9 +400,13 @@ async def test_analytics_export_jobs_success(async_test_client):
         ],
     }
 
-    response = await client.get("/support/portfolios/P1/analytics-export-jobs?status_filter=FAILED")
+    response = await client.get(
+        "/support/portfolios/P1/analytics-export-jobs"
+        "?status_filter=FAILED&stale_threshold_minutes=30"
+    )
 
     assert response.status_code == 200
+    assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["items"][0]["job_id"] == "aexp_1234567890abcdef"
     assert (
         response.json()["items"][0]["request_fingerprint"]
@@ -386,6 +417,13 @@ async def test_analytics_export_jobs_success(async_test_client):
     assert response.json()["items"][0]["is_stale_running"] is False
     assert response.json()["items"][0]["is_terminal_failure"] is True
     assert response.json()["items"][0]["operational_state"] == "FAILED"
+    mock_service.get_analytics_export_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        status="FAILED",
+        stale_threshold_minutes=30,
+    )
 
 
 async def test_analytics_export_jobs_unexpected_maps_to_500(async_test_client):
@@ -652,6 +690,8 @@ async def test_reprocessing_keys_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reprocessing_keys.return_value = {
         "portfolio_id": "P1",
+        "stale_threshold_minutes": 30,
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
         "skip": 0,
         "limit": 100,
@@ -671,15 +711,24 @@ async def test_reprocessing_keys_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/reprocessing-keys"
-        "?status_filter=REPROCESSING&security_id=SEC-US-IBM"
+        "?status_filter=REPROCESSING&security_id=SEC-US-IBM&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"
     assert response.json()["items"][0]["created_at"] == "2026-03-13T10:05:00Z"
     assert response.json()["items"][0]["is_stale_reprocessing"] is False
     assert response.json()["items"][0]["operational_state"] == "REPROCESSING"
+    mock_service.get_reprocessing_keys.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+        stale_threshold_minutes=30,
+    )
 
 
 async def test_reprocessing_keys_not_found_maps_to_404(async_test_client):
@@ -706,6 +755,8 @@ async def test_reprocessing_jobs_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reprocessing_jobs.return_value = {
         "portfolio_id": "P1",
+        "stale_threshold_minutes": 30,
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
         "skip": 0,
         "limit": 100,
@@ -731,13 +782,23 @@ async def test_reprocessing_jobs_success(async_test_client):
     }
 
     response = await client.get(
-        "/support/portfolios/P1/reprocessing-jobs?status_filter=PROCESSING&security_id=SEC-US-IBM"
+        "/support/portfolios/P1/reprocessing-jobs"
+        "?status_filter=PROCESSING&security_id=SEC-US-IBM&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["items"][0]["job_type"] == "RESET_WATERMARKS"
     assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"
+    mock_service.get_reprocessing_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        status="PROCESSING",
+        security_id="SEC-US-IBM",
+        stale_threshold_minutes=30,
+    )
 
 
 async def test_reprocessing_jobs_not_found_maps_to_404(async_test_client):

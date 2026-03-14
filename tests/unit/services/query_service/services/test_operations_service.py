@@ -316,6 +316,8 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
 
     response = await service.get_valuation_jobs("P1", skip=0, limit=20, status="PENDING")
 
+    assert response.stale_threshold_minutes == 15
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 1
     assert response.items[0].job_id == 101
     assert response.items[0].job_type == "VALUATION"
@@ -356,6 +358,8 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
 
     response = await service.get_aggregation_jobs("P1", skip=0, limit=20, status="PROCESSING")
 
+    assert response.stale_threshold_minutes == 15
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 1
     assert response.items[0].job_id == 202
     assert response.items[0].job_type == "AGGREGATION"
@@ -401,6 +405,8 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         "P1", skip=0, limit=20, status="PROCESSING", security_id="S1"
     )
 
+    assert response.stale_threshold_minutes == 15
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 1
     assert response.items[0].job_id == 303
     assert response.items[0].job_type == "RESET_WATERMARKS"
@@ -481,6 +487,8 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
 
     response = await service.get_analytics_export_jobs("P1", skip=0, limit=20, status="FAILED")
 
+    assert response.stale_threshold_minutes == 15
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 1
     assert response.items[0].job_id == "aexp_1234567890abcdef"
     assert response.items[0].request_fingerprint == "fp_portfolio_timeseries_pf001_20260313_v1"
@@ -787,6 +795,8 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
     )
 
     assert response.portfolio_id == "P1"
+    assert response.stale_threshold_minutes == 15
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 1
     assert response.items[0].security_id == "SEC-US-IBM"
     assert response.items[0].epoch == 3

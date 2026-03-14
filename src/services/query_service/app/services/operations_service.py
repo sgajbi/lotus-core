@@ -38,10 +38,15 @@ class OperationsService:
         self.repo = OperationsRepository(db)
 
     @classmethod
-    def _get_support_job_operational_state(cls, status: str, updated_at: datetime | None) -> str:
+    def _get_support_job_operational_state(
+        cls,
+        status: str,
+        updated_at: datetime | None,
+        now: datetime | None = None,
+    ) -> str:
         if status == "FAILED":
             return "FAILED"
-        if cls._is_support_job_stale(status, updated_at):
+        if cls._is_support_job_stale(status, updated_at, now):
             return "STALE_PROCESSING"
         if status == "PROCESSING":
             return "PROCESSING"
@@ -61,12 +66,12 @@ class OperationsService:
 
     @classmethod
     def _get_analytics_export_operational_state(
-        cls, status: str, updated_at: datetime | None
+        cls, status: str, updated_at: datetime | None, now: datetime | None = None
     ) -> str:
         status = cls._normalize_analytics_export_status(status) or ""
         if status == "failed":
             return "FAILED"
-        if cls._is_analytics_export_job_stale(status, updated_at):
+        if cls._is_analytics_export_job_stale(status, updated_at, now):
             return "STALE_RUNNING"
         if status == "running":
             return "RUNNING"
@@ -96,9 +101,9 @@ class OperationsService:
 
     @classmethod
     def _get_reprocessing_key_operational_state(
-        cls, status: str | None, updated_at: datetime | None
+        cls, status: str | None, updated_at: datetime | None, now: datetime | None = None
     ) -> str:
-        if cls._is_reprocessing_key_stale(status, updated_at):
+        if cls._is_reprocessing_key_stale(status, updated_at, now):
             return "STALE_REPROCESSING"
         if status == "REPROCESSING":
             return "REPROCESSING"
@@ -183,6 +188,7 @@ class OperationsService:
         created_at: datetime | None,
         updated_at: datetime | None,
         failure_reason: str | None,
+        reference_now: datetime | None = None,
     ) -> SupportJobRecord:
         return SupportJobRecord(
             job_id=job_id,
@@ -196,10 +202,12 @@ class OperationsService:
             correlation_id=correlation_id,
             created_at=created_at,
             updated_at=updated_at,
-            is_stale_processing=self._is_support_job_stale(status, updated_at),
+            is_stale_processing=self._is_support_job_stale(status, updated_at, reference_now),
             failure_reason=failure_reason,
             is_terminal_failure=status == "FAILED",
-            operational_state=self._get_support_job_operational_state(status, updated_at),
+            operational_state=self._get_support_job_operational_state(
+                status, updated_at, reference_now
+            ),
         )
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
@@ -527,10 +535,16 @@ class OperationsService:
         )
 
     async def get_valuation_jobs(
-        self, portfolio_id: str, skip: int, limit: int, status: str | None = None
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: str | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        generated_at_utc = datetime.now(timezone.utc)
+        stale_minutes = stale_threshold_minutes
         total, jobs = await asyncio.gather(
             self.repo.get_valuation_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_valuation_jobs(
@@ -543,6 +557,8 @@ class OperationsService:
         )
         return SupportJobListResponse(
             portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,
@@ -559,16 +575,23 @@ class OperationsService:
                     created_at=job.created_at,
                     updated_at=job.updated_at,
                     failure_reason=job.failure_reason,
+                    reference_now=generated_at_utc,
                 )
                 for job in jobs
             ],
         )
 
     async def get_aggregation_jobs(
-        self, portfolio_id: str, skip: int, limit: int, status: str | None = None
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: str | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        generated_at_utc = datetime.now(timezone.utc)
+        stale_minutes = stale_threshold_minutes
         total, jobs = await asyncio.gather(
             self.repo.get_aggregation_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_aggregation_jobs(
@@ -581,6 +604,8 @@ class OperationsService:
         )
         return SupportJobListResponse(
             portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,
@@ -597,16 +622,23 @@ class OperationsService:
                     created_at=job.created_at,
                     updated_at=job.updated_at,
                     failure_reason=job.failure_reason,
+                    reference_now=generated_at_utc,
                 )
                 for job in jobs
             ],
         )
 
     async def get_analytics_export_jobs(
-        self, portfolio_id: str, skip: int, limit: int, status: str | None = None
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        status: str | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> AnalyticsExportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        generated_at_utc = datetime.now(timezone.utc)
+        stale_minutes = stale_threshold_minutes
         total, jobs = await asyncio.gather(
             self.repo.get_analytics_export_jobs_count(portfolio_id=portfolio_id, status=status),
             self.repo.get_analytics_export_jobs(
@@ -619,6 +651,8 @@ class OperationsService:
         )
         return AnalyticsExportJobListResponse(
             portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,
@@ -633,10 +667,10 @@ class OperationsService:
                     completed_at=job.completed_at,
                     updated_at=job.updated_at,
                     is_stale_running=self._is_analytics_export_job_stale(
-                        job.status, job.updated_at
+                        job.status, job.updated_at, generated_at_utc
                     ),
                     backlog_age_minutes=self._get_analytics_export_backlog_age_minutes(
-                        job.status, job.created_at
+                        job.status, job.created_at, generated_at_utc
                     ),
                     result_row_count=job.result_row_count,
                     error_message=job.error_message,
@@ -644,7 +678,7 @@ class OperationsService:
                         self._normalize_analytics_export_status(job.status) == "failed"
                     ),
                     operational_state=self._get_analytics_export_operational_state(
-                        job.status, job.updated_at
+                        job.status, job.updated_at, generated_at_utc
                     ),
                 )
                 for job in jobs
@@ -792,9 +826,11 @@ class OperationsService:
         limit: int,
         status: str | None = None,
         security_id: str | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> ReprocessingKeyListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        generated_at_utc = datetime.now(timezone.utc)
+        stale_minutes = stale_threshold_minutes
         total, keys = await asyncio.gather(
             self.repo.get_reprocessing_keys_count(
                 portfolio_id=portfolio_id,
@@ -812,6 +848,8 @@ class OperationsService:
         )
         return ReprocessingKeyListResponse(
             portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,
@@ -826,10 +864,12 @@ class OperationsService:
                     is_stale_reprocessing=self._is_reprocessing_key_stale(
                         key.status,
                         key.updated_at,
+                        generated_at_utc,
                     ),
                     operational_state=self._get_reprocessing_key_operational_state(
                         key.status,
                         key.updated_at,
+                        generated_at_utc,
                     ),
                 )
                 for key in keys
@@ -843,9 +883,11 @@ class OperationsService:
         limit: int,
         status: str | None = None,
         security_id: str | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        stale_minutes = int(self.SUPPORT_JOB_STALE_THRESHOLD.total_seconds() // 60)
+        generated_at_utc = datetime.now(timezone.utc)
+        stale_minutes = stale_threshold_minutes
         total, jobs = await asyncio.gather(
             self.repo.get_reprocessing_jobs_count(
                 portfolio_id=portfolio_id,
@@ -863,6 +905,8 @@ class OperationsService:
         )
         return SupportJobListResponse(
             portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,
@@ -879,6 +923,7 @@ class OperationsService:
                     created_at=job.created_at,
                     updated_at=job.updated_at,
                     failure_reason=job.failure_reason,
+                    reference_now=generated_at_utc,
                 )
                 for job in jobs
             ],

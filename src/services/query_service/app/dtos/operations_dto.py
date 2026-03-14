@@ -691,6 +691,16 @@ class SupportJobRecord(BaseModel):
 
 class SupportJobListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this support job listing snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(..., description="Total jobs matching the filter.", examples=[42])
     skip: int = Field(..., description="Pagination offset.", examples=[0])
     limit: int = Field(..., description="Pagination limit.", examples=[50])
@@ -807,6 +817,16 @@ class AnalyticsExportJobRecord(BaseModel):
 
 class AnalyticsExportJobListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this analytics export listing snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(..., description="Total export jobs matching the filter.", examples=[12])
     skip: int = Field(..., description="Pagination offset.", examples=[0])
     limit: int = Field(..., description="Pagination limit.", examples=[50])
@@ -1180,6 +1200,16 @@ class ReprocessingKeyRecord(BaseModel):
 
 class ReprocessingKeyListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this replay-key listing snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(
         ...,
         description="Total durable portfolio-security replay keys matching the filter.",

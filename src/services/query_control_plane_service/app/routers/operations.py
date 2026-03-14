@@ -245,6 +245,13 @@ async def get_reprocessing_keys(
         description="Optional security identifier filter for one replay key.",
         examples=["SEC-US-IBM"],
     ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
@@ -256,6 +263,7 @@ async def get_reprocessing_keys(
             limit=limit,
             status=status_filter,
             security_id=security_id,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -297,6 +305,13 @@ async def get_reprocessing_jobs(
         description="Optional security identifier filter for one replay job stream.",
         examples={"security": {"summary": "Single replay security", "value": "SEC-US-IBM"}},
     ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
@@ -308,6 +323,7 @@ async def get_reprocessing_jobs(
             limit=limit,
             status=status_filter,
             security_id=security_id,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -337,10 +353,18 @@ async def get_reprocessing_jobs(
 )
 async def get_valuation_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
-    status_filter: Optional[str] = Query(
+    job_status: Optional[str] = Query(
         None,
+        alias="status",
         description="Optional job status filter (e.g., PENDING, PROCESSING).",
         examples=["PENDING"],
+    ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
     ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
@@ -348,7 +372,11 @@ async def get_valuation_jobs(
 ):
     try:
         return await service.get_valuation_jobs(
-            portfolio_id=portfolio_id, skip=skip, limit=limit, status=status_filter
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            status=job_status,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -378,10 +406,18 @@ async def get_valuation_jobs(
 )
 async def get_aggregation_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
-    status_filter: Optional[str] = Query(
+    job_status: Optional[str] = Query(
         None,
+        alias="status",
         description="Optional job status filter (e.g., PENDING, PROCESSING).",
         examples=["PENDING"],
+    ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
     ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
@@ -389,7 +425,11 @@ async def get_aggregation_jobs(
 ):
     try:
         return await service.get_aggregation_jobs(
-            portfolio_id=portfolio_id, skip=skip, limit=limit, status=status_filter
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            status=job_status,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -424,13 +464,24 @@ async def get_analytics_export_jobs(
         description="Optional export job status filter (e.g., accepted, running, failed).",
         examples=["failed"],
     ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
         return await service.get_analytics_export_jobs(
-            portfolio_id=portfolio_id, skip=skip, limit=limit, status=status_filter
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            status=status_filter,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

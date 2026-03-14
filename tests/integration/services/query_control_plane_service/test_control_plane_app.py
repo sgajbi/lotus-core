@@ -171,6 +171,19 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "status_filter"
     )
     assert analytics_export_status["description"].startswith("Optional export job status filter")
+    for path_item in (
+        analytics_export_jobs,
+        reprocessing_jobs,
+        reprocessing_keys,
+        schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"]["get"],
+        schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"]["get"],
+    ):
+        listing_stale_threshold = next(
+            parameter
+            for parameter in path_item["parameters"]
+            if parameter["name"] == "stale_threshold_minutes"
+        )
+        assert listing_stale_threshold["description"].startswith("Threshold in minutes")
     analytics_export_not_found = analytics_export_jobs["responses"]["404"]["content"][
         "application/json"
     ]["example"]
@@ -206,6 +219,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_keys["properties"]["items"]["description"] == "Current lineage key states."
     assert support_jobs["properties"]["items"]["description"] == (
         "Operational jobs for support workflows."
+    )
+    assert support_jobs["properties"]["stale_threshold_minutes"]["description"] == (
+        "Threshold in minutes used to classify stale support rows in this listing."
+    )
+    assert support_jobs["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this support job listing snapshot was generated."
     )
     support_job_record = components["SupportJobRecord"]
     assert support_job_record["properties"]["job_id"]["description"] == (
@@ -288,6 +307,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     ].startswith("Backlog age in minutes from the oldest waiting/running analytics export job")
     assert analytics_export_jobs_schema["properties"]["items"]["description"] == (
         "Durable analytics export jobs for support workflows."
+    )
+    assert analytics_export_jobs_schema["properties"]["stale_threshold_minutes"][
+        "description"
+    ] == "Threshold in minutes used to classify stale support rows in this listing."
+    assert analytics_export_jobs_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this analytics export listing snapshot was generated."
     )
     assert analytics_export_job_record["properties"]["request_fingerprint"][
         "description"
@@ -452,6 +477,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert reprocessing_key_schema["properties"]["items"]["description"] == (
         "Durable replay key rows for support workflows."
+    )
+    assert reprocessing_key_schema["properties"]["stale_threshold_minutes"]["description"] == (
+        "Threshold in minutes used to classify stale support rows in this listing."
+    )
+    assert reprocessing_key_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this replay-key listing snapshot was generated."
     )
     assert reprocessing_key_record["properties"]["created_at"]["description"] == (
         "UTC timestamp when the durable replay key row was first created."
