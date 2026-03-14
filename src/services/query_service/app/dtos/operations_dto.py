@@ -318,6 +318,14 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["COMPLETED"],
     )
+    controls_failure_reason: Optional[str] = Field(
+        None,
+        description=(
+            "Durable failure reason recorded on the latest portfolio-day financial "
+            "reconciliation control stage, when the latest stage is failed."
+        ),
+        examples=["Tolerance exceeded for portfolio totals."],
+    )
     controls_last_updated_at: Optional[datetime] = Field(
         None,
         description=(

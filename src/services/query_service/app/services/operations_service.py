@@ -396,6 +396,9 @@ class OperationsService:
             ),
             controls_epoch=latest_control_stage.epoch if latest_control_stage else None,
             controls_status=controls_status,
+            controls_failure_reason=(
+                latest_control_stage.failure_reason if latest_control_stage else None
+            ),
             controls_last_updated_at=(
                 latest_control_stage.updated_at if latest_control_stage else None
             ),

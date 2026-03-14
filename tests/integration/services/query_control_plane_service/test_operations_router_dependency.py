@@ -76,6 +76,7 @@ async def test_support_overview_success(async_test_client):
         "controls_ready_emitted_at": "2025-08-31T10:15:00Z",
         "controls_epoch": 3,
         "controls_status": "COMPLETED",
+        "controls_failure_reason": None,
         "controls_last_updated_at": "2025-08-31T10:16:00Z",
         "controls_blocking": False,
         "publish_allowed": True,
@@ -100,6 +101,7 @@ async def test_support_overview_success(async_test_client):
     )
     assert response.json()["controls_created_at"] == "2025-08-31T10:10:00Z"
     assert response.json()["controls_ready_emitted_at"] == "2025-08-31T10:15:00Z"
+    assert response.json()["controls_failure_reason"] is None
     assert response.json()["controls_last_updated_at"] == "2025-08-31T10:16:00Z"
     assert response.json()["publish_allowed"] is True
     assert "X-Correlation-ID" in response.headers

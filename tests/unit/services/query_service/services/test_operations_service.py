@@ -80,6 +80,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
             "business_date": date(2025, 8, 30),
             "epoch": 2,
             "status": "COMPLETED",
+            "failure_reason": None,
             "last_source_event_type": "financial_reconciliation_completed",
             "created_at": datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
             "ready_emitted_at": datetime(2025, 8, 30, 10, 14, tzinfo=timezone.utc),
@@ -143,6 +144,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     )
     assert response.controls_epoch == 2
     assert response.controls_status == "COMPLETED"
+    assert response.controls_failure_reason is None
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 10, 15, tzinfo=timezone.utc
     )
@@ -1194,6 +1196,7 @@ async def test_get_support_overview_without_business_date(
     assert response.controls_last_source_event_type is None
     assert response.controls_created_at is None
     assert response.controls_ready_emitted_at is None
+    assert response.controls_failure_reason is None
     assert response.controls_last_updated_at is None
     assert response.controls_blocking is False
     assert response.publish_allowed is True
@@ -1252,7 +1255,8 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
             "id": 702,
             "business_date": date(2025, 8, 30),
             "epoch": 2,
-            "status": "REQUIRES_REPLAY",
+            "status": "FAILED",
+            "failure_reason": "Tolerance exceeded for portfolio totals.",
             "last_source_event_type": "financial_reconciliation_completed",
             "created_at": datetime(2025, 8, 30, 10, 40, tzinfo=timezone.utc),
             "ready_emitted_at": None,
@@ -1268,7 +1272,8 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         2025, 8, 30, 10, 40, tzinfo=timezone.utc
     )
     assert response.controls_ready_emitted_at is None
-    assert response.controls_status == "REQUIRES_REPLAY"
+    assert response.controls_status == "FAILED"
+    assert response.controls_failure_reason == "Tolerance exceeded for portfolio totals."
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc
     )

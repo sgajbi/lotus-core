@@ -295,6 +295,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["controls_ready_emitted_at"]["description"].startswith(
         "UTC timestamp when the latest portfolio-day financial reconciliation control"
     )
+    assert support_overview["properties"]["controls_failure_reason"]["description"].startswith(
+        "Durable failure reason recorded on the latest portfolio-day financial"
+    )
     assert support_overview["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale in-flight portfolio processing."
     )
