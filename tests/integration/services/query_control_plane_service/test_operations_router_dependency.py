@@ -33,6 +33,7 @@ async def test_support_overview_success(async_test_client):
         "current_epoch": 3,
         "stale_threshold_minutes": 30,
         "failed_window_hours": 48,
+        "generated_at_utc": "2026-03-14T10:45:00Z",
         "active_reprocessing_keys": 1,
         "stale_reprocessing_keys": 1,
         "oldest_reprocessing_watermark_date": date(2025, 8, 20),
@@ -80,6 +81,7 @@ async def test_support_overview_success(async_test_client):
     assert response.json()["portfolio_id"] == "P1"
     assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["failed_window_hours"] == 48
+    assert response.json()["generated_at_utc"] == "2026-03-14T10:45:00Z"
     assert response.json()["controls_stage_id"] == 701
     assert response.json()["controls_last_updated_at"] == "2025-08-31T10:16:00Z"
     assert response.json()["publish_allowed"] is True

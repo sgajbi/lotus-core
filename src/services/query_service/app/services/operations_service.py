@@ -213,6 +213,7 @@ class OperationsService:
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> SupportOverviewResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        generated_at_utc = datetime.now(timezone.utc)
         (
             latest_business_date,
             current_epoch,
@@ -267,25 +268,25 @@ class OperationsService:
 
         valuation_backlog_age_days = None
         if valuation_job_health.oldest_open_job_date:
-            reference_date = latest_business_date or datetime.now(timezone.utc).date()
+            reference_date = latest_business_date or generated_at_utc.date()
             valuation_backlog_age_days = max(
                 0, (reference_date - valuation_job_health.oldest_open_job_date).days
             )
         aggregation_backlog_age_days = None
         if aggregation_job_health.oldest_open_job_date:
-            reference_date = latest_business_date or datetime.now(timezone.utc).date()
+            reference_date = latest_business_date or generated_at_utc.date()
             aggregation_backlog_age_days = max(
                 0, (reference_date - aggregation_job_health.oldest_open_job_date).days
             )
         analytics_export_backlog_age_minutes = None
         if analytics_export_job_health.oldest_open_job_created_at:
             delta = (
-                datetime.now(timezone.utc) - analytics_export_job_health.oldest_open_job_created_at
+                generated_at_utc - analytics_export_job_health.oldest_open_job_created_at
             )
             analytics_export_backlog_age_minutes = max(0, int(delta.total_seconds() // 60))
         reprocessing_backlog_age_days = None
         if reprocessing_health.oldest_reprocessing_watermark_date:
-            reference_date = latest_business_date or datetime.now(timezone.utc).date()
+            reference_date = latest_business_date or generated_at_utc.date()
             reprocessing_backlog_age_days = max(
                 0,
                 (
@@ -302,6 +303,7 @@ class OperationsService:
             current_epoch=current_epoch,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
+            generated_at_utc=generated_at_utc,
             active_reprocessing_keys=reprocessing_health.active_keys,
             stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
             oldest_reprocessing_watermark_date=(
@@ -362,6 +364,7 @@ class OperationsService:
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> CalculatorSloResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        generated_at_utc = datetime.now(timezone.utc)
         (
             latest_business_date,
             reprocessing_health,
@@ -385,7 +388,7 @@ class OperationsService:
             ),
         )
 
-        reference_date = latest_business_date or datetime.now(timezone.utc).date()
+        reference_date = latest_business_date or generated_at_utc.date()
         valuation_backlog_age_days = (
             max(0, (reference_date - valuation_job_health.oldest_open_job_date).days)
             if valuation_job_health.oldest_open_job_date is not None
@@ -407,7 +410,7 @@ class OperationsService:
             business_date=latest_business_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
-            generated_at_utc=datetime.now(timezone.utc),
+            generated_at_utc=generated_at_utc,
             valuation=CalculatorSloBucket(
                 pending_jobs=valuation_job_health.pending_jobs,
                 processing_jobs=valuation_job_health.processing_jobs,

@@ -244,6 +244,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["failed_window_hours"]["description"] == (
         "Window in hours used to count recent failed jobs on the support overview."
     )
+    assert support_overview["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this support overview snapshot was generated."
+    )
     assert support_overview["properties"]["failed_valuation_jobs_within_window"][
         "description"
     ].startswith("Number of valuation jobs that moved to FAILED state within")

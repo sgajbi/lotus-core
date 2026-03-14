@@ -35,6 +35,11 @@ class SupportOverviewResponse(BaseModel):
         description=SUPPORT_FAILED_WINDOW_DESCRIPTION,
         examples=[24],
     )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this support overview snapshot was generated.",
+        examples=["2026-03-14T10:45:00Z"],
+    )
     active_reprocessing_keys: int = Field(
         ...,
         description="Number of portfolio-security keys currently marked REPROCESSING.",

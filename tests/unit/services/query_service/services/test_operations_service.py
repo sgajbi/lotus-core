@@ -86,6 +86,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.current_epoch == 2
     assert response.stale_threshold_minutes == 15
     assert response.failed_window_hours == 24
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.active_reprocessing_keys == 1
     assert response.stale_reprocessing_keys == 1
     assert response.oldest_reprocessing_watermark_date == date(2025, 8, 18)
@@ -863,6 +864,7 @@ async def test_get_support_overview_honors_custom_stale_threshold(
 
     assert response.stale_threshold_minutes == 30
     assert response.failed_window_hours == 48
+    assert response.generated_at_utc.tzinfo == timezone.utc
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
         "P1", stale_minutes=30
     )
@@ -921,6 +923,7 @@ async def test_get_support_overview_without_business_date(
     assert response.business_date is None
     assert response.stale_threshold_minutes == 15
     assert response.failed_window_hours == 24
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.stale_reprocessing_keys == 0
     assert response.oldest_reprocessing_watermark_date is None
     assert response.reprocessing_backlog_age_days is None
