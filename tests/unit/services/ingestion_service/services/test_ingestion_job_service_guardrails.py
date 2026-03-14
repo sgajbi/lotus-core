@@ -530,3 +530,62 @@ async def test_record_consumer_dlq_replay_audit_increments_failure_metric(
         replay_status="failed",
     ).calls == [1]
     assert duplicate_counter.handles == {}
+
+
+async def test_record_consumer_dlq_replay_audit_increments_bookkeeping_failure_metric(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FakeBegin:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class _FakeSession:
+        def add(self, _row):
+            return None
+
+        def begin(self):
+            return _FakeBegin()
+
+    audit_counter = _FakeCounterVec()
+    duplicate_counter = _FakeCounterVec()
+    failure_counter = _FakeCounterVec()
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+    monkeypatch.setattr(service_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
+    monkeypatch.setattr(
+        service_module,
+        "INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL",
+        duplicate_counter,
+    )
+    monkeypatch.setattr(service_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
+
+    await service.record_consumer_dlq_replay_audit(
+        recovery_path="consumer_dlq_replay",
+        event_id="event_123",
+        replay_fingerprint="fp_789",
+        correlation_id="corr-789",
+        job_id="job_789",
+        endpoint="/ingest/transactions",
+        replay_status="replayed_bookkeeping_failed",
+        dry_run=False,
+        replay_reason="publish succeeded but bookkeeping failed",
+        requested_by="ops-token",
+    )
+
+    assert audit_counter.labels(
+        recovery_path="consumer_dlq_replay",
+        replay_status="replayed_bookkeeping_failed",
+    ).calls == [1]
+    assert failure_counter.labels(
+        recovery_path="consumer_dlq_replay",
+        replay_status="replayed_bookkeeping_failed",
+    ).calls == [1]
+    assert duplicate_counter.handles == {}

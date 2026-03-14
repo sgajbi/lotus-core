@@ -124,7 +124,10 @@ class IngestionJobFailureResponse(BaseModel):
     )
     failed_record_keys: list[str] = Field(
         default_factory=list,
-        description="Subset of record keys that failed during publish/retry processing.",
+        description=(
+            "Record keys that failed during publish/retry processing, including batch records "
+            "left unpublished after a mid-batch publish failure."
+        ),
         examples=[["TXN-2026-000145", "TXN-2026-000146"]],
     )
     failed_at: datetime = Field(
@@ -975,7 +978,12 @@ class IngestionReplayAuditResponse(BaseModel):
         examples=["/ingest/transactions"],
     )
     replay_status: Literal[
-        "dry_run", "replayed", "not_replayable", "duplicate_blocked", "failed"
+        "dry_run",
+        "replayed",
+        "replayed_bookkeeping_failed",
+        "not_replayable",
+        "duplicate_blocked",
+        "failed",
     ] = Field(
         description="Replay outcome status.",
         examples=["replayed"],

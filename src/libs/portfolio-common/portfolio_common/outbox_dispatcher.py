@@ -54,6 +54,7 @@ class OutboxDispatcher:
             max(1, int(batch_size)) if batch_size is not None else runtime_settings.batch_size
         )
         self._running = True
+        self._stop_event = asyncio.Event()
         self._session_factory = db_session_factory or SessionLocal
         self._max_retries = (
             max(1, int(max_retries)) if max_retries is not None else runtime_settings.max_retries
@@ -62,6 +63,7 @@ class OutboxDispatcher:
     def stop(self):
         logger.info("Outbox dispatcher shutdown signal received.")
         self._running = False
+        self._stop_event.set()
 
     def _read_pending_gauge(self) -> None:
         """Reads PENDING count in a short-lived session to avoid interfering with the batch tx."""
@@ -143,20 +145,36 @@ class OutboxDispatcher:
                             else json.loads(event.payload)
                         )
 
-                        self._producer.publish_message(
-                            topic=event.topic,
-                            key=event.aggregate_id,
-                            value=payload_obj,
-                            headers=headers,
-                            outbox_id=str(event.id),
-                            on_delivery=_make_on_delivery(event.id),
-                        )
+                        try:
+                            self._producer.publish_message(
+                                topic=event.topic,
+                                key=event.aggregate_id,
+                                value=payload_obj,
+                                headers=headers,
+                                outbox_id=str(event.id),
+                                on_delivery=_make_on_delivery(event.id),
+                            )
+                        except Exception as e:
+                            delivery_ack[event.id] = False
+                            delivery_errs[event.id] = str(e)
+                            logger.error(
+                                "OutboxDispatcher: Synchronous Kafka publish failed.",
+                                exc_info=True,
+                                extra={"outbox_id": event.id, "topic": event.topic},
+                            )
 
                     try:
-                        self._producer.flush(timeout=10)
+                        undelivered_count = self._producer.flush(timeout=10)
                         logger.info(
                             f"OutboxDispatcher: Flush complete for {len(events_to_process)} events."
                         )
+                        if undelivered_count:
+                            for event in events_to_process:
+                                if event.id not in delivery_ack:
+                                    delivery_ack[event.id] = False
+                                    delivery_errs[event.id] = (
+                                        "Kafka flush timed out before delivery callback."
+                                    )
                     except Exception as e:
                         logger.error("OutboxDispatcher: Kafka flush failed.", exc_info=True)
                         for event in events_to_process:
@@ -251,7 +269,10 @@ class OutboxDispatcher:
                 logger.error("Failed to process outbox batch.", exc_info=True)
 
             try:
-                await asyncio.sleep(self._poll_interval)
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
+                break
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 break
 

@@ -46,6 +46,9 @@ from src.services.ingestion_service.app.routers import (
     portfolios as portfolios_router,
 )
 from src.services.ingestion_service.app.routers import (
+    reference_data as reference_data_router,
+)
+from src.services.ingestion_service.app.routers import (
     reprocessing as reprocessing_router,
 )
 from src.services.ingestion_service.app.routers import (
@@ -64,6 +67,7 @@ def mock_kafka_producer() -> MagicMock:
     """Provides a mock KafkaProducer."""
     mock = MagicMock(spec=KafkaProducer)
     mock.publish_message = MagicMock()
+    mock.flush.return_value = 0
     return mock
 
 
@@ -82,6 +86,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.job_payloads: dict[str, dict] = {}
             self.failures: dict[str, list[dict]] = {}
             self.replay_audit: dict[str, dict] = {}
+            self.fail_mark_queued_job_ids: set[str] = set()
+            self.fail_mark_retried_job_ids: set[str] = set()
+            self.fail_next_mark_queued = False
             self.mode = "normal"
             self.replay_window_start = None
             self.replay_window_end = None
@@ -127,6 +134,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
         async def mark_queued(self, job_id: str) -> None:
+            if self.fail_next_mark_queued:
+                self.fail_next_mark_queued = False
+                raise RuntimeError("queue state write failed")
+            if job_id in self.fail_mark_queued_job_ids:
+                raise RuntimeError("queue state write failed")
             if job_id not in self.jobs:
                 return
             record = self.jobs[job_id]
@@ -159,7 +171,28 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 }
             )
 
+        async def record_failure_observation(
+            self,
+            job_id: str,
+            failure_reason: str,
+            *,
+            failure_phase: str,
+            failed_record_keys: list[str] | None = None,
+        ) -> None:
+            self.failures.setdefault(job_id, []).append(
+                {
+                    "failure_id": f"fail_{len(self.failures.get(job_id, [])) + 1}",
+                    "job_id": job_id,
+                    "failure_phase": failure_phase,
+                    "failure_reason": failure_reason,
+                    "failed_record_keys": failed_record_keys or [],
+                    "failed_at": datetime.now(UTC),
+                }
+            )
+
         async def mark_retried(self, job_id: str) -> None:
+            if job_id in self.fail_mark_retried_job_ids:
+                raise RuntimeError("retry accounting write failed")
             if job_id not in self.jobs:
                 return
             record = self.jobs[job_id]
@@ -536,7 +569,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             row = self.replay_audit.get(replay_fingerprint)
             if (
                 row
-                and row.get("replay_status") == "replayed"
+                and row.get("replay_status")
+                in {"replayed", "replayed_bookkeeping_failed"}
                 and (recovery_path is None or row.get("recovery_path") == recovery_path)
             ):
                 return {
@@ -655,7 +689,46 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
             return None
 
+    class FakeReferenceDataIngestionService:
+        def __init__(self):
+            self.persisted: dict[str, list[dict]] = {
+                "benchmark_assignments": [],
+                "benchmark_definitions": [],
+            }
+
+        async def upsert_portfolio_benchmark_assignments(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["benchmark_assignments"].extend(records)
+
+        async def upsert_benchmark_definitions(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["benchmark_definitions"].extend(records)
+
+        async def upsert_benchmark_compositions(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_indices(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_index_price_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_index_return_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_benchmark_return_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_risk_free_series(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
+            return None
+
     fake_job_service = FakeIngestionJobService()
+    fake_reference_data_service = FakeReferenceDataIngestionService()
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -682,11 +755,20 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[reprocessing_router.get_ingestion_job_service] = (
         lambda: fake_job_service
     )
+    app.dependency_overrides[reference_data_router.get_ingestion_job_service] = (
+        lambda: fake_job_service
+    )
+    app.dependency_overrides[reference_data_router.get_reference_data_ingestion_service] = (
+        lambda: fake_reference_data_service
+    )
     event_replay_app.dependency_overrides[ingestion_operations_router.get_ingestion_job_service] = (
         lambda: fake_job_service
     )
 
-    yield {"fake_job_service": fake_job_service}
+    yield {
+        "fake_job_service": fake_job_service,
+        "fake_reference_data_service": fake_reference_data_service,
+    }
 
     for target_app in target_apps:
         target_app.dependency_overrides.pop(get_kafka_producer, None)
@@ -699,6 +781,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(business_dates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
+    app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)
+    app.dependency_overrides.pop(
+        reference_data_router.get_reference_data_ingestion_service,
+        None,
+    )
     event_replay_app.dependency_overrides.pop(
         ingestion_operations_router.get_ingestion_job_service,
         None,
@@ -929,6 +1016,217 @@ async def test_ingestion_job_failure_history_and_retry(
     assert retry_response.status_code == 200
     assert retry_response.json()["status"] == "queued"
     assert retry_response.json()["retry_count"] == 1
+
+
+async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_BOOKKEEPING_FAIL_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+
+    response = await async_test_client.post("/ingest/transactions", json=payload)
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
+    job_id = body["detail"]["job_id"]
+
+    job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert job.status == "accepted"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "queue_bookkeeping"
+
+
+async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    payload = {
+        "benchmark_definitions": [
+            {
+                "benchmark_id": "BMK_WORLD_60_40",
+                "benchmark_name": "World 60/40",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    }
+
+    response = await async_test_client.post("/ingest/benchmark-definitions", json=payload)
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
+    job_id = body["detail"]["job_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_definitions"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["benchmark_id"] == "BMK_WORLD_60_40"
+
+    job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert job.status == "accepted"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist_bookkeeping"
+
+
+async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_RETRY_BOOKKEEPING_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+
+    with pytest.raises(Exception, match="Failed to publish transaction"):
+        await async_test_client.post("/ingest/transactions", json=payload)
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed"},
+    )
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.add(failed_job_id)
+    mock_kafka_producer.publish_message.side_effect = None
+
+    retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{failed_job_id}/retry")
+
+    assert retry_response.status_code == 500
+    body = retry_response.json()
+    assert body["detail"]["code"] == "INGESTION_RETRY_BOOKKEEPING_FAILED"
+    assert body["detail"]["replay_audit_id"]
+    assert body["detail"]["replay_fingerprint"]
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": failed_job_id},
+    )
+    audits = audit_response.json()["audits"]
+    assert any(
+        row["replay_status"] == "replayed_bookkeeping_failed" for row in audits
+    )
+
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.discard(failed_job_id)
+    duplicate_response = await event_replay_test_client.post(
+        f"/ingestion/jobs/{failed_job_id}/retry"
+    )
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json()["detail"]["code"] == "INGESTION_RETRY_DUPLICATE_BLOCKED"
+
+
+async def test_ingestion_job_failure_history_tracks_remaining_unpublished_batch_keys(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_BATCH_FAIL_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            },
+            {
+                "transaction_id": "TX_BATCH_FAIL_002",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:01:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            },
+            {
+                "transaction_id": "TX_BATCH_FAIL_003",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:02:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            },
+        ]
+    }
+
+    with pytest.raises(Exception, match="Failed to publish transaction"):
+        await async_test_client.post("/ingest/transactions", json=payload)
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed"},
+    )
+    assert jobs_response.status_code == 200
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    failure_history = await event_replay_test_client.get(
+        f"/ingestion/jobs/{failed_job_id}/failures"
+    )
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "TX_BATCH_FAIL_002",
+        "TX_BATCH_FAIL_003",
+    ]
 
 
 async def test_ingestion_job_partial_retry_dry_run(
@@ -1292,6 +1590,64 @@ async def test_replay_consumer_dlq_event_blocks_duplicate_replay(
     assert second.status_code == 200
     body = second.json()
     assert body["replay_status"] == "duplicate_blocked"
+
+
+async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publish(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_REPLAY_BOOKKEEPING_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        headers={"X-Correlation-Id": "ING:test-correlation-id"},
+        json=payload,
+    )
+    job_id = ingest_response.json()["job_id"]
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.add(job_id)
+
+    first = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        json={"dry_run": False},
+    )
+    assert first.status_code == 500
+    first_body = first.json()
+    assert first_body["detail"]["code"] == "INGESTION_DLQ_REPLAY_BOOKKEEPING_FAILED"
+    assert first_body["detail"]["replay_audit_id"]
+    assert first_body["detail"]["replay_fingerprint"]
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": job_id},
+    )
+    audits = audit_response.json()["audits"]
+    assert any(
+        row["replay_status"] == "replayed_bookkeeping_failed" for row in audits
+    )
+
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.discard(job_id)
+    second = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        json={"dry_run": False},
+    )
+    assert second.status_code == 200
+    assert second.json()["replay_status"] == "duplicate_blocked"
 
 
 async def test_ingestion_replay_audit_list_and_get(
@@ -1777,6 +2133,33 @@ async def test_reprocess_transactions_deduplicates_transaction_ids_at_ingress(
         for call in mock_kafka_producer.publish_message.call_args_list
     ]
     assert published_ids == ["TXN1", "TXN2"]
+
+
+async def test_reprocess_transactions_records_remaining_unpublished_keys_on_partial_failure(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(Exception, match="Failed to publish reprocessing request"):
+        await async_test_client.post(
+            "/reprocess/transactions",
+            json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
+        )
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed"},
+    )
+    assert jobs_response.status_code == 200
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    failure_history = await event_replay_test_client.get(
+        f"/ingestion/jobs/{failed_job_id}/failures"
+    )
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["TXN2", "TXN3"]
 
 
 @pytest.mark.parametrize(

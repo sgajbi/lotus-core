@@ -17,6 +17,7 @@ from ..services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
 )
+from .job_bookkeeping import raise_post_publish_bookkeeping_failure
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -114,7 +115,6 @@ async def ingest_portfolios(
         await ingestion_service.publish_portfolios(
             request.portfolios, idempotency_key=idempotency_key
         )
-        await ingestion_job_service.mark_queued(job_result.job.job_id)
     except IngestionPublishError as exc:
         await ingestion_job_service.mark_failed(
             job_result.job.job_id,
@@ -125,6 +125,15 @@ async def ingest_portfolios(
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise
+
+    try:
+        await ingestion_job_service.mark_queued(job_result.job.job_id)
+    except Exception as exc:
+        await raise_post_publish_bookkeeping_failure(
+            ingestion_job_service=ingestion_job_service,
+            job_id=job_result.job.job_id,
+            failure_reason=str(exc),
+        )
 
     logger.info("Portfolios successfully queued.", extra={"num_portfolios": num_portfolios})
     return build_batch_ack(

@@ -16,7 +16,12 @@ trace_id_var: ContextVar[str] = ContextVar("trace_id", default="<not-set>")
 
 def normalize_lineage_value(value: str | None) -> str | None:
     """Normalize unset lineage sentinel values to ``None``."""
-    return None if value in (None, "", "<not-set>") else value
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized or normalized.lower() == "<not-set>":
+        return None
+    return normalized
 
 
 class CorrelationIdFilter(logging.Filter):

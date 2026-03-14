@@ -1,6 +1,6 @@
 # tests/unit/libs/portfolio-common/test_kafka_consumer.py
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.kafka_consumer import (
@@ -33,7 +33,9 @@ def mock_confluent_consumer() -> MagicMock:
 @pytest.fixture
 def mock_kafka_producer() -> MagicMock:
     """Provides a mock of the KafkaProducer used for the DLQ."""
-    return MagicMock()
+    mock = MagicMock()
+    mock.flush.return_value = 0
+    return mock
 
 
 @pytest.fixture
@@ -99,7 +101,7 @@ async def test_run_loop_failure_sends_to_dlq_and_commits(
         raise ValueError("Processing failed!")
 
     test_consumer.process_message_mock.side_effect = fail_and_stop
-    test_consumer._send_to_dlq_async = AsyncMock()
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
 
     # ACT
     await test_consumer.run()
@@ -108,6 +110,54 @@ async def test_run_loop_failure_sends_to_dlq_and_commits(
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
     test_consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key2b", {"data": "value2b"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=False)
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    mock_confluent_consumer.commit.assert_not_called()
+    test_consumer._send_to_dlq_async.assert_awaited_once()
+    assert "DLQ publication failed" in mock_warning.call_args.args[0]
+
+
+async def test_run_loop_dlq_commit_failure_does_not_crash_or_re_dlq(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-dlq-commit", {"data": "value-dlq-commit"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    mock_confluent_consumer.commit.side_effect = RuntimeError("commit failed after dlq")
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+    assert (
+        "Offset commit failed after successful DLQ publication"
+        in mock_warning.call_args.args[0]
+    )
 
 
 async def test_run_loop_retryable_error_does_not_commit(
@@ -134,6 +184,28 @@ async def test_run_loop_retryable_error_does_not_commit(
     test_consumer._send_to_dlq_async.assert_not_called()
 
 
+async def test_run_loop_commit_failure_does_not_send_to_dlq(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-commit", {"data": "value-commit"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    mock_confluent_consumer.commit.side_effect = RuntimeError("commit failed")
+    test_consumer._send_to_dlq_async = AsyncMock()
+
+    async def process_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = process_and_stop
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+    test_consumer._send_to_dlq_async.assert_not_awaited()
+    assert "Offset commit failed after successful processing" in mock_warning.call_args.args[0]
+
+
 async def test_dlq_payload_is_correct(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -154,11 +226,12 @@ async def test_dlq_payload_is_correct(
         try:
             raise error
         except ValueError as e:
-            await test_consumer._send_to_dlq_async(mock_msg, e)
+            result = await test_consumer._send_to_dlq_async(mock_msg, e)
     finally:
         correlation_id_var.reset(token)
 
     # ASSERT
+    assert result is True
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
 
@@ -190,14 +263,51 @@ async def test_dlq_omits_unset_correlation_header(
         try:
             raise error
         except ValueError as exc:
-            await test_consumer._send_to_dlq_async(mock_msg, exc)
+            result = await test_consumer._send_to_dlq_async(mock_msg, exc)
     finally:
         correlation_id_var.reset(token)
 
+    assert result is True
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
     assert "correlation_id" not in dict(call_args["headers"])
     assert call_args["value"]["correlation_id"] is None
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
+
+
+async def test_dlq_flush_timeout_does_not_record_event(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key-timeout", {"data": "value-timeout"})
+    error = RuntimeError("downstream timeout")
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+    mock_kafka_producer.flush.return_value = 1
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        result = await test_consumer._send_to_dlq_async(mock_msg, error)
+
+    assert result is False
+    mock_kafka_producer.publish_message.assert_called_once()
+    mock_kafka_producer.flush.assert_called_once_with(timeout=5)
+    test_consumer._record_consumer_dlq_event.assert_not_awaited()
+    mock_log_error.assert_called_once()
+    assert "Could not send message to DLQ" in mock_log_error.call_args.args[0]
+
+
+async def test_dlq_publish_exception_does_not_record_event(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key-fail", {"data": "value-fail"})
+    error = ValueError("validation failed")
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("producer unavailable")
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        result = await test_consumer._send_to_dlq_async(mock_msg, error)
+
+    assert result is False
+    mock_kafka_producer.flush.assert_not_called()
+    test_consumer._record_consumer_dlq_event.assert_not_awaited()
+    mock_log_error.assert_called_once()
 
 
 async def test_classify_dlq_reason_code_deserialization():
@@ -264,3 +374,76 @@ async def test_consumer_ignores_invalid_runtime_overrides(monkeypatch):
     assert "unsupported.key" not in consumer._consumer_config
     assert consumer._consumer_config["enable.auto.commit"] is False
     assert consumer._consumer_config["session.timeout.ms"] == 45000
+
+
+async def test_consumer_drops_invalid_merged_heartbeat_session_override(monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
+        '{"session.timeout.ms": 30000}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
+        '{"test-group": {"heartbeat.interval.ms": 30000}}',
+    )
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=MagicMock()),
+        patch("portfolio_common.kafka_consumer.get_kafka_producer", return_value=MagicMock()),
+    ):
+        consumer = ConcreteTestConsumer(
+            bootstrap_servers="mock_bs",
+            topic="test-topic",
+            group_id="test-group",
+            dlq_topic="test.dlq",
+        )
+
+    assert consumer._consumer_config["session.timeout.ms"] == 30000
+    assert consumer._consumer_config["heartbeat.interval.ms"] == 3000
+
+
+async def test_shutdown_logs_flush_timeout_without_raising(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_kafka_producer.flush.return_value = 2
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        test_consumer.shutdown()
+
+    mock_confluent_consumer.close.assert_called_once()
+    mock_kafka_producer.flush.assert_called_once_with(timeout=5)
+    assert (
+        "DLQ producer flush left undelivered messages during shutdown."
+        in mock_log_error.call_args.args[0]
+    )
+
+
+async def test_shutdown_wakes_consumer_before_close(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+
+    test_consumer.shutdown()
+
+    mock_confluent_consumer.wakeup.assert_called_once()
+    mock_confluent_consumer.close.assert_called_once()
+
+
+async def test_shutdown_logs_close_and_flush_failures_without_raising(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_confluent_consumer.close.side_effect = RuntimeError("close failed")
+    mock_kafka_producer.flush.side_effect = RuntimeError("flush failed")
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        test_consumer.shutdown()
+
+    assert mock_log_error.call_count == 2
+    assert "Consumer close failed during shutdown." == mock_log_error.call_args_list[0].args[0]
+    assert "DLQ producer flush failed during shutdown." == mock_log_error.call_args_list[1].args[0]

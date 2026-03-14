@@ -11,7 +11,10 @@ from src.services.ingestion_service.app.DTOs.portfolio_bundle_dto import (
 )
 from src.services.ingestion_service.app.DTOs.portfolio_dto import Portfolio
 from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
-from src.services.ingestion_service.app.services.ingestion_service import IngestionService
+from src.services.ingestion_service.app.services.ingestion_service import (
+    IngestionPublishError,
+    IngestionService,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -138,6 +141,90 @@ async def test_publish_transactions_rejects_empty_partition_key(
         await ingestion_service.publish_transactions(transactions)
 
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_failure(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transactions = [
+        Transaction(
+            transaction_id="T1",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        ),
+        Transaction(
+            transaction_id="T2",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        ),
+        Transaction(
+            transaction_id="T3",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        ),
+    ]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_transactions(transactions)
+
+    assert exc_info.value.failed_record_keys == ["T2", "T3"]
+    assert exc_info.value.published_record_count == 1
+    assert "Remaining unpublished record keys: T2, T3." in str(exc_info.value)
+
+
+async def test_publish_reprocessing_requests_reports_remaining_unpublished_keys_on_batch_failure(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transaction_ids = ["TX1", "TX2", "TX3"]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_reprocessing_requests(transaction_ids)
+
+    assert exc_info.value.failed_record_keys == ["TX2", "TX3"]
+    assert exc_info.value.published_record_count == 1
+    assert "Failed to publish reprocessing request 'TX2'" in str(exc_info.value)
+
+
+async def test_publish_reprocessing_requests_fails_on_flush_timeout(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transaction_ids = ["TX1", "TX2"]
+    mock_kafka_producer.flush.return_value = 1
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_reprocessing_requests(transaction_ids)
+
+    assert exc_info.value.failed_record_keys == ["TX1", "TX2"]
+    assert (
+        "Delivery confirmation timed out for reprocessing request delivery confirmation."
+        in str(exc_info.value)
+    )
 
 
 async def test_publish_with_correlation_id(
@@ -294,3 +381,52 @@ async def test_publish_portfolio_bundle(ingestion_service: IngestionService):
         "market_prices": 1,
         "fx_rates": 1,
     }
+
+
+async def test_publish_portfolio_bundle_reports_completed_group_counts_before_failure(
+    ingestion_service: IngestionService,
+):
+    bundle = PortfolioBundleIngestionRequest.model_validate(
+        {
+            "business_dates": [{"business_date": "2026-01-02"}],
+            "portfolios": [
+                {
+                    "portfolio_id": "P1",
+                    "base_currency": "USD",
+                    "open_date": "2025-01-01",
+                    "client_id": "C1",
+                    "status": "ACTIVE",
+                    "risk_exposure": "a",
+                    "investment_time_horizon": "b",
+                    "portfolio_type": "c",
+                    "booking_center_code": "d",
+                }
+            ],
+            "instruments": [],
+            "transactions": [],
+            "market_prices": [],
+            "fx_rates": [],
+        }
+    )
+
+    async def _ok_business_dates(*args, **kwargs):
+        return None
+
+    async def _fail_portfolios(*args, **kwargs):
+        raise IngestionPublishError(
+            "Failed to publish portfolio 'P1'.",
+            failed_record_keys=["P1"],
+        )
+
+    ingestion_service.publish_business_dates = _ok_business_dates  # type: ignore[method-assign]
+    ingestion_service.publish_portfolios = _fail_portfolios  # type: ignore[method-assign]
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_portfolio_bundle(bundle)
+
+    assert exc_info.value.failed_record_keys == ["P1"]
+    assert (
+        "Portfolio bundle publish stopped after these entity groups were already published: "
+        "{'business_dates': 1, 'portfolios': 0, 'instruments': 0, 'transactions': 0, "
+        "'market_prices': 0, 'fx_rates': 0}."
+    ) in str(exc_info.value)

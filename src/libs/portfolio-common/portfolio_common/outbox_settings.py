@@ -1,17 +1,38 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 
+logger = logging.getLogger(__name__)
+
+def _normalize_positive_default(default: int) -> int:
+    try:
+        return max(1, int(default))
+    except Exception:
+        return 1
+
 
 def _env_positive_int(name: str, default: int) -> int:
+    safe_default = _normalize_positive_default(default)
     raw = os.getenv(name)
     if raw is None:
-        return max(1, int(default))
+        return safe_default
     try:
-        return max(1, int(raw))
+        value = int(raw)
     except Exception:
-        return max(1, int(default))
+        logger.warning(
+            "Invalid outbox runtime setting; falling back to default.",
+            extra={"setting": name, "raw_value": raw, "default": safe_default},
+        )
+        return safe_default
+    if value <= 0:
+        logger.warning(
+            "Non-positive outbox runtime setting; falling back to default.",
+            extra={"setting": name, "raw_value": raw, "default": safe_default},
+        )
+        return safe_default
+    return value
 
 
 @dataclass(frozen=True, slots=True)

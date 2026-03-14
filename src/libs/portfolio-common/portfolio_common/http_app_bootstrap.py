@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from typing import Any
 from uuid import uuid4
@@ -17,6 +18,16 @@ from portfolio_common.logging_utils import (
 )
 from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUESTS_TOTAL
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
+
+_TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+
+
+def normalize_trace_id(value: str | None) -> str | None:
+    normalized = normalize_lineage_value(value)
+    if normalized is None:
+        return None
+    candidate = normalized.lower()
+    return candidate if _TRACE_ID_PATTERN.fullmatch(candidate) else None
 
 
 def configure_standard_openapi(app: FastAPI, *, service_name: str) -> None:
@@ -64,7 +75,7 @@ def configure_standard_http_app(
             request.headers.get("X-Correlation-Id") or request.headers.get("X-Correlation-ID")
         )
         request_id = normalize_lineage_value(request.headers.get("X-Request-Id"))
-        trace_id = normalize_lineage_value(request.headers.get("X-Trace-Id"))
+        trace_id = normalize_trace_id(request.headers.get("X-Trace-Id"))
         if not correlation_id:
             correlation_id = id_generator(service_prefix)
         if not request_id:

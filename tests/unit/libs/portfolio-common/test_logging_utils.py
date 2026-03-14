@@ -13,10 +13,13 @@ def test_normalize_lineage_value_converts_sentinels_to_none():
     assert normalize_lineage_value(None) is None
     assert normalize_lineage_value("") is None
     assert normalize_lineage_value("<not-set>") is None
+    assert normalize_lineage_value("   ") is None
+    assert normalize_lineage_value("  <NOT-SET>  ") is None
 
 
 def test_normalize_lineage_value_preserves_real_lineage():
     assert normalize_lineage_value("corr-123") == "corr-123"
+    assert normalize_lineage_value("  corr-123  ") == "corr-123"
 
 
 def test_correlation_id_filter_normalizes_sentinel_lineage_values():

@@ -55,6 +55,30 @@ async def test_middleware_replaces_unset_lineage_headers(async_test_client):
     assert response.headers["X-Trace-Id"] not in ("", "<not-set>")
 
 
+async def test_middleware_replaces_invalid_trace_id(async_test_client):
+    with patch(
+        "src.services.query_service.app.main.generate_correlation_id",
+        return_value="QRY-abc",
+    ):
+        response = await async_test_client.get(
+            "/openapi.json",
+            headers={
+                "X-Correlation-ID": "corr-123",
+                "X-Request-Id": "req-123",
+                "X-Trace-Id": "trace-123",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == "corr-123"
+    assert response.headers["X-Request-Id"] == "req-123"
+    assert response.headers["X-Trace-Id"] != "trace-123"
+    assert len(response.headers["X-Trace-Id"]) == 32
+    assert response.headers["traceparent"].startswith(
+        f"00-{response.headers['X-Trace-Id']}-0000000000000001-01"
+    )
+
+
 async def test_global_exception_handler_returns_standard_payload(async_test_client):
     async def boom():
         raise RuntimeError("boom")

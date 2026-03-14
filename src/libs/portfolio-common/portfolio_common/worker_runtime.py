@@ -15,10 +15,9 @@ async def run_instrumented_worker_service(
     """
     logger.info("%s starting up...", service_name)
 
-    Instrumentator().instrument(web_app).expose(web_app)
-    logger.info("Prometheus metrics exposed at /metrics")
-
     try:
+        Instrumentator().instrument(web_app).expose(web_app)
+        logger.info("Prometheus metrics exposed at /metrics")
         await manager.run()
     except Exception:
         logger.critical("%s encountered a critical error", service_name, exc_info=True)

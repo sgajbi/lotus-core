@@ -10,6 +10,58 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
+    try:
+        safe_default = int(default)
+    except Exception:
+        safe_default = 0
+
+    raw = os.getenv(name)
+    if raw is None:
+        value = safe_default
+    else:
+        try:
+            value = int(raw)
+        except Exception:
+            logger.warning(
+                "Invalid integer env setting; falling back to default.",
+                extra={"setting": name, "raw_value": raw, "default": safe_default},
+            )
+            value = safe_default
+
+    if minimum is not None and value < minimum:
+        logger.warning(
+            "Out-of-range integer env setting; falling back to default.",
+            extra={
+                "setting": name,
+                "raw_value": raw,
+                "default": safe_default,
+                "minimum": minimum,
+            },
+        )
+        return safe_default if safe_default >= minimum else minimum
+
+    return value
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    logger.warning(
+        "Invalid boolean env setting; falling back to default.",
+        extra={"setting": name, "raw_value": raw, "default": default},
+    )
+    return default
+
+
 # Database Configurations
 POSTGRES_USER = os.getenv("POSTGRES_USER", "user")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
@@ -92,14 +144,13 @@ KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC = os.getenv(
 
 # Business-date calendar and guardrail policy
 DEFAULT_BUSINESS_CALENDAR_CODE = os.getenv("DEFAULT_BUSINESS_CALENDAR_CODE", "GLOBAL")
-BUSINESS_DATE_MAX_FUTURE_DAYS = int(os.getenv("BUSINESS_DATE_MAX_FUTURE_DAYS", "0"))
-BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = os.getenv(
-    "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE",
-    "false",
-).strip().lower() in {"1", "true", "yes", "on"}
+BUSINESS_DATE_MAX_FUTURE_DAYS = _env_int("BUSINESS_DATE_MAX_FUTURE_DAYS", 0, minimum=0)
+BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = _env_bool(
+    "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", False
+)
 
 # Cashflow calculator runtime cache policy
-CASHFLOW_RULE_CACHE_TTL_SECONDS = int(os.getenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "300"))
+CASHFLOW_RULE_CACHE_TTL_SECONDS = _env_int("CASHFLOW_RULE_CACHE_TTL_SECONDS", 300, minimum=1)
 
 
 _CONSUMER_ALLOWED_TYPES: dict[str, type] = {
@@ -113,6 +164,17 @@ _CONSUMER_ALLOWED_TYPES: dict[str, type] = {
     "max.partition.fetch.bytes": int,
     "queued.min.messages": int,
     "queued.max.messages.kbytes": int,
+}
+_AUTO_OFFSET_RESET_ALLOWED_VALUES = {"earliest", "latest", "error"}
+_POSITIVE_INT_CONSUMER_KEYS = {
+    "session.timeout.ms",
+    "heartbeat.interval.ms",
+    "max.poll.interval.ms",
+    "fetch.min.bytes",
+    "fetch.max.bytes",
+    "max.partition.fetch.bytes",
+    "queued.min.messages",
+    "queued.max.messages.kbytes",
 }
 
 
@@ -129,13 +191,27 @@ def _coerce_consumer_config_value(key: str, value: object) -> object:
                 return False
         raise ValueError(f"Expected bool for '{key}', got {value!r}")
     if expected is int:
+        if isinstance(value, bool):
+            raise ValueError(f"Expected int for '{key}', got {value!r}")
         if isinstance(value, int):
-            return value
-        if isinstance(value, str):
-            return int(value.strip())
-        raise ValueError(f"Expected int for '{key}', got {value!r}")
+            coerced = value
+        elif isinstance(value, str):
+            coerced = int(value.strip())
+        else:
+            raise ValueError(f"Expected int for '{key}', got {value!r}")
+        if key in _POSITIVE_INT_CONSUMER_KEYS and coerced <= 0:
+            raise ValueError(f"Expected positive int for '{key}', got {value!r}")
+        return coerced
     if expected is str:
         if isinstance(value, str):
+            if key == "auto.offset.reset":
+                normalized = value.strip().lower()
+                if normalized not in _AUTO_OFFSET_RESET_ALLOWED_VALUES:
+                    raise ValueError(
+                        "Expected one of "
+                        f"{sorted(_AUTO_OFFSET_RESET_ALLOWED_VALUES)} for '{key}', got {value!r}"
+                    )
+                return normalized
             return value
         raise ValueError(f"Expected str for '{key}', got {value!r}")
     return value
@@ -162,6 +238,29 @@ def _sanitize_consumer_override_map(raw: object, *, context: str) -> dict[str, o
     return sanitized
 
 
+def _validate_consumer_override_relationships(
+    overrides: dict[str, object], *, context: str
+) -> dict[str, object]:
+    validated = dict(overrides)
+    session_timeout = validated.get("session.timeout.ms")
+    heartbeat_interval = validated.get("heartbeat.interval.ms")
+    if (
+        isinstance(session_timeout, int)
+        and isinstance(heartbeat_interval, int)
+        and heartbeat_interval >= session_timeout
+    ):
+        logger.warning(
+            "Ignoring invalid Kafka consumer heartbeat/session relationship.",
+            extra={
+                "context": context,
+                "heartbeat.interval.ms": heartbeat_interval,
+                "session.timeout.ms": session_timeout,
+            },
+        )
+        validated.pop("heartbeat.interval.ms", None)
+    return validated
+
+
 def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
     """
     Loads optional runtime Kafka consumer tuning from environment variables.
@@ -175,8 +274,11 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
         try:
             defaults = json.loads(defaults_raw)
             merged.update(
-                _sanitize_consumer_override_map(
-                    defaults, context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON"
+                _validate_consumer_override_relationships(
+                    _sanitize_consumer_override_map(
+                        defaults, context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON"
+                    ),
+                    context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
                 )
             )
         except Exception as exc:
@@ -190,9 +292,18 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
                 group_cfg = parsed.get(group_id)
                 if group_cfg is not None:
                     merged.update(
-                        _sanitize_consumer_override_map(
-                            group_cfg,
-                            context=f"LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON[{group_id}]",
+                        _validate_consumer_override_relationships(
+                            _sanitize_consumer_override_map(
+                                group_cfg,
+                                context=(
+                                    "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON"
+                                    f"[{group_id}]"
+                                ),
+                            ),
+                            context=(
+                                "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON"
+                                f"[{group_id}]"
+                            ),
                         )
                     )
             else:
@@ -202,4 +313,7 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
                 "Invalid consumer group overrides JSON; ignoring.", extra={"error": str(exc)}
             )
 
-    return merged
+    return _validate_consumer_override_relationships(
+        merged,
+        context=f"merged Kafka consumer runtime overrides for group '{group_id}'",
+    )

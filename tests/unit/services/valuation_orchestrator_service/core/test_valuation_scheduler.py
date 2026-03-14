@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -30,7 +31,9 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 def mock_kafka_producer() -> MagicMock:
-    return MagicMock(spec=KafkaProducer)
+    mock = MagicMock(spec=KafkaProducer)
+    mock.flush.return_value = 0
+    return mock
 
 
 @pytest.fixture
@@ -434,6 +437,56 @@ async def test_scheduler_omits_empty_correlation_header(
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
 
 
+async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispatch_failure(
+    scheduler: ValuationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(RuntimeError, match="Remaining job keys: P1\\|S2\\|2025-08-12\\|1"):
+        await scheduler._dispatch_jobs(claimed_jobs)
+
+    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_scheduler_raises_on_flush_timeout(
+    scheduler: ValuationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+    ]
+    mock_kafka_producer.flush.return_value = 1
+
+    with pytest.raises(
+        RuntimeError,
+        match="Delivery confirmation timed out while dispatching valuation jobs",
+    ):
+        await scheduler._dispatch_jobs(claimed_jobs)
+
+
 async def test_scheduler_reads_max_attempts_from_environment(
     mock_kafka_producer: MagicMock, monkeypatch: pytest.MonkeyPatch
 ):
@@ -495,3 +548,43 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
         correlation_id="corr-trigger-1",
     )
     mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(scheduler._batch_size)
+
+
+async def test_scheduler_stop_interrupts_poll_sleep(
+    scheduler: ValuationScheduler,
+):
+    batch_started = asyncio.Event()
+
+    async def mark_started(*args, **kwargs):
+        batch_started.set()
+
+    async def get_session_gen():
+        yield AsyncMock(spec=AsyncSession)
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch.object(scheduler, "_update_reprocessing_metrics", side_effect=mark_started),
+        patch.object(scheduler, "_update_queue_metrics", new=AsyncMock()),
+        patch.object(scheduler, "_process_instrument_level_triggers", new=AsyncMock()),
+        patch.object(scheduler, "_create_backfill_jobs", new=AsyncMock()),
+        patch.object(scheduler, "_advance_watermarks", new=AsyncMock()),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
+        ) as mock_repo_factory,
+    ):
+        mock_repo = AsyncMock()
+        mock_repo.find_and_claim_eligible_jobs.return_value = []
+        mock_repo.find_and_reset_stale_jobs.return_value = 0
+        mock_repo_factory.return_value = mock_repo
+
+        scheduler._poll_interval = 60
+        task = asyncio.create_task(scheduler.run())
+        await batch_started.wait()
+        await asyncio.sleep(0)
+
+        scheduler.stop()
+
+        await asyncio.wait_for(task, timeout=0.2)

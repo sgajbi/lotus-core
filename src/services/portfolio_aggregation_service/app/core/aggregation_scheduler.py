@@ -34,11 +34,13 @@ class AggregationScheduler:
         self._stale_timeout_minutes = runtime_settings.aggregation_scheduler_stale_timeout_minutes
         self._max_attempts = runtime_settings.aggregation_scheduler_max_attempts
         self._running = True
+        self._stop_event = asyncio.Event()
         self._producer: KafkaProducer = get_kafka_producer()
 
     def stop(self):
         logger.info("Aggregation scheduler shutdown signal received.")
         self._running = False
+        self._stop_event.set()
 
     async def _update_queue_metrics(self, repo: TimeseriesRepository):
         queue_stats = await repo.get_job_queue_stats()
@@ -58,7 +60,8 @@ class AggregationScheduler:
             return
 
         logger.info(f"Dispatching {len(jobs)} claimed aggregation jobs to Kafka.")
-        for job in jobs:
+        record_keys = [f"{job.portfolio_id}|{job.aggregation_date.isoformat()}" for job in jobs]
+        for idx, job in enumerate(jobs):
             event = PortfolioAggregationRequiredEvent(
                 portfolio_id=job.portfolio_id,
                 aggregation_date=job.aggregation_date,
@@ -67,13 +70,27 @@ class AggregationScheduler:
             headers = []
             if job.correlation_id:
                 headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
-            self._producer.publish_message(
-                topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
-                key=job.portfolio_id,
-                value=event.model_dump(mode="json"),
-                headers=headers,
+            try:
+                self._producer.publish_message(
+                    topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+                    key=job.portfolio_id,
+                    value=event.model_dump(mode="json"),
+                    headers=headers,
+                )
+            except Exception as exc:
+                self._producer.flush(timeout=10)
+                remaining_keys = ", ".join(record_keys[idx:])
+                raise RuntimeError(
+                    "Failed to dispatch aggregation jobs after "
+                    f"{idx} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+                ) from exc
+        undelivered_count = self._producer.flush(timeout=10)
+        if undelivered_count:
+            affected_keys = ", ".join(record_keys)
+            raise RuntimeError(
+                "Delivery confirmation timed out while dispatching aggregation jobs. "
+                f"Affected job keys: {affected_keys}."
             )
-        self._producer.flush(timeout=10)
         logger.info(f"Successfully flushed {len(jobs)} aggregation jobs.")
 
     async def run(self):
@@ -102,7 +119,10 @@ class AggregationScheduler:
                 logger.error("Error in scheduler polling loop.", exc_info=True)
 
             try:
-                await asyncio.sleep(self._poll_interval)
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
+                break
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 break
 

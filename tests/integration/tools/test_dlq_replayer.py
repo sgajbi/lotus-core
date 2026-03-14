@@ -25,7 +25,7 @@ def mock_kafka_producer() -> MagicMock:
     """Provides a mock of the KafkaProducer for the replayer to use."""
     mock = MagicMock()
     mock.publish_message = MagicMock()
-    mock.flush = MagicMock()
+    mock.flush = MagicMock(return_value=0)
     return mock
 
 
@@ -173,3 +173,67 @@ async def test_dlq_replayer_skips_malformed_message(
     assert call_args["topic"] == "raw_portfolios"
     assert call_args["key"] == "valid-key-01"
     assert call_args["value"] == {"portfolioId": "P01"}
+
+
+async def test_dlq_replayer_does_not_commit_when_replay_flush_times_out(
+    docker_services, mock_kafka_producer, unique_dlq_topic
+):
+    kafka_bootstrap_host = _kafka_bootstrap_host()
+    dlq_topic = unique_dlq_topic
+
+    original_topic = "raw_transactions"
+    original_key = f"txn-{uuid.uuid4()}"
+    original_value = {"transaction_id": original_key, "amount": 1000}
+
+    dlq_payload = {
+        "original_topic": original_topic,
+        "original_key": original_key,
+        "original_value": json.dumps(original_value),
+        "error_reason": "Test-induced failure",
+        "correlation_id": f"corr-{uuid.uuid4()}",
+    }
+
+    setup_producer = KafkaProducer(bootstrap_servers=kafka_bootstrap_host)
+    setup_producer.publish_message(
+        topic=dlq_topic,
+        key="dlq_timeout_key",
+        value=dlq_payload,
+    )
+    setup_producer.flush()
+    await asyncio.sleep(2)
+
+    mock_kafka_producer.flush.return_value = 1
+
+    replay_group_id = f"test-replayer-group-{uuid.uuid4()}"
+
+    with patch("tools.dlq_replayer.get_kafka_producer", return_value=mock_kafka_producer):
+        consumer = DLQReplayConsumer(
+            bootstrap_servers=kafka_bootstrap_host,
+            topic=dlq_topic,
+            group_id=replay_group_id,
+            limit=1,
+        )
+        await consumer.run()
+
+    mock_kafka_producer.publish_message.assert_called_once()
+    assert any(
+        call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list
+    )
+
+    mock_kafka_producer.publish_message.reset_mock()
+    mock_kafka_producer.flush.reset_mock()
+    mock_kafka_producer.flush.return_value = 0
+
+    with patch("tools.dlq_replayer.get_kafka_producer", return_value=mock_kafka_producer):
+        consumer = DLQReplayConsumer(
+            bootstrap_servers=kafka_bootstrap_host,
+            topic=dlq_topic,
+            group_id=replay_group_id,
+            limit=1,
+        )
+        await consumer.run()
+
+    mock_kafka_producer.publish_message.assert_called_once()
+    assert any(
+        call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list
+    )

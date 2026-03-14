@@ -1,9 +1,10 @@
+# ruff: noqa: E402, I001
 # tools/reprocess_transactions.py
 import argparse
 import asyncio
 import logging
-import sys
 import os
+import sys
 from typing import List
 
 # Ensure the script can find the portfolio-common library
@@ -11,13 +12,25 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from portfolio_common.logging_utils import setup_logging, correlation_id_var, generate_correlation_id
-from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.db import get_async_db_session
+from portfolio_common.kafka_utils import get_kafka_producer
+from portfolio_common.logging_utils import (
+    correlation_id_var,
+    generate_correlation_id,
+    setup_logging,
+)
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+def _flush_or_raise(kafka_producer, *, context: str) -> None:
+    undelivered_count = kafka_producer.flush(timeout=10)
+    if undelivered_count:
+        raise RuntimeError(
+            f"Kafka producer flush left {int(undelivered_count)} undelivered message(s) {context}."
+        )
 
 async def main(transaction_ids: List[str]):
     """
@@ -37,7 +50,7 @@ async def main(transaction_ids: List[str]):
     )
 
     kafka_producer = get_kafka_producer()
-    
+
     try:
         async for db_session in get_async_db_session():
             async with db_session.begin():
@@ -45,15 +58,25 @@ async def main(transaction_ids: List[str]):
                 reprocessed_count = await repo.reprocess_transactions_by_ids(
                     transaction_ids=transaction_ids
                 )
-                logger.info(f"Completed reprocessing. Republished {reprocessed_count} events.")
+    except Exception:
+        try:
+            _flush_or_raise(kafka_producer, context="after reprocessing failure")
+        except Exception:
+            logger.exception("Kafka producer flush failed during reprocessing cleanup.")
+        raise
+    else:
+        _flush_or_raise(kafka_producer, context="after successful reprocessing")
+        logger.info(f"Completed reprocessing. Republished {reprocessed_count} events.")
     finally:
-        kafka_producer.flush(timeout=10)
         correlation_id_var.reset(token)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="A tool to reprocess specific transactions by re-publishing them to the 'raw_transactions_completed' topic."
+        description=(
+            "A tool to reprocess specific transactions by re-publishing them to the "
+            "'raw_transactions_completed' topic."
+        )
     )
     parser.add_argument(
         "--transaction-ids",

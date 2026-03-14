@@ -1,6 +1,5 @@
 # libs/portfolio-common/portfolio_common/kafka_admin.py
 import logging
-import sys
 from typing import List
 
 from confluent_kafka import KafkaException
@@ -10,6 +9,10 @@ from tenacity import before_log, retry, stop_after_attempt, wait_fixed
 from .config import KAFKA_BOOTSTRAP_SERVERS
 
 logger = logging.getLogger(__name__)
+
+
+class KafkaTopicVerificationError(RuntimeError):
+    """Raised when required Kafka topics cannot be verified safely."""
 
 
 @retry(
@@ -57,4 +60,6 @@ def ensure_topics_exist(required_topics: List[str]):
         logger.critical(
             f"An unexpected error occurred while verifying Kafka topics: {e}", exc_info=True
         )
-        sys.exit(1)  # Exit on unexpected errors
+        raise KafkaTopicVerificationError(
+            "Unexpected error while verifying Kafka topics."
+        ) from e

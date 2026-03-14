@@ -278,6 +278,10 @@ def _to_replay_audit_response(row: DBConsumerDlqReplayAudit) -> IngestionReplayA
     )
 
 
+_SUCCESSFUL_REPLAY_AUDIT_STATUSES = {"replayed", "replayed_bookkeeping_failed"}
+_FAILED_REPLAY_AUDIT_STATUSES = {"not_replayable", "failed", "replayed_bookkeeping_failed"}
+
+
 def _derive_capacity_group(
     *,
     endpoint: str,
@@ -467,6 +471,38 @@ class IngestionJobService:
                     .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
                 )
                 row = updated.first()
+                if row is None:
+                    return
+                db.add(
+                    DBIngestionJobFailure(
+                        failure_id=f"fail_{uuid4().hex}",
+                        job_id=job_id,
+                        failure_phase=failure_phase,
+                        failure_reason=failure_reason,
+                        failed_record_keys=failed_record_keys or [],
+                    )
+                )
+                INGESTION_JOBS_FAILED_TOTAL.labels(
+                    endpoint=row.endpoint,
+                    entity_type=row.entity_type,
+                    failure_phase=failure_phase,
+                ).inc()
+
+    async def record_failure_observation(
+        self,
+        job_id: str,
+        failure_reason: str,
+        *,
+        failure_phase: str,
+        failed_record_keys: list[str] | None = None,
+    ) -> None:
+        async for db in get_async_db_session():
+            async with db.begin():
+                row = await db.scalar(
+                    select(DBIngestionJob)
+                    .where(DBIngestionJob.job_id == job_id)
+                    .limit(1)
+                )
                 if row is None:
                     return
                 db.add(
@@ -1218,7 +1254,9 @@ class IngestionJobService:
             stmt = select(DBConsumerDlqReplayAudit).where(
                 and_(
                     DBConsumerDlqReplayAudit.replay_fingerprint == replay_fingerprint,
-                    DBConsumerDlqReplayAudit.replay_status == "replayed",
+                    DBConsumerDlqReplayAudit.replay_status.in_(
+                        _SUCCESSFUL_REPLAY_AUDIT_STATUSES
+                    ),
                 )
             )
             if recovery_path is not None:
@@ -1269,7 +1307,7 @@ class IngestionJobService:
             ).inc()
             if replay_status == "duplicate_blocked":
                 INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL.labels(recovery_path=recovery_path).inc()
-            if replay_status in {"not_replayable", "failed"}:
+            if replay_status in _FAILED_REPLAY_AUDIT_STATUSES:
                 INGESTION_REPLAY_FAILURE_TOTAL.labels(
                     recovery_path=recovery_path, replay_status=replay_status
                 ).inc()

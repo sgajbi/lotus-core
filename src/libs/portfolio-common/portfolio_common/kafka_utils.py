@@ -146,8 +146,17 @@ class KafkaProducer:
 
     def close(self, timeout: int = 10) -> None:
         if self.producer:
-            self.producer.flush(timeout)
-            self.producer = None
+            try:
+                undelivered_count = self.producer.flush(timeout)
+                if undelivered_count:
+                    logger.error(
+                        "Kafka producer close left undelivered messages.",
+                        extra={"undelivered_count": undelivered_count, "timeout": timeout},
+                    )
+            except Exception:
+                logger.error("Kafka producer close flush failed.", exc_info=True)
+            finally:
+                self.producer = None
 
 
 _kafka_producer_instance = None

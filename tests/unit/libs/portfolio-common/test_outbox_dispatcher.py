@@ -1,5 +1,8 @@
+import asyncio
+import logging
 from unittest.mock import MagicMock
 
+import pytest
 from portfolio_common.kafka_utils import KafkaProducer
 
 
@@ -29,6 +32,22 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
     assert settings.poll_interval_seconds == 11
     assert settings.batch_size == 77
     assert settings.max_retries == 7
+
+
+def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "nope")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "0")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "-4")
+
+    import portfolio_common.outbox_settings as module
+
+    settings = module.get_outbox_runtime_settings()
+
+    assert settings.poll_interval_seconds == 5
+    assert settings.batch_size == 50
+    assert settings.max_retries == 3
+    assert "falling back to default" in caplog.text
 
 
 def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
@@ -62,3 +81,27 @@ def test_dispatcher_constructor_uses_runtime_defaults(monkeypatch):
     assert dispatcher._poll_interval == 17
     assert dispatcher._batch_size == 91
     assert dispatcher._max_retries == 6
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_stop_interrupts_poll_sleep(monkeypatch):
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        poll_interval=60,
+    )
+    batch_started = asyncio.Event()
+
+    def _process_batch_sync():
+        batch_started.set()
+
+    monkeypatch.setattr(dispatcher, "_process_batch_sync", _process_batch_sync)
+
+    task = asyncio.create_task(dispatcher.run())
+    await batch_started.wait()
+    await asyncio.sleep(0)
+
+    dispatcher.stop()
+
+    await asyncio.wait_for(task, timeout=0.2)
