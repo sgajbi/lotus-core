@@ -351,3 +351,52 @@ async def test_publish_portfolio_bundle(ingestion_service: IngestionService):
         "market_prices": 1,
         "fx_rates": 1,
     }
+
+
+async def test_publish_portfolio_bundle_reports_completed_group_counts_before_failure(
+    ingestion_service: IngestionService,
+):
+    bundle = PortfolioBundleIngestionRequest.model_validate(
+        {
+            "business_dates": [{"business_date": "2026-01-02"}],
+            "portfolios": [
+                {
+                    "portfolio_id": "P1",
+                    "base_currency": "USD",
+                    "open_date": "2025-01-01",
+                    "client_id": "C1",
+                    "status": "ACTIVE",
+                    "risk_exposure": "a",
+                    "investment_time_horizon": "b",
+                    "portfolio_type": "c",
+                    "booking_center_code": "d",
+                }
+            ],
+            "instruments": [],
+            "transactions": [],
+            "market_prices": [],
+            "fx_rates": [],
+        }
+    )
+
+    async def _ok_business_dates(*args, **kwargs):
+        return None
+
+    async def _fail_portfolios(*args, **kwargs):
+        raise IngestionPublishError(
+            "Failed to publish portfolio 'P1'.",
+            failed_record_keys=["P1"],
+        )
+
+    ingestion_service.publish_business_dates = _ok_business_dates  # type: ignore[method-assign]
+    ingestion_service.publish_portfolios = _fail_portfolios  # type: ignore[method-assign]
+
+    with pytest.raises(IngestionPublishError) as exc_info:
+        await ingestion_service.publish_portfolio_bundle(bundle)
+
+    assert exc_info.value.failed_record_keys == ["P1"]
+    assert (
+        "Portfolio bundle publish stopped after these entity groups were already published: "
+        "{'business_dates': 1, 'portfolios': 0, 'instruments': 0, 'transactions': 0, "
+        "'market_prices': 0, 'fx_rates': 0}."
+    ) in str(exc_info.value)

@@ -279,21 +279,43 @@ class IngestionService:
         The bundle is fan-out published to existing domain topics to keep downstream
         processing unchanged.
         """
-        await self.publish_business_dates(bundle.business_dates, idempotency_key)
-        await self.publish_portfolios(bundle.portfolios, idempotency_key)
-        await self.publish_instruments(bundle.instruments, idempotency_key)
-        await self.publish_transactions(bundle.transactions, idempotency_key)
-        await self.publish_market_prices(bundle.market_prices, idempotency_key)
-        await self.publish_fx_rates(bundle.fx_rates, idempotency_key)
-
-        return {
-            "business_dates": len(bundle.business_dates),
-            "portfolios": len(bundle.portfolios),
-            "instruments": len(bundle.instruments),
-            "transactions": len(bundle.transactions),
-            "market_prices": len(bundle.market_prices),
-            "fx_rates": len(bundle.fx_rates),
+        published_counts = {
+            "business_dates": 0,
+            "portfolios": 0,
+            "instruments": 0,
+            "transactions": 0,
+            "market_prices": 0,
+            "fx_rates": 0,
         }
+        try:
+            await self.publish_business_dates(bundle.business_dates, idempotency_key)
+            published_counts["business_dates"] = len(bundle.business_dates)
+
+            await self.publish_portfolios(bundle.portfolios, idempotency_key)
+            published_counts["portfolios"] = len(bundle.portfolios)
+
+            await self.publish_instruments(bundle.instruments, idempotency_key)
+            published_counts["instruments"] = len(bundle.instruments)
+
+            await self.publish_transactions(bundle.transactions, idempotency_key)
+            published_counts["transactions"] = len(bundle.transactions)
+
+            await self.publish_market_prices(bundle.market_prices, idempotency_key)
+            published_counts["market_prices"] = len(bundle.market_prices)
+
+            await self.publish_fx_rates(bundle.fx_rates, idempotency_key)
+            published_counts["fx_rates"] = len(bundle.fx_rates)
+        except IngestionPublishError as exc:
+            raise IngestionPublishError(
+                (
+                    "Portfolio bundle publish stopped after these entity groups were already "
+                    f"published: {published_counts}. {exc}"
+                ),
+                failed_record_keys=exc.failed_record_keys,
+                published_record_count=exc.published_record_count,
+            ) from exc
+
+        return published_counts
 
 
 def get_ingestion_service(
