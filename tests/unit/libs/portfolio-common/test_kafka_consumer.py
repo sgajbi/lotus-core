@@ -376,6 +376,31 @@ async def test_consumer_ignores_invalid_runtime_overrides(monkeypatch):
     assert consumer._consumer_config["session.timeout.ms"] == 45000
 
 
+async def test_consumer_drops_invalid_merged_heartbeat_session_override(monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
+        '{"session.timeout.ms": 30000}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
+        '{"test-group": {"heartbeat.interval.ms": 30000}}',
+    )
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=MagicMock()),
+        patch("portfolio_common.kafka_consumer.get_kafka_producer", return_value=MagicMock()),
+    ):
+        consumer = ConcreteTestConsumer(
+            bootstrap_servers="mock_bs",
+            topic="test-topic",
+            group_id="test-group",
+            dlq_topic="test.dlq",
+        )
+
+    assert consumer._consumer_config["session.timeout.ms"] == 30000
+    assert consumer._consumer_config["heartbeat.interval.ms"] == 3000
+
+
 async def test_shutdown_logs_flush_timeout_without_raising(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,
