@@ -262,4 +262,7 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
                 "Invalid consumer group overrides JSON; ignoring.", extra={"error": str(exc)}
             )
 
-    return merged
+    return _validate_consumer_override_relationships(
+        merged,
+        context=f"merged Kafka consumer runtime overrides for group '{group_id}'",
+    )

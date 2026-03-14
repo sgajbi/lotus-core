@@ -67,3 +67,20 @@ def test_group_override_drops_invalid_heartbeat_session_relationship(monkeypatch
     overrides = get_kafka_consumer_runtime_overrides("test-group")
 
     assert overrides == {"session.timeout.ms": 30000}
+
+
+def test_merged_defaults_and_group_overrides_drop_invalid_heartbeat_session_relationship(
+    monkeypatch,
+):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
+        '{"session.timeout.ms": 30000}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
+        '{"test-group": {"heartbeat.interval.ms": 30000}}',
+    )
+
+    overrides = get_kafka_consumer_runtime_overrides("test-group")
+
+    assert overrides == {"session.timeout.ms": 30000}
