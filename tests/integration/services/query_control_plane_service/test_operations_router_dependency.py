@@ -550,6 +550,8 @@ async def test_portfolio_control_stages_success(async_test_client):
                 "epoch": 3,
                 "status": "REQUIRES_REPLAY",
                 "last_source_event_type": "financial_reconciliation_completed",
+                "created_at": "2026-03-13T10:10:00Z",
+                "ready_emitted_at": None,
                 "updated_at": "2026-03-13T10:15:09Z",
                 "is_blocking": True,
                 "operational_state": "BLOCKING",
@@ -567,6 +569,8 @@ async def test_portfolio_control_stages_success(async_test_client):
     assert response.json()["portfolio_id"] == "P1"
     assert response.json()["items"][0]["stage_id"] == 701
     assert response.json()["items"][0]["stage_name"] == "FINANCIAL_RECONCILIATION"
+    assert response.json()["items"][0]["created_at"] == "2026-03-13T10:10:00Z"
+    assert response.json()["items"][0]["ready_emitted_at"] is None
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
 

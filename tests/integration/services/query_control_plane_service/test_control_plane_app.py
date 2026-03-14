@@ -358,6 +358,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert control_stage_record["properties"]["last_source_event_type"]["description"] == (
         "Last event type that updated the control stage row."
     )
+    assert control_stage_record["properties"]["created_at"]["description"] == (
+        "UTC timestamp when the durable control stage row was first created."
+    )
+    assert control_stage_record["properties"]["ready_emitted_at"]["description"] == (
+        "UTC timestamp when the control stage emitted downstream readiness, if any."
+    )
     assert control_stage_record["properties"]["is_blocking"]["description"] == (
         "True when the control stage blocks downstream publication or release decisions."
     )

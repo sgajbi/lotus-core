@@ -682,6 +682,8 @@ class OperationsService:
                     epoch=stage.epoch,
                     status=stage.status,
                     last_source_event_type=stage.last_source_event_type,
+                    created_at=stage.created_at,
+                    ready_emitted_at=stage.ready_emitted_at,
                     updated_at=stage.updated_at,
                     is_blocking=self._is_controls_blocking(stage.status),
                     operational_state=self._get_portfolio_control_stage_operational_state(

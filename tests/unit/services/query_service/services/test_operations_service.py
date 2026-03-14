@@ -667,6 +667,7 @@ async def test_get_reconciliation_findings_raises_when_run_missing(
 
 
 async def test_get_portfolio_control_stages(service: OperationsService, mock_ops_repo: AsyncMock):
+    created_at = datetime(2026, 3, 13, 10, 10, tzinfo=timezone.utc)
     updated_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
     mock_ops_repo.get_portfolio_control_stages_count.return_value = 1
     mock_ops_repo.get_portfolio_control_stages.return_value = [
@@ -680,6 +681,8 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
                 "epoch": 3,
                 "status": "REQUIRES_REPLAY",
                 "last_source_event_type": "financial_reconciliation_completed",
+                "created_at": created_at,
+                "ready_emitted_at": None,
                 "updated_at": updated_at,
             },
         )()
@@ -702,6 +705,8 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
     assert response.items[0].epoch == 3
     assert response.items[0].status == "REQUIRES_REPLAY"
     assert response.items[0].last_source_event_type == "financial_reconciliation_completed"
+    assert response.items[0].created_at == created_at
+    assert response.items[0].ready_emitted_at is None
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_blocking is True
     assert response.items[0].operational_state == "BLOCKING"

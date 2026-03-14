@@ -921,6 +921,16 @@ class PortfolioControlStageRecord(BaseModel):
         description="Last event type that updated the control stage row.",
         examples=["financial_reconciliation_completed"],
     )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the durable control stage row was first created.",
+        examples=["2026-03-13T10:10:00Z"],
+    )
+    ready_emitted_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the control stage emitted downstream readiness, if any.",
+        examples=["2026-03-13T10:14:30Z"],
+    )
     updated_at: datetime = Field(
         ...,
         description=(
@@ -961,6 +971,8 @@ class PortfolioControlStageListResponse(BaseModel):
                     "epoch": 3,
                     "status": "REQUIRES_REPLAY",
                     "last_source_event_type": "financial_reconciliation_completed",
+                    "created_at": "2026-03-13T10:10:00Z",
+                    "ready_emitted_at": None,
                     "updated_at": "2026-03-13T10:15:09Z",
                     "is_blocking": True,
                     "operational_state": "BLOCKING",
