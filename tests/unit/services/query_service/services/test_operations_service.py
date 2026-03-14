@@ -876,16 +876,25 @@ async def test_get_support_overview_honors_custom_stale_threshold(
     assert response.failed_window_hours == 48
     assert response.generated_at_utc.tzinfo == timezone.utc
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30
+        "P1", stale_minutes=30, reference_now=response.generated_at_utc
     )
     mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30, failed_window_hours=48
+        "P1",
+        stale_minutes=30,
+        failed_window_hours=48,
+        reference_now=response.generated_at_utc,
     )
     mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30, failed_window_hours=48
+        "P1",
+        stale_minutes=30,
+        failed_window_hours=48,
+        reference_now=response.generated_at_utc,
     )
     mock_ops_repo.get_analytics_export_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=30, failed_window_hours=48
+        "P1",
+        stale_minutes=30,
+        failed_window_hours=48,
+        reference_now=response.generated_at_utc,
     )
 
 
@@ -1063,9 +1072,18 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
     assert response.reprocessing.stale_reprocessing_keys == 1
     assert response.reprocessing.oldest_reprocessing_watermark_date == date(2025, 8, 18)
     assert response.reprocessing.backlog_age_days == 12
+    mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
+        "P1", stale_minutes=15, reference_now=response.generated_at_utc
+    )
     mock_ops_repo.get_valuation_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=15, failed_window_hours=48
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=48,
+        reference_now=response.generated_at_utc,
     )
     mock_ops_repo.get_aggregation_job_health_summary.assert_awaited_once_with(
-        "P1", stale_minutes=15, failed_window_hours=48
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=48,
+        reference_now=response.generated_at_utc,
     )

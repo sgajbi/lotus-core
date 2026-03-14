@@ -61,9 +61,37 @@ async def test_get_active_reprocessing_keys_count(
     assert "position_state.status = 'REPROCESSING'" in compiled
 
 
+async def test_get_reprocessing_health_summary(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    mock_row = MagicMock(
+        active_keys=3,
+        stale_reprocessing_keys=1,
+        oldest_reprocessing_watermark_date=date(2025, 8, 20),
+    )
+    mock_result = MagicMock()
+    mock_result.one.return_value = mock_row
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reprocessing_health_summary(
+        "P1", stale_minutes=15, reference_now=reference_now
+    )
+
+    assert value.active_keys == 3
+    assert value.stale_reprocessing_keys == 1
+    assert value.oldest_reprocessing_watermark_date == date(2025, 8, 20)
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from position_state" in compiled.lower()
+    assert "position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+
+
 async def test_get_valuation_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_row = MagicMock(
         pending_jobs=4,
         processing_jobs=2,
@@ -77,7 +105,10 @@ async def test_get_valuation_job_health_summary(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_valuation_job_health_summary(
-        "P1", stale_minutes=15, failed_window_hours=24
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=24,
+        reference_now=reference_now,
     )
 
     assert value.pending_jobs == 4
@@ -91,11 +122,14 @@ async def test_get_valuation_job_health_summary(
     assert "from portfolio_valuation_jobs" in compiled.lower()
     assert "FILTER (WHERE portfolio_valuation_jobs.status IN ('PENDING', 'PROCESSING'))" in compiled
     assert "FILTER (WHERE portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "portfolio_valuation_jobs.updated_at >= '2025-08-30 12:00:00+00:00'" in compiled
 
 
 async def test_get_aggregation_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_row = MagicMock(
         pending_jobs=5,
         processing_jobs=1,
@@ -109,7 +143,10 @@ async def test_get_aggregation_job_health_summary(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_aggregation_job_health_summary(
-        "P1", stale_minutes=15, failed_window_hours=24
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=24,
+        reference_now=reference_now,
     )
 
     assert value.pending_jobs == 5
@@ -125,11 +162,14 @@ async def test_get_aggregation_job_health_summary(
         "FILTER (WHERE portfolio_aggregation_jobs.status IN ('PENDING', 'PROCESSING'))" in compiled
     )
     assert "FILTER (WHERE portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "portfolio_aggregation_jobs.updated_at >= '2025-08-30 12:00:00+00:00'" in compiled
 
 
 async def test_get_analytics_export_job_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_row = MagicMock(
         accepted_jobs=2,
         running_jobs=1,
@@ -143,7 +183,10 @@ async def test_get_analytics_export_job_health_summary(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_analytics_export_job_health_summary(
-        "P1", stale_minutes=15, failed_window_hours=24
+        "P1",
+        stale_minutes=15,
+        failed_window_hours=24,
+        reference_now=reference_now,
     )
 
     assert value.accepted_jobs == 2
@@ -158,6 +201,8 @@ async def test_get_analytics_export_job_health_summary(
     assert "FILTER (WHERE analytics_export_jobs.status = 'accepted')" in compiled
     assert "FILTER (WHERE analytics_export_jobs.status = 'running')" in compiled
     assert "FILTER (WHERE analytics_export_jobs.status = 'failed')" in compiled
+    assert "analytics_export_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "analytics_export_jobs.updated_at >= '2025-08-30 12:00:00+00:00'" in compiled
 
 
 async def test_get_latest_transaction_date(

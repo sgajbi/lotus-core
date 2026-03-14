@@ -130,8 +130,9 @@ class OperationsRepository:
         self,
         portfolio_id: str,
         stale_minutes: int,
+        reference_now: datetime,
     ) -> ReprocessingHealthSummary:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(
             func.count()
             .filter(PositionState.status == "REPROCESSING")
@@ -158,9 +159,10 @@ class OperationsRepository:
         portfolio_id: str,
         stale_minutes: int,
         failed_window_hours: int,
+        reference_now: datetime,
     ) -> JobHealthSummary:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
-        failed_since = datetime.now(timezone.utc) - timedelta(hours=failed_window_hours)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
+        failed_since = reference_now - timedelta(hours=failed_window_hours)
         stmt = select(
             func.count()
             .filter(PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")))
@@ -200,9 +202,10 @@ class OperationsRepository:
         portfolio_id: str,
         stale_minutes: int,
         failed_window_hours: int,
+        reference_now: datetime,
     ) -> JobHealthSummary:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
-        failed_since = datetime.now(timezone.utc) - timedelta(hours=failed_window_hours)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
+        failed_since = reference_now - timedelta(hours=failed_window_hours)
         stmt = select(
             func.count()
             .filter(PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")))
@@ -242,9 +245,10 @@ class OperationsRepository:
         portfolio_id: str,
         stale_minutes: int,
         failed_window_hours: int,
+        reference_now: datetime,
     ) -> ExportJobHealthSummary:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
-        failed_since = datetime.now(timezone.utc) - timedelta(hours=failed_window_hours)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
+        failed_since = reference_now - timedelta(hours=failed_window_hours)
         stmt = select(
             func.count().filter(AnalyticsExportJob.status == "accepted").label("accepted_jobs"),
             func.count().filter(AnalyticsExportJob.status == "running").label("running_jobs"),
