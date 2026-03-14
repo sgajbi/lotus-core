@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from unittest.mock import patch
 
 import pytest
 from portfolio_common.runtime_supervision import (
@@ -85,7 +86,6 @@ async def test_shutdown_runtime_components_stops_consumers_callbacks_and_server(
 
 
 async def test_shutdown_runtime_components_cancels_stuck_tasks_after_timeout():
-    stop_event = asyncio.Event()
     cancelled = asyncio.Event()
 
     async def _stuck_task():
@@ -97,14 +97,75 @@ async def test_shutdown_runtime_components_cancels_stuck_tasks_after_timeout():
 
     task = asyncio.create_task(_stuck_task(), name="stuck-task")
 
-    def _stop_callback() -> None:
-        stop_event.set()
-
     await shutdown_runtime_components(
         tasks=[task],
-        stop_callbacks=[_stop_callback],
         shutdown_timeout_seconds=0.01,
     )
 
     assert task.cancelled() is True
     assert cancelled.is_set() is True
+
+
+async def test_shutdown_runtime_components_continues_after_callback_failures():
+    logger = logging.getLogger("test-runtime-supervision")
+    stop_marker: list[str] = []
+
+    class _FailingConsumer:
+        def shutdown(self) -> None:
+            stop_marker.append("consumer")
+            raise RuntimeError("consumer shutdown failed")
+
+    class _HealthyConsumer:
+        def __init__(self) -> None:
+            self.shutdown_called = False
+
+        def shutdown(self) -> None:
+            self.shutdown_called = True
+            stop_marker.append("healthy-consumer")
+
+    stop_event = asyncio.Event()
+
+    async def _task():
+        await stop_event.wait()
+
+    task = asyncio.create_task(_task(), name="managed-task")
+    healthy_consumer = _HealthyConsumer()
+
+    def _failing_stop_callback() -> None:
+        stop_marker.append("callback")
+        raise RuntimeError("stop callback failed")
+
+    def _healthy_stop_callback() -> None:
+        stop_marker.append("healthy-callback")
+        stop_event.set()
+
+    with patch.object(logger, "error") as mock_log_error:
+        await shutdown_runtime_components(
+            tasks=[task],
+            consumers=[_FailingConsumer(), healthy_consumer],
+            stop_callbacks=[_failing_stop_callback, _healthy_stop_callback],
+            logger=logger,
+        )
+
+    assert healthy_consumer.shutdown_called is True
+    assert stop_marker == ["consumer", "healthy-consumer", "callback", "healthy-callback"]
+    assert mock_log_error.call_count == 2
+
+
+async def test_shutdown_runtime_components_logs_timed_out_task_names():
+    logger = logging.getLogger("test-runtime-supervision")
+
+    async def _stuck_task():
+        await asyncio.Future()
+
+    task = asyncio.create_task(_stuck_task(), name="stuck-task")
+
+    with patch.object(logger, "error") as mock_log_error:
+        await shutdown_runtime_components(
+            tasks=[task],
+            shutdown_timeout_seconds=0.01,
+            logger=logger,
+        )
+
+    assert task.cancelled() is True
+    assert mock_log_error.call_args.kwargs["extra"]["timed_out_tasks"] == ["stuck-task"]
