@@ -841,6 +841,25 @@ async def test_get_reconciliation_findings_count(
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
 
 
+async def test_get_reconciliation_finding_summary(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_row = MagicMock(total_findings=4, blocking_findings=2)
+    mock_result = MagicMock()
+    mock_result.one.return_value = mock_row
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reconciliation_finding_summary(run_id="recon_123")
+
+    assert value.total_findings == 4
+    assert value.blocking_findings == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_findings" in compiled.lower()
+    assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
+    assert "FILTER (WHERE financial_reconciliation_findings.severity = 'ERROR')" in compiled
+
+
 async def test_get_portfolio_control_stages_count_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

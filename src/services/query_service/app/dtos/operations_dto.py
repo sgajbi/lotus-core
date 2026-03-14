@@ -419,6 +419,23 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["Tolerance exceeded for portfolio totals."],
     )
+    controls_latest_reconciliation_total_findings: Optional[int] = Field(
+        None,
+        description=(
+            "Total durable finding count recorded on the latest reconciliation run on the "
+            "same portfolio-day and epoch as the latest control stage."
+        ),
+        examples=[3],
+    )
+    controls_latest_reconciliation_blocking_findings: Optional[int] = Field(
+        None,
+        description=(
+            "Number of blocking reconciliation findings recorded on the latest "
+            "reconciliation run on the same portfolio-day and epoch as the latest "
+            "control stage."
+        ),
+        examples=[1],
+    )
     controls_last_updated_at: Optional[datetime] = Field(
         None,
         description=(

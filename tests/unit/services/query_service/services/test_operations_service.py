@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.repositories.operations_repository import (
     ExportJobHealthSummary,
     JobHealthSummary,
+    ReconciliationFindingSummary,
     ReprocessingHealthSummary,
 )
 from src.services.query_service.app.services.operations_service import OperationsService
@@ -106,6 +107,10 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
             "failure_reason": None,
         },
     )()
+    mock_ops_repo.get_reconciliation_finding_summary.return_value = ReconciliationFindingSummary(
+        total_findings=2,
+        blocking_findings=1,
+    )
 
     response = await service.get_support_overview("P1")
 
@@ -184,6 +189,8 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
         == "recon:transaction_cashflow:P1:2025-08-30:2"
     )
     assert response.controls_latest_reconciliation_failure_reason is None
+    assert response.controls_latest_reconciliation_total_findings == 2
+    assert response.controls_latest_reconciliation_blocking_findings == 1
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 10, 15, tzinfo=timezone.utc
     )
@@ -1262,6 +1269,8 @@ async def test_get_support_overview_without_business_date(
     assert response.controls_latest_reconciliation_requested_by is None
     assert response.controls_latest_reconciliation_dedupe_key is None
     assert response.controls_latest_reconciliation_failure_reason is None
+    assert response.controls_latest_reconciliation_total_findings is None
+    assert response.controls_latest_reconciliation_blocking_findings is None
     assert response.controls_last_updated_at is None
     assert response.controls_blocking is False
     assert response.publish_allowed is True
@@ -1347,6 +1356,10 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
             "failure_reason": "Tolerance exceeded for portfolio totals.",
         },
     )()
+    mock_ops_repo.get_reconciliation_finding_summary.return_value = ReconciliationFindingSummary(
+        total_findings=3,
+        blocking_findings=2,
+    )
 
     response = await service.get_support_overview("P1")
 
@@ -1377,6 +1390,8 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         response.controls_latest_reconciliation_failure_reason
         == "Tolerance exceeded for portfolio totals."
     )
+    assert response.controls_latest_reconciliation_total_findings == 3
+    assert response.controls_latest_reconciliation_blocking_findings == 2
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc
     )

@@ -24,7 +24,7 @@ from ..dtos.operations_dto import (
     SupportJobRecord,
     SupportOverviewResponse,
 )
-from ..repositories.operations_repository import OperationsRepository
+from ..repositories.operations_repository import OperationsRepository, ReconciliationFindingSummary
 from ..support_policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
@@ -285,6 +285,7 @@ class OperationsService:
             self.repo.get_latest_financial_reconciliation_control_stage(portfolio_id),
         )
         latest_reconciliation_run = None
+        latest_reconciliation_finding_summary: ReconciliationFindingSummary | None = None
         if latest_control_stage is not None:
             latest_reconciliation_run = (
                 await self.repo.get_latest_reconciliation_run_for_portfolio_day(
@@ -293,6 +294,12 @@ class OperationsService:
                     epoch=latest_control_stage.epoch,
                 )
             )
+            if latest_reconciliation_run is not None:
+                latest_reconciliation_finding_summary = (
+                    await self.repo.get_reconciliation_finding_summary(
+                        latest_reconciliation_run.run_id
+                    )
+                )
 
         latest_booked_transaction_date = None
         latest_booked_position_snapshot_date = None
@@ -446,6 +453,16 @@ class OperationsService:
             controls_latest_reconciliation_failure_reason=(
                 latest_reconciliation_run.failure_reason
                 if latest_reconciliation_run
+                else None
+            ),
+            controls_latest_reconciliation_total_findings=(
+                latest_reconciliation_finding_summary.total_findings
+                if latest_reconciliation_finding_summary
+                else None
+            ),
+            controls_latest_reconciliation_blocking_findings=(
+                latest_reconciliation_finding_summary.blocking_findings
+                if latest_reconciliation_finding_summary
                 else None
             ),
             controls_last_updated_at=(

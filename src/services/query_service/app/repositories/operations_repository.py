@@ -57,6 +57,12 @@ class ReprocessingHealthSummary:
     oldest_reprocessing_updated_at: Optional[datetime]
 
 
+@dataclass(frozen=True)
+class ReconciliationFindingSummary:
+    total_findings: int
+    blocking_findings: int
+
+
 class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -994,6 +1000,25 @@ class OperationsRepository:
             .where(FinancialReconciliationFinding.run_id == run_id)
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_reconciliation_finding_summary(
+        self, run_id: str
+    ) -> ReconciliationFindingSummary:
+        stmt = (
+            select(
+                func.count().label("total_findings"),
+                func.count()
+                .filter(FinancialReconciliationFinding.severity == "ERROR")
+                .label("blocking_findings"),
+            )
+            .select_from(FinancialReconciliationFinding)
+            .where(FinancialReconciliationFinding.run_id == run_id)
+        )
+        row = (await self.db.execute(stmt)).one()
+        return ReconciliationFindingSummary(
+            total_findings=int(row.total_findings or 0),
+            blocking_findings=int(row.blocking_findings or 0),
+        )
 
     async def get_portfolio_control_stages_count(
         self,

@@ -319,6 +319,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["controls_latest_reconciliation_failure_reason"][
         "description"
     ].startswith("Failure reason recorded on the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_total_findings"][
+        "description"
+    ].startswith("Total durable finding count recorded on the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_blocking_findings"][
+        "description"
+    ].startswith("Number of blocking reconciliation findings recorded on the latest")
     assert support_overview["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale in-flight portfolio processing."
     )
