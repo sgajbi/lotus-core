@@ -250,7 +250,7 @@ async def test_lineage_success(async_test_client):
         "latest_daily_snapshot_date": date(2025, 8, 31),
         "latest_valuation_job_date": date(2025, 8, 31),
         "latest_valuation_job_id": 101,
-        "latest_valuation_job_status": "DONE",
+        "latest_valuation_job_status": "COMPLETE",
         "latest_valuation_job_correlation_id": "corr-val-101",
         "has_artifact_gap": False,
         "operational_state": "HEALTHY",
@@ -310,7 +310,7 @@ async def test_lineage_keys_success(async_test_client):
                 "latest_daily_snapshot_date": date(2025, 8, 30),
                 "latest_valuation_job_date": date(2025, 8, 31),
                 "latest_valuation_job_id": 101,
-                "latest_valuation_job_status": "DONE",
+                "latest_valuation_job_status": "COMPLETE",
                 "latest_valuation_job_correlation_id": "corr-val-101",
                 "has_artifact_gap": True,
                 "operational_state": "ARTIFACT_GAP",
@@ -324,7 +324,7 @@ async def test_lineage_keys_success(async_test_client):
     assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["security_id"] == "S1"
     assert response.json()["items"][0]["latest_valuation_job_id"] == 101
-    assert response.json()["items"][0]["latest_valuation_job_status"] == "DONE"
+    assert response.json()["items"][0]["latest_valuation_job_status"] == "COMPLETE"
     assert response.json()["items"][0]["latest_valuation_job_correlation_id"] == "corr-val-101"
     assert response.json()["items"][0]["operational_state"] == "ARTIFACT_GAP"
 

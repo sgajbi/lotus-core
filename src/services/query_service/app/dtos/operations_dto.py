@@ -710,7 +710,7 @@ class LineageResponse(BaseModel):
     latest_valuation_job_status: Optional[str] = Field(
         None,
         description="Status of the latest valuation job for current epoch.",
-        examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
+        examples=["PENDING", "PROCESSING", "COMPLETE", "FAILED"],
     )
     latest_valuation_job_correlation_id: Optional[str] = Field(
         None,
@@ -780,7 +780,7 @@ class LineageKeyRecord(BaseModel):
         description=(
             "Status of the latest valuation job recorded for the current epoch of this key."
         ),
-        examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
+        examples=["PENDING", "PROCESSING", "COMPLETE", "FAILED"],
     )
     latest_valuation_job_correlation_id: Optional[str] = Field(
         None,
@@ -832,7 +832,7 @@ class LineageKeyListResponse(BaseModel):
                     "latest_daily_snapshot_date": "2025-12-30",
                     "latest_valuation_job_date": "2025-12-30",
                     "latest_valuation_job_id": 101,
-                    "latest_valuation_job_status": "DONE",
+                    "latest_valuation_job_status": "COMPLETE",
                     "latest_valuation_job_correlation_id": "corr-val-20260314-001",
                     "has_artifact_gap": False,
                     "operational_state": "HEALTHY",
@@ -862,7 +862,7 @@ class SupportJobRecord(BaseModel):
         examples=["2025-12-30"],
     )
     status: str = Field(
-        ..., description="Current job status.", examples=["PENDING", "PROCESSING", "DONE"]
+        ..., description="Current job status.", examples=["PENDING", "PROCESSING", "COMPLETE"]
     )
     security_id: Optional[str] = Field(
         None,
