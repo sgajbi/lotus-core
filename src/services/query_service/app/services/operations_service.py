@@ -292,6 +292,7 @@ class OperationsService:
                     portfolio_id=portfolio_id,
                     business_date=latest_control_stage.business_date,
                     epoch=latest_control_stage.epoch,
+                    as_of=latest_control_stage.updated_at,
                 )
             )
             if latest_reconciliation_run is not None:

@@ -1834,6 +1834,12 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     )
     assert response.controls_blocking is True
     assert response.publish_allowed is False
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.assert_awaited_once_with(
+        portfolio_id="P1",
+        business_date=date(2025, 8, 30),
+        epoch=2,
+        as_of=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+    )
 
 
 async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):

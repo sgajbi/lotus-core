@@ -709,6 +709,23 @@ async def test_get_latest_reconciliation_run_for_portfolio_day(
     assert "financial_reconciliation_runs.started_at DESC" in compiled
 
 
+async def test_get_latest_reconciliation_run_for_portfolio_day_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_run = object()
+    mock_execute_scalar_one_or_none(mock_db_session, mock_run)
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_latest_reconciliation_run_for_portfolio_day(
+        "P1", date(2025, 8, 30), 2, as_of=as_of
+    )
+
+    assert value is mock_run
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "financial_reconciliation_runs.started_at <= '2025-08-30 11:00:00+00:00'" in compiled
+
+
 async def test_get_lineage_keys_query_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

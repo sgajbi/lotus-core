@@ -555,6 +555,7 @@ class OperationsRepository:
         portfolio_id: str,
         business_date: date,
         epoch: int,
+        as_of: Optional[datetime] = None,
     ) -> Optional[FinancialReconciliationRun]:
         stmt = (
             select(FinancialReconciliationRun)
@@ -563,13 +564,14 @@ class OperationsRepository:
                 FinancialReconciliationRun.business_date == business_date,
                 FinancialReconciliationRun.epoch == epoch,
             )
-            .order_by(
-                self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
-                FinancialReconciliationRun.started_at.desc(),
-                FinancialReconciliationRun.id.desc(),
-            )
-            .limit(1)
         )
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationRun.started_at <= as_of)
+        stmt = stmt.order_by(
+            self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
+            FinancialReconciliationRun.started_at.desc(),
+            FinancialReconciliationRun.id.desc(),
+        ).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_position_state(
