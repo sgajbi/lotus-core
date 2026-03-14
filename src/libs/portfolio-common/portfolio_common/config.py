@@ -10,6 +10,40 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
+    try:
+        safe_default = int(default)
+    except Exception:
+        safe_default = 0
+
+    raw = os.getenv(name)
+    if raw is None:
+        value = safe_default
+    else:
+        try:
+            value = int(raw)
+        except Exception:
+            logger.warning(
+                "Invalid integer env setting; falling back to default.",
+                extra={"setting": name, "raw_value": raw, "default": safe_default},
+            )
+            value = safe_default
+
+    if minimum is not None and value < minimum:
+        logger.warning(
+            "Out-of-range integer env setting; falling back to default.",
+            extra={
+                "setting": name,
+                "raw_value": raw,
+                "default": safe_default,
+                "minimum": minimum,
+            },
+        )
+        return safe_default if safe_default >= minimum else minimum
+
+    return value
+
+
 # Database Configurations
 POSTGRES_USER = os.getenv("POSTGRES_USER", "user")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
@@ -92,14 +126,14 @@ KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC = os.getenv(
 
 # Business-date calendar and guardrail policy
 DEFAULT_BUSINESS_CALENDAR_CODE = os.getenv("DEFAULT_BUSINESS_CALENDAR_CODE", "GLOBAL")
-BUSINESS_DATE_MAX_FUTURE_DAYS = int(os.getenv("BUSINESS_DATE_MAX_FUTURE_DAYS", "0"))
+BUSINESS_DATE_MAX_FUTURE_DAYS = _env_int("BUSINESS_DATE_MAX_FUTURE_DAYS", 0, minimum=0)
 BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = os.getenv(
     "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE",
     "false",
 ).strip().lower() in {"1", "true", "yes", "on"}
 
 # Cashflow calculator runtime cache policy
-CASHFLOW_RULE_CACHE_TTL_SECONDS = int(os.getenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "300"))
+CASHFLOW_RULE_CACHE_TTL_SECONDS = _env_int("CASHFLOW_RULE_CACHE_TTL_SECONDS", 300, minimum=1)
 
 
 _CONSUMER_ALLOWED_TYPES: dict[str, type] = {

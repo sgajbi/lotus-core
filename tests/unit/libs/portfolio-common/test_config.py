@@ -1,5 +1,8 @@
+import importlib
+
 from portfolio_common.config import (
     _coerce_consumer_config_value,
+    _env_int,
     _sanitize_consumer_override_map,
     _validate_consumer_override_relationships,
     get_kafka_consumer_runtime_overrides,
@@ -35,6 +38,20 @@ def test_rejects_boolean_for_integer_consumer_setting():
 
 def test_accepts_integer_string_for_integer_consumer_setting():
     assert _coerce_consumer_config_value("max.poll.interval.ms", "180000") == 180000
+
+
+def test_env_int_falls_back_for_invalid_value(caplog, monkeypatch):
+    monkeypatch.setenv("TEST_INT_SETTING", "bad")
+
+    assert _env_int("TEST_INT_SETTING", 7, minimum=0) == 7
+    assert "falling back to default" in caplog.text
+
+
+def test_env_int_falls_back_for_out_of_range_value(caplog, monkeypatch):
+    monkeypatch.setenv("TEST_INT_SETTING", "-1")
+
+    assert _env_int("TEST_INT_SETTING", 7, minimum=0) == 7
+    assert "falling back to default" in caplog.text
 
 
 def test_rejects_non_positive_integer_consumer_setting():
@@ -84,3 +101,15 @@ def test_merged_defaults_and_group_overrides_drop_invalid_heartbeat_session_rela
     overrides = get_kafka_consumer_runtime_overrides("test-group")
 
     assert overrides == {"session.timeout.ms": 30000}
+
+
+def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
+    monkeypatch.setenv("BUSINESS_DATE_MAX_FUTURE_DAYS", "invalid")
+    monkeypatch.setenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "0")
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.BUSINESS_DATE_MAX_FUTURE_DAYS == 0
+    assert reloaded.CASHFLOW_RULE_CACHE_TTL_SECONDS == 300
