@@ -695,6 +695,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 reprocessing_status=reprocessing_status,
                 security_id=security_id,
+                as_of=generated_at_utc,
             ),
             self.repo.get_lineage_keys(
                 portfolio_id=portfolio_id,
@@ -702,6 +703,7 @@ class OperationsService:
                 limit=limit,
                 reprocessing_status=reprocessing_status,
                 security_id=security_id,
+                as_of=generated_at_utc,
             ),
         )
         return LineageKeyListResponse(

@@ -911,6 +911,44 @@ async def test_get_lineage_keys_query_with_filters(
     assert "position_state.security_id = 'S1'" in compiled
 
 
+async def test_get_lineage_keys_count_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_lineage_keys_count("P1", as_of=as_of)
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
+
+
+async def test_get_lineage_keys_query_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.mappings.return_value.all.return_value = ["k1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_lineage_keys(
+        portfolio_id="P1",
+        skip=0,
+        limit=10,
+        as_of=as_of,
+    )
+
+    assert value == ["k1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "position_history.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "daily_position_snapshots.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "portfolio_valuation_jobs.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+
+
 async def test_get_valuation_jobs_query_with_status(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

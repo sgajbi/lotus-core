@@ -339,6 +339,20 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     assert response.items[0].latest_valuation_job_correlation_id == "corr-val-101"
     assert response.items[0].has_artifact_gap is True
     assert response.items[0].operational_state == "ARTIFACT_GAP"
+    mock_ops_repo.get_lineage_keys_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        reprocessing_status="CURRENT",
+        security_id=None,
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_lineage_keys.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=10,
+        reprocessing_status="CURRENT",
+        security_id=None,
+        as_of=response.generated_at_utc,
+    )
 
 
 async def test_build_lineage_key_record_healthy_state(service: OperationsService):
