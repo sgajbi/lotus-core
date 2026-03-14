@@ -143,14 +143,23 @@ class OutboxDispatcher:
                             else json.loads(event.payload)
                         )
 
-                        self._producer.publish_message(
-                            topic=event.topic,
-                            key=event.aggregate_id,
-                            value=payload_obj,
-                            headers=headers,
-                            outbox_id=str(event.id),
-                            on_delivery=_make_on_delivery(event.id),
-                        )
+                        try:
+                            self._producer.publish_message(
+                                topic=event.topic,
+                                key=event.aggregate_id,
+                                value=payload_obj,
+                                headers=headers,
+                                outbox_id=str(event.id),
+                                on_delivery=_make_on_delivery(event.id),
+                            )
+                        except Exception as e:
+                            delivery_ack[event.id] = False
+                            delivery_errs[event.id] = str(e)
+                            logger.error(
+                                "OutboxDispatcher: Synchronous Kafka publish failed.",
+                                exc_info=True,
+                                extra={"outbox_id": event.id, "topic": event.topic},
+                            )
 
                     try:
                         self._producer.flush(timeout=10)
