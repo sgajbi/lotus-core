@@ -27,8 +27,28 @@ def get_sync_database_url():
     return url
 
 
-engine = create_engine(get_sync_database_url(), pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+_engine = None
+_session_factory = None
+_async_engine = None
+_async_session_factory = None
+
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_engine(get_sync_database_url(), pool_pre_ping=True)
+    return _engine
+
+
+def get_session_factory():
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
+    return _session_factory
+
+
+def SessionLocal():
+    return get_session_factory()()
 
 
 def get_db_session():
@@ -60,18 +80,31 @@ def get_async_database_url():
     return url
 
 
-async_engine = create_async_engine(
-    get_async_database_url(),
-    pool_pre_ping=True,
-)
+def get_async_engine():
+    global _async_engine
+    if _async_engine is None:
+        _async_engine = create_async_engine(
+            get_async_database_url(),
+            pool_pre_ping=True,
+        )
+    return _async_engine
 
-AsyncSessionLocal = async_sessionmaker(
-    bind=async_engine,
-    class_=AsyncSession,
-    autocommit=False,
-    autoflush=False,
-    expire_on_commit=False,
-)
+
+def get_async_session_factory():
+    global _async_session_factory
+    if _async_session_factory is None:
+        _async_session_factory = async_sessionmaker(
+            bind=get_async_engine(),
+            class_=AsyncSession,
+            autocommit=False,
+            autoflush=False,
+            expire_on_commit=False,
+        )
+    return _async_session_factory
+
+
+def AsyncSessionLocal():
+    return get_async_session_factory()()
 
 
 async def get_async_db_session() -> AsyncSession:
