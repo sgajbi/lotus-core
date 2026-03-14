@@ -170,14 +170,27 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
         fail_message="Realized P&L was not calculated correctly after reprocessing.",
     )
 
-    # ASSERT 3: The final position must be correct.
+    # ASSERT 3: The final query-facing position must converge too.
     # Final Qty = 100 + 50 - 40 = 110
     # Final Cost = (60 * 200) + (50 * 220) = 12000 + 11000 = 23000
-    response = e2e_api_client.query(f"/portfolios/{portfolio_id}/positions")
-    data = response.json()
+    def _has_expected_position(data: dict) -> bool:
+        positions = data.get("positions", [])
+        if len(positions) != 1:
+            return False
 
-    assert len(data["positions"]) == 1
+        position = positions[0]
+        return (
+            as_decimal(position["quantity"]) == Decimal("110")
+            and as_decimal(position["cost_basis"]) == Decimal("23000")
+        )
+
+    data = e2e_api_client.poll_for_data(
+        f"/portfolios/{portfolio_id}/positions",
+        _has_expected_position,
+        timeout=180,
+        fail_message="Reprocessing did not converge to the expected final position.",
+    )
+
     position = data["positions"][0]
-
     assert as_decimal(position["quantity"]) == Decimal("110")
     assert as_decimal(position["cost_basis"]) == Decimal("23000")

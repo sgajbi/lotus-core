@@ -3,6 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
+import pytest_asyncio
 from portfolio_common.database_models import (
     InstrumentReprocessingState,
     Portfolio,
@@ -21,68 +22,53 @@ from src.services.valuation_orchestrator_service.app.repositories.valuation_repo
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture(scope="function")
-def setup_reprocessing_trigger_data(db_engine, clean_db):
+@pytest_asyncio.fixture
+async def setup_reprocessing_trigger_data(async_db_session: AsyncSession, clean_db):
     """
     Seeds the database with instrument triggers and related portfolio positions.
     """
-    with Session(db_engine) as session:
-        # Prerequisites
-        session.add_all(
-            [
-                Portfolio(
-                    portfolio_id="P1",
-                    base_currency="USD",
-                    open_date=date(2024, 1, 1),
-                    risk_exposure="a",
-                    investment_time_horizon="b",
-                    portfolio_type="c",
-                    booking_center_code="d",
-                    client_id="e",
-                    status="f",
-                ),
-                Portfolio(
-                    portfolio_id="P2",
-                    base_currency="USD",
-                    open_date=date(2024, 1, 1),
-                    risk_exposure="a",
-                    investment_time_horizon="b",
-                    portfolio_type="c",
-                    booking_center_code="d",
-                    client_id="e",
-                    status="f",
-                ),
-            ]
-        )
-        session.flush()
-
-        # Position States: P1 holds S1, P2 holds S1 and S2
-        session.add_all(
-            [
-                PositionState(
-                    portfolio_id="P1", security_id="S1", epoch=0, watermark_date=date(2025, 1, 1)
-                ),
-                PositionState(
-                    portfolio_id="P2", security_id="S1", epoch=0, watermark_date=date(2025, 1, 1)
-                ),
-                PositionState(
-                    portfolio_id="P2", security_id="S2", epoch=0, watermark_date=date(2025, 1, 1)
-                ),
-            ]
-        )
-
-        # Reprocessing Triggers
-        session.add_all(
-            [
-                InstrumentReprocessingState(
-                    security_id="S1", earliest_impacted_date=date(2025, 8, 10)
-                ),
-                InstrumentReprocessingState(
-                    security_id="S2", earliest_impacted_date=date(2025, 8, 11)
-                ),
-            ]
-        )
-        session.commit()
+    async_db_session.add_all(
+        [
+            Portfolio(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            ),
+            Portfolio(
+                portfolio_id="P2",
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            ),
+            PositionState(
+                portfolio_id="P1", security_id="S1", epoch=0, watermark_date=date(2025, 1, 1)
+            ),
+            PositionState(
+                portfolio_id="P2", security_id="S1", epoch=0, watermark_date=date(2025, 1, 1)
+            ),
+            PositionState(
+                portfolio_id="P2", security_id="S2", epoch=0, watermark_date=date(2025, 1, 1)
+            ),
+            InstrumentReprocessingState(
+                security_id="S1", earliest_impacted_date=date(2025, 8, 10)
+            ),
+            InstrumentReprocessingState(
+                security_id="S2", earliest_impacted_date=date(2025, 8, 11)
+            ),
+        ]
+    )
+    await async_db_session.commit()
 
 
 async def test_claim_instrument_reprocessing_triggers(
@@ -116,7 +102,7 @@ async def test_claim_instrument_reprocessing_triggers(
 
 
 async def test_claim_instrument_reprocessing_triggers_prioritizes_oldest_impacted_date(
-    async_db_session: AsyncSession, db_engine, clean_db
+    async_db_session: AsyncSession, clean_db
 ):
     """
     GIVEN multiple pending instrument reprocessing triggers
@@ -124,24 +110,23 @@ async def test_claim_instrument_reprocessing_triggers_prioritizes_oldest_impacte
     THEN the scheduler-facing order should prioritize the oldest impacted date,
     with updated_at and security_id only acting as tie-breakers.
     """
-    with Session(db_engine) as session:
-        session.add_all(
-            [
-                InstrumentReprocessingState(
-                    security_id="S_LATE",
-                    earliest_impacted_date=date(2025, 8, 11),
-                ),
-                InstrumentReprocessingState(
-                    security_id="S_EARLY",
-                    earliest_impacted_date=date(2025, 8, 9),
-                ),
-                InstrumentReprocessingState(
-                    security_id="S_MID",
-                    earliest_impacted_date=date(2025, 8, 10),
-                ),
-            ]
-        )
-        session.commit()
+    async_db_session.add_all(
+        [
+            InstrumentReprocessingState(
+                security_id="S_LATE",
+                earliest_impacted_date=date(2025, 8, 11),
+            ),
+            InstrumentReprocessingState(
+                security_id="S_EARLY",
+                earliest_impacted_date=date(2025, 8, 9),
+            ),
+            InstrumentReprocessingState(
+                security_id="S_MID",
+                earliest_impacted_date=date(2025, 8, 10),
+            ),
+        ]
+    )
+    await async_db_session.commit()
 
     repo = ValuationRepository(async_db_session)
 
