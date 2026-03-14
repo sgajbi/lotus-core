@@ -8,6 +8,8 @@ from portfolio_common.database_models import (
     FinancialReconciliationRun,
     PipelineStageState,
     Portfolio,
+    PortfolioAggregationJob,
+    PortfolioValuationJob,
     PositionState,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -213,3 +215,117 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
     assert response.controls_latest_blocking_finding_type == "missing_cashflow"
     assert response.controls_latest_blocking_finding_security_id == "SEC-OLD"
     assert response.controls_latest_blocking_finding_transaction_id == "TXN-OLD"
+
+
+async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add_all(
+        [
+            Portfolio(
+                portfolio_id="P2",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                risk_exposure="MODERATE",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="SG",
+                client_id="CLIENT-P2",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            BusinessDate(
+                date=date(2025, 8, 30),
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            BusinessDate(
+                date=date(2025, 8, 31),
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            PositionState(
+                portfolio_id="P2",
+                security_id="SEC-VAL-OLD",
+                epoch=2,
+                watermark_date=date(2025, 8, 18),
+                status="REPROCESSING",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PositionState(
+                portfolio_id="P2",
+                security_id="SEC-VAL-LATE",
+                epoch=5,
+                watermark_date=date(2025, 8, 31),
+                status="REPROCESSING",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P2",
+                security_id="SEC-VAL-OLD",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-val-old",
+                created_at=datetime(2025, 8, 30, 9, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P2",
+                security_id="SEC-VAL-LATE",
+                valuation_date=date(2025, 8, 31),
+                epoch=5,
+                status="FAILED",
+                correlation_id="corr-val-late",
+                failure_reason="late valuation failure",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            PortfolioAggregationJob(
+                portfolio_id="P2",
+                aggregation_date=date(2025, 8, 21),
+                status="PROCESSING",
+                correlation_id="corr-agg-old",
+                created_at=datetime(2025, 8, 30, 9, 45, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioAggregationJob(
+                portfolio_id="P2",
+                aggregation_date=date(2025, 8, 31),
+                status="FAILED",
+                correlation_id="corr-agg-late",
+                failure_reason="late aggregation failure",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_calculator_slos("P2")
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.business_date == date(2025, 8, 30)
+    assert response.valuation.pending_jobs == 1
+    assert response.valuation.processing_jobs == 0
+    assert response.valuation.failed_jobs == 0
+    assert response.valuation.failed_jobs_within_window == 0
+    assert response.valuation.oldest_open_job_date == date(2025, 8, 20)
+    assert response.valuation.oldest_open_job_correlation_id == "corr-val-old"
+    assert response.valuation.backlog_age_days == 10
+    assert response.aggregation.pending_jobs == 1
+    assert response.aggregation.processing_jobs == 1
+    assert response.aggregation.failed_jobs == 0
+    assert response.aggregation.failed_jobs_within_window == 0
+    assert response.aggregation.oldest_open_job_date == date(2025, 8, 21)
+    assert response.aggregation.oldest_open_job_correlation_id == "corr-agg-old"
+    assert response.aggregation.backlog_age_days == 9
+    assert response.reprocessing.active_reprocessing_keys == 1
+    assert response.reprocessing.stale_reprocessing_keys == 1
+    assert response.reprocessing.oldest_reprocessing_watermark_date == date(2025, 8, 18)
+    assert response.reprocessing.oldest_reprocessing_security_id == "SEC-VAL-OLD"
+    assert response.reprocessing.oldest_reprocessing_epoch == 2
+    assert response.reprocessing.backlog_age_days == 12
