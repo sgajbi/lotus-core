@@ -1431,6 +1431,13 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_reprocessing is False
     assert response.items[0].operational_state == "REPROCESSING"
+    mock_ops_repo.get_reprocessing_keys_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+        watermark_date=None,
+        as_of=response.generated_at_utc,
+    )
     mock_ops_repo.get_reprocessing_keys.assert_awaited_once_with(
         portfolio_id="P1",
         skip=0,
@@ -1440,6 +1447,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
         watermark_date=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -1476,6 +1484,13 @@ async def test_get_reprocessing_keys_honors_custom_stale_threshold(
     assert response.stale_threshold_minutes == 30
     assert response.items[0].is_stale_reprocessing is False
     assert response.items[0].operational_state == "REPROCESSING"
+    mock_ops_repo.get_reprocessing_keys_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="REPROCESSING",
+        security_id="SEC-US-IBM",
+        watermark_date=None,
+        as_of=response.generated_at_utc,
+    )
     mock_ops_repo.get_reprocessing_keys.assert_awaited_once_with(
         portfolio_id="P1",
         skip=0,
@@ -1485,6 +1500,7 @@ async def test_get_reprocessing_keys_honors_custom_stale_threshold(
         watermark_date=None,
         stale_minutes=30,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -1508,6 +1524,7 @@ async def test_get_reprocessing_keys_forwards_watermark_date_filter(
         status="REPROCESSING",
         security_id=None,
         watermark_date=date(2026, 3, 10),
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_reprocessing_keys.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1518,6 +1535,7 @@ async def test_get_reprocessing_keys_forwards_watermark_date_filter(
         watermark_date=date(2026, 3, 10),
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 

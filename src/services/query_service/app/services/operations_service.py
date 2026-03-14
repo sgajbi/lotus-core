@@ -1098,6 +1098,7 @@ class OperationsService:
                 status=status,
                 security_id=security_id,
                 watermark_date=watermark_date,
+                as_of=generated_at_utc,
             ),
             self.repo.get_reprocessing_keys(
                 portfolio_id=portfolio_id,
@@ -1108,6 +1109,7 @@ class OperationsService:
                 watermark_date=watermark_date,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
         )
         return ReprocessingKeyListResponse(

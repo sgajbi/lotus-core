@@ -1283,12 +1283,15 @@ class OperationsRepository:
         status: Optional[str] = None,
         security_id: Optional[str] = None,
         watermark_date: Optional[date] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         stmt = (
             select(func.count())
             .select_from(PositionState)
             .where(PositionState.portfolio_id == portfolio_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
             stmt = stmt.where(PositionState.status == status)
         if security_id:
@@ -1307,10 +1310,13 @@ class OperationsRepository:
         watermark_date: Optional[date] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
+        as_of: Optional[datetime] = None,
     ) -> list[PositionState]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PositionState).where(PositionState.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
             stmt = stmt.where(PositionState.status == status)
         if security_id:

@@ -1285,6 +1285,23 @@ async def test_get_reprocessing_keys_count_with_filters(
     assert "position_state.watermark_date = '2025-08-01'" in compiled
 
 
+async def test_get_reprocessing_keys_count_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_reprocessing_keys_count(
+        portfolio_id="P1",
+        as_of=as_of,
+    )
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
+
+
 async def test_get_reprocessing_keys_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
@@ -1314,6 +1331,28 @@ async def test_get_reprocessing_keys_query(
     assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "position_state.updated_at ASC" in compiled
     assert "LIMIT 7 OFFSET 3" in compiled
+
+
+async def test_get_reprocessing_keys_query_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["key1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reprocessing_keys(
+        portfolio_id="P1",
+        skip=0,
+        limit=10,
+        reference_now=reference_now,
+        as_of=reference_now,
+    )
+
+    assert value == ["key1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
 
 
 async def test_get_reprocessing_jobs_query_uses_reference_now(
