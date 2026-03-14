@@ -319,6 +319,7 @@ async def test_analytics_export_jobs_success(async_test_client):
         "items": [
             {
                 "job_id": "aexp_1234567890abcdef",
+                "request_fingerprint": "fp_portfolio_timeseries_pf001_20260313_v1",
                 "dataset_type": "portfolio_timeseries",
                 "status": "FAILED",
                 "created_at": "2026-03-13T10:15:00Z",
@@ -339,6 +340,10 @@ async def test_analytics_export_jobs_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["items"][0]["job_id"] == "aexp_1234567890abcdef"
+    assert (
+        response.json()["items"][0]["request_fingerprint"]
+        == "fp_portfolio_timeseries_pf001_20260313_v1"
+    )
     assert response.json()["items"][0]["dataset_type"] == "portfolio_timeseries"
     assert response.json()["items"][0]["status"] == "FAILED"
     assert response.json()["items"][0]["is_stale_running"] is False

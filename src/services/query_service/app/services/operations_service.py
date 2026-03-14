@@ -539,6 +539,7 @@ class OperationsService:
             items=[
                 AnalyticsExportJobRecord(
                     job_id=job.job_id,
+                    request_fingerprint=job.request_fingerprint,
                     dataset_type=job.dataset_type,
                     status=job.status,
                     created_at=job.created_at,

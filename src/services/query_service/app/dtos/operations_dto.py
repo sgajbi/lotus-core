@@ -607,6 +607,14 @@ class AnalyticsExportJobRecord(BaseModel):
         description="Stable analytics export job identifier.",
         examples=["aexp_1234567890abcdef"],
     )
+    request_fingerprint: str = Field(
+        ...,
+        description=(
+            "Stable deduplication fingerprint for the export request, used to correlate reuse "
+            "or stale supersession behavior."
+        ),
+        examples=["fp_portfolio_timeseries_pf001_20260313_v1"],
+    )
     dataset_type: str = Field(
         ..., description="Analytics dataset exported by the job.", examples=["portfolio_timeseries"]
     )
@@ -689,6 +697,7 @@ class AnalyticsExportJobListResponse(BaseModel):
             [
                 {
                     "job_id": "aexp_1234567890abcdef",
+                    "request_fingerprint": "fp_portfolio_timeseries_pf001_20260313_v1",
                     "dataset_type": "portfolio_timeseries",
                     "status": "failed",
                     "created_at": "2026-03-13T10:15:00Z",

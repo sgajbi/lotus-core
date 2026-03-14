@@ -235,6 +235,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_jobs_schema["properties"]["items"]["description"] == (
         "Durable analytics export jobs for support workflows."
     )
+    assert analytics_export_job_record["properties"]["request_fingerprint"][
+        "description"
+    ].startswith("Stable deduplication fingerprint for the export request")
     assert analytics_export_job_record["properties"]["dataset_type"]["description"] == (
         "Analytics dataset exported by the job."
     )

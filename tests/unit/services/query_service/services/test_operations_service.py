@@ -442,6 +442,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
             (),
             {
                 "job_id": "aexp_1234567890abcdef",
+                "request_fingerprint": "fp_portfolio_timeseries_pf001_20260313_v1",
                 "dataset_type": "portfolio_timeseries",
                 "status": "FAILED",
                 "created_at": created_at,
@@ -458,6 +459,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
 
     assert response.total == 1
     assert response.items[0].job_id == "aexp_1234567890abcdef"
+    assert response.items[0].request_fingerprint == "fp_portfolio_timeseries_pf001_20260313_v1"
     assert response.items[0].dataset_type == "portfolio_timeseries"
     assert response.items[0].status == "FAILED"
     assert response.items[0].created_at == created_at
