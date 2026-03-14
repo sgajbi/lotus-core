@@ -116,3 +116,36 @@ def test_reset_kafka_producer_clears_singleton(MockProducer):
 
     mock_confluent_producer.flush.assert_called()
     assert get_kafka_producer() is not producer
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_kafka_producer_close_logs_undelivered_messages(MockProducer):
+    mock_confluent_producer = MagicMock()
+    mock_confluent_producer.flush.return_value = 2
+    MockProducer.return_value = mock_confluent_producer
+
+    producer = KafkaProducer()
+
+    with patch("portfolio_common.kafka_utils.logger.error") as mock_log_error:
+        producer.close(timeout=7)
+
+    mock_confluent_producer.flush.assert_called_once_with(7)
+    assert producer.producer is None
+    assert "Kafka producer close left undelivered messages." == mock_log_error.call_args.args[0]
+    assert mock_log_error.call_args.kwargs["extra"]["undelivered_count"] == 2
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_kafka_producer_close_logs_flush_exception_and_clears_producer(MockProducer):
+    mock_confluent_producer = MagicMock()
+    mock_confluent_producer.flush.side_effect = RuntimeError("flush failed")
+    MockProducer.return_value = mock_confluent_producer
+
+    producer = KafkaProducer()
+
+    with patch("portfolio_common.kafka_utils.logger.error") as mock_log_error:
+        producer.close(timeout=3)
+
+    mock_confluent_producer.flush.assert_called_once_with(3)
+    assert producer.producer is None
+    assert "Kafka producer close flush failed." == mock_log_error.call_args.args[0]
