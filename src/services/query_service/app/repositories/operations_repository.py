@@ -575,8 +575,10 @@ class OperationsRepository:
         limit: int,
         status: Optional[str] = None,
         stale_minutes: int = 15,
+        reference_now: Optional[datetime] = None,
     ) -> list[PortfolioValuationJob]:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        reference_now = reference_now or datetime.now(timezone.utc)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PortfolioValuationJob).where(
             PortfolioValuationJob.portfolio_id == portfolio_id
         )
@@ -617,8 +619,10 @@ class OperationsRepository:
         limit: int,
         status: Optional[str] = None,
         stale_minutes: int = 15,
+        reference_now: Optional[datetime] = None,
     ) -> list[PortfolioAggregationJob]:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        reference_now = reference_now or datetime.now(timezone.utc)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PortfolioAggregationJob).where(
             PortfolioAggregationJob.portfolio_id == portfolio_id
         )
@@ -659,8 +663,10 @@ class OperationsRepository:
         limit: int,
         status: Optional[str] = None,
         stale_minutes: int = 15,
+        reference_now: Optional[datetime] = None,
     ) -> list[AnalyticsExportJob]:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        reference_now = reference_now or datetime.now(timezone.utc)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(AnalyticsExportJob).where(AnalyticsExportJob.portfolio_id == portfolio_id)
         if status:
             stmt = stmt.where(AnalyticsExportJob.status == status)
@@ -842,8 +848,10 @@ class OperationsRepository:
         status: Optional[str] = None,
         security_id: Optional[str] = None,
         stale_minutes: int = 15,
+        reference_now: Optional[datetime] = None,
     ) -> list[PositionState]:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        reference_now = reference_now or datetime.now(timezone.utc)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PositionState).where(PositionState.portfolio_id == portfolio_id)
         if status:
             stmt = stmt.where(PositionState.status == status)
@@ -897,10 +905,12 @@ class OperationsRepository:
         status: Optional[str] = None,
         security_id: Optional[str] = None,
         stale_minutes: int = 15,
+        reference_now: Optional[datetime] = None,
     ):
         security_id_expr = ReprocessingJob.payload["security_id"].as_string()
         impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        reference_now = reference_now or datetime.now(timezone.utc)
+        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = (
             select(
                 ReprocessingJob.id,

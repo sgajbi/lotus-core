@@ -580,6 +580,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 stale_minutes=stale_minutes,
+                reference_now=generated_at_utc,
             ),
         )
         return SupportJobListResponse(
@@ -628,6 +629,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 stale_minutes=stale_minutes,
+                reference_now=generated_at_utc,
             ),
         )
         return SupportJobListResponse(
@@ -676,6 +678,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 stale_minutes=stale_minutes,
+                reference_now=generated_at_utc,
             ),
         )
         return AnalyticsExportJobListResponse(
@@ -879,6 +882,7 @@ class OperationsService:
                 status=status,
                 security_id=security_id,
                 stale_minutes=stale_minutes,
+                reference_now=generated_at_utc,
             ),
         )
         return ReprocessingKeyListResponse(
@@ -938,6 +942,7 @@ class OperationsService:
                 status=status,
                 security_id=security_id,
                 stale_minutes=stale_minutes,
+                reference_now=generated_at_utc,
             ),
         )
         return SupportJobListResponse(

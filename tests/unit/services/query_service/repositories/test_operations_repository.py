@@ -402,16 +402,24 @@ async def test_get_valuation_jobs_count_with_status(
 async def test_get_valuation_jobs_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["job1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    value = await repository.get_valuation_jobs(portfolio_id="P1", skip=0, limit=20, status=None)
+    value = await repository.get_valuation_jobs(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status=None,
+        reference_now=reference_now,
+    )
 
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
 
@@ -433,16 +441,24 @@ async def test_get_aggregation_jobs_count_with_status(
 async def test_get_aggregation_jobs_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["agg1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    value = await repository.get_aggregation_jobs(portfolio_id="P1", skip=2, limit=5, status=None)
+    value = await repository.get_aggregation_jobs(
+        portfolio_id="P1",
+        skip=2,
+        limit=5,
+        status=None,
+        reference_now=reference_now,
+    )
 
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
 
@@ -548,12 +564,17 @@ async def test_get_analytics_export_jobs_count_with_status(
 async def test_get_analytics_export_jobs_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["exp1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_analytics_export_jobs(
-        portfolio_id="P1", skip=1, limit=3, status="running"
+        portfolio_id="P1",
+        skip=1,
+        limit=3,
+        status="running",
+        reference_now=reference_now,
     )
 
     assert value == ["exp1"]
@@ -562,6 +583,7 @@ async def test_get_analytics_export_jobs_query(
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.status = 'running'" in compiled
     assert "CASE WHEN (analytics_export_jobs.status = 'failed')" in compiled
+    assert "analytics_export_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "analytics_export_jobs.created_at ASC" in compiled
 
 
@@ -735,6 +757,7 @@ async def test_get_reprocessing_keys_count_with_filters(
 async def test_get_reprocessing_keys_query(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["key1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
@@ -745,6 +768,7 @@ async def test_get_reprocessing_keys_query(
         limit=7,
         status="REPROCESSING",
         security_id="SEC-US-IBM",
+        reference_now=reference_now,
     )
 
     assert value == ["key1"]
@@ -754,5 +778,31 @@ async def test_get_reprocessing_keys_query(
     assert "position_state.status = 'REPROCESSING'" in compiled
     assert "position_state.security_id = 'SEC-US-IBM'" in compiled
     assert "CASE WHEN (position_state.status = 'REPROCESSING'" in compiled
+    assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "position_state.updated_at ASC" in compiled
     assert "LIMIT 7 OFFSET 3" in compiled
+
+
+async def test_get_reprocessing_jobs_query_uses_reference_now(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    mock_result = MagicMock()
+    mock_result.all.return_value = ["job1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reprocessing_jobs(
+        portfolio_id="P1",
+        skip=0,
+        limit=10,
+        status="PROCESSING",
+        security_id="SEC-US-IBM",
+        reference_now=reference_now,
+    )
+
+    assert value == ["job1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
+    assert "reprocessing_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "LIMIT 10 OFFSET 0" in compiled

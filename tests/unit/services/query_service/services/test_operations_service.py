@@ -331,7 +331,12 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
     assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "PENDING"
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
-        portfolio_id="P1", skip=0, limit=20, status="PENDING", stale_minutes=15
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
     )
 
 
@@ -374,7 +379,12 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "STALE_PROCESSING"
     mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
-        portfolio_id="P1", skip=0, limit=20, status="PROCESSING", stale_minutes=15
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
     )
 
 
@@ -413,7 +423,12 @@ async def test_get_aggregation_jobs_honors_custom_stale_threshold(
     assert response.items[0].is_stale_processing is False
     assert response.items[0].operational_state == "PROCESSING"
     mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
-        portfolio_id="P1", skip=0, limit=20, status="PROCESSING", stale_minutes=30
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        stale_minutes=30,
+        reference_now=response.generated_at_utc,
     )
 
 
@@ -467,6 +482,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         status="PROCESSING",
         security_id="S1",
         stale_minutes=15,
+        reference_now=response.generated_at_utc,
     )
 
 
@@ -552,7 +568,12 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     assert response.items[0].is_terminal_failure is True
     assert response.items[0].operational_state == "FAILED"
     mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
-        portfolio_id="P1", skip=0, limit=20, status="FAILED", stale_minutes=15
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="FAILED",
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
     )
 
 
@@ -879,6 +900,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
         status="REPROCESSING",
         security_id="SEC-US-IBM",
         stale_minutes=15,
+        reference_now=response.generated_at_utc,
     )
 
 
@@ -922,6 +944,7 @@ async def test_get_reprocessing_keys_honors_custom_stale_threshold(
         status="REPROCESSING",
         security_id="SEC-US-IBM",
         stale_minutes=30,
+        reference_now=response.generated_at_utc,
     )
 
 
