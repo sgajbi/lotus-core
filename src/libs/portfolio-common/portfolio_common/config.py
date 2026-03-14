@@ -114,6 +114,7 @@ _CONSUMER_ALLOWED_TYPES: dict[str, type] = {
     "queued.min.messages": int,
     "queued.max.messages.kbytes": int,
 }
+_AUTO_OFFSET_RESET_ALLOWED_VALUES = {"earliest", "latest", "error"}
 
 
 def _coerce_consumer_config_value(key: str, value: object) -> object:
@@ -129,6 +130,8 @@ def _coerce_consumer_config_value(key: str, value: object) -> object:
                 return False
         raise ValueError(f"Expected bool for '{key}', got {value!r}")
     if expected is int:
+        if isinstance(value, bool):
+            raise ValueError(f"Expected int for '{key}', got {value!r}")
         if isinstance(value, int):
             return value
         if isinstance(value, str):
@@ -136,6 +139,14 @@ def _coerce_consumer_config_value(key: str, value: object) -> object:
         raise ValueError(f"Expected int for '{key}', got {value!r}")
     if expected is str:
         if isinstance(value, str):
+            if key == "auto.offset.reset":
+                normalized = value.strip().lower()
+                if normalized not in _AUTO_OFFSET_RESET_ALLOWED_VALUES:
+                    raise ValueError(
+                        "Expected one of "
+                        f"{sorted(_AUTO_OFFSET_RESET_ALLOWED_VALUES)} for '{key}', got {value!r}"
+                    )
+                return normalized
             return value
         raise ValueError(f"Expected str for '{key}', got {value!r}")
     return value
