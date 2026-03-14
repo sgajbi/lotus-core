@@ -165,6 +165,39 @@ class OperationsService:
             ),
         )
 
+    def _build_support_job_record(
+        self,
+        *,
+        job_id: int,
+        job_type: str,
+        business_date: date,
+        status: str,
+        security_id: str | None,
+        epoch: int | None,
+        attempt_count: int | None,
+        correlation_id: str | None,
+        created_at: datetime | None,
+        updated_at: datetime | None,
+        failure_reason: str | None,
+    ) -> SupportJobRecord:
+        return SupportJobRecord(
+            job_id=job_id,
+            job_type=job_type,
+            business_date=business_date,
+            status=status,
+            security_id=security_id,
+            epoch=epoch,
+            attempt_count=attempt_count,
+            is_retrying=self._is_support_job_retrying(status, attempt_count),
+            correlation_id=correlation_id,
+            created_at=created_at,
+            updated_at=updated_at,
+            is_stale_processing=self._is_support_job_stale(status, updated_at),
+            failure_reason=failure_reason,
+            is_terminal_failure=status == "FAILED",
+            operational_state=self._get_support_job_operational_state(status, updated_at),
+        )
+
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
@@ -449,7 +482,7 @@ class OperationsService:
             skip=skip,
             limit=limit,
             items=[
-                SupportJobRecord(
+                self._build_support_job_record(
                     job_id=job.id,
                     job_type="VALUATION",
                     business_date=job.valuation_date,
@@ -457,16 +490,10 @@ class OperationsService:
                     security_id=job.security_id,
                     epoch=job.epoch,
                     attempt_count=job.attempt_count,
-                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
                     correlation_id=job.correlation_id,
                     created_at=job.created_at,
                     updated_at=job.updated_at,
-                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
-                    is_terminal_failure=job.status == "FAILED",
-                    operational_state=self._get_support_job_operational_state(
-                        job.status, job.updated_at
-                    ),
                 )
                 for job in jobs
             ],
@@ -493,7 +520,7 @@ class OperationsService:
             skip=skip,
             limit=limit,
             items=[
-                SupportJobRecord(
+                self._build_support_job_record(
                     job_id=job.id,
                     job_type="AGGREGATION",
                     business_date=job.aggregation_date,
@@ -501,16 +528,10 @@ class OperationsService:
                     security_id=None,
                     epoch=None,
                     attempt_count=job.attempt_count,
-                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
                     correlation_id=job.correlation_id,
                     created_at=job.created_at,
                     updated_at=job.updated_at,
-                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
-                    is_terminal_failure=job.status == "FAILED",
-                    operational_state=self._get_support_job_operational_state(
-                        job.status, job.updated_at
-                    ),
                 )
                 for job in jobs
             ],
@@ -781,7 +802,7 @@ class OperationsService:
             skip=skip,
             limit=limit,
             items=[
-                SupportJobRecord(
+                self._build_support_job_record(
                     job_id=job.id,
                     job_type=job.job_type,
                     business_date=date.fromisoformat(job.business_date),
@@ -789,16 +810,10 @@ class OperationsService:
                     security_id=job.security_id,
                     epoch=None,
                     attempt_count=job.attempt_count,
-                    is_retrying=self._is_support_job_retrying(job.status, job.attempt_count),
                     correlation_id=job.correlation_id,
                     created_at=job.created_at,
                     updated_at=job.updated_at,
-                    is_stale_processing=self._is_support_job_stale(job.status, job.updated_at),
                     failure_reason=job.failure_reason,
-                    is_terminal_failure=job.status == "FAILED",
-                    operational_state=self._get_support_job_operational_state(
-                        job.status, job.updated_at
-                    ),
                 )
                 for job in jobs
             ],
