@@ -589,8 +589,8 @@ async def get_analytics_export_jobs(
     summary="List reconciliation runs for support workflows",
     description=(
         "What: List durable reconciliation control runs for a portfolio.\n"
-        "How: Query reconciliation run records with pagination and optional id, type, status, "
-        "and correlation filters.\n"
+        "How: Query reconciliation run records with pagination and optional id, requester, "
+        "deduplication key, type, status, and correlation filters.\n"
         "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
         "unexpected reconciliation failures."
     ),
@@ -601,6 +601,16 @@ async def get_reconciliation_runs(
         None,
         description="Optional durable reconciliation run identifier filter.",
         examples=["recon_1234567890abcdef"],
+    ),
+    requested_by: Optional[str] = Query(
+        None,
+        description="Optional reconciliation requester filter.",
+        examples=["pipeline_orchestrator_service"],
+    ),
+    dedupe_key: Optional[str] = Query(
+        None,
+        description="Optional reconciliation deduplication key filter.",
+        examples=["recon:transaction_cashflow:PF-001:2026-03-13:3"],
     ),
     correlation_id: Optional[str] = Query(
         None,
@@ -627,6 +637,8 @@ async def get_reconciliation_runs(
             skip=skip,
             limit=limit,
             run_id=run_id,
+            requested_by=requested_by,
+            dedupe_key=dedupe_key,
             correlation_id=correlation_id,
             reconciliation_type=reconciliation_type,
             status=status_filter,

@@ -963,6 +963,8 @@ class OperationsRepository:
         portfolio_id: str,
         run_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
+        requested_by: Optional[str] = None,
+        dedupe_key: Optional[str] = None,
         reconciliation_type: Optional[str] = None,
         status: Optional[str] = None,
     ) -> int:
@@ -975,6 +977,10 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
         if correlation_id:
             stmt = stmt.where(FinancialReconciliationRun.correlation_id == correlation_id)
+        if requested_by:
+            stmt = stmt.where(FinancialReconciliationRun.requested_by == requested_by)
+        if dedupe_key:
+            stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
@@ -988,6 +994,8 @@ class OperationsRepository:
         limit: int,
         run_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
+        requested_by: Optional[str] = None,
+        dedupe_key: Optional[str] = None,
         reconciliation_type: Optional[str] = None,
         status: Optional[str] = None,
     ) -> list[FinancialReconciliationRun]:
@@ -998,6 +1006,10 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
         if correlation_id:
             stmt = stmt.where(FinancialReconciliationRun.correlation_id == correlation_id)
+        if requested_by:
+            stmt = stmt.where(FinancialReconciliationRun.requested_by == requested_by)
+        if dedupe_key:
+            stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:

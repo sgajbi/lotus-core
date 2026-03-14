@@ -578,6 +578,24 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         reconciliation_run_id["description"]
         == "Optional durable reconciliation run identifier filter."
     )
+    reconciliation_requested_by = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "requested_by"
+    )
+    assert (
+        reconciliation_requested_by["description"]
+        == "Optional reconciliation requester filter."
+    )
+    reconciliation_dedupe_key = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "dedupe_key"
+    )
+    assert (
+        reconciliation_dedupe_key["description"]
+        == "Optional reconciliation deduplication key filter."
+    )
     assert reconciliation_type["description"].startswith("Optional reconciliation type filter")
     reconciliation_status = next(
         parameter

@@ -618,6 +618,8 @@ async def test_reconciliation_runs_success(async_test_client):
     response = await client.get(
         "/support/portfolios/P1/reconciliation-runs"
         "?run_id=recon_1234567890abcdef&correlation_id=corr-recon-20260313-001"
+        "&requested_by=pipeline_orchestrator_service"
+        "&dedupe_key=recon:transaction_cashflow:PF-001:2026-03-13:3"
         "&reconciliation_type=transaction_cashflow&status_filter=FAILED"
     )
 
@@ -638,6 +640,8 @@ async def test_reconciliation_runs_success(async_test_client):
         skip=0,
         limit=100,
         run_id="recon_1234567890abcdef",
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:PF-001:2026-03-13:3",
         correlation_id="corr-recon-20260313-001",
         reconciliation_type="transaction_cashflow",
         status="FAILED",

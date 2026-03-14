@@ -817,6 +817,8 @@ async def test_get_reconciliation_runs_count_with_filters(
         portfolio_id="P1",
         run_id="recon_123",
         correlation_id="corr-recon-123",
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2025-08-30:2",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -827,6 +829,14 @@ async def test_get_reconciliation_runs_count_with_filters(
     assert "from financial_reconciliation_runs" in compiled.lower()
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_runs.correlation_id = 'corr-recon-123'" in compiled
+    assert (
+        "financial_reconciliation_runs.requested_by = 'pipeline_orchestrator_service'"
+        in compiled
+    )
+    assert (
+        "financial_reconciliation_runs.dedupe_key = 'recon:transaction_cashflow:P1:2025-08-30:2'"
+        in compiled
+    )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
     assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
 
@@ -844,6 +854,8 @@ async def test_get_reconciliation_runs_query(
         limit=5,
         run_id="recon_123",
         correlation_id="corr-recon-123",
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2025-08-30:2",
         reconciliation_type="transaction_cashflow",
         status="COMPLETED",
     )
@@ -854,6 +866,14 @@ async def test_get_reconciliation_runs_query(
     assert "from financial_reconciliation_runs" in compiled.lower()
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_runs.correlation_id = 'corr-recon-123'" in compiled
+    assert (
+        "financial_reconciliation_runs.requested_by = 'pipeline_orchestrator_service'"
+        in compiled
+    )
+    assert (
+        "financial_reconciliation_runs.dedupe_key = 'recon:transaction_cashflow:P1:2025-08-30:2'"
+        in compiled
+    )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
     assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
     assert (

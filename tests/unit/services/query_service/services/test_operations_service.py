@@ -1018,6 +1018,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         skip=0,
         limit=20,
         run_id="recon_1234567890abcdef",
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -1037,6 +1039,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         portfolio_id="P1",
         run_id="recon_1234567890abcdef",
         correlation_id=None,
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -1046,6 +1050,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         limit=20,
         run_id="recon_1234567890abcdef",
         correlation_id=None,
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -1070,6 +1076,8 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
         portfolio_id="P1",
         run_id=None,
         correlation_id="corr-recon-20260313-001",
+        requested_by=None,
+        dedupe_key=None,
         reconciliation_type=None,
         status="FAILED",
     )
@@ -1079,6 +1087,46 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
         limit=20,
         run_id=None,
         correlation_id="corr-recon-20260313-001",
+        requested_by=None,
+        dedupe_key=None,
+        reconciliation_type=None,
+        status="FAILED",
+    )
+
+
+async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_reconciliation_runs_count.return_value = 0
+    mock_ops_repo.get_reconciliation_runs.return_value = []
+
+    response = await service.get_reconciliation_runs(
+        "P1",
+        skip=0,
+        limit=20,
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
+        status="FAILED",
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        run_id=None,
+        correlation_id=None,
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
+        reconciliation_type=None,
+        status="FAILED",
+    )
+    mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        run_id=None,
+        correlation_id=None,
+        requested_by="pipeline_orchestrator_service",
+        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type=None,
         status="FAILED",
     )
