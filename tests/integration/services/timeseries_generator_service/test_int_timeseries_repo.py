@@ -1,10 +1,17 @@
-# tests/integration/services/timeseries_generator_service/test_int_timeseries_repo.py
+import asyncio
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import Portfolio, PortfolioAggregationJob
+from portfolio_common.database_models import (
+    DailyPositionSnapshot,
+    Instrument,
+    Portfolio,
+    PortfolioAggregationJob,
+    PositionTimeseries,
+)
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
 from src.services.timeseries_generator_service.app.repositories.timeseries_repository import (
@@ -198,3 +205,102 @@ async def test_find_and_reset_stale_aggregation_jobs_does_not_overwrite_complete
     with Session(db_engine) as session:
         job = session.query(PortfolioAggregationJob).filter_by(id=job_id).one()
         assert job.status == "COMPLETE"
+
+
+async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurrency(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P-AGG-CLAIM",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        Instrument(
+            security_id="SEC-AGG-CLAIM",
+            name="Aggregation Claim Instrument",
+            isin="US-AGG-CLAIM",
+            asset_class="EQUITY",
+            product_type="COMMON_STOCK",
+            currency="USD",
+        )
+    )
+    await async_db_session.flush()
+    async_db_session.add(
+        PortfolioAggregationJob(
+            portfolio_id="P-AGG-CLAIM",
+            aggregation_date=date(2025, 8, 15),
+            status="PENDING",
+        )
+    )
+    async_db_session.add(
+        DailyPositionSnapshot(
+            portfolio_id="P-AGG-CLAIM",
+            security_id="SEC-AGG-CLAIM",
+            date=date(2025, 8, 15),
+            epoch=0,
+            quantity=Decimal("1"),
+            cost_basis=Decimal("1"),
+            cost_basis_local=Decimal("1"),
+            valuation_status="VALUED_CURRENT",
+        )
+    )
+    async_db_session.add(
+        PositionTimeseries(
+            portfolio_id="P-AGG-CLAIM",
+            security_id="SEC-AGG-CLAIM",
+            date=date(2025, 8, 15),
+            epoch=0,
+            bod_market_value=Decimal("1"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("1"),
+            fees=Decimal("0"),
+            quantity=Decimal("1"),
+            cost=Decimal("1"),
+        )
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def claim_one():
+        async with session_factory() as session:
+            repo = TimeseriesRepository(session)
+            claimed = await repo.find_and_claim_eligible_jobs(batch_size=1)
+            await session.commit()
+            return claimed
+
+    first_claim, second_claim = await asyncio.gather(claim_one(), claim_one())
+    all_claimed = [*first_claim, *second_claim]
+
+    assert len(all_claimed) == 1
+    assert len({job.id for job in all_claimed}) == 1
+
+    async with session_factory() as verification_session:
+        jobs = (
+            (
+                await verification_session.execute(
+                    select(PortfolioAggregationJob).where(
+                        PortfolioAggregationJob.portfolio_id == "P-AGG-CLAIM",
+                        PortfolioAggregationJob.aggregation_date == date(2025, 8, 15),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert len(jobs) == 1
+    assert jobs[0].status == "PROCESSING"
+    assert jobs[0].attempt_count == 1

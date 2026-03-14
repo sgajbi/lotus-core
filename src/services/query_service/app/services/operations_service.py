@@ -45,6 +45,8 @@ class OperationsService:
     ) -> str:
         if status == "FAILED":
             return "FAILED"
+        if status.startswith("SKIPPED"):
+            return "SKIPPED"
         if cls._is_support_job_stale(status, updated_at, now, stale_threshold_minutes):
             return "STALE_PROCESSING"
         if status == "PROCESSING":
@@ -443,7 +445,9 @@ class OperationsService:
             controls_epoch=latest_control_stage.epoch if latest_control_stage else None,
             controls_status=controls_status,
             controls_failure_reason=(
-                latest_control_stage.failure_reason if latest_control_stage else None
+                getattr(latest_control_stage, "failure_reason", None)
+                if latest_control_stage
+                else None
             ),
             controls_latest_reconciliation_run_id=(
                 latest_reconciliation_run.run_id if latest_reconciliation_run else None

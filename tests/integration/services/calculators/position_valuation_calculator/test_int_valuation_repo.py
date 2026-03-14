@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 import pytest_asyncio
+from portfolio_common import valuation_repository_base as valuation_repository_base_module
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
     MarketPrice,
@@ -25,9 +26,19 @@ from src.services.calculators.position_valuation_calculator.app.repositories.val
 
 pytestmark = pytest.mark.asyncio
 
+FIXED_STALE_NOW = datetime(2025, 8, 30, 12, 0, tzinfo=timezone.utc)
+
+
+class _FixedDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is None:
+            return FIXED_STALE_NOW.replace(tzinfo=None)
+        return FIXED_STALE_NOW.astimezone(tz)
+
 
 @pytest.fixture(scope="function")
-def setup_stale_job_data(db_engine):
+def setup_stale_job_data(clean_db, db_engine):
     """
     Sets up a variety of valuation jobs in the database:
     - One recent 'PROCESSING' job (should not be reset).
@@ -36,7 +47,7 @@ def setup_stale_job_data(db_engine):
     - One stale 'COMPLETE' job (should not be reset).
     """
     with Session(db_engine) as session:
-        now = datetime.now(timezone.utc)
+        now = FIXED_STALE_NOW
         stale_time = now - timedelta(minutes=30)
 
         jobs = [
@@ -687,7 +698,9 @@ async def test_find_and_reset_stale_jobs(
 
     async with session_factory() as session:
         repo = ValuationRepository(session)
-        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
+            reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
         await session.commit()
     assert reset_count == 1
 
@@ -723,7 +736,9 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
 ):
     async with session_factory() as session:
         repo = ValuationRepository(session)
-        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=0)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
+            reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=0)
         await session.commit()
 
     assert reset_count == 0
@@ -767,13 +782,15 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
                     await concurrent_session.execute(
                         update(PortfolioValuationJob)
                         .where(PortfolioValuationJob.id == job_id)
-                        .values(status="COMPLETE", updated_at=datetime.now(timezone.utc))
+                        .values(status="COMPLETE", updated_at=FIXED_STALE_NOW)
                     )
                     await concurrent_session.commit()
             return await original_execute(*args, **kwargs)
 
         session.execute = execute_with_concurrent_completion
-        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
+            reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
         await session.commit()
 
     assert reset_count == 0
