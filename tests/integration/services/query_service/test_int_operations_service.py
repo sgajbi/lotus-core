@@ -329,3 +329,155 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
     assert response.reprocessing.oldest_reprocessing_security_id == "SEC-VAL-OLD"
     assert response.reprocessing.oldest_reprocessing_epoch == 2
     assert response.reprocessing.backlog_age_days == 12
+
+
+async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P3",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P3",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add_all(
+        [
+            FinancialReconciliationRun(
+                run_id="recon-run-old",
+                reconciliation_type="transaction_cashflow",
+                portfolio_id="P3",
+                business_date=date(2025, 8, 30),
+                epoch=2,
+                status="COMPLETED",
+                requested_by="pipeline_orchestrator_service",
+                dedupe_key="recon:transaction_cashflow:P3:2025-08-30:2:old",
+                correlation_id="corr-recon-run-old",
+                started_at=datetime(2025, 8, 30, 10, 30, tzinfo=timezone.utc),
+                completed_at=datetime(2025, 8, 30, 10, 40, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 10, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 45, tzinfo=timezone.utc),
+            ),
+            FinancialReconciliationRun(
+                run_id="recon-run-late",
+                reconciliation_type="transaction_cashflow",
+                portfolio_id="P3",
+                business_date=date(2025, 8, 30),
+                epoch=2,
+                status="FAILED",
+                requested_by="pipeline_orchestrator_service",
+                dedupe_key="recon:transaction_cashflow:P3:2025-08-30:2:late",
+                correlation_id="corr-recon-run-late",
+                failure_reason="late reconciliation failure",
+                started_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_reconciliation_runs("P3", skip=0, limit=10)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].run_id == "recon-run-old"
+    assert response.items[0].status == "COMPLETED"
+    assert response.items[0].correlation_id == "corr-recon-run-old"
+    assert response.items[0].failure_reason is None
+    assert response.items[0].operational_state == "COMPLETED"
+
+
+async def test_reconciliation_findings_return_coherent_snapshot_under_finding_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P4",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P4",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        FinancialReconciliationRun(
+            run_id="recon-findings-old",
+            reconciliation_type="transaction_cashflow",
+            portfolio_id="P4",
+            business_date=date(2025, 8, 30),
+            epoch=2,
+            status="FAILED",
+            requested_by="pipeline_orchestrator_service",
+            dedupe_key="recon:transaction_cashflow:P4:2025-08-30:2",
+            correlation_id="corr-recon-findings-old",
+            failure_reason="older run failure",
+            started_at=datetime(2025, 8, 30, 10, 30, tzinfo=timezone.utc),
+            created_at=datetime(2025, 8, 30, 10, 30, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+        )
+    )
+    await async_db_session.commit()
+    async_db_session.add_all(
+        [
+            FinancialReconciliationFinding(
+                finding_id="finding-visible",
+                run_id="recon-findings-old",
+                reconciliation_type="transaction_cashflow",
+                finding_type="missing_cashflow",
+                severity="ERROR",
+                portfolio_id="P4",
+                security_id="SEC-VISIBLE",
+                transaction_id="TXN-VISIBLE",
+                business_date=date(2025, 8, 30),
+                epoch=2,
+                detail={"message": "visible finding"},
+                created_at=datetime(2025, 8, 30, 11, 10, tzinfo=timezone.utc),
+            ),
+            FinancialReconciliationFinding(
+                finding_id="finding-hidden",
+                run_id="recon-findings-old",
+                reconciliation_type="transaction_cashflow",
+                finding_type="late_breakage",
+                severity="ERROR",
+                portfolio_id="P4",
+                security_id="SEC-HIDDEN",
+                transaction_id="TXN-HIDDEN",
+                business_date=date(2025, 8, 30),
+                epoch=2,
+                detail={"message": "hidden finding"},
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_reconciliation_findings("P4", "recon-findings-old", limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].finding_id == "finding-visible"
+    assert response.items[0].security_id == "SEC-VISIBLE"
+    assert response.items[0].transaction_id == "TXN-VISIBLE"
+    assert response.items[0].is_blocking is True
+    assert response.items[0].operational_state == "BLOCKING"
