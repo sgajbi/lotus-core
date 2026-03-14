@@ -298,6 +298,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["controls_failure_reason"]["description"].startswith(
         "Durable failure reason recorded on the latest portfolio-day financial"
     )
+    assert support_overview["properties"]["controls_latest_reconciliation_run_id"][
+        "description"
+    ].startswith("Durable reconciliation run identifier for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_type"][
+        "description"
+    ].startswith("Reconciliation type for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_status"][
+        "description"
+    ].startswith("Durable lifecycle status for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_correlation_id"][
+        "description"
+    ].startswith("Durable correlation identifier for the latest reconciliation run")
     assert support_overview["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale in-flight portfolio processing."
     )

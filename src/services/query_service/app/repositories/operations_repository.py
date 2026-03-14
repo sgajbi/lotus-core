@@ -510,6 +510,28 @@ class OperationsRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
+    async def get_latest_reconciliation_run_for_portfolio_day(
+        self,
+        portfolio_id: str,
+        business_date: date,
+        epoch: int,
+    ) -> Optional[FinancialReconciliationRun]:
+        stmt = (
+            select(FinancialReconciliationRun)
+            .where(
+                FinancialReconciliationRun.portfolio_id == portfolio_id,
+                FinancialReconciliationRun.business_date == business_date,
+                FinancialReconciliationRun.epoch == epoch,
+            )
+            .order_by(
+                self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
+                FinancialReconciliationRun.started_at.desc(),
+                FinancialReconciliationRun.id.desc(),
+            )
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def get_position_state(
         self, portfolio_id: str, security_id: str
     ) -> Optional[PositionState]:

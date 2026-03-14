@@ -326,6 +326,38 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["Tolerance exceeded for portfolio totals."],
     )
+    controls_latest_reconciliation_run_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable reconciliation run identifier for the latest reconciliation run on the "
+            "same portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["recon_1234567890abcdef"],
+    )
+    controls_latest_reconciliation_type: Optional[str] = Field(
+        None,
+        description=(
+            "Reconciliation type for the latest reconciliation run on the same portfolio-day "
+            "and epoch as the latest control stage."
+        ),
+        examples=["transaction_cashflow"],
+    )
+    controls_latest_reconciliation_status: Optional[str] = Field(
+        None,
+        description=(
+            "Durable lifecycle status for the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["FAILED"],
+    )
+    controls_latest_reconciliation_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["corr-recon-20260313-001"],
+    )
     controls_last_updated_at: Optional[datetime] = Field(
         None,
         description=(

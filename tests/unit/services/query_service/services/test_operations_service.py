@@ -87,6 +87,16 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
             "updated_at": datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
         },
     )()
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = type(
+        "ReconciliationRunStub",
+        (),
+        {
+            "run_id": "recon_1234567890abcdef",
+            "reconciliation_type": "transaction_cashflow",
+            "status": "COMPLETED",
+            "correlation_id": "corr-recon-20250830-001",
+        },
+    )()
 
     response = await service.get_support_overview("P1")
 
@@ -145,6 +155,10 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.controls_epoch == 2
     assert response.controls_status == "COMPLETED"
     assert response.controls_failure_reason is None
+    assert response.controls_latest_reconciliation_run_id == "recon_1234567890abcdef"
+    assert response.controls_latest_reconciliation_type == "transaction_cashflow"
+    assert response.controls_latest_reconciliation_status == "COMPLETED"
+    assert response.controls_latest_reconciliation_correlation_id == "corr-recon-20250830-001"
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 10, 15, tzinfo=timezone.utc
     )
@@ -1093,6 +1107,7 @@ async def test_get_support_overview_honors_custom_stale_threshold(
     )
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
 
     response = await service.get_support_overview(
         "P1", stale_threshold_minutes=30, failed_window_hours=48
@@ -1197,6 +1212,10 @@ async def test_get_support_overview_without_business_date(
     assert response.controls_created_at is None
     assert response.controls_ready_emitted_at is None
     assert response.controls_failure_reason is None
+    assert response.controls_latest_reconciliation_run_id is None
+    assert response.controls_latest_reconciliation_type is None
+    assert response.controls_latest_reconciliation_status is None
+    assert response.controls_latest_reconciliation_correlation_id is None
     assert response.controls_last_updated_at is None
     assert response.controls_blocking is False
     assert response.publish_allowed is True
@@ -1263,6 +1282,16 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
             "updated_at": datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
         },
     )()
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = type(
+        "ReconciliationRunStub",
+        (),
+        {
+            "run_id": "recon_failed_20250830",
+            "reconciliation_type": "transaction_cashflow",
+            "status": "FAILED",
+            "correlation_id": "corr-recon-20250830-failed",
+        },
+    )()
 
     response = await service.get_support_overview("P1")
 
@@ -1274,6 +1303,13 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     assert response.controls_ready_emitted_at is None
     assert response.controls_status == "FAILED"
     assert response.controls_failure_reason == "Tolerance exceeded for portfolio totals."
+    assert response.controls_latest_reconciliation_run_id == "recon_failed_20250830"
+    assert response.controls_latest_reconciliation_type == "transaction_cashflow"
+    assert response.controls_latest_reconciliation_status == "FAILED"
+    assert (
+        response.controls_latest_reconciliation_correlation_id
+        == "corr-recon-20250830-failed"
+    )
     assert response.controls_last_updated_at == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc
     )

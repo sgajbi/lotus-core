@@ -284,6 +284,15 @@ class OperationsService:
             self.repo.get_position_snapshot_history_mismatch_count(portfolio_id),
             self.repo.get_latest_financial_reconciliation_control_stage(portfolio_id),
         )
+        latest_reconciliation_run = None
+        if latest_control_stage is not None:
+            latest_reconciliation_run = (
+                await self.repo.get_latest_reconciliation_run_for_portfolio_day(
+                    portfolio_id=portfolio_id,
+                    business_date=latest_control_stage.business_date,
+                    epoch=latest_control_stage.epoch,
+                )
+            )
 
         latest_booked_transaction_date = None
         latest_booked_position_snapshot_date = None
@@ -398,6 +407,22 @@ class OperationsService:
             controls_status=controls_status,
             controls_failure_reason=(
                 latest_control_stage.failure_reason if latest_control_stage else None
+            ),
+            controls_latest_reconciliation_run_id=(
+                latest_reconciliation_run.run_id if latest_reconciliation_run else None
+            ),
+            controls_latest_reconciliation_type=(
+                latest_reconciliation_run.reconciliation_type
+                if latest_reconciliation_run
+                else None
+            ),
+            controls_latest_reconciliation_status=(
+                latest_reconciliation_run.status if latest_reconciliation_run else None
+            ),
+            controls_latest_reconciliation_correlation_id=(
+                latest_reconciliation_run.correlation_id
+                if latest_reconciliation_run
+                else None
             ),
             controls_last_updated_at=(
                 latest_control_stage.updated_at if latest_control_stage else None

@@ -613,6 +613,26 @@ async def test_get_latest_financial_reconciliation_control_stage(
     assert "ORDER BY pipeline_stage_state.business_date DESC" in compiled
 
 
+async def test_get_latest_reconciliation_run_for_portfolio_day(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_run = object()
+    mock_execute_scalar_one_or_none(mock_db_session, mock_run)
+
+    value = await repository.get_latest_reconciliation_run_for_portfolio_day(
+        "P1", date(2025, 8, 30), 2
+    )
+
+    assert value is mock_run
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled
+    assert "financial_reconciliation_runs.business_date = '2025-08-30'" in compiled
+    assert "financial_reconciliation_runs.epoch = 2" in compiled
+    assert "financial_reconciliation_runs.started_at DESC" in compiled
+
+
 async def test_get_lineage_keys_query_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
