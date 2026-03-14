@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
@@ -329,3 +331,46 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
             .one()
         )
     assert persisted.status == "COMPLETE"
+
+
+async def test_find_and_claim_jobs_does_not_double_claim_under_concurrency(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        ReprocessingJob(
+            job_type="RESET_WATERMARKS",
+            payload={"security_id": "S5", "earliest_impacted_date": "2025-01-05"},
+            status="PENDING",
+        )
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def claim_one():
+        async with session_factory() as session:
+            repository = ReprocessingJobRepository(session)
+            claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1)
+            await session.commit()
+            return claimed
+
+    first_claim, second_claim = await asyncio.gather(claim_one(), claim_one())
+    all_claimed = [*first_claim, *second_claim]
+
+    assert len(all_claimed) == 1
+    assert len({job.id for job in all_claimed}) == 1
+
+    persisted_rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(persisted_rows) == 1
+    assert persisted_rows[0].status == "PROCESSING"
+    assert persisted_rows[0].attempt_count == 1
