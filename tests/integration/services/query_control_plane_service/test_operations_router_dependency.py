@@ -37,6 +37,7 @@ async def test_support_overview_success(async_test_client):
         "active_reprocessing_keys": 1,
         "stale_reprocessing_keys": 1,
         "oldest_reprocessing_watermark_date": date(2025, 8, 20),
+        "oldest_reprocessing_security_id": "S1",
         "reprocessing_backlog_age_days": 11,
         "pending_valuation_jobs": 2,
         "processing_valuation_jobs": 1,
@@ -44,6 +45,7 @@ async def test_support_overview_success(async_test_client):
         "failed_valuation_jobs": 0,
         "failed_valuation_jobs_within_window": 0,
         "oldest_pending_valuation_date": date(2025, 8, 30),
+        "oldest_pending_valuation_job_id": 8801,
         "valuation_backlog_age_days": 1,
         "pending_aggregation_jobs": 0,
         "processing_aggregation_jobs": 0,
@@ -51,6 +53,7 @@ async def test_support_overview_success(async_test_client):
         "failed_aggregation_jobs": 0,
         "failed_aggregation_jobs_within_window": 0,
         "oldest_pending_aggregation_date": None,
+        "oldest_pending_aggregation_job_id": None,
         "aggregation_backlog_age_days": None,
         "pending_analytics_export_jobs": 2,
         "processing_analytics_export_jobs": 1,
@@ -58,6 +61,8 @@ async def test_support_overview_success(async_test_client):
         "failed_analytics_export_jobs": 1,
         "failed_analytics_export_jobs_within_window": 1,
         "oldest_pending_analytics_export_created_at": "2025-08-31T10:00:00Z",
+        "oldest_pending_analytics_export_job_id": "aexp_0001",
+        "oldest_pending_analytics_export_request_fingerprint": "pf-001:positions:csv",
         "analytics_export_backlog_age_minutes": 15,
         "latest_transaction_date": date(2025, 8, 31),
         "latest_booked_transaction_date": date(2025, 8, 31),
@@ -82,6 +87,9 @@ async def test_support_overview_success(async_test_client):
     assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["failed_window_hours"] == 48
     assert response.json()["generated_at_utc"] == "2026-03-14T10:45:00Z"
+    assert response.json()["oldest_reprocessing_security_id"] == "S1"
+    assert response.json()["oldest_pending_valuation_job_id"] == 8801
+    assert response.json()["oldest_pending_analytics_export_job_id"] == "aexp_0001"
     assert response.json()["controls_stage_id"] == 701
     assert response.json()["controls_last_updated_at"] == "2025-08-31T10:16:00Z"
     assert response.json()["publish_allowed"] is True
@@ -118,6 +126,7 @@ async def test_calculator_slos_success(async_test_client):
             "failed_jobs": 0,
             "failed_jobs_within_window": 0,
             "oldest_open_job_date": date(2025, 8, 31),
+            "oldest_open_job_id": 8801,
             "backlog_age_days": 0,
         },
         "aggregation": {
@@ -127,12 +136,14 @@ async def test_calculator_slos_success(async_test_client):
             "failed_jobs": 0,
             "failed_jobs_within_window": 0,
             "oldest_open_job_date": date(2025, 8, 31),
+            "oldest_open_job_id": 4401,
             "backlog_age_days": 0,
         },
         "reprocessing": {
             "active_reprocessing_keys": 0,
             "stale_reprocessing_keys": 0,
             "oldest_reprocessing_watermark_date": None,
+            "oldest_reprocessing_security_id": None,
             "backlog_age_days": None,
         },
     }
@@ -145,6 +156,7 @@ async def test_calculator_slos_success(async_test_client):
     assert response.json()["portfolio_id"] == "P1"
     assert response.json()["failed_window_hours"] == 48
     assert response.json()["valuation"]["pending_jobs"] == 2
+    assert response.json()["valuation"]["oldest_open_job_id"] == 8801
     mock_service.get_calculator_slos.assert_awaited_once_with(
         portfolio_id="P1",
         stale_threshold_minutes=15,

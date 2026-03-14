@@ -341,6 +341,7 @@ class OperationsService:
             oldest_reprocessing_watermark_date=(
                 reprocessing_health.oldest_reprocessing_watermark_date
             ),
+            oldest_reprocessing_security_id=reprocessing_health.oldest_reprocessing_security_id,
             reprocessing_backlog_age_days=reprocessing_backlog_age_days,
             pending_valuation_jobs=valuation_job_health.pending_jobs,
             processing_valuation_jobs=valuation_job_health.processing_jobs,
@@ -348,6 +349,7 @@ class OperationsService:
             failed_valuation_jobs=valuation_job_health.failed_jobs,
             failed_valuation_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
             oldest_pending_valuation_date=valuation_job_health.oldest_open_job_date,
+            oldest_pending_valuation_job_id=valuation_job_health.oldest_open_job_id,
             valuation_backlog_age_days=valuation_backlog_age_days,
             pending_aggregation_jobs=aggregation_job_health.pending_jobs,
             processing_aggregation_jobs=aggregation_job_health.processing_jobs,
@@ -355,6 +357,7 @@ class OperationsService:
             failed_aggregation_jobs=aggregation_job_health.failed_jobs,
             failed_aggregation_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
             oldest_pending_aggregation_date=aggregation_job_health.oldest_open_job_date,
+            oldest_pending_aggregation_job_id=aggregation_job_health.oldest_open_job_id,
             aggregation_backlog_age_days=aggregation_backlog_age_days,
             pending_analytics_export_jobs=analytics_export_job_health.accepted_jobs,
             processing_analytics_export_jobs=analytics_export_job_health.running_jobs,
@@ -365,6 +368,12 @@ class OperationsService:
             ),
             oldest_pending_analytics_export_created_at=(
                 analytics_export_job_health.oldest_open_job_created_at
+            ),
+            oldest_pending_analytics_export_job_id=(
+                analytics_export_job_health.oldest_open_job_id
+            ),
+            oldest_pending_analytics_export_request_fingerprint=(
+                analytics_export_job_health.oldest_open_request_fingerprint
             ),
             analytics_export_backlog_age_minutes=analytics_export_backlog_age_minutes,
             latest_transaction_date=latest_transaction_date,
@@ -453,6 +462,7 @@ class OperationsService:
                 failed_jobs=valuation_job_health.failed_jobs,
                 failed_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
                 oldest_open_job_date=valuation_job_health.oldest_open_job_date,
+                oldest_open_job_id=valuation_job_health.oldest_open_job_id,
                 backlog_age_days=valuation_backlog_age_days,
             ),
             aggregation=CalculatorSloBucket(
@@ -462,6 +472,7 @@ class OperationsService:
                 failed_jobs=aggregation_job_health.failed_jobs,
                 failed_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
                 oldest_open_job_date=aggregation_job_health.oldest_open_job_date,
+                oldest_open_job_id=aggregation_job_health.oldest_open_job_id,
                 backlog_age_days=aggregation_backlog_age_days,
             ),
             reprocessing=ReprocessingSloBucket(
@@ -469,6 +480,9 @@ class OperationsService:
                 stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
                 oldest_reprocessing_watermark_date=(
                     reprocessing_health.oldest_reprocessing_watermark_date
+                ),
+                oldest_reprocessing_security_id=(
+                    reprocessing_health.oldest_reprocessing_security_id
                 ),
                 backlog_age_days=reprocessing_backlog_age_days,
             ),

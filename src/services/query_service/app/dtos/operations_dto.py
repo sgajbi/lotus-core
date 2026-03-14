@@ -61,6 +61,14 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["2025-11-03"],
     )
+    oldest_reprocessing_security_id: Optional[str] = Field(
+        None,
+        description=(
+            "Security identifier for the oldest portfolio-security key currently marked "
+            "REPROCESSING."
+        ),
+        examples=["AAPL"],
+    )
     reprocessing_backlog_age_days: Optional[int] = Field(
         None,
         description=(
@@ -101,6 +109,11 @@ class SupportOverviewResponse(BaseModel):
         None,
         description="Oldest valuation date among pending/processing jobs for backlog analysis.",
         examples=["2025-11-03"],
+    )
+    oldest_pending_valuation_job_id: Optional[int] = Field(
+        None,
+        description="Durable job id for the oldest open valuation job in the backlog.",
+        examples=[8801],
     )
     valuation_backlog_age_days: Optional[int] = Field(
         None,
@@ -144,6 +157,11 @@ class SupportOverviewResponse(BaseModel):
         None,
         description="Oldest aggregation date among pending/processing jobs for backlog analysis.",
         examples=["2025-12-29"],
+    )
+    oldest_pending_aggregation_job_id: Optional[int] = Field(
+        None,
+        description="Durable job id for the oldest open aggregation job in the backlog.",
+        examples=[4402],
     )
     aggregation_backlog_age_days: Optional[int] = Field(
         None,
@@ -190,6 +208,16 @@ class SupportOverviewResponse(BaseModel):
             "Oldest created_at timestamp among analytics export jobs still waiting or running."
         ),
         examples=["2026-03-13T10:15:00Z"],
+    )
+    oldest_pending_analytics_export_job_id: Optional[str] = Field(
+        None,
+        description="Durable job id for the oldest open analytics export job in the backlog.",
+        examples=["aexp_20260313_00012"],
+    )
+    oldest_pending_analytics_export_request_fingerprint: Optional[str] = Field(
+        None,
+        description="Request fingerprint for the oldest open analytics export job in the backlog.",
+        examples=["pf-001:positions:csv:2026-03-13"],
     )
     analytics_export_backlog_age_minutes: Optional[int] = Field(
         None,
@@ -325,6 +353,11 @@ class CalculatorSloBucket(BaseModel):
         description="Oldest business date among open jobs (PENDING/PROCESSING).",
         examples=["2026-02-25"],
     )
+    oldest_open_job_id: Optional[int] = Field(
+        None,
+        description="Durable job id for the oldest open job contributing to this backlog.",
+        examples=[8801],
+    )
     backlog_age_days: Optional[int] = Field(
         None,
         description=(
@@ -353,6 +386,11 @@ class ReprocessingSloBucket(BaseModel):
         None,
         description="Oldest watermark date among position keys currently in REPROCESSING state.",
         examples=["2026-02-25"],
+    )
+    oldest_reprocessing_security_id: Optional[str] = Field(
+        None,
+        description="Security identifier for the oldest active reprocessing key.",
+        examples=["AAPL"],
     )
     backlog_age_days: Optional[int] = Field(
         None,
@@ -397,6 +435,7 @@ class CalculatorSloResponse(BaseModel):
                 "failed_jobs": 0,
                 "failed_jobs_within_window": 2,
                 "oldest_open_job_date": "2026-02-25",
+                "oldest_open_job_id": 8801,
                 "backlog_age_days": 7,
             }
         ],
@@ -412,6 +451,7 @@ class CalculatorSloResponse(BaseModel):
                 "failed_jobs": 0,
                 "failed_jobs_within_window": 0,
                 "oldest_open_job_date": "2026-03-01",
+                "oldest_open_job_id": 4402,
                 "backlog_age_days": 1,
             }
         ],
@@ -424,6 +464,7 @@ class CalculatorSloResponse(BaseModel):
                 "active_reprocessing_keys": 4,
                 "stale_reprocessing_keys": 1,
                 "oldest_reprocessing_watermark_date": "2026-02-25",
+                "oldest_reprocessing_security_id": "AAPL",
                 "backlog_age_days": 7,
             }
         ],

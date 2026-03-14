@@ -30,6 +30,7 @@ class JobHealthSummary:
     failed_jobs: int
     failed_jobs_last_hours: int
     oldest_open_job_date: Optional[date]
+    oldest_open_job_id: Optional[int]
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,8 @@ class ExportJobHealthSummary:
     failed_jobs: int
     failed_jobs_last_hours: int
     oldest_open_job_created_at: Optional[datetime]
+    oldest_open_job_id: Optional[str]
+    oldest_open_request_fingerprint: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,7 @@ class ReprocessingHealthSummary:
     active_keys: int
     stale_reprocessing_keys: int
     oldest_reprocessing_watermark_date: Optional[date]
+    oldest_reprocessing_security_id: Optional[str]
 
 
 class OperationsRepository:
@@ -189,10 +193,26 @@ class OperationsRepository:
             .label("oldest_reprocessing_watermark_date"),
         ).where(PositionState.portfolio_id == portfolio_id)
         row = (await self.db.execute(stmt)).one()
+        oldest_key_stmt = (
+            select(PositionState.security_id)
+            .where(
+                PositionState.portfolio_id == portfolio_id,
+                PositionState.status == "REPROCESSING",
+            )
+            .order_by(
+                PositionState.watermark_date.asc(),
+                PositionState.updated_at.asc(),
+                PositionState.security_id.asc(),
+            )
+            .limit(1)
+        )
         return ReprocessingHealthSummary(
             active_keys=int(row.active_keys or 0),
             stale_reprocessing_keys=int(row.stale_reprocessing_keys or 0),
             oldest_reprocessing_watermark_date=row.oldest_reprocessing_watermark_date,
+            oldest_reprocessing_security_id=(
+                await self.db.execute(oldest_key_stmt)
+            ).scalar_one_or_none(),
         )
 
     async def get_valuation_job_health_summary(
@@ -229,6 +249,19 @@ class OperationsRepository:
             .label("oldest_open_job_date"),
         ).where(PortfolioValuationJob.portfolio_id == portfolio_id)
         row = (await self.db.execute(stmt)).one()
+        oldest_job_stmt = (
+            select(PortfolioValuationJob.id)
+            .where(
+                PortfolioValuationJob.portfolio_id == portfolio_id,
+                PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")),
+            )
+            .order_by(
+                PortfolioValuationJob.valuation_date.asc(),
+                PortfolioValuationJob.updated_at.asc(),
+                PortfolioValuationJob.id.asc(),
+            )
+            .limit(1)
+        )
         return JobHealthSummary(
             pending_jobs=int(row.pending_jobs or 0),
             processing_jobs=int(row.processing_jobs or 0),
@@ -236,6 +269,7 @@ class OperationsRepository:
             failed_jobs=int(row.failed_jobs or 0),
             failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
             oldest_open_job_date=row.oldest_open_job_date,
+            oldest_open_job_id=(await self.db.execute(oldest_job_stmt)).scalar_one_or_none(),
         )
 
     async def get_aggregation_job_health_summary(
@@ -272,6 +306,19 @@ class OperationsRepository:
             .label("oldest_open_job_date"),
         ).where(PortfolioAggregationJob.portfolio_id == portfolio_id)
         row = (await self.db.execute(stmt)).one()
+        oldest_job_stmt = (
+            select(PortfolioAggregationJob.id)
+            .where(
+                PortfolioAggregationJob.portfolio_id == portfolio_id,
+                PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")),
+            )
+            .order_by(
+                PortfolioAggregationJob.aggregation_date.asc(),
+                PortfolioAggregationJob.updated_at.asc(),
+                PortfolioAggregationJob.id.asc(),
+            )
+            .limit(1)
+        )
         return JobHealthSummary(
             pending_jobs=int(row.pending_jobs or 0),
             processing_jobs=int(row.processing_jobs or 0),
@@ -279,6 +326,7 @@ class OperationsRepository:
             failed_jobs=int(row.failed_jobs or 0),
             failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
             oldest_open_job_date=row.oldest_open_job_date,
+            oldest_open_job_id=(await self.db.execute(oldest_job_stmt)).scalar_one_or_none(),
         )
 
     async def get_analytics_export_job_health_summary(
@@ -311,6 +359,23 @@ class OperationsRepository:
             .label("oldest_open_job_created_at"),
         ).where(AnalyticsExportJob.portfolio_id == portfolio_id)
         row = (await self.db.execute(stmt)).one()
+        oldest_job_stmt = (
+            select(
+                AnalyticsExportJob.job_id,
+                AnalyticsExportJob.request_fingerprint,
+            )
+            .where(
+                AnalyticsExportJob.portfolio_id == portfolio_id,
+                AnalyticsExportJob.status.in_(("accepted", "running")),
+            )
+            .order_by(
+                AnalyticsExportJob.created_at.asc(),
+                AnalyticsExportJob.updated_at.asc(),
+                AnalyticsExportJob.job_id.asc(),
+            )
+            .limit(1)
+        )
+        oldest_job_row = (await self.db.execute(oldest_job_stmt)).one_or_none()
         return ExportJobHealthSummary(
             accepted_jobs=int(row.accepted_jobs or 0),
             running_jobs=int(row.running_jobs or 0),
@@ -318,6 +383,10 @@ class OperationsRepository:
             failed_jobs=int(row.failed_jobs or 0),
             failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
             oldest_open_job_created_at=row.oldest_open_job_created_at,
+            oldest_open_job_id=(oldest_job_row.job_id if oldest_job_row else None),
+            oldest_open_request_fingerprint=(
+                oldest_job_row.request_fingerprint if oldest_job_row else None
+            ),
         )
 
     async def get_latest_transaction_date(self, portfolio_id: str) -> Optional[date]:

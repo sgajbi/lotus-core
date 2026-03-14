@@ -290,6 +290,21 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["oldest_reprocessing_watermark_date"][
         "description"
     ].startswith("Oldest replay watermark date among portfolio-security keys")
+    assert support_overview["properties"]["oldest_reprocessing_security_id"][
+        "description"
+    ].startswith("Security identifier for the oldest portfolio-security key")
+    assert support_overview["properties"]["oldest_pending_valuation_job_id"][
+        "description"
+    ] == "Durable job id for the oldest open valuation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_aggregation_job_id"][
+        "description"
+    ] == "Durable job id for the oldest open aggregation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_analytics_export_job_id"][
+        "description"
+    ] == "Durable job id for the oldest open analytics export job in the backlog."
+    assert support_overview["properties"]["oldest_pending_analytics_export_request_fingerprint"][
+        "description"
+    ].startswith("Request fingerprint for the oldest open analytics export job")
     assert support_overview["properties"]["reprocessing_backlog_age_days"][
         "description"
     ].startswith("Backlog age in days computed from oldest_reprocessing_watermark_date")
@@ -343,8 +358,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reprocessing_slo["properties"]["oldest_reprocessing_watermark_date"][
         "description"
     ] == "Oldest watermark date among position keys currently in REPROCESSING state."
+    assert reprocessing_slo["properties"]["oldest_reprocessing_security_id"][
+        "description"
+    ] == "Security identifier for the oldest active reprocessing key."
     assert reprocessing_slo["properties"]["backlog_age_days"]["description"].startswith(
         "Age in days from oldest_reprocessing_watermark_date"
+    )
+    assert calculator_bucket["properties"]["oldest_open_job_id"]["description"] == (
+        "Durable job id for the oldest open job contributing to this backlog."
     )
     assert calculator_bucket["properties"]["failed_jobs_within_window"]["description"] == (
         "Count of jobs that moved to FAILED state within the configured failed-job window."
