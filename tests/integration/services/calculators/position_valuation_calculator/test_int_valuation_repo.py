@@ -906,6 +906,56 @@ async def test_upsert_job_deduplicates_concurrent_duplicate_scheduler_pressure(
     assert jobs[0].correlation_id == "corr-val-conc"
 
 
+async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurrency(
+    async_db_session: AsyncSession, clean_db
+):
+    async_db_session.add(
+        PortfolioValuationJob(
+            portfolio_id="P-VAL-CLAIM",
+            security_id="S-VAL-CLAIM",
+            valuation_date=date(2025, 8, 15),
+            epoch=4,
+            status="PENDING",
+            correlation_id="corr-val-claim",
+        )
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def claim_one():
+        async with session_factory() as session:
+            repo = ValuationRepository(session)
+            claimed = await repo.find_and_claim_eligible_jobs(batch_size=1)
+            await session.commit()
+            return claimed
+
+    first_claim, second_claim = await asyncio.gather(claim_one(), claim_one())
+    all_claimed = [*first_claim, *second_claim]
+
+    assert len(all_claimed) == 1
+    assert len({job.id for job in all_claimed}) == 1
+
+    async with session_factory() as verification_session:
+        jobs = (
+            (
+                await verification_session.execute(
+                    select(PortfolioValuationJob).where(
+                        PortfolioValuationJob.portfolio_id == "P-VAL-CLAIM",
+                        PortfolioValuationJob.security_id == "S-VAL-CLAIM",
+                        PortfolioValuationJob.valuation_date == date(2025, 8, 15),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert len(jobs) == 1
+    assert jobs[0].status == "PROCESSING"
+    assert jobs[0].attempt_count == 1
+
+
 async def test_get_latest_business_date_falls_back_to_processing_dates_when_calendar_is_empty(
     clean_db, async_db_session: AsyncSession
 ):
