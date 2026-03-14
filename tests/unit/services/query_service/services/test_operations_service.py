@@ -609,6 +609,14 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     assert response.items[0].failure_reason == "timed out once"
     assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "STALE_PROCESSING"
+    mock_ops_repo.get_reprocessing_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PROCESSING",
+        security_id="S1",
+        job_id=None,
+        correlation_id=None,
+        as_of=response.generated_at_utc,
+    )
     mock_ops_repo.get_reprocessing_jobs.assert_awaited_once_with(
         portfolio_id="P1",
         skip=0,
@@ -619,6 +627,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 
@@ -1560,6 +1569,7 @@ async def test_get_reprocessing_jobs_forwards_correlation_filter(
         security_id=None,
         job_id=None,
         correlation_id="corr-replay-303",
+        as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_reprocessing_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1571,6 +1581,7 @@ async def test_get_reprocessing_jobs_forwards_correlation_filter(
         correlation_id="corr-replay-303",
         stale_minutes=15,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
     )
 
 

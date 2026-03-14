@@ -1385,6 +1385,28 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     assert "LIMIT 10 OFFSET 0" in compiled
 
 
+async def test_get_reprocessing_jobs_query_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    mock_result = MagicMock()
+    mock_result.all.return_value = ["job1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_reprocessing_jobs(
+        portfolio_id="P1",
+        skip=0,
+        limit=10,
+        reference_now=reference_now,
+        as_of=reference_now,
+    )
+
+    assert value == ["job1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "reprocessing_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
+
+
 async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
@@ -1406,3 +1428,20 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert "anon_1.quantity > 0" in compiled
     assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
+
+
+async def test_get_reprocessing_jobs_count_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_reprocessing_jobs_count(
+        portfolio_id="P1",
+        as_of=as_of,
+    )
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "reprocessing_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled

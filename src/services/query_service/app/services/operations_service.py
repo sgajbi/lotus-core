@@ -1165,6 +1165,7 @@ class OperationsService:
                 security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,
+                as_of=generated_at_utc,
             ),
             self.repo.get_reprocessing_jobs(
                 portfolio_id=portfolio_id,
@@ -1176,6 +1177,7 @@ class OperationsService:
                 correlation_id=correlation_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
+                as_of=generated_at_utc,
             ),
         )
         return SupportJobListResponse(

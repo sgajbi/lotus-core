@@ -1345,6 +1345,7 @@ class OperationsRepository:
         security_id: Optional[str] = None,
         job_id: Optional[int] = None,
         correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         security_id_expr = ReprocessingJob.payload["security_id"].as_string()
         impacted_date_expr = cast(
@@ -1364,6 +1365,8 @@ class OperationsRepository:
                 portfolio_scope_exists,
             )
         )
+        if as_of is not None:
+            stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(ReprocessingJob.status == status)
         if security_id:
@@ -1385,6 +1388,7 @@ class OperationsRepository:
         correlation_id: Optional[str] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
+        as_of: Optional[datetime] = None,
     ):
         security_id_expr = ReprocessingJob.payload["security_id"].as_string()
         impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
@@ -1414,6 +1418,8 @@ class OperationsRepository:
                 portfolio_scope_exists,
             )
         )
+        if as_of is not None:
+            stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(ReprocessingJob.status == status)
         if security_id:
