@@ -83,6 +83,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.job_payloads: dict[str, dict] = {}
             self.failures: dict[str, list[dict]] = {}
             self.replay_audit: dict[str, dict] = {}
+            self.fail_mark_queued_job_ids: set[str] = set()
+            self.fail_mark_retried_job_ids: set[str] = set()
             self.mode = "normal"
             self.replay_window_start = None
             self.replay_window_end = None
@@ -128,6 +130,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
         async def mark_queued(self, job_id: str) -> None:
+            if job_id in self.fail_mark_queued_job_ids:
+                raise RuntimeError("queue state write failed")
             if job_id not in self.jobs:
                 return
             record = self.jobs[job_id]
@@ -161,6 +165,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             )
 
         async def mark_retried(self, job_id: str) -> None:
+            if job_id in self.fail_mark_retried_job_ids:
+                raise RuntimeError("retry accounting write failed")
             if job_id not in self.jobs:
                 return
             record = self.jobs[job_id]
@@ -537,7 +543,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             row = self.replay_audit.get(replay_fingerprint)
             if (
                 row
-                and row.get("replay_status") == "replayed"
+                and row.get("replay_status")
+                in {"replayed", "replayed_bookkeeping_failed"}
                 and (recovery_path is None or row.get("recovery_path") == recovery_path)
             ):
                 return {
@@ -930,6 +937,68 @@ async def test_ingestion_job_failure_history_and_retry(
     assert retry_response.status_code == 200
     assert retry_response.json()["status"] == "queued"
     assert retry_response.json()["retry_count"] == 1
+
+
+async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_RETRY_BOOKKEEPING_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+
+    with pytest.raises(Exception, match="Failed to publish transaction"):
+        await async_test_client.post("/ingest/transactions", json=payload)
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed"},
+    )
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.add(failed_job_id)
+    mock_kafka_producer.publish_message.side_effect = None
+
+    retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{failed_job_id}/retry")
+
+    assert retry_response.status_code == 500
+    body = retry_response.json()
+    assert body["detail"]["code"] == "INGESTION_RETRY_BOOKKEEPING_FAILED"
+    assert body["detail"]["replay_audit_id"]
+    assert body["detail"]["replay_fingerprint"]
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": failed_job_id},
+    )
+    audits = audit_response.json()["audits"]
+    assert any(
+        row["replay_status"] == "replayed_bookkeeping_failed" for row in audits
+    )
+
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.discard(failed_job_id)
+    duplicate_response = await event_replay_test_client.post(
+        f"/ingestion/jobs/{failed_job_id}/retry"
+    )
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json()["detail"]["code"] == "INGESTION_RETRY_DUPLICATE_BLOCKED"
 
 
 async def test_ingestion_job_failure_history_tracks_remaining_unpublished_batch_keys(
@@ -1363,6 +1432,64 @@ async def test_replay_consumer_dlq_event_blocks_duplicate_replay(
     assert second.status_code == 200
     body = second.json()
     assert body["replay_status"] == "duplicate_blocked"
+
+
+async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publish(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_REPLAY_BOOKKEEPING_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        headers={"X-Correlation-Id": "ING:test-correlation-id"},
+        json=payload,
+    )
+    job_id = ingest_response.json()["job_id"]
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.add(job_id)
+
+    first = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        json={"dry_run": False},
+    )
+    assert first.status_code == 500
+    first_body = first.json()
+    assert first_body["detail"]["code"] == "INGESTION_DLQ_REPLAY_BOOKKEEPING_FAILED"
+    assert first_body["detail"]["replay_audit_id"]
+    assert first_body["detail"]["replay_fingerprint"]
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": job_id},
+    )
+    audits = audit_response.json()["audits"]
+    assert any(
+        row["replay_status"] == "replayed_bookkeeping_failed" for row in audits
+    )
+
+    ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.discard(job_id)
+    second = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        json={"dry_run": False},
+    )
+    assert second.status_code == 200
+    assert second.json()["replay_status"] == "duplicate_blocked"
 
 
 async def test_ingestion_replay_audit_list_and_get(

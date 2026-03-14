@@ -278,6 +278,10 @@ def _to_replay_audit_response(row: DBConsumerDlqReplayAudit) -> IngestionReplayA
     )
 
 
+_SUCCESSFUL_REPLAY_AUDIT_STATUSES = {"replayed", "replayed_bookkeeping_failed"}
+_FAILED_REPLAY_AUDIT_STATUSES = {"not_replayable", "failed", "replayed_bookkeeping_failed"}
+
+
 def _derive_capacity_group(
     *,
     endpoint: str,
@@ -1218,7 +1222,9 @@ class IngestionJobService:
             stmt = select(DBConsumerDlqReplayAudit).where(
                 and_(
                     DBConsumerDlqReplayAudit.replay_fingerprint == replay_fingerprint,
-                    DBConsumerDlqReplayAudit.replay_status == "replayed",
+                    DBConsumerDlqReplayAudit.replay_status.in_(
+                        _SUCCESSFUL_REPLAY_AUDIT_STATUSES
+                    ),
                 )
             )
             if recovery_path is not None:
@@ -1269,7 +1275,7 @@ class IngestionJobService:
             ).inc()
             if replay_status == "duplicate_blocked":
                 INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL.labels(recovery_path=recovery_path).inc()
-            if replay_status in {"not_replayable", "failed"}:
+            if replay_status in _FAILED_REPLAY_AUDIT_STATUSES:
                 INGESTION_REPLAY_FAILURE_TOTAL.labels(
                     recovery_path=recovery_path, replay_status=replay_status
                 ).inc()

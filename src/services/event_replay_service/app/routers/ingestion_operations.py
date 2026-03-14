@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -53,6 +54,7 @@ from src.services.ingestion_service.app.services.ingestion_service import (
 )
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])
+logger = logging.getLogger(__name__)
 
 INGESTION_JOB_RESPONSE_EXAMPLE = {
     "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
@@ -193,6 +195,46 @@ def _filter_payload_by_record_keys(
         rows = [txn_id for txn_id in payload.get("transaction_ids", []) if txn_id in key_set]
         return {"transaction_ids": rows}
     raise ValueError(f"Partial retry is not supported for endpoint '{endpoint}'.")
+
+
+async def _record_replay_audit_best_effort(
+    *,
+    ingestion_job_service: IngestionJobService,
+    recovery_path: str,
+    event_id: str,
+    replay_fingerprint: str,
+    correlation_id: str | None,
+    job_id: str | None,
+    endpoint: str | None,
+    replay_status: str,
+    dry_run: bool,
+    replay_reason: str,
+    requested_by: str | None,
+) -> str | None:
+    try:
+        return await ingestion_job_service.record_consumer_dlq_replay_audit(
+            recovery_path=recovery_path,
+            event_id=event_id,
+            replay_fingerprint=replay_fingerprint,
+            correlation_id=correlation_id,
+            job_id=job_id,
+            endpoint=endpoint,
+            replay_status=replay_status,
+            dry_run=dry_run,
+            replay_reason=replay_reason,
+            requested_by=requested_by,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to record replay audit row.",
+            extra={
+                "recovery_path": recovery_path,
+                "event_id": event_id,
+                "job_id": job_id,
+                "replay_status": replay_status,
+            },
+        )
+        return None
 
 
 async def _replay_job_payload(
@@ -643,20 +685,6 @@ async def retry_ingestion_job(
             ingestion_service=ingestion_service,
             kafka_producer=kafka_producer,
         )
-        await ingestion_job_service.mark_retried(job_id)
-        await ingestion_job_service.mark_queued(job_id)
-        await ingestion_job_service.record_consumer_dlq_replay_audit(
-            recovery_path="ingestion_job_retry",
-            event_id=f"job:{job_id}",
-            replay_fingerprint=replay_fingerprint,
-            correlation_id=None,
-            job_id=job_id,
-            endpoint=context.endpoint,
-            replay_status="replayed",
-            dry_run=False,
-            replay_reason="Ingestion job retry replay succeeded.",
-            requested_by=ops_actor,
-        )
     except Exception as exc:
         await ingestion_job_service.record_consumer_dlq_replay_audit(
             recovery_path="ingestion_job_retry",
@@ -677,6 +705,49 @@ async def retry_ingestion_job(
             failed_record_keys=retry_request.record_keys,
         )
         raise
+
+    try:
+        await ingestion_job_service.mark_retried(job_id)
+        await ingestion_job_service.mark_queued(job_id)
+        await ingestion_job_service.record_consumer_dlq_replay_audit(
+            recovery_path="ingestion_job_retry",
+            event_id=f"job:{job_id}",
+            replay_fingerprint=replay_fingerprint,
+            correlation_id=None,
+            job_id=job_id,
+            endpoint=context.endpoint,
+            replay_status="replayed",
+            dry_run=False,
+            replay_reason="Ingestion job retry replay succeeded.",
+            requested_by=ops_actor,
+        )
+    except Exception as exc:
+        replay_reason = (
+            "Replay publish succeeded but post-publish bookkeeping failed: "
+            f"{exc}"
+        )
+        replay_audit_id = await _record_replay_audit_best_effort(
+            ingestion_job_service=ingestion_job_service,
+            recovery_path="ingestion_job_retry",
+            event_id=f"job:{job_id}",
+            replay_fingerprint=replay_fingerprint,
+            correlation_id=None,
+            job_id=job_id,
+            endpoint=context.endpoint,
+            replay_status="replayed_bookkeeping_failed",
+            dry_run=False,
+            replay_reason=replay_reason,
+            requested_by=ops_actor,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_RETRY_BOOKKEEPING_FAILED",
+                "message": replay_reason,
+                "replay_audit_id": replay_audit_id,
+                "replay_fingerprint": replay_fingerprint,
+            },
+        ) from exc
 
     job = await ingestion_job_service.get_job(job_id)
     if job is None:
@@ -1356,20 +1427,6 @@ async def replay_consumer_dlq_event(
             ingestion_service=ingestion_service,
             kafka_producer=kafka_producer,
         )
-        await ingestion_job_service.mark_retried(replay_job_id)
-        await ingestion_job_service.mark_queued(replay_job_id)
-        replay_audit_id = await ingestion_job_service.record_consumer_dlq_replay_audit(
-            recovery_path="consumer_dlq_replay",
-            event_id=event_id,
-            replay_fingerprint=replay_fingerprint,
-            correlation_id=event.correlation_id,
-            job_id=replay_job_id,
-            endpoint=context.endpoint,
-            replay_status="replayed",
-            dry_run=False,
-            replay_reason="Replayed ingestion job from correlated consumer DLQ event.",
-            requested_by=ops_actor,
-        )
     except Exception as exc:
         replay_audit_id = await ingestion_job_service.record_consumer_dlq_replay_audit(
             recovery_path="consumer_dlq_replay",
@@ -1389,6 +1446,49 @@ async def replay_consumer_dlq_event(
                 "code": "INGESTION_DLQ_REPLAY_FAILED",
                 "message": str(exc),
                 "replay_audit_id": replay_audit_id,
+            },
+        ) from exc
+
+    try:
+        await ingestion_job_service.mark_retried(replay_job_id)
+        await ingestion_job_service.mark_queued(replay_job_id)
+        replay_audit_id = await ingestion_job_service.record_consumer_dlq_replay_audit(
+            recovery_path="consumer_dlq_replay",
+            event_id=event_id,
+            replay_fingerprint=replay_fingerprint,
+            correlation_id=event.correlation_id,
+            job_id=replay_job_id,
+            endpoint=context.endpoint,
+            replay_status="replayed",
+            dry_run=False,
+            replay_reason="Replayed ingestion job from correlated consumer DLQ event.",
+            requested_by=ops_actor,
+        )
+    except Exception as exc:
+        replay_reason = (
+            "Replay publish succeeded but post-publish bookkeeping failed: "
+            f"{exc}"
+        )
+        replay_audit_id = await _record_replay_audit_best_effort(
+            ingestion_job_service=ingestion_job_service,
+            recovery_path="consumer_dlq_replay",
+            event_id=event_id,
+            replay_fingerprint=replay_fingerprint,
+            correlation_id=event.correlation_id,
+            job_id=replay_job_id,
+            endpoint=context.endpoint,
+            replay_status="replayed_bookkeeping_failed",
+            dry_run=False,
+            replay_reason=replay_reason,
+            requested_by=ops_actor,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_DLQ_REPLAY_BOOKKEEPING_FAILED",
+                "message": replay_reason,
+                "replay_audit_id": replay_audit_id,
+                "replay_fingerprint": replay_fingerprint,
             },
         ) from exc
     return ConsumerDlqReplayResponse(

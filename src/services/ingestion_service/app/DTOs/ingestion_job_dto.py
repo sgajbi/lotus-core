@@ -978,7 +978,12 @@ class IngestionReplayAuditResponse(BaseModel):
         examples=["/ingest/transactions"],
     )
     replay_status: Literal[
-        "dry_run", "replayed", "not_replayable", "duplicate_blocked", "failed"
+        "dry_run",
+        "replayed",
+        "replayed_bookkeeping_failed",
+        "not_replayable",
+        "duplicate_blocked",
+        "failed",
     ] = Field(
         description="Replay outcome status.",
         examples=["replayed"],
