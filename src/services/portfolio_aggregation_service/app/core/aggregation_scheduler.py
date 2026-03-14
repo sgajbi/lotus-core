@@ -58,7 +58,8 @@ class AggregationScheduler:
             return
 
         logger.info(f"Dispatching {len(jobs)} claimed aggregation jobs to Kafka.")
-        for job in jobs:
+        record_keys = [f"{job.portfolio_id}|{job.aggregation_date.isoformat()}" for job in jobs]
+        for idx, job in enumerate(jobs):
             event = PortfolioAggregationRequiredEvent(
                 portfolio_id=job.portfolio_id,
                 aggregation_date=job.aggregation_date,
@@ -67,13 +68,27 @@ class AggregationScheduler:
             headers = []
             if job.correlation_id:
                 headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
-            self._producer.publish_message(
-                topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
-                key=job.portfolio_id,
-                value=event.model_dump(mode="json"),
-                headers=headers,
+            try:
+                self._producer.publish_message(
+                    topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+                    key=job.portfolio_id,
+                    value=event.model_dump(mode="json"),
+                    headers=headers,
+                )
+            except Exception as exc:
+                self._producer.flush(timeout=10)
+                remaining_keys = ", ".join(record_keys[idx:])
+                raise RuntimeError(
+                    "Failed to dispatch aggregation jobs after "
+                    f"{idx} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+                ) from exc
+        undelivered_count = self._producer.flush(timeout=10)
+        if undelivered_count:
+            affected_keys = ", ".join(record_keys)
+            raise RuntimeError(
+                "Delivery confirmation timed out while dispatching aggregation jobs. "
+                f"Affected job keys: {affected_keys}."
             )
-        self._producer.flush(timeout=10)
         logger.info(f"Successfully flushed {len(jobs)} aggregation jobs.")
 
     async def run(self):

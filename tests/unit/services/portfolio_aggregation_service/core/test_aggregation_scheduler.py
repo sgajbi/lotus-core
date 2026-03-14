@@ -18,7 +18,9 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 def mock_kafka_producer() -> MagicMock:
-    return MagicMock(spec=KafkaProducer)
+    mock = MagicMock(spec=KafkaProducer)
+    mock.flush.return_value = 0
+    return mock
 
 
 @pytest.fixture
@@ -82,6 +84,50 @@ async def test_scheduler_omits_empty_correlation_header(
         headers=[],
     )
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispatch_failure(
+    scheduler: AggregationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioAggregationJob(
+            portfolio_id="P1",
+            aggregation_date=date(2025, 8, 11),
+            correlation_id="corr-agg-1",
+        ),
+        PortfolioAggregationJob(
+            portfolio_id="P2",
+            aggregation_date=date(2025, 8, 12),
+            correlation_id="corr-agg-2",
+        ),
+    ]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(RuntimeError, match="Remaining job keys: P2\\|2025-08-12"):
+        await scheduler._dispatch_jobs(claimed_jobs)
+
+    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_scheduler_raises_on_flush_timeout(
+    scheduler: AggregationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioAggregationJob(
+            portfolio_id="P1",
+            aggregation_date=date(2025, 8, 11),
+            correlation_id="corr-agg-1",
+        ),
+    ]
+    mock_kafka_producer.flush.return_value = 1
+
+    with pytest.raises(
+        RuntimeError,
+        match="Delivery confirmation timed out while dispatching aggregation jobs",
+    ):
+        await scheduler._dispatch_jobs(claimed_jobs)
 
 
 async def test_scheduler_reads_runtime_settings_from_environment(

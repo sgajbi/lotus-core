@@ -318,7 +318,11 @@ class ValuationScheduler:
             return
 
         logger.info(f"Dispatching {len(jobs)} claimed valuation jobs to Kafka.")
-        for job in jobs:
+        record_keys = [
+            f"{job.portfolio_id}|{job.security_id}|{job.valuation_date.isoformat()}|{job.epoch}"
+            for job in jobs
+        ]
+        for idx, job in enumerate(jobs):
             event = PortfolioValuationRequiredEvent(
                 portfolio_id=job.portfolio_id,
                 security_id=job.security_id,
@@ -329,13 +333,27 @@ class ValuationScheduler:
             headers = []
             if job.correlation_id:
                 headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
-            self._producer.publish_message(
-                topic=KAFKA_VALUATION_REQUIRED_TOPIC,
-                key=job.portfolio_id,
-                value=event.model_dump(mode="json"),
-                headers=headers,
+            try:
+                self._producer.publish_message(
+                    topic=KAFKA_VALUATION_REQUIRED_TOPIC,
+                    key=job.portfolio_id,
+                    value=event.model_dump(mode="json"),
+                    headers=headers,
+                )
+            except Exception as exc:
+                self._producer.flush(timeout=10)
+                remaining_keys = ", ".join(record_keys[idx:])
+                raise RuntimeError(
+                    "Failed to dispatch valuation jobs after "
+                    f"{idx} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+                ) from exc
+        undelivered_count = self._producer.flush(timeout=10)
+        if undelivered_count:
+            affected_keys = ", ".join(record_keys)
+            raise RuntimeError(
+                "Delivery confirmation timed out while dispatching valuation jobs. "
+                f"Affected job keys: {affected_keys}."
             )
-        self._producer.flush(timeout=10)
         logger.info(f"Successfully flushed {len(jobs)} valuation jobs.")
 
     async def run(self):
