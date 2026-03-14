@@ -428,13 +428,17 @@ async def test_get_latest_transaction_date_as_of(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one_or_none(mock_db_session, date(2025, 8, 15))
+    snapshot_as_of = datetime(2025, 8, 20, 10, 0, tzinfo=timezone.utc)
 
-    value = await repository.get_latest_transaction_date_as_of("P1", date(2025, 8, 20))
+    value = await repository.get_latest_transaction_date_as_of(
+        "P1", date(2025, 8, 20), snapshot_as_of=snapshot_as_of
+    )
 
     assert value == date(2025, 8, 15)
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "date(transactions.transaction_date) <= '2025-08-20'" in compiled
+    assert "transactions.created_at <= '2025-08-20 10:00:00+00:00'" in compiled
 
 
 async def test_get_latest_business_date(
@@ -499,15 +503,17 @@ async def test_get_latest_snapshot_date_for_current_epoch_as_of(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one_or_none(mock_db_session, date(2025, 8, 12))
+    snapshot_as_of = datetime(2025, 8, 20, 10, 0, tzinfo=timezone.utc)
 
     value = await repository.get_latest_snapshot_date_for_current_epoch_as_of(
-        "P1", date(2025, 8, 20)
+        "P1", date(2025, 8, 20), snapshot_as_of=snapshot_as_of
     )
 
     assert value == date(2025, 8, 12)
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.date <= '2025-08-20'" in compiled
+    assert "daily_position_snapshots.created_at <= '2025-08-20 10:00:00+00:00'" in compiled
 
 
 async def test_get_position_snapshot_history_mismatch_count(

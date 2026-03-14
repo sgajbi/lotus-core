@@ -219,6 +219,16 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
+    mock_ops_repo.get_latest_transaction_date_as_of.assert_awaited_once_with(
+        "P1",
+        date(2025, 8, 30),
+        snapshot_as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.assert_awaited_once_with(
+        "P1",
+        date(2025, 8, 30),
+        snapshot_as_of=response.generated_at_utc,
+    )
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.assert_awaited_once()
     control_call = mock_ops_repo.get_latest_financial_reconciliation_control_stage.await_args
     assert control_call.args == ("P1",)
@@ -1740,6 +1750,16 @@ async def test_get_support_overview_honors_custom_stale_threshold(
         stale_minutes=30,
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
+    )
+    mock_ops_repo.get_latest_transaction_date_as_of.assert_awaited_once_with(
+        "P1",
+        date(2025, 8, 30),
+        snapshot_as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.assert_awaited_once_with(
+        "P1",
+        date(2025, 8, 30),
+        snapshot_as_of=response.generated_at_utc,
     )
 
 

@@ -433,12 +433,17 @@ class OperationsRepository:
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_transaction_date_as_of(
-        self, portfolio_id: str, as_of_date: date
+        self,
+        portfolio_id: str,
+        as_of_date: date,
+        snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
         stmt = select(func.max(func.date(Transaction.transaction_date))).where(
             Transaction.portfolio_id == portfolio_id,
             func.date(Transaction.transaction_date) <= as_of_date,
         )
+        if snapshot_as_of is not None:
+            stmt = stmt.where(Transaction.created_at <= snapshot_as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_business_date(self, as_of: Optional[datetime] = None) -> Optional[date]:
@@ -469,7 +474,10 @@ class OperationsRepository:
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_snapshot_date_for_current_epoch_as_of(
-        self, portfolio_id: str, as_of_date: date
+        self,
+        portfolio_id: str,
+        as_of_date: date,
+        snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
         stmt = (
             select(func.max(DailyPositionSnapshot.date))
@@ -486,6 +494,8 @@ class OperationsRepository:
                 DailyPositionSnapshot.date <= as_of_date,
             )
         )
+        if snapshot_as_of is not None:
+            stmt = stmt.where(DailyPositionSnapshot.created_at <= snapshot_as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_position_snapshot_history_mismatch_count(

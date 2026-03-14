@@ -319,9 +319,15 @@ class OperationsService:
                 latest_booked_transaction_date,
                 latest_booked_position_snapshot_date,
             ) = await asyncio.gather(
-                self.repo.get_latest_transaction_date_as_of(portfolio_id, latest_business_date),
+                self.repo.get_latest_transaction_date_as_of(
+                    portfolio_id,
+                    latest_business_date,
+                    snapshot_as_of=generated_at_utc,
+                ),
                 self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
-                    portfolio_id, latest_business_date
+                    portfolio_id,
+                    latest_business_date,
+                    snapshot_as_of=generated_at_utc,
                 ),
             )
 
