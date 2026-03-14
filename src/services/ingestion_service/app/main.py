@@ -48,8 +48,18 @@ async def lifespan(app: FastAPI):
     producer = app_state.get("kafka_producer")
     if producer:
         logger.info("Flushing Kafka producer to send all buffered messages...")
-        producer.flush(timeout=5)
-    logger.info("Kafka producer flushed successfully.")
+        try:
+            undelivered_count = producer.flush(timeout=5)
+        except Exception:
+            logger.exception("Kafka producer flush failed during shutdown.")
+        else:
+            if undelivered_count:
+                logger.error(
+                    "Kafka producer shutdown flush left undelivered messages.",
+                    extra={"undelivered_count": int(undelivered_count)},
+                )
+            else:
+                logger.info("Kafka producer flushed successfully.")
     logger.info("Ingestion Service has shut down gracefully.")
 
 

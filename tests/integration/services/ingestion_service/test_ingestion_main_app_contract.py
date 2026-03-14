@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import httpx
 import pytest
 import pytest_asyncio
@@ -549,3 +551,30 @@ async def test_ingestion_service_fails_startup_when_kafka_init_fails(monkeypatch
     with pytest.raises(RuntimeError, match="Kafka producer initialization failed"):
         async with app.router.lifespan_context(app):
             pass
+
+
+async def test_ingestion_service_logs_shutdown_flush_timeout_truth(monkeypatch):
+    producer = MagicMock()
+    producer.flush.return_value = 2
+
+    monkeypatch.setattr(ingestion_main, "get_kafka_producer", lambda: producer)
+    ingestion_main.app_state.clear()
+
+    with (
+        patch("src.services.ingestion_service.app.main.logger.info") as logger_info,
+        patch("src.services.ingestion_service.app.main.logger.error") as logger_error,
+    ):
+        async with app.router.lifespan_context(app):
+            pass
+
+    logged_info_messages = [args[0] for args, _ in logger_info.call_args_list]
+    assert "Ingestion Service starting up..." in logged_info_messages
+    assert "Ingestion Service shutting down..." in logged_info_messages
+    assert "Flushing Kafka producer to send all buffered messages..." in logged_info_messages
+    assert "Kafka producer flushed successfully." not in logged_info_messages
+
+    logger_error.assert_called_once()
+    assert (
+        logger_error.call_args.args[0]
+        == "Kafka producer shutdown flush left undelivered messages."
+    )
