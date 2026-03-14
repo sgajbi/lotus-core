@@ -395,6 +395,18 @@ async def test_shutdown_logs_flush_timeout_without_raising(
     )
 
 
+async def test_shutdown_wakes_consumer_before_close(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+
+    test_consumer.shutdown()
+
+    mock_confluent_consumer.wakeup.assert_called_once()
+    mock_confluent_consumer.close.assert_called_once()
+
+
 async def test_shutdown_logs_close_and_flush_failures_without_raising(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,

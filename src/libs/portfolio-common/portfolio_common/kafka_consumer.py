@@ -399,6 +399,19 @@ class BaseConsumer(ABC):
         logger.info(f"Shutting down consumer for topic '{self.topic}'...")
         self._running = False
         if self._consumer:
+            wakeup = getattr(self._consumer, "wakeup", None)
+            if callable(wakeup):
+                try:
+                    wakeup()
+                except Exception:
+                    logger.warning(
+                        "Consumer wakeup failed during shutdown.",
+                        exc_info=True,
+                        extra={
+                            "topic": self.topic,
+                            "consumer_group": self._consumer_config["group.id"],
+                        },
+                    )
             try:
                 self._consumer.close()
             except Exception:
