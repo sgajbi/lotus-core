@@ -346,6 +346,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["oldest_reprocessing_security_id"][
         "description"
     ].startswith("Security identifier for the oldest portfolio-security key")
+    assert support_overview["properties"]["oldest_reprocessing_epoch"]["description"] == (
+        "Current epoch of the oldest portfolio-security key currently marked REPROCESSING."
+    )
+    assert support_overview["properties"]["oldest_reprocessing_updated_at"][
+        "description"
+    ].startswith("UTC timestamp of the most recent durable update for the oldest")
     assert support_overview["properties"]["oldest_pending_valuation_job_id"][
         "description"
     ] == "Durable job id for the oldest open valuation job in the backlog."
@@ -414,6 +420,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reprocessing_slo["properties"]["oldest_reprocessing_security_id"][
         "description"
     ] == "Security identifier for the oldest active reprocessing key."
+    assert reprocessing_slo["properties"]["oldest_reprocessing_epoch"]["description"] == (
+        "Current epoch of the oldest active reprocessing key."
+    )
+    assert reprocessing_slo["properties"]["oldest_reprocessing_updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable update for the oldest active reprocessing key."
+    )
     assert reprocessing_slo["properties"]["backlog_age_days"]["description"].startswith(
         "Age in days from oldest_reprocessing_watermark_date"
     )

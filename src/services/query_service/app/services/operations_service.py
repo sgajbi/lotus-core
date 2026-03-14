@@ -351,6 +351,8 @@ class OperationsService:
                 reprocessing_health.oldest_reprocessing_watermark_date
             ),
             oldest_reprocessing_security_id=reprocessing_health.oldest_reprocessing_security_id,
+            oldest_reprocessing_epoch=reprocessing_health.oldest_reprocessing_epoch,
+            oldest_reprocessing_updated_at=reprocessing_health.oldest_reprocessing_updated_at,
             reprocessing_backlog_age_days=reprocessing_backlog_age_days,
             pending_valuation_jobs=valuation_job_health.pending_jobs,
             processing_valuation_jobs=valuation_job_health.processing_jobs,
@@ -520,6 +522,10 @@ class OperationsService:
                 ),
                 oldest_reprocessing_security_id=(
                     reprocessing_health.oldest_reprocessing_security_id
+                ),
+                oldest_reprocessing_epoch=reprocessing_health.oldest_reprocessing_epoch,
+                oldest_reprocessing_updated_at=(
+                    reprocessing_health.oldest_reprocessing_updated_at
                 ),
                 backlog_age_days=reprocessing_backlog_age_days,
             ),

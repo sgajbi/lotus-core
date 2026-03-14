@@ -38,6 +38,8 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
         stale_reprocessing_keys=1,
         oldest_reprocessing_watermark_date=date(2025, 8, 18),
         oldest_reprocessing_security_id="S1",
+        oldest_reprocessing_epoch=3,
+        oldest_reprocessing_updated_at=datetime(2025, 8, 30, 9, 45, tzinfo=timezone.utc),
     )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=4,
@@ -110,6 +112,10 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.stale_reprocessing_keys == 1
     assert response.oldest_reprocessing_watermark_date == date(2025, 8, 18)
     assert response.oldest_reprocessing_security_id == "S1"
+    assert response.oldest_reprocessing_epoch == 3
+    assert response.oldest_reprocessing_updated_at == datetime(
+        2025, 8, 30, 9, 45, tzinfo=timezone.utc
+    )
     assert response.reprocessing_backlog_age_days == 12
     assert response.pending_valuation_jobs == 4
     assert response.processing_valuation_jobs == 2
@@ -1070,6 +1076,8 @@ async def test_get_support_overview_honors_custom_stale_threshold(
         stale_reprocessing_keys=0,
         oldest_reprocessing_watermark_date=None,
         oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
     )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
@@ -1149,6 +1157,8 @@ async def test_get_support_overview_without_business_date(
         stale_reprocessing_keys=0,
         oldest_reprocessing_watermark_date=None,
         oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
     )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
@@ -1182,6 +1192,7 @@ async def test_get_support_overview_without_business_date(
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 31)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
 
     response = await service.get_support_overview("P1")
 
@@ -1192,6 +1203,8 @@ async def test_get_support_overview_without_business_date(
     assert response.stale_reprocessing_keys == 0
     assert response.oldest_reprocessing_watermark_date is None
     assert response.oldest_reprocessing_security_id is None
+    assert response.oldest_reprocessing_epoch is None
+    assert response.oldest_reprocessing_updated_at is None
     assert response.reprocessing_backlog_age_days is None
     assert response.valuation_backlog_age_days is None
     assert response.aggregation_backlog_age_days is None
@@ -1233,6 +1246,8 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         stale_reprocessing_keys=0,
         oldest_reprocessing_watermark_date=None,
         oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
     )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=0,
@@ -1324,6 +1339,8 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         stale_reprocessing_keys=1,
         oldest_reprocessing_watermark_date=date(2025, 8, 18),
         oldest_reprocessing_security_id="S2",
+        oldest_reprocessing_epoch=5,
+        oldest_reprocessing_updated_at=datetime(2025, 8, 29, 8, 30, tzinfo=timezone.utc),
     )
     mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
         pending_jobs=7,
@@ -1366,6 +1383,10 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
     assert response.reprocessing.stale_reprocessing_keys == 1
     assert response.reprocessing.oldest_reprocessing_watermark_date == date(2025, 8, 18)
     assert response.reprocessing.oldest_reprocessing_security_id == "S2"
+    assert response.reprocessing.oldest_reprocessing_epoch == 5
+    assert response.reprocessing.oldest_reprocessing_updated_at == datetime(
+        2025, 8, 29, 8, 30, tzinfo=timezone.utc
+    )
     assert response.reprocessing.backlog_age_days == 12
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
         "P1", stale_minutes=15, reference_now=response.generated_at_utc

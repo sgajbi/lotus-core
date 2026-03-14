@@ -73,7 +73,11 @@ async def test_get_reprocessing_health_summary(
     aggregate_result = MagicMock()
     aggregate_result.one.return_value = mock_row
     oldest_key_result = MagicMock()
-    oldest_key_result.scalar_one_or_none.return_value = "SEC-IBM"
+    oldest_key_result.one_or_none.return_value = MagicMock(
+        security_id="SEC-IBM",
+        epoch=4,
+        updated_at=datetime(2025, 8, 20, 9, 0, tzinfo=timezone.utc),
+    )
     mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, oldest_key_result])
 
     value = await repository.get_reprocessing_health_summary(
@@ -84,6 +88,10 @@ async def test_get_reprocessing_health_summary(
     assert value.stale_reprocessing_keys == 1
     assert value.oldest_reprocessing_watermark_date == date(2025, 8, 20)
     assert value.oldest_reprocessing_security_id == "SEC-IBM"
+    assert value.oldest_reprocessing_epoch == 4
+    assert value.oldest_reprocessing_updated_at == datetime(
+        2025, 8, 20, 9, 0, tzinfo=timezone.utc
+    )
     aggregate_stmt = mock_db_session.execute.call_args_list[0][0][0]
     aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in aggregate_compiled.lower()

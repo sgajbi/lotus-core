@@ -38,6 +38,8 @@ async def test_support_overview_success(async_test_client):
         "stale_reprocessing_keys": 1,
         "oldest_reprocessing_watermark_date": date(2025, 8, 20),
         "oldest_reprocessing_security_id": "S1",
+        "oldest_reprocessing_epoch": 3,
+        "oldest_reprocessing_updated_at": "2025-08-31T09:45:00Z",
         "reprocessing_backlog_age_days": 11,
         "pending_valuation_jobs": 2,
         "processing_valuation_jobs": 1,
@@ -96,6 +98,8 @@ async def test_support_overview_success(async_test_client):
     assert response.json()["failed_window_hours"] == 48
     assert response.json()["generated_at_utc"] == "2026-03-14T10:45:00Z"
     assert response.json()["oldest_reprocessing_security_id"] == "S1"
+    assert response.json()["oldest_reprocessing_epoch"] == 3
+    assert response.json()["oldest_reprocessing_updated_at"] == "2025-08-31T09:45:00Z"
     assert response.json()["oldest_pending_valuation_job_id"] == 8801
     assert response.json()["oldest_pending_analytics_export_job_id"] == "aexp_0001"
     assert response.json()["controls_stage_id"] == 701
@@ -166,6 +170,8 @@ async def test_calculator_slos_success(async_test_client):
             "stale_reprocessing_keys": 0,
             "oldest_reprocessing_watermark_date": None,
             "oldest_reprocessing_security_id": None,
+            "oldest_reprocessing_epoch": None,
+            "oldest_reprocessing_updated_at": None,
             "backlog_age_days": None,
         },
     }

@@ -69,6 +69,22 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["AAPL"],
     )
+    oldest_reprocessing_epoch: Optional[int] = Field(
+        None,
+        description=(
+            "Current epoch of the oldest portfolio-security key currently marked "
+            "REPROCESSING."
+        ),
+        examples=[3],
+    )
+    oldest_reprocessing_updated_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent durable update for the oldest "
+            "portfolio-security key currently marked REPROCESSING."
+        ),
+        examples=["2026-03-13T10:15:09Z"],
+    )
     reprocessing_backlog_age_days: Optional[int] = Field(
         None,
         description=(
@@ -456,6 +472,19 @@ class ReprocessingSloBucket(BaseModel):
         description="Security identifier for the oldest active reprocessing key.",
         examples=["AAPL"],
     )
+    oldest_reprocessing_epoch: Optional[int] = Field(
+        None,
+        description="Current epoch of the oldest active reprocessing key.",
+        examples=[3],
+    )
+    oldest_reprocessing_updated_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent durable update for the oldest active "
+            "reprocessing key."
+        ),
+        examples=["2026-03-13T10:15:09Z"],
+    )
     backlog_age_days: Optional[int] = Field(
         None,
         description=(
@@ -529,6 +558,8 @@ class CalculatorSloResponse(BaseModel):
                 "stale_reprocessing_keys": 1,
                 "oldest_reprocessing_watermark_date": "2026-02-25",
                 "oldest_reprocessing_security_id": "AAPL",
+                "oldest_reprocessing_epoch": 3,
+                "oldest_reprocessing_updated_at": "2026-03-13T10:15:09Z",
                 "backlog_age_days": 7,
             }
         ],

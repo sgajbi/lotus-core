@@ -51,6 +51,8 @@ class ReprocessingHealthSummary:
     stale_reprocessing_keys: int
     oldest_reprocessing_watermark_date: Optional[date]
     oldest_reprocessing_security_id: Optional[str]
+    oldest_reprocessing_epoch: Optional[int]
+    oldest_reprocessing_updated_at: Optional[datetime]
 
 
 class OperationsRepository:
@@ -194,7 +196,11 @@ class OperationsRepository:
         ).where(PositionState.portfolio_id == portfolio_id)
         row = (await self.db.execute(stmt)).one()
         oldest_key_stmt = (
-            select(PositionState.security_id)
+            select(
+                PositionState.security_id,
+                PositionState.epoch,
+                PositionState.updated_at,
+            )
             .where(
                 PositionState.portfolio_id == portfolio_id,
                 PositionState.status == "REPROCESSING",
@@ -206,13 +212,18 @@ class OperationsRepository:
             )
             .limit(1)
         )
+        oldest_key_row = (await self.db.execute(oldest_key_stmt)).one_or_none()
         return ReprocessingHealthSummary(
             active_keys=int(row.active_keys or 0),
             stale_reprocessing_keys=int(row.stale_reprocessing_keys or 0),
             oldest_reprocessing_watermark_date=row.oldest_reprocessing_watermark_date,
             oldest_reprocessing_security_id=(
-                await self.db.execute(oldest_key_stmt)
-            ).scalar_one_or_none(),
+                oldest_key_row.security_id if oldest_key_row else None
+            ),
+            oldest_reprocessing_epoch=(oldest_key_row.epoch if oldest_key_row else None),
+            oldest_reprocessing_updated_at=(
+                oldest_key_row.updated_at if oldest_key_row else None
+            ),
         )
 
     async def get_valuation_job_health_summary(
