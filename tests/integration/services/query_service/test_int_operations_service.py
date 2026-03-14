@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 from portfolio_common.database_models import (
+    AnalyticsExportJob,
     BusinessDate,
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
@@ -920,3 +921,189 @@ async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
     assert response.items[0].latest_valuation_job_date == date(2025, 8, 20)
     assert response.items[0].latest_valuation_job_correlation_id == "corr-lineage-old"
     assert response.items[0].operational_state == "HEALTHY"
+
+
+async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P9",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P9",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P9",
+                security_id="SEC-VAL-OLD",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="PROCESSING",
+                correlation_id="corr-valuation-old",
+                attempt_count=1,
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P9",
+                security_id="SEC-VAL-LATE",
+                valuation_date=date(2025, 8, 31),
+                epoch=5,
+                status="FAILED",
+                correlation_id="corr-valuation-late",
+                failure_reason="late valuation failure",
+                attempt_count=2,
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_valuation_jobs("P9", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].job_type == "VALUATION"
+    assert response.items[0].security_id == "SEC-VAL-OLD"
+    assert response.items[0].business_date == date(2025, 8, 20)
+    assert response.items[0].correlation_id == "corr-valuation-old"
+    assert response.items[0].is_stale_processing is True
+    assert response.items[0].operational_state == "STALE_PROCESSING"
+
+
+async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P10",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P10",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PortfolioAggregationJob(
+                portfolio_id="P10",
+                aggregation_date=date(2025, 8, 20),
+                status="PROCESSING",
+                correlation_id="corr-aggregation-old",
+                attempt_count=1,
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioAggregationJob(
+                portfolio_id="P10",
+                aggregation_date=date(2025, 8, 31),
+                status="FAILED",
+                correlation_id="corr-aggregation-late",
+                failure_reason="late aggregation failure",
+                attempt_count=2,
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_aggregation_jobs("P10", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].job_type == "AGGREGATION"
+    assert response.items[0].business_date == date(2025, 8, 20)
+    assert response.items[0].correlation_id == "corr-aggregation-old"
+    assert response.items[0].is_stale_processing is True
+    assert response.items[0].operational_state == "STALE_PROCESSING"
+
+
+async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P11",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P11",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            AnalyticsExportJob(
+                job_id="analytics-old",
+                dataset_type="portfolio_positions",
+                portfolio_id="P11",
+                status="running",
+                request_fingerprint="fingerprint-old",
+                request_payload={"dataset_type": "portfolio_positions"},
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                started_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            AnalyticsExportJob(
+                job_id="analytics-late",
+                dataset_type="portfolio_positions",
+                portfolio_id="P11",
+                status="failed",
+                request_fingerprint="fingerprint-late",
+                request_payload={"dataset_type": "portfolio_positions"},
+                error_message="late analytics failure",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                started_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_analytics_export_jobs("P11", skip=0, limit=20)
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].job_id == "analytics-old"
+    assert response.items[0].request_fingerprint == "fingerprint-old"
+    assert response.items[0].status == "running"
+    assert response.items[0].is_stale_running is True
+    assert response.items[0].operational_state == "STALE_RUNNING"
