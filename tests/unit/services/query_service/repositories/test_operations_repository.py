@@ -569,6 +569,21 @@ async def test_get_position_state(repository: OperationsRepository, mock_db_sess
     assert "position_state.security_id = 'S1'" in compiled
 
 
+async def test_get_position_state_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_state = object()
+    mock_execute_scalar_one_or_none(mock_db_session, mock_state)
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_position_state("P1", "S1", as_of=as_of)
+
+    assert value is mock_state
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
+
+
 async def test_get_latest_position_history_date(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
@@ -581,6 +596,20 @@ async def test_get_latest_position_history_date(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "max(position_history.position_date)" in compiled.lower()
     assert "position_history.epoch = 2" in compiled
+
+
+async def test_get_latest_position_history_date_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one_or_none(mock_db_session, date(2025, 8, 20))
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_latest_position_history_date("P1", "S1", 2, as_of=as_of)
+
+    assert value == date(2025, 8, 20)
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_history.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
 async def test_get_latest_daily_snapshot_date(
@@ -597,6 +626,20 @@ async def test_get_latest_daily_snapshot_date(
     assert "daily_position_snapshots.epoch = 2" in compiled
 
 
+async def test_get_latest_daily_snapshot_date_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one_or_none(mock_db_session, date(2025, 8, 22))
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_latest_daily_snapshot_date("P1", "S1", 2, as_of=as_of)
+
+    assert value == date(2025, 8, 22)
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "daily_position_snapshots.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+
+
 async def test_get_latest_valuation_job(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
@@ -610,6 +653,21 @@ async def test_get_latest_valuation_job(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in compiled.lower()
     assert "portfolio_valuation_jobs.epoch = 2" in compiled
+
+
+async def test_get_latest_valuation_job_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_job = object()
+    mock_execute_scalar_one_or_none(mock_db_session, mock_job)
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_latest_valuation_job("P1", "S1", 2, as_of=as_of)
+
+    assert value is mock_job
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_valuation_jobs.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
     assert (
         "ORDER BY portfolio_valuation_jobs.valuation_date DESC, portfolio_valuation_jobs.id DESC"
         in compiled

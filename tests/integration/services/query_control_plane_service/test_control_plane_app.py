@@ -136,6 +136,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
     )
     lineage_response = schema["components"]["schemas"]["LineageResponse"]
+    assert lineage_response["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this lineage snapshot was generated."
+    )
     assert lineage_response["properties"]["has_artifact_gap"]["description"].startswith(
         "True when the current epoch shows missing or lagging downstream artifacts"
     )
@@ -694,6 +697,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reprocessing_key_schema = components["ReprocessingKeyListResponse"]
     reprocessing_key_record = components["ReprocessingKeyRecord"]
     lineage_key_record = components["LineageKeyRecord"]
+    lineage_key_schema = components["LineageKeyListResponse"]
 
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
@@ -757,6 +761,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert reprocessing_key_schema["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this replay-key listing snapshot was generated."
+    )
+    assert lineage_key_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this lineage key snapshot was generated."
     )
     assert reprocessing_key_record["properties"]["created_at"]["description"] == (
         "UTC timestamp when the durable replay key row was first created."

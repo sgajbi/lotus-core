@@ -671,6 +671,11 @@ class CalculatorSloResponse(BaseModel):
 
 
 class LineageResponse(BaseModel):
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this lineage snapshot was generated.",
+        examples=["2026-03-14T10:45:00Z"],
+    )
     portfolio_id: str = Field(..., description="Unique portfolio identifier.", examples=["PF-001"])
     security_id: str = Field(..., description="Unique security identifier.", examples=["AAPL.OQ"])
     epoch: int = Field(..., description="Current active epoch for this key.", examples=[3])
@@ -804,6 +809,11 @@ class LineageKeyRecord(BaseModel):
 
 
 class LineageKeyListResponse(BaseModel):
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this lineage key snapshot was generated.",
+        examples=["2026-03-14T10:45:00Z"],
+    )
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     total: int = Field(..., description="Total matching keys for this portfolio.", examples=[24])
     skip: int = Field(..., description="Pagination offset.", examples=[0])

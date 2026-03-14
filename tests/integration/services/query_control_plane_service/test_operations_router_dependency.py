@@ -240,6 +240,7 @@ async def test_calculator_slos_unexpected_maps_to_500(async_test_client):
 async def test_lineage_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage.return_value = {
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "portfolio_id": "P1",
         "security_id": "S1",
         "epoch": 2,
@@ -258,6 +259,7 @@ async def test_lineage_success(async_test_client):
     response = await client.get("/lineage/portfolios/P1/securities/S1")
 
     assert response.status_code == 200
+    assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["security_id"] == "S1"
     assert response.json()["operational_state"] == "HEALTHY"
 
@@ -293,6 +295,7 @@ async def test_get_operations_service_dependency_factory():
 async def test_lineage_keys_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage_keys.return_value = {
+        "generated_at_utc": "2026-03-14T10:50:00Z",
         "portfolio_id": "P1",
         "total": 1,
         "skip": 0,
@@ -318,6 +321,7 @@ async def test_lineage_keys_success(async_test_client):
     response = await client.get("/lineage/portfolios/P1/keys?reprocessing_status=CURRENT")
 
     assert response.status_code == 200
+    assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["security_id"] == "S1"
     assert response.json()["items"][0]["latest_valuation_job_id"] == 101
     assert response.json()["items"][0]["latest_valuation_job_status"] == "DONE"

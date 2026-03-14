@@ -608,7 +608,12 @@ class OperationsService:
         )
 
     async def get_lineage(self, portfolio_id: str, security_id: str) -> LineageResponse:
-        position_state = await self.repo.get_position_state(portfolio_id, security_id)
+        generated_at_utc = datetime.now(timezone.utc)
+        position_state = await self.repo.get_position_state(
+            portfolio_id,
+            security_id,
+            as_of=generated_at_utc,
+        )
         if not position_state:
             raise ValueError(
                 "Lineage state not found for portfolio "
@@ -621,12 +626,23 @@ class OperationsService:
             latest_valuation_job,
         ) = await asyncio.gather(
             self.repo.get_latest_position_history_date(
-                portfolio_id, security_id, position_state.epoch
+                portfolio_id,
+                security_id,
+                position_state.epoch,
+                as_of=generated_at_utc,
             ),
             self.repo.get_latest_daily_snapshot_date(
-                portfolio_id, security_id, position_state.epoch
+                portfolio_id,
+                security_id,
+                position_state.epoch,
+                as_of=generated_at_utc,
             ),
-            self.repo.get_latest_valuation_job(portfolio_id, security_id, position_state.epoch),
+            self.repo.get_latest_valuation_job(
+                portfolio_id,
+                security_id,
+                position_state.epoch,
+                as_of=generated_at_utc,
+            ),
         )
 
         latest_valuation_job_date = (
@@ -642,6 +658,7 @@ class OperationsService:
             latest_valuation_job_status=latest_valuation_job_status,
         )
         return LineageResponse(
+            generated_at_utc=generated_at_utc,
             portfolio_id=portfolio_id,
             security_id=security_id,
             epoch=position_state.epoch,
@@ -672,6 +689,7 @@ class OperationsService:
         security_id: str | None = None,
     ) -> LineageKeyListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        generated_at_utc = datetime.now(timezone.utc)
         total, keys = await asyncio.gather(
             self.repo.get_lineage_keys_count(
                 portfolio_id=portfolio_id,
@@ -687,6 +705,7 @@ class OperationsService:
             ),
         )
         return LineageKeyListResponse(
+            generated_at_utc=generated_at_utc,
             portfolio_id=portfolio_id,
             total=total,
             skip=skip,

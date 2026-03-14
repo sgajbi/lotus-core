@@ -255,6 +255,7 @@ async def test_get_lineage_success(service: OperationsService, mock_ops_repo: As
 
     response = await service.get_lineage("P1", "S1")
 
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.portfolio_id == "P1"
     assert response.security_id == "S1"
     assert response.epoch == 3
@@ -265,6 +266,18 @@ async def test_get_lineage_success(service: OperationsService, mock_ops_repo: As
     assert response.latest_valuation_job_correlation_id == "corr-val-101"
     assert response.has_artifact_gap is False
     assert response.operational_state == "HEALTHY"
+    mock_ops_repo.get_position_state.assert_awaited_once_with(
+        "P1", "S1", as_of=response.generated_at_utc
+    )
+    mock_ops_repo.get_latest_position_history_date.assert_awaited_once_with(
+        "P1", "S1", 3, as_of=response.generated_at_utc
+    )
+    mock_ops_repo.get_latest_daily_snapshot_date.assert_awaited_once_with(
+        "P1", "S1", 3, as_of=response.generated_at_utc
+    )
+    mock_ops_repo.get_latest_valuation_job.assert_awaited_once_with(
+        "P1", "S1", 3, as_of=response.generated_at_utc
+    )
 
 
 async def test_get_lineage_valuation_blocked(service: OperationsService, mock_ops_repo: AsyncMock):
@@ -288,6 +301,7 @@ async def test_get_lineage_valuation_blocked(service: OperationsService, mock_op
 
     response = await service.get_lineage("P1", "S1")
 
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.has_artifact_gap is True
     assert response.operational_state == "VALUATION_BLOCKED"
 
@@ -313,6 +327,7 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
         "P1", skip=0, limit=10, reprocessing_status="CURRENT", security_id=None
     )
 
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 1
     assert response.items[0].security_id == "S1"
     assert response.items[0].reprocessing_status == "CURRENT"
