@@ -662,6 +662,7 @@ async def test_get_latest_valuation_job_honors_as_of(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_valuation_jobs.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "portfolio_valuation_jobs.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
     assert (
         "ORDER BY portfolio_valuation_jobs.valuation_date DESC, portfolio_valuation_jobs.id DESC"
         in compiled
@@ -955,6 +956,7 @@ async def test_get_lineage_keys_query_honors_as_of(
     assert "position_history.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
     assert "daily_position_snapshots.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "portfolio_valuation_jobs.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
 async def test_get_valuation_jobs_query_with_status(

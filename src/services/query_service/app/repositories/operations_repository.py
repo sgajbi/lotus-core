@@ -652,7 +652,10 @@ class OperationsRepository:
             )
         )
         if as_of is not None:
-            stmt = stmt.where(PortfolioValuationJob.created_at <= as_of)
+            stmt = stmt.where(
+                PortfolioValuationJob.created_at <= as_of,
+                PortfolioValuationJob.updated_at <= as_of,
+            )
         stmt = stmt.order_by(
             PortfolioValuationJob.valuation_date.desc(),
             PortfolioValuationJob.id.desc(),
@@ -728,7 +731,8 @@ class OperationsRepository:
         )
         if as_of is not None:
             latest_valuation_job_date = latest_valuation_job_date.where(
-                PortfolioValuationJob.created_at <= as_of
+                PortfolioValuationJob.created_at <= as_of,
+                PortfolioValuationJob.updated_at <= as_of,
             )
         latest_valuation_job_date = latest_valuation_job_date.order_by(
             PortfolioValuationJob.valuation_date.desc(),
@@ -744,7 +748,8 @@ class OperationsRepository:
         )
         if as_of is not None:
             latest_valuation_job_id = latest_valuation_job_id.where(
-                PortfolioValuationJob.created_at <= as_of
+                PortfolioValuationJob.created_at <= as_of,
+                PortfolioValuationJob.updated_at <= as_of,
             )
         latest_valuation_job_id = latest_valuation_job_id.order_by(
             PortfolioValuationJob.valuation_date.desc(),
@@ -760,7 +765,8 @@ class OperationsRepository:
         )
         if as_of is not None:
             latest_valuation_job_status = latest_valuation_job_status.where(
-                PortfolioValuationJob.created_at <= as_of
+                PortfolioValuationJob.created_at <= as_of,
+                PortfolioValuationJob.updated_at <= as_of,
             )
         latest_valuation_job_status = latest_valuation_job_status.order_by(
             PortfolioValuationJob.valuation_date.desc(),
@@ -776,7 +782,8 @@ class OperationsRepository:
         )
         if as_of is not None:
             latest_valuation_job_correlation_id = latest_valuation_job_correlation_id.where(
-                PortfolioValuationJob.created_at <= as_of
+                PortfolioValuationJob.created_at <= as_of,
+                PortfolioValuationJob.updated_at <= as_of,
             )
         latest_valuation_job_correlation_id = latest_valuation_job_correlation_id.order_by(
             PortfolioValuationJob.valuation_date.desc(),
