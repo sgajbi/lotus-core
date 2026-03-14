@@ -74,7 +74,8 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
                 security_id="SEC-VAL-INT-01",
                 valuation_date=date(2025, 8, 19),
                 epoch=0,
-                status="PENDING",
+                # Direct consumer invocation should model an already-claimed worker job.
+                status="PROCESSING",
                 correlation_id="corr-val-int-01",
             ),
         ]
