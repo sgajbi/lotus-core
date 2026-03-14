@@ -29,7 +29,19 @@ async def wait_for_shutdown_or_task_failure(
         if shutdown_wait_task in done:
             return None
 
-        failed_task = next(iter(done))
+        completed_tasks = [task for task in done if task is not shutdown_wait_task]
+        failed_task = next(
+            (
+                task
+                for task in completed_tasks
+                if not task.cancelled() and task.exception() is not None
+            ),
+            None,
+        )
+        if failed_task is None:
+            failed_task = next((task for task in completed_tasks if task.cancelled()), None)
+        if failed_task is None:
+            failed_task = completed_tasks[0]
         task_name = failed_task.get_name() or "unnamed-task"
         if failed_task.cancelled():
             runtime_error = RuntimeError(

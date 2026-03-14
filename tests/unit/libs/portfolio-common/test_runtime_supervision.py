@@ -45,6 +45,37 @@ async def test_returns_runtime_error_when_task_fails():
     assert shutdown_event.is_set() is True
 
 
+async def test_prefers_real_failure_over_simultaneous_cancelled_task():
+    shutdown_event = asyncio.Event()
+    logger = logging.getLogger("test-runtime-supervision")
+
+    started = asyncio.Event()
+
+    async def _failing():
+        await started.wait()
+        raise ValueError("boom")
+
+    async def _cancelled():
+        await started.wait()
+        raise asyncio.CancelledError
+
+    failing_task = asyncio.create_task(_failing(), name="failing-task")
+    cancelled_task = asyncio.create_task(_cancelled(), name="cancelled-task")
+    await asyncio.sleep(0)
+    started.set()
+    await asyncio.sleep(0)
+
+    result = await wait_for_shutdown_or_task_failure(
+        tasks=[cancelled_task, failing_task],
+        shutdown_event=shutdown_event,
+        logger=logger,
+    )
+
+    assert isinstance(result, RuntimeError)
+    assert "Critical service task 'failing-task' failed." in str(result)
+    assert isinstance(result.__cause__, ValueError)
+
+
 async def test_shutdown_runtime_components_stops_consumers_callbacks_and_server():
     stop_marker: list[str] = []
 
