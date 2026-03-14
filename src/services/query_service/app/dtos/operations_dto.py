@@ -3,6 +3,12 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from ..support_policy import (
+    CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
+    SUPPORT_FAILED_WINDOW_DESCRIPTION,
+    SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+)
+
 
 class SupportOverviewResponse(BaseModel):
     portfolio_id: str = Field(..., description="Unique portfolio identifier.", examples=["PF-001"])
@@ -19,10 +25,73 @@ class SupportOverviewResponse(BaseModel):
         description="Current active epoch for the portfolio across position state keys.",
         examples=[3],
     )
+    stale_threshold_minutes: int = Field(
+        ...,
+        description=SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+        examples=[15],
+    )
+    failed_window_hours: int = Field(
+        ...,
+        description=SUPPORT_FAILED_WINDOW_DESCRIPTION,
+        examples=[24],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this support overview snapshot was generated.",
+        examples=["2026-03-14T10:45:00Z"],
+    )
     active_reprocessing_keys: int = Field(
         ...,
         description="Number of portfolio-security keys currently marked REPROCESSING.",
         examples=[2],
+    )
+    stale_reprocessing_keys: int = Field(
+        ...,
+        description=(
+            "Number of REPROCESSING portfolio-security keys whose last update is older than "
+            "the support stale threshold."
+        ),
+        examples=[1],
+    )
+    oldest_reprocessing_watermark_date: Optional[date] = Field(
+        None,
+        description=(
+            "Oldest replay watermark date among portfolio-security keys currently marked "
+            "REPROCESSING."
+        ),
+        examples=["2025-11-03"],
+    )
+    oldest_reprocessing_security_id: Optional[str] = Field(
+        None,
+        description=(
+            "Security identifier for the oldest portfolio-security key currently marked "
+            "REPROCESSING."
+        ),
+        examples=["AAPL"],
+    )
+    oldest_reprocessing_epoch: Optional[int] = Field(
+        None,
+        description=(
+            "Current epoch of the oldest portfolio-security key currently marked "
+            "REPROCESSING."
+        ),
+        examples=[3],
+    )
+    oldest_reprocessing_updated_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent durable update for the oldest "
+            "portfolio-security key currently marked REPROCESSING."
+        ),
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    reprocessing_backlog_age_days: Optional[int] = Field(
+        None,
+        description=(
+            "Backlog age in days computed from oldest_reprocessing_watermark_date to "
+            "business_date (or current UTC date when business_date is missing)."
+        ),
+        examples=[119],
     )
     pending_valuation_jobs: int = Field(
         ...,
@@ -36,7 +105,7 @@ class SupportOverviewResponse(BaseModel):
     )
     stale_processing_valuation_jobs: int = Field(
         ...,
-        description="Number of PROCESSING valuation jobs older than stale threshold (15 minutes).",
+        description="Number of PROCESSING valuation jobs older than the support stale threshold.",
         examples=[1],
     )
     failed_valuation_jobs: int = Field(
@@ -44,10 +113,36 @@ class SupportOverviewResponse(BaseModel):
         description="Number of valuation jobs currently in FAILED terminal state.",
         examples=[2],
     )
+    failed_valuation_jobs_within_window: int = Field(
+        ...,
+        description=(
+            "Number of valuation jobs that moved to FAILED state within the configured "
+            "failed-job window."
+        ),
+        examples=[1],
+    )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
         description="Oldest valuation date among pending/processing jobs for backlog analysis.",
         examples=["2025-11-03"],
+    )
+    oldest_pending_valuation_job_id: Optional[int] = Field(
+        None,
+        description="Durable job id for the oldest open valuation job in the backlog.",
+        examples=[8801],
+    )
+    oldest_pending_valuation_security_id: Optional[str] = Field(
+        None,
+        description="Security identifier for the oldest open valuation job in the backlog.",
+        examples=["SEC-US-IBM"],
+    )
+    oldest_pending_valuation_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the oldest open valuation job in the "
+            "backlog."
+        ),
+        examples=["corr-val-20260313-001"],
     )
     valuation_backlog_age_days: Optional[int] = Field(
         None,
@@ -70,7 +165,7 @@ class SupportOverviewResponse(BaseModel):
     stale_processing_aggregation_jobs: int = Field(
         ...,
         description=(
-            "Number of PROCESSING aggregation jobs older than stale threshold " "(15 minutes)."
+            "Number of PROCESSING aggregation jobs older than the support stale threshold."
         ),
         examples=[0],
     )
@@ -79,10 +174,31 @@ class SupportOverviewResponse(BaseModel):
         description="Number of aggregation jobs currently in FAILED terminal state.",
         examples=[1],
     )
+    failed_aggregation_jobs_within_window: int = Field(
+        ...,
+        description=(
+            "Number of aggregation jobs that moved to FAILED state within the configured "
+            "failed-job window."
+        ),
+        examples=[0],
+    )
     oldest_pending_aggregation_date: Optional[date] = Field(
         None,
         description="Oldest aggregation date among pending/processing jobs for backlog analysis.",
         examples=["2025-12-29"],
+    )
+    oldest_pending_aggregation_job_id: Optional[int] = Field(
+        None,
+        description="Durable job id for the oldest open aggregation job in the backlog.",
+        examples=[4402],
+    )
+    oldest_pending_aggregation_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the oldest open aggregation job in the "
+            "backlog."
+        ),
+        examples=["corr-agg-20260313-001"],
     )
     aggregation_backlog_age_days: Optional[int] = Field(
         None,
@@ -106,7 +222,7 @@ class SupportOverviewResponse(BaseModel):
         ...,
         description=(
             "Number of analytics export jobs in RUNNING state whose last update is older than "
-            "the stale threshold (15 minutes)."
+            "the support stale threshold."
         ),
         examples=[0],
     )
@@ -115,12 +231,30 @@ class SupportOverviewResponse(BaseModel):
         description="Number of analytics export jobs currently in FAILED terminal state.",
         examples=[1],
     )
+    failed_analytics_export_jobs_within_window: int = Field(
+        ...,
+        description=(
+            "Number of analytics export jobs that moved to FAILED state within the configured "
+            "failed-job window."
+        ),
+        examples=[1],
+    )
     oldest_pending_analytics_export_created_at: Optional[datetime] = Field(
         None,
         description=(
             "Oldest created_at timestamp among analytics export jobs still waiting or running."
         ),
         examples=["2026-03-13T10:15:00Z"],
+    )
+    oldest_pending_analytics_export_job_id: Optional[str] = Field(
+        None,
+        description="Durable job id for the oldest open analytics export job in the backlog.",
+        examples=["aexp_20260313_00012"],
+    )
+    oldest_pending_analytics_export_request_fingerprint: Optional[str] = Field(
+        None,
+        description="Request fingerprint for the oldest open analytics export job in the backlog.",
+        examples=["pf-001:positions:csv:2026-03-13"],
     )
     analytics_export_backlog_age_minutes: Optional[int] = Field(
         None,
@@ -174,6 +308,38 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["2025-12-30"],
     )
+    controls_stage_id: Optional[int] = Field(
+        None,
+        description=(
+            "Durable database identifier of the latest portfolio-day financial reconciliation "
+            "control stage."
+        ),
+        examples=[701],
+    )
+    controls_last_source_event_type: Optional[str] = Field(
+        None,
+        description=(
+            "Most recent durable source event type recorded on the latest portfolio-day "
+            "financial reconciliation control stage."
+        ),
+        examples=["financial_reconciliation_completed"],
+    )
+    controls_created_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp when the latest portfolio-day financial reconciliation control "
+            "stage row was first created."
+        ),
+        examples=["2026-03-13T10:10:00Z"],
+    )
+    controls_ready_emitted_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp when the latest portfolio-day financial reconciliation control "
+            "stage emitted readiness, if readiness has been emitted."
+        ),
+        examples=["2026-03-13T10:15:05Z"],
+    )
     controls_epoch: Optional[int] = Field(
         None,
         description=(
@@ -188,6 +354,127 @@ class SupportOverviewResponse(BaseModel):
             "(for example COMPLETED, REQUIRES_REPLAY, FAILED)."
         ),
         examples=["COMPLETED"],
+    )
+    controls_failure_reason: Optional[str] = Field(
+        None,
+        description=(
+            "Durable failure reason recorded on the latest portfolio-day financial "
+            "reconciliation control stage, when the latest stage is failed."
+        ),
+        examples=["Tolerance exceeded for portfolio totals."],
+    )
+    controls_latest_reconciliation_run_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable reconciliation run identifier for the latest reconciliation run on the "
+            "same portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["recon_1234567890abcdef"],
+    )
+    controls_latest_reconciliation_type: Optional[str] = Field(
+        None,
+        description=(
+            "Reconciliation type for the latest reconciliation run on the same portfolio-day "
+            "and epoch as the latest control stage."
+        ),
+        examples=["transaction_cashflow"],
+    )
+    controls_latest_reconciliation_status: Optional[str] = Field(
+        None,
+        description=(
+            "Durable lifecycle status for the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["FAILED"],
+    )
+    controls_latest_reconciliation_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["corr-recon-20260313-001"],
+    )
+    controls_latest_reconciliation_requested_by: Optional[str] = Field(
+        None,
+        description=(
+            "Principal or subsystem that requested the latest reconciliation run on the "
+            "same portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["pipeline_orchestrator_service"],
+    )
+    controls_latest_reconciliation_dedupe_key: Optional[str] = Field(
+        None,
+        description=(
+            "Stable deduplication key for the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["recon:transaction_cashflow:PF-001:2025-08-31:3"],
+    )
+    controls_latest_reconciliation_failure_reason: Optional[str] = Field(
+        None,
+        description=(
+            "Failure reason recorded on the latest reconciliation run on the same "
+            "portfolio-day and epoch as the latest control stage."
+        ),
+        examples=["Tolerance exceeded for portfolio totals."],
+    )
+    controls_latest_reconciliation_total_findings: Optional[int] = Field(
+        None,
+        description=(
+            "Total durable finding count recorded on the latest reconciliation run on the "
+            "same portfolio-day and epoch as the latest control stage."
+        ),
+        examples=[3],
+    )
+    controls_latest_reconciliation_blocking_findings: Optional[int] = Field(
+        None,
+        description=(
+            "Number of blocking reconciliation findings recorded on the latest "
+            "reconciliation run on the same portfolio-day and epoch as the latest "
+            "control stage."
+        ),
+        examples=[1],
+    )
+    controls_latest_blocking_finding_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable identifier of the most recent blocking reconciliation finding on the "
+            "latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["rf_1234567890abcdef"],
+    )
+    controls_latest_blocking_finding_type: Optional[str] = Field(
+        None,
+        description=(
+            "Finding type for the most recent blocking reconciliation finding on the "
+            "latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["missing_cashflow"],
+    )
+    controls_latest_blocking_finding_security_id: Optional[str] = Field(
+        None,
+        description=(
+            "Security identifier attached to the most recent blocking reconciliation "
+            "finding on the latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["SEC-US-IBM"],
+    )
+    controls_latest_blocking_finding_transaction_id: Optional[str] = Field(
+        None,
+        description=(
+            "Transaction identifier attached to the most recent blocking reconciliation "
+            "finding on the latest reconciliation run linked to the latest control stage."
+        ),
+        examples=["txn_20260313_0001"],
+    )
+    controls_last_updated_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent durable lifecycle update for the latest "
+            "portfolio-day financial reconciliation control stage."
+        ),
+        examples=["2026-03-13T10:15:09Z"],
     )
     controls_blocking: bool = Field(
         ...,
@@ -228,15 +515,30 @@ class CalculatorSloBucket(BaseModel):
         description="Count of jobs currently in FAILED terminal state.",
         examples=[0],
     )
-    failed_jobs_last_24h: int = Field(
+    failed_jobs_within_window: int = Field(
         ...,
-        description="Count of jobs that moved to FAILED state in the last 24 hours.",
+        description=(
+            "Count of jobs that moved to FAILED state within the configured failed-job window."
+        ),
         examples=[2],
     )
     oldest_open_job_date: Optional[date] = Field(
         None,
         description="Oldest business date among open jobs (PENDING/PROCESSING).",
         examples=["2026-02-25"],
+    )
+    oldest_open_job_id: Optional[int] = Field(
+        None,
+        description="Durable job id for the oldest open job contributing to this backlog.",
+        examples=[8801],
+    )
+    oldest_open_job_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier for the oldest open job contributing to this "
+            "backlog."
+        ),
+        examples=["corr-val-20260313-001"],
     )
     backlog_age_days: Optional[int] = Field(
         None,
@@ -254,6 +556,45 @@ class ReprocessingSloBucket(BaseModel):
         description="Number of position keys currently in REPROCESSING state.",
         examples=[4],
     )
+    stale_reprocessing_keys: int = Field(
+        ...,
+        description=(
+            "Number of REPROCESSING position keys whose last update is older than the stale "
+            "threshold."
+        ),
+        examples=[1],
+    )
+    oldest_reprocessing_watermark_date: Optional[date] = Field(
+        None,
+        description="Oldest watermark date among position keys currently in REPROCESSING state.",
+        examples=["2026-02-25"],
+    )
+    oldest_reprocessing_security_id: Optional[str] = Field(
+        None,
+        description="Security identifier for the oldest active reprocessing key.",
+        examples=["AAPL"],
+    )
+    oldest_reprocessing_epoch: Optional[int] = Field(
+        None,
+        description="Current epoch of the oldest active reprocessing key.",
+        examples=[3],
+    )
+    oldest_reprocessing_updated_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent durable update for the oldest active "
+            "reprocessing key."
+        ),
+        examples=["2026-03-13T10:15:09Z"],
+    )
+    backlog_age_days: Optional[int] = Field(
+        None,
+        description=(
+            "Age in days from oldest_reprocessing_watermark_date to business_date "
+            "(or current UTC date when business_date is unavailable)."
+        ),
+        examples=[7],
+    )
 
 
 class CalculatorSloResponse(BaseModel):
@@ -267,6 +608,11 @@ class CalculatorSloResponse(BaseModel):
         ...,
         description="Threshold used to classify stale processing jobs.",
         examples=[15],
+    )
+    failed_window_hours: int = Field(
+        ...,
+        description=CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
+        examples=[24],
     )
     generated_at_utc: datetime = Field(
         ...,
@@ -282,8 +628,10 @@ class CalculatorSloResponse(BaseModel):
                 "processing_jobs": 3,
                 "stale_processing_jobs": 1,
                 "failed_jobs": 0,
-                "failed_jobs_last_24h": 2,
+                "failed_jobs_within_window": 2,
                 "oldest_open_job_date": "2026-02-25",
+                "oldest_open_job_id": 8801,
+                "oldest_open_job_correlation_id": "corr-val-20260313-001",
                 "backlog_age_days": 7,
             }
         ],
@@ -297,8 +645,10 @@ class CalculatorSloResponse(BaseModel):
                 "processing_jobs": 0,
                 "stale_processing_jobs": 0,
                 "failed_jobs": 0,
-                "failed_jobs_last_24h": 0,
+                "failed_jobs_within_window": 0,
                 "oldest_open_job_date": "2026-03-01",
+                "oldest_open_job_id": 4402,
+                "oldest_open_job_correlation_id": "corr-agg-20260313-001",
                 "backlog_age_days": 1,
             }
         ],
@@ -306,11 +656,26 @@ class CalculatorSloResponse(BaseModel):
     reprocessing: ReprocessingSloBucket = Field(
         ...,
         description="Reprocessing SLO snapshot for this portfolio.",
-        examples=[{"active_reprocessing_keys": 4}],
+        examples=[
+            {
+                "active_reprocessing_keys": 4,
+                "stale_reprocessing_keys": 1,
+                "oldest_reprocessing_watermark_date": "2026-02-25",
+                "oldest_reprocessing_security_id": "AAPL",
+                "oldest_reprocessing_epoch": 3,
+                "oldest_reprocessing_updated_at": "2026-03-13T10:15:09Z",
+                "backlog_age_days": 7,
+            }
+        ],
     )
 
 
 class LineageResponse(BaseModel):
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this lineage snapshot was generated.",
+        examples=["2026-03-14T10:45:00Z"],
+    )
     portfolio_id: str = Field(..., description="Unique portfolio identifier.", examples=["PF-001"])
     security_id: str = Field(..., description="Unique security identifier.", examples=["AAPL.OQ"])
     epoch: int = Field(..., description="Current active epoch for this key.", examples=[3])
@@ -337,10 +702,39 @@ class LineageResponse(BaseModel):
         description="Latest valuation job business date for current epoch.",
         examples=["2025-12-30"],
     )
+    latest_valuation_job_id: Optional[int] = Field(
+        None,
+        description="Durable database identifier of the latest valuation job in the current epoch.",
+        examples=[101],
+    )
     latest_valuation_job_status: Optional[str] = Field(
         None,
         description="Status of the latest valuation job for current epoch.",
         examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
+    )
+    latest_valuation_job_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier of the latest valuation job in the current epoch, "
+            "used to bridge lineage triage to logs and scheduler dispatch."
+        ),
+        examples=["corr-val-20260314-001"],
+    )
+    has_artifact_gap: bool = Field(
+        ...,
+        description=(
+            "True when the current epoch shows missing or lagging downstream artifacts relative "
+            "to the latest position history for this key."
+        ),
+        examples=[False, True],
+    )
+    operational_state: str = Field(
+        ...,
+        description=(
+            "Derived operator-facing lineage state for this key, based on replay status and "
+            "artifact freshness."
+        ),
+        examples=["HEALTHY", "REPLAYING", "ARTIFACT_GAP", "VALUATION_BLOCKED"],
     )
 
 
@@ -359,9 +753,67 @@ class LineageKeyRecord(BaseModel):
         description="Current key status.",
         examples=["CURRENT", "REPROCESSING"],
     )
+    latest_position_history_date: Optional[date] = Field(
+        None,
+        description="Latest position-history date for the current epoch of this key.",
+        examples=["2025-12-30"],
+    )
+    latest_daily_snapshot_date: Optional[date] = Field(
+        None,
+        description="Latest daily snapshot date for the current epoch of this key.",
+        examples=["2025-12-30"],
+    )
+    latest_valuation_job_date: Optional[date] = Field(
+        None,
+        description=(
+            "Latest valuation job business date recorded for the current epoch of this key."
+        ),
+        examples=["2025-12-30"],
+    )
+    latest_valuation_job_id: Optional[int] = Field(
+        None,
+        description="Durable database identifier of the latest valuation job in the current epoch.",
+        examples=[101],
+    )
+    latest_valuation_job_status: Optional[str] = Field(
+        None,
+        description=(
+            "Status of the latest valuation job recorded for the current epoch of this key."
+        ),
+        examples=["PENDING", "PROCESSING", "DONE", "FAILED"],
+    )
+    latest_valuation_job_correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier of the latest valuation job in the current epoch, "
+            "used to bridge lineage triage to logs and scheduler dispatch."
+        ),
+        examples=["corr-val-20260314-001"],
+    )
+    has_artifact_gap: bool = Field(
+        ...,
+        description=(
+            "True when the current epoch shows missing or lagging downstream artifacts relative "
+            "to the latest position history for this key."
+        ),
+        examples=[False, True],
+    )
+    operational_state: str = Field(
+        ...,
+        description=(
+            "Derived operator-facing lineage state for this key, based on replay status and "
+            "artifact freshness."
+        ),
+        examples=["HEALTHY", "REPLAYING", "ARTIFACT_GAP", "VALUATION_BLOCKED"],
+    )
 
 
 class LineageKeyListResponse(BaseModel):
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this lineage key snapshot was generated.",
+        examples=["2026-03-14T10:45:00Z"],
+    )
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     total: int = Field(..., description="Total matching keys for this portfolio.", examples=[24])
     skip: int = Field(..., description="Pagination offset.", examples=[0])
@@ -376,6 +828,14 @@ class LineageKeyListResponse(BaseModel):
                     "epoch": 3,
                     "watermark_date": "2025-11-01",
                     "reprocessing_status": "CURRENT",
+                    "latest_position_history_date": "2025-12-30",
+                    "latest_daily_snapshot_date": "2025-12-30",
+                    "latest_valuation_job_date": "2025-12-30",
+                    "latest_valuation_job_id": 101,
+                    "latest_valuation_job_status": "DONE",
+                    "latest_valuation_job_correlation_id": "corr-val-20260314-001",
+                    "has_artifact_gap": False,
+                    "operational_state": "HEALTHY",
                 }
             ]
         ],
@@ -383,6 +843,11 @@ class LineageKeyListResponse(BaseModel):
 
 
 class SupportJobRecord(BaseModel):
+    job_id: int = Field(
+        ...,
+        description="Durable database identifier for this job row.",
+        examples=[101],
+    )
     job_type: Literal["VALUATION", "AGGREGATION", "RESET_WATERMARKS"] = Field(
         ...,
         description=(
@@ -425,6 +890,19 @@ class SupportJobRecord(BaseModel):
         ),
         examples=[False],
     )
+    correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier captured when the job was created, used to join "
+            "support triage with logs, events, and replay lineage."
+        ),
+        examples=["corr-valuation-20260313-001"],
+    )
+    created_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the durable job row was first created.",
+        examples=["2026-03-13T10:10:00Z"],
+    )
     updated_at: Optional[datetime] = Field(
         None,
         description="UTC timestamp of the most recent durable lifecycle update for the job.",
@@ -443,6 +921,11 @@ class SupportJobRecord(BaseModel):
         description="Failure reason (when status=FAILED).",
         examples=["Missing market price for security/date"],
     )
+    is_terminal_failure: bool = Field(
+        ...,
+        description="True when the durable job is in FAILED terminal state.",
+        examples=[False, True],
+    )
     operational_state: Literal[
         "FAILED",
         "STALE_PROCESSING",
@@ -458,6 +941,16 @@ class SupportJobRecord(BaseModel):
 
 class SupportJobListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this support job listing snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(..., description="Total jobs matching the filter.", examples=[42])
     skip: int = Field(..., description="Pagination offset.", examples=[0])
     limit: int = Field(..., description="Pagination limit.", examples=[50])
@@ -467,6 +960,7 @@ class SupportJobListResponse(BaseModel):
         examples=[
             [
                 {
+                    "job_id": 101,
                     "job_type": "VALUATION",
                     "business_date": "2025-12-30",
                     "status": "PENDING",
@@ -474,9 +968,12 @@ class SupportJobListResponse(BaseModel):
                     "epoch": 3,
                     "attempt_count": 1,
                     "is_retrying": True,
+                    "correlation_id": "corr-valuation-20260313-001",
+                    "created_at": "2025-12-30T10:10:00Z",
                     "updated_at": "2025-12-30T10:15:09Z",
                     "is_stale_processing": False,
                     "failure_reason": None,
+                    "is_terminal_failure": False,
                     "operational_state": "PENDING",
                 }
             ]
@@ -489,6 +986,14 @@ class AnalyticsExportJobRecord(BaseModel):
         ...,
         description="Stable analytics export job identifier.",
         examples=["aexp_1234567890abcdef"],
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description=(
+            "Stable deduplication fingerprint for the export request, used to correlate reuse "
+            "or stale supersession behavior."
+        ),
+        examples=["fp_portfolio_timeseries_pf001_20260313_v1"],
     )
     dataset_type: str = Field(
         ..., description="Analytics dataset exported by the job.", examples=["portfolio_timeseries"]
@@ -562,6 +1067,16 @@ class AnalyticsExportJobRecord(BaseModel):
 
 class AnalyticsExportJobListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this analytics export listing snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(..., description="Total export jobs matching the filter.", examples=[12])
     skip: int = Field(..., description="Pagination offset.", examples=[0])
     limit: int = Field(..., description="Pagination limit.", examples=[50])
@@ -572,6 +1087,7 @@ class AnalyticsExportJobListResponse(BaseModel):
             [
                 {
                     "job_id": "aexp_1234567890abcdef",
+                    "request_fingerprint": "fp_portfolio_timeseries_pf001_20260313_v1",
                     "dataset_type": "portfolio_timeseries",
                     "status": "failed",
                     "created_at": "2026-03-13T10:15:00Z",
@@ -626,6 +1142,27 @@ class ReconciliationRunRecord(BaseModel):
         description="UTC timestamp when reconciliation execution completed.",
         examples=["2026-03-13T10:15:09Z"],
     )
+    requested_by: Optional[str] = Field(
+        None,
+        description="Principal or subsystem that requested the reconciliation run.",
+        examples=["support.ops@lotus.local", "pipeline_orchestrator_service"],
+    )
+    dedupe_key: Optional[str] = Field(
+        None,
+        description=(
+            "Stable deduplication key for the run when the control path enforces one-run-per-scope "
+            "behavior."
+        ),
+        examples=["recon:transaction_cashflow:PF-001:2026-03-13:3"],
+    )
+    correlation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Durable correlation identifier captured for the reconciliation run, used to join "
+            "support triage with logs and upstream control requests."
+        ),
+        examples=["corr-recon-20260313-001"],
+    )
     failure_reason: Optional[str] = Field(
         None,
         description="Failure reason when the reconciliation run reaches FAILED state.",
@@ -653,6 +1190,11 @@ class ReconciliationRunRecord(BaseModel):
 
 class ReconciliationRunListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this reconciliation-run support snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(
         ..., description="Total reconciliation runs matching the filter.", examples=[8]
     )
@@ -671,6 +1213,9 @@ class ReconciliationRunListResponse(BaseModel):
                     "epoch": 3,
                     "started_at": "2026-03-13T10:15:00Z",
                     "completed_at": "2026-03-13T10:15:09Z",
+                    "requested_by": "pipeline_orchestrator_service",
+                    "dedupe_key": "recon:transaction_cashflow:PF-001:2026-03-13:3",
+                    "correlation_id": "corr-recon-20260313-001",
                     "failure_reason": None,
                     "is_terminal_failure": False,
                     "is_blocking": False,
@@ -727,11 +1272,31 @@ class ReconciliationFindingRecord(BaseModel):
         description="Structured detail describing the mismatch or control breach.",
         examples=[{"expected_cashflow_count": 1, "observed_cashflow_count": 0}],
     )
+    is_blocking: bool = Field(
+        ...,
+        description=(
+            "True when the finding represents a publication-blocking control breach "
+            "(currently severity ERROR)."
+        ),
+        examples=[True, False],
+    )
+    operational_state: Literal["BLOCKING", "NON_BLOCKING"] = Field(
+        ...,
+        description="Derived operator-facing state for support triage of reconciliation findings.",
+        examples=["BLOCKING"],
+    )
 
 
 class ReconciliationFindingListResponse(BaseModel):
     run_id: str = Field(
         ..., description="Reconciliation run identifier.", examples=["recon_1234567890abcdef"]
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description=(
+            "UTC timestamp when this reconciliation-finding support snapshot was generated."
+        ),
+        examples=["2026-03-14T10:50:00Z"],
     )
     total: int = Field(..., description="Total findings returned for the run.", examples=[2])
     items: list[ReconciliationFindingRecord] = Field(
@@ -749,6 +1314,8 @@ class ReconciliationFindingListResponse(BaseModel):
                     "epoch": 3,
                     "created_at": "2026-03-13T10:15:09Z",
                     "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+                    "is_blocking": True,
+                    "operational_state": "BLOCKING",
                 }
             ]
         ],
@@ -756,6 +1323,11 @@ class ReconciliationFindingListResponse(BaseModel):
 
 
 class PortfolioControlStageRecord(BaseModel):
+    stage_id: int = Field(
+        ...,
+        description="Durable database identifier for this portfolio control stage row.",
+        examples=[701],
+    )
     stage_name: str = Field(
         ...,
         description="Control-plane stage name recorded for the portfolio-day scope.",
@@ -781,6 +1353,16 @@ class PortfolioControlStageRecord(BaseModel):
         description="Last event type that updated the control stage row.",
         examples=["financial_reconciliation_completed"],
     )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the durable control stage row was first created.",
+        examples=["2026-03-13T10:10:00Z"],
+    )
+    ready_emitted_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the control stage emitted downstream readiness, if any.",
+        examples=["2026-03-13T10:14:30Z"],
+    )
     updated_at: datetime = Field(
         ...,
         description=(
@@ -804,6 +1386,11 @@ class PortfolioControlStageRecord(BaseModel):
 
 class PortfolioControlStageListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this control-stage support snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(
         ..., description="Total portfolio control stage rows matching the filter.", examples=[6]
     )
@@ -815,11 +1402,14 @@ class PortfolioControlStageListResponse(BaseModel):
         examples=[
             [
                 {
+                    "stage_id": 701,
                     "stage_name": "FINANCIAL_RECONCILIATION",
                     "business_date": "2026-03-13",
                     "epoch": 3,
                     "status": "REQUIRES_REPLAY",
                     "last_source_event_type": "financial_reconciliation_completed",
+                    "created_at": "2026-03-13T10:10:00Z",
+                    "ready_emitted_at": None,
                     "updated_at": "2026-03-13T10:15:09Z",
                     "is_blocking": True,
                     "operational_state": "BLOCKING",
@@ -850,6 +1440,11 @@ class ReprocessingKeyRecord(BaseModel):
         description="Current durable reprocessing state for the key.",
         examples=["REPROCESSING"],
     )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the durable replay key row was first created.",
+        examples=["2026-03-13T10:05:00Z"],
+    )
     updated_at: datetime = Field(
         ...,
         description="UTC timestamp of the most recent durable lifecycle update for the key.",
@@ -872,6 +1467,16 @@ class ReprocessingKeyRecord(BaseModel):
 
 class ReprocessingKeyListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    stale_threshold_minutes: int = Field(
+        ...,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this replay-key listing snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(
         ...,
         description="Total durable portfolio-security replay keys matching the filter.",
@@ -889,6 +1494,7 @@ class ReprocessingKeyListResponse(BaseModel):
                     "epoch": 3,
                     "watermark_date": "2026-03-10",
                     "status": "REPROCESSING",
+                    "created_at": "2026-03-13T10:05:00Z",
                     "updated_at": "2026-03-13T10:15:09Z",
                     "is_stale_reprocessing": False,
                     "operational_state": "REPROCESSING",

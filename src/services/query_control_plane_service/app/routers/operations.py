@@ -19,6 +19,14 @@ from src.services.query_service.app.dtos.operations_dto import (
     SupportOverviewResponse,
 )
 from src.services.query_service.app.services.operations_service import OperationsService
+from src.services.query_service.app.support_policy import (
+    CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
+    CALCULATOR_SLO_STALE_THRESHOLD_DESCRIPTION,
+    DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+    DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+    SUPPORT_FAILED_WINDOW_DESCRIPTION,
+    SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +68,28 @@ async def get_support_overview(
         description="Portfolio identifier.",
         examples=["PORT-OPS-001"],
     ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description=SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+        examples=[15],
+    ),
+    failed_window_hours: int = Query(
+        DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+        ge=1,
+        le=720,
+        description=SUPPORT_FAILED_WINDOW_DESCRIPTION,
+        examples=[24],
+    ),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
-        return await service.get_support_overview(portfolio_id)
+        return await service.get_support_overview(
+            portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception:
@@ -99,17 +125,26 @@ async def get_calculator_slos(
         examples=["PORT-OPS-001"],
     ),
     stale_threshold_minutes: int = Query(
-        15,
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         ge=1,
         le=1440,
-        description="Threshold in minutes used to classify stale PROCESSING jobs.",
+        description=CALCULATOR_SLO_STALE_THRESHOLD_DESCRIPTION,
         examples=[15],
+    ),
+    failed_window_hours: int = Query(
+        DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+        ge=1,
+        le=720,
+        description=CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
+        examples=[24],
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
         return await service.get_calculator_slos(
-            portfolio_id=portfolio_id, stale_threshold_minutes=stale_threshold_minutes
+            portfolio_id=portfolio_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -140,6 +175,11 @@ async def get_calculator_slos(
 )
 async def get_portfolio_control_stages(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    stage_id: Optional[int] = Query(
+        None,
+        description="Optional durable control-stage row id filter.",
+        examples=[701],
+    ),
     stage_name: Optional[str] = Query(
         None,
         description="Optional control stage filter (e.g., FINANCIAL_RECONCILIATION).",
@@ -167,6 +207,7 @@ async def get_portfolio_control_stages(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            stage_id=stage_id,
             stage_name=stage_name,
             business_date=parsed_business_date,
             status=status_filter,
@@ -193,7 +234,8 @@ async def get_portfolio_control_stages(
     summary="List durable replay keys for support workflows",
     description=(
         "What: List durable portfolio-security replay keys for a portfolio.\n"
-        "How: Query `position_state` rows with pagination and optional status/security filters.\n"
+        "How: Query `position_state` rows with pagination and optional status, security, and "
+        "watermark-date filters.\n"
         "When: Use to inspect stuck or stale REPROCESSING keys and verify replay normalization "
         "after recovery."
     ),
@@ -210,17 +252,32 @@ async def get_reprocessing_keys(
         description="Optional security identifier filter for one replay key.",
         examples=["SEC-US-IBM"],
     ),
+    watermark_date: Optional[str] = Query(
+        None,
+        description="Optional replay watermark date filter in YYYY-MM-DD format.",
+        examples=["2026-03-10"],
+    ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
+        parsed_watermark_date = date.fromisoformat(watermark_date) if watermark_date else None
         return await service.get_reprocessing_keys(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
             status=status_filter,
             security_id=security_id,
+            watermark_date=parsed_watermark_date,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -245,13 +302,23 @@ async def get_reprocessing_keys(
     description=(
         "What: List durable replay jobs currently relevant to a portfolio.\n"
         "How: Query reprocessing jobs linked to the portfolio's replay keys, with pagination and "
-        "optional status/security filters.\n"
+        "optional id, status, correlation, and security filters.\n"
         "When: Use to inspect queued, stale, retried, or failed replay jobs without direct "
         "database access."
     ),
 )
 async def get_reprocessing_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    job_id: Optional[int] = Query(
+        None,
+        description="Optional durable replay job id filter.",
+        examples=[303],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable replay correlation identifier filter.",
+        examples=["corr-replay-303"],
+    ),
     status_filter: Optional[str] = Query(
         None,
         description="Optional replay job status filter (e.g., PENDING, PROCESSING, FAILED).",
@@ -262,6 +329,13 @@ async def get_reprocessing_jobs(
         description="Optional security identifier filter for one replay job stream.",
         examples={"security": {"summary": "Single replay security", "value": "SEC-US-IBM"}},
     ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
+    ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
@@ -271,8 +345,11 @@ async def get_reprocessing_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            job_id=job_id,
+            correlation_id=correlation_id,
             status=status_filter,
             security_id=security_id,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -296,24 +373,62 @@ async def get_reprocessing_jobs(
     summary="List valuation jobs for support workflows",
     description=(
         "What: List valuation jobs for a portfolio with support filters.\n"
-        "How: Query valuation job records with pagination and optional status filtering.\n"
+        "How: Query valuation job records with pagination and optional id, date, security, "
+        "status, and correlation filtering.\n"
         "When: Use to triage stuck valuation workloads and verify drain progress."
     ),
 )
 async def get_valuation_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
-    status_filter: Optional[str] = Query(
+    job_id: Optional[int] = Query(
         None,
+        description="Optional durable valuation job id filter.",
+        examples=[8801],
+    ),
+    security_id: Optional[str] = Query(
+        None,
+        description="Optional security identifier filter for one valuation job stream.",
+        examples=["SEC-US-IBM"],
+    ),
+    business_date: Optional[str] = Query(
+        None,
+        description="Optional valuation business date filter in YYYY-MM-DD format.",
+        examples=["2025-08-31"],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable valuation correlation identifier filter.",
+        examples=["corr-val-8801"],
+    ),
+    job_status: Optional[str] = Query(
+        None,
+        alias="status",
         description="Optional job status filter (e.g., PENDING, PROCESSING).",
         examples=["PENDING"],
+    ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
     ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
+        parsed_business_date = date.fromisoformat(business_date) if business_date else None
         return await service.get_valuation_jobs(
-            portfolio_id=portfolio_id, skip=skip, limit=limit, status=status_filter
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            job_id=job_id,
+            business_date=parsed_business_date,
+            security_id=security_id,
+            correlation_id=correlation_id,
+            status=job_status,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -337,24 +452,56 @@ async def get_valuation_jobs(
     summary="List aggregation jobs for support workflows",
     description=(
         "What: List portfolio aggregation jobs for support workflows.\n"
-        "How: Query aggregation job records with pagination and optional status filtering.\n"
+        "How: Query aggregation job records with pagination and optional id, date, status, "
+        "and correlation filtering.\n"
         "When: Use when portfolio rollups are stale or downstream timeseries appears delayed."
     ),
 )
 async def get_aggregation_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
-    status_filter: Optional[str] = Query(
+    job_id: Optional[int] = Query(
         None,
+        description="Optional durable aggregation job id filter.",
+        examples=[4402],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable aggregation correlation identifier filter.",
+        examples=["corr-agg-4402"],
+    ),
+    business_date: Optional[str] = Query(
+        None,
+        description="Optional aggregation business date filter in YYYY-MM-DD format.",
+        examples=["2025-08-31"],
+    ),
+    job_status: Optional[str] = Query(
+        None,
+        alias="status",
         description="Optional job status filter (e.g., PENDING, PROCESSING).",
         examples=["PENDING"],
+    ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
     ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
+        parsed_business_date = date.fromisoformat(business_date) if business_date else None
         return await service.get_aggregation_jobs(
-            portfolio_id=portfolio_id, skip=skip, limit=limit, status=status_filter
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            job_id=job_id,
+            business_date=parsed_business_date,
+            correlation_id=correlation_id,
+            status=job_status,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -384,10 +531,27 @@ async def get_aggregation_jobs(
 )
 async def get_analytics_export_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    job_id: Optional[str] = Query(
+        None,
+        description="Optional durable analytics export job identifier filter.",
+        examples=["aexp_20260313_00012"],
+    ),
+    request_fingerprint: Optional[str] = Query(
+        None,
+        description="Optional analytics export request fingerprint filter.",
+        examples=["pf-001:positions:csv"],
+    ),
     status_filter: Optional[str] = Query(
         None,
         description="Optional export job status filter (e.g., accepted, running, failed).",
         examples=["failed"],
+    ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description="Threshold in minutes used to classify stale support rows in this listing.",
+        examples=[15],
     ),
     skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
@@ -395,7 +559,13 @@ async def get_analytics_export_jobs(
 ):
     try:
         return await service.get_analytics_export_jobs(
-            portfolio_id=portfolio_id, skip=skip, limit=limit, status=status_filter
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            job_id=job_id,
+            request_fingerprint=request_fingerprint,
+            status=status_filter,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -419,13 +589,34 @@ async def get_analytics_export_jobs(
     summary="List reconciliation runs for support workflows",
     description=(
         "What: List durable reconciliation control runs for a portfolio.\n"
-        "How: Query reconciliation run records with pagination and optional type/status filters.\n"
+        "How: Query reconciliation run records with pagination and optional id, requester, "
+        "deduplication key, type, status, and correlation filters.\n"
         "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
         "unexpected reconciliation failures."
     ),
 )
 async def get_reconciliation_runs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    run_id: Optional[str] = Query(
+        None,
+        description="Optional durable reconciliation run identifier filter.",
+        examples=["recon_1234567890abcdef"],
+    ),
+    requested_by: Optional[str] = Query(
+        None,
+        description="Optional reconciliation requester filter.",
+        examples=["pipeline_orchestrator_service"],
+    ),
+    dedupe_key: Optional[str] = Query(
+        None,
+        description="Optional reconciliation deduplication key filter.",
+        examples=["recon:transaction_cashflow:PF-001:2026-03-13:3"],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable reconciliation correlation identifier filter.",
+        examples=["corr-recon-20260313-001"],
+    ),
     reconciliation_type: Optional[str] = Query(
         None,
         description="Optional reconciliation type filter (e.g., transaction_cashflow).",
@@ -445,6 +636,10 @@ async def get_reconciliation_runs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            run_id=run_id,
+            requested_by=requested_by,
+            dedupe_key=dedupe_key,
+            correlation_id=correlation_id,
             reconciliation_type=reconciliation_type,
             status=status_filter,
         )
@@ -482,6 +677,21 @@ async def get_reconciliation_findings(
         description="Reconciliation run identifier.",
         examples=["recon_1234567890abcdef"],
     ),
+    finding_id: Optional[str] = Query(
+        None,
+        description="Optional durable reconciliation finding identifier filter.",
+        examples=["rf_1234567890abcdef"],
+    ),
+    security_id: Optional[str] = Query(
+        None,
+        description="Optional security identifier filter for reconciliation findings.",
+        examples=["SEC-US-IBM"],
+    ),
+    transaction_id: Optional[str] = Query(
+        None,
+        description="Optional transaction identifier filter for reconciliation findings.",
+        examples=["TXN-20260313-0042"],
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum findings to return.", examples=[100]
     ),
@@ -492,6 +702,9 @@ async def get_reconciliation_findings(
             portfolio_id=portfolio_id,
             run_id=run_id,
             limit=limit,
+            finding_id=finding_id,
+            security_id=security_id,
+            transaction_id=transaction_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

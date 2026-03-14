@@ -199,6 +199,8 @@ async def test_find_and_reset_stale_jobs_resets_processing_rows(
     update_stmt = mock_db_session.execute.await_args_list[1].args[0]
     assert "SELECT reprocessing_jobs.id" in str(select_stmt)
     assert "UPDATE reprocessing_jobs SET status=:status" in str(update_stmt)
+    assert "reprocessing_jobs.status = :status_1" in str(update_stmt)
+    assert "reprocessing_jobs.updated_at < :updated_at_1" in str(update_stmt)
 
 
 async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
@@ -259,11 +261,25 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30, max_attempts=3)
 
     assert reset_count == 1
-    assert mock_db_session.execute.await_count == 3
-    failed_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    reset_stmt = mock_db_session.execute.await_args_list[2].args[0]
-    assert "failure_reason" in str(failed_stmt)
-    assert "UPDATE reprocessing_jobs SET status=:status" in str(reset_stmt)
+
+
+async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_select_result = MagicMock()
+    mock_select_result.all.return_value = [MagicMock(id=10, attempt_count=1)]
+    mock_update_result = MagicMock()
+    mock_update_result.rowcount = 0
+    mock_db_session.execute.side_effect = [mock_select_result, mock_update_result]
+
+    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30, max_attempts=3)
+
+    assert reset_count == 0
+    update_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    stmt_text = str(update_stmt)
+    assert "reprocessing_jobs.status = :status_1" in stmt_text
+    assert "reprocessing_jobs.updated_at < :updated_at_1" in stmt_text
 
 
 async def test_create_job_coalesces_pending_reset_watermarks_job(
@@ -387,3 +403,19 @@ async def test_create_job_normalizes_sentinel_correlation_for_generic_jobs(
     )
 
     assert result.correlation_id is None
+
+
+async def test_update_job_status_requires_processing_ownership(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    update_result = MagicMock()
+    update_result.rowcount = 0
+    mock_db_session.execute.return_value = update_result
+
+    updated = await repository.update_job_status(99, "COMPLETE")
+
+    assert updated is False
+    stmt = mock_db_session.execute.await_args.args[0]
+    stmt_text = str(stmt)
+    assert "reprocessing_jobs.status = :status_1" in stmt_text

@@ -102,6 +102,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         parameter for parameter in overview["parameters"] if parameter["name"] == "portfolio_id"
     )
     assert overview_portfolio["description"] == "Portfolio identifier."
+    overview_stale_threshold = next(
+        parameter
+        for parameter in overview["parameters"]
+        if parameter["name"] == "stale_threshold_minutes"
+    )
+    assert overview_stale_threshold["description"].startswith("Threshold in minutes")
+    overview_failed_window = next(
+        parameter
+        for parameter in overview["parameters"]
+        if parameter["name"] == "failed_window_hours"
+    )
+    assert overview_failed_window["description"].startswith("Window in hours")
 
     stale_threshold = next(
         parameter
@@ -109,6 +121,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "stale_threshold_minutes"
     )
     assert stale_threshold["description"].startswith("Threshold in minutes")
+    failed_window = next(
+        parameter
+        for parameter in calculator_slos["parameters"]
+        if parameter["name"] == "failed_window_hours"
+    )
+    assert failed_window["description"].startswith("Window in hours")
 
     not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
@@ -117,6 +135,22 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_not_found["detail"] == (
         "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
     )
+    lineage_response = schema["components"]["schemas"]["LineageResponse"]
+    assert lineage_response["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this lineage snapshot was generated."
+    )
+    assert lineage_response["properties"]["has_artifact_gap"]["description"].startswith(
+        "True when the current epoch shows missing or lagging downstream artifacts"
+    )
+    assert lineage_response["properties"]["operational_state"]["description"].startswith(
+        "Derived operator-facing lineage state for this key"
+    )
+    assert lineage_response["properties"]["latest_valuation_job_id"]["description"] == (
+        "Durable database identifier of the latest valuation job in the current epoch."
+    )
+    assert lineage_response["properties"]["latest_valuation_job_correlation_id"][
+        "description"
+    ].startswith("Durable correlation identifier of the latest valuation job")
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
@@ -140,6 +174,125 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "status_filter"
     )
     assert analytics_export_status["description"].startswith("Optional export job status filter")
+    for path_item in (
+        analytics_export_jobs,
+        reprocessing_jobs,
+        reprocessing_keys,
+        schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"]["get"],
+        schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"]["get"],
+    ):
+        listing_stale_threshold = next(
+            parameter
+            for parameter in path_item["parameters"]
+            if parameter["name"] == "stale_threshold_minutes"
+        )
+        assert listing_stale_threshold["description"].startswith("Threshold in minutes")
+    valuation_job_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "job_id"
+    )
+    control_stage_id = next(
+        parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_id"
+    )
+    assert control_stage_id["description"] == "Optional durable control-stage row id filter."
+    assert valuation_job_id["description"] == "Optional durable valuation job id filter."
+    valuation_business_date = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "business_date"
+    )
+    assert (
+        valuation_business_date["description"]
+        == "Optional valuation business date filter in YYYY-MM-DD format."
+    )
+    valuation_security_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert (
+        valuation_security_id["description"]
+        == "Optional security identifier filter for one valuation job stream."
+    )
+    valuation_correlation_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        valuation_correlation_id["description"]
+        == "Optional durable valuation correlation identifier filter."
+    )
+    aggregation_job_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "job_id"
+    )
+    assert aggregation_job_id["description"] == "Optional durable aggregation job id filter."
+    aggregation_business_date = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "business_date"
+    )
+    assert (
+        aggregation_business_date["description"]
+        == "Optional aggregation business date filter in YYYY-MM-DD format."
+    )
+    aggregation_correlation_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        aggregation_correlation_id["description"]
+        == "Optional durable aggregation correlation identifier filter."
+    )
+    analytics_export_job_id = next(
+        parameter
+        for parameter in analytics_export_jobs["parameters"]
+        if parameter["name"] == "job_id"
+    )
+    analytics_export_request_fingerprint = next(
+        parameter
+        for parameter in analytics_export_jobs["parameters"]
+        if parameter["name"] == "request_fingerprint"
+    )
+    assert (
+        analytics_export_job_id["description"]
+        == "Optional durable analytics export job identifier filter."
+    )
+    assert (
+        analytics_export_request_fingerprint["description"]
+        == "Optional analytics export request fingerprint filter."
+    )
+    replay_job_id = next(
+        parameter for parameter in reprocessing_jobs["parameters"] if parameter["name"] == "job_id"
+    )
+    assert replay_job_id["description"] == "Optional durable replay job id filter."
+    replay_correlation_id = next(
+        parameter
+        for parameter in reprocessing_jobs["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        replay_correlation_id["description"]
+        == "Optional durable replay correlation identifier filter."
+    )
     analytics_export_not_found = analytics_export_jobs["responses"]["404"]["content"][
         "application/json"
     ]["example"]
@@ -160,6 +313,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         or reprocessing_jobs_status.get("schema", {}).get("example")
     )
     assert status_filter_example == "PROCESSING"
+    reconciliation_correlation_id = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        reconciliation_correlation_id["description"]
+        == "Optional durable reconciliation correlation identifier filter."
+    )
 
     components = schema["components"]["schemas"]
     calculator_slo = components["CalculatorSloResponse"]
@@ -176,15 +338,33 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_jobs["properties"]["items"]["description"] == (
         "Operational jobs for support workflows."
     )
+    assert support_jobs["properties"]["stale_threshold_minutes"]["description"] == (
+        "Threshold in minutes used to classify stale support rows in this listing."
+    )
+    assert support_jobs["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this support job listing snapshot was generated."
+    )
     support_job_record = components["SupportJobRecord"]
+    assert support_job_record["properties"]["job_id"]["description"] == (
+        "Durable database identifier for this job row."
+    )
     assert support_job_record["properties"]["updated_at"]["description"] == (
         "UTC timestamp of the most recent durable lifecycle update for the job."
     )
     assert support_job_record["properties"]["is_retrying"]["description"].startswith(
         "True when the durable job has already consumed at least one retry attempt"
     )
+    assert support_job_record["properties"]["correlation_id"]["description"].startswith(
+        "Durable correlation identifier captured when the job was created"
+    )
+    assert support_job_record["properties"]["created_at"]["description"] == (
+        "UTC timestamp when the durable job row was first created."
+    )
     assert support_job_record["properties"]["is_stale_processing"]["description"].startswith(
         "True when the job is in PROCESSING state"
+    )
+    assert support_job_record["properties"]["is_terminal_failure"]["description"] == (
+        "True when the durable job is in FAILED terminal state."
     )
     assert support_job_record["properties"]["operational_state"]["description"] == (
         "Derived operator-facing lifecycle state used for support triage ordering."
@@ -192,11 +372,128 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
         "Number of valuation jobs currently in FAILED terminal state."
     )
+    assert support_overview["properties"]["controls_stage_id"]["description"].startswith(
+        "Durable database identifier of the latest portfolio-day financial reconciliation"
+    )
+    assert support_overview["properties"]["controls_last_source_event_type"][
+        "description"
+    ].startswith("Most recent durable source event type recorded on the latest")
+    assert support_overview["properties"]["controls_created_at"]["description"].startswith(
+        "UTC timestamp when the latest portfolio-day financial reconciliation control"
+    )
+    assert support_overview["properties"]["controls_ready_emitted_at"]["description"].startswith(
+        "UTC timestamp when the latest portfolio-day financial reconciliation control"
+    )
+    assert support_overview["properties"]["controls_failure_reason"]["description"].startswith(
+        "Durable failure reason recorded on the latest portfolio-day financial"
+    )
+    assert support_overview["properties"]["controls_latest_reconciliation_run_id"][
+        "description"
+    ].startswith("Durable reconciliation run identifier for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_type"][
+        "description"
+    ].startswith("Reconciliation type for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_status"][
+        "description"
+    ].startswith("Durable lifecycle status for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_correlation_id"][
+        "description"
+    ].startswith("Durable correlation identifier for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_requested_by"][
+        "description"
+    ].startswith("Principal or subsystem that requested the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_dedupe_key"][
+        "description"
+    ].startswith("Stable deduplication key for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_failure_reason"][
+        "description"
+    ].startswith("Failure reason recorded on the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_total_findings"][
+        "description"
+    ].startswith("Total durable finding count recorded on the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_blocking_findings"][
+        "description"
+    ].startswith("Number of blocking reconciliation findings recorded on the latest")
+    assert support_overview["properties"]["controls_latest_blocking_finding_id"][
+        "description"
+    ].startswith("Durable identifier of the most recent blocking reconciliation finding")
+    assert support_overview["properties"]["controls_latest_blocking_finding_type"][
+        "description"
+    ].startswith("Finding type for the most recent blocking reconciliation finding")
+    assert support_overview["properties"]["controls_latest_blocking_finding_security_id"][
+        "description"
+    ].startswith("Security identifier attached to the most recent blocking")
+    assert support_overview["properties"]["controls_latest_blocking_finding_transaction_id"][
+        "description"
+    ].startswith("Transaction identifier attached to the most recent blocking")
+    assert support_overview["properties"]["stale_threshold_minutes"]["description"] == (
+        "Threshold in minutes used to classify stale in-flight portfolio processing."
+    )
+    assert support_overview["properties"]["failed_window_hours"]["description"] == (
+        "Window in hours used to count recent failed jobs on the support overview."
+    )
+    assert support_overview["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this support overview snapshot was generated."
+    )
+    assert support_overview["properties"]["failed_valuation_jobs_within_window"][
+        "description"
+    ].startswith("Number of valuation jobs that moved to FAILED state within")
+    assert support_overview["properties"]["failed_aggregation_jobs_within_window"][
+        "description"
+    ].startswith("Number of aggregation jobs that moved to FAILED state within")
+    assert support_overview["properties"]["failed_analytics_export_jobs_within_window"][
+        "description"
+    ].startswith("Number of analytics export jobs that moved to FAILED state within")
+    assert support_overview["properties"]["controls_last_updated_at"]["description"].startswith(
+        "UTC timestamp of the most recent durable lifecycle update for the latest"
+    )
     assert support_overview["properties"]["oldest_pending_aggregation_date"]["description"] == (
         "Oldest aggregation date among pending/processing jobs for backlog analysis."
     )
     assert support_overview["properties"]["aggregation_backlog_age_days"]["description"].startswith(
         "Backlog age in days computed from oldest pending aggregation date"
+    )
+    assert support_overview["properties"]["stale_reprocessing_keys"]["description"].startswith(
+        "Number of REPROCESSING portfolio-security keys whose last update is older"
+    )
+    assert support_overview["properties"]["oldest_reprocessing_watermark_date"][
+        "description"
+    ].startswith("Oldest replay watermark date among portfolio-security keys")
+    assert support_overview["properties"]["oldest_reprocessing_security_id"][
+        "description"
+    ].startswith("Security identifier for the oldest portfolio-security key")
+    assert support_overview["properties"]["oldest_reprocessing_epoch"]["description"] == (
+        "Current epoch of the oldest portfolio-security key currently marked REPROCESSING."
+    )
+    assert support_overview["properties"]["oldest_reprocessing_updated_at"][
+        "description"
+    ].startswith("UTC timestamp of the most recent durable update for the oldest")
+    assert support_overview["properties"]["oldest_pending_valuation_job_id"][
+        "description"
+    ] == "Durable job id for the oldest open valuation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_valuation_security_id"][
+        "description"
+    ] == "Security identifier for the oldest open valuation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_valuation_correlation_id"][
+        "description"
+    ] == "Durable correlation identifier for the oldest open valuation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_aggregation_job_id"][
+        "description"
+    ] == "Durable job id for the oldest open aggregation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_aggregation_correlation_id"][
+        "description"
+    ] == "Durable correlation identifier for the oldest open aggregation job in the backlog."
+    assert support_overview["properties"]["oldest_pending_analytics_export_job_id"][
+        "description"
+    ] == "Durable job id for the oldest open analytics export job in the backlog."
+    assert support_overview["properties"]["oldest_pending_analytics_export_request_fingerprint"][
+        "description"
+    ].startswith("Request fingerprint for the oldest open analytics export job")
+    assert support_overview["properties"]["reprocessing_backlog_age_days"][
+        "description"
+    ].startswith("Backlog age in days computed from oldest_reprocessing_watermark_date")
+    assert calculator_slo["properties"]["failed_window_hours"]["description"] == (
+        "Window in hours used to count recent failed jobs."
     )
     assert support_overview["properties"]["pending_analytics_export_jobs"]["description"] == (
         "Number of analytics export jobs currently waiting in ACCEPTED state."
@@ -210,6 +507,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_jobs_schema["properties"]["items"]["description"] == (
         "Durable analytics export jobs for support workflows."
     )
+    assert analytics_export_jobs_schema["properties"]["stale_threshold_minutes"][
+        "description"
+    ] == "Threshold in minutes used to classify stale support rows in this listing."
+    assert analytics_export_jobs_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this analytics export listing snapshot was generated."
+    )
+    assert analytics_export_job_record["properties"]["request_fingerprint"][
+        "description"
+    ].startswith("Stable deduplication fingerprint for the export request")
     assert analytics_export_job_record["properties"]["dataset_type"]["description"] == (
         "Analytics dataset exported by the job."
     )
@@ -228,10 +534,70 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_job_record["properties"]["backlog_age_minutes"][
         "description"
     ].startswith("Age in minutes from created_at to the current UTC time")
+    reprocessing_slo = components["ReprocessingSloBucket"]
+    calculator_bucket = components["CalculatorSloBucket"]
+    assert reprocessing_slo["properties"]["stale_reprocessing_keys"]["description"].startswith(
+        "Number of REPROCESSING position keys whose last update is older"
+    )
+    assert reprocessing_slo["properties"]["oldest_reprocessing_watermark_date"][
+        "description"
+    ] == "Oldest watermark date among position keys currently in REPROCESSING state."
+    assert reprocessing_slo["properties"]["oldest_reprocessing_security_id"][
+        "description"
+    ] == "Security identifier for the oldest active reprocessing key."
+    assert reprocessing_slo["properties"]["oldest_reprocessing_epoch"]["description"] == (
+        "Current epoch of the oldest active reprocessing key."
+    )
+    assert reprocessing_slo["properties"]["oldest_reprocessing_updated_at"]["description"] == (
+        "UTC timestamp of the most recent durable update for the oldest active reprocessing key."
+    )
+    assert reprocessing_slo["properties"]["backlog_age_days"]["description"].startswith(
+        "Age in days from oldest_reprocessing_watermark_date"
+    )
+    assert calculator_bucket["properties"]["oldest_open_job_id"]["description"] == (
+        "Durable job id for the oldest open job contributing to this backlog."
+    )
+    assert calculator_bucket["properties"]["oldest_open_job_correlation_id"][
+        "description"
+    ] == "Durable correlation identifier for the oldest open job contributing to this backlog."
+    assert calculator_bucket["properties"]["failed_jobs_within_window"]["description"] == (
+        "Count of jobs that moved to FAILED state within the configured failed-job window."
+    )
+    reconciliation_run_record = components["ReconciliationRunRecord"]
+    assert reconciliation_run_record["properties"]["correlation_id"]["description"].startswith(
+        "Durable correlation identifier captured for the reconciliation run"
+    )
     reconciliation_type = next(
         parameter
         for parameter in reconciliation_runs["parameters"]
         if parameter["name"] == "reconciliation_type"
+    )
+    reconciliation_run_id = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "run_id"
+    )
+    assert (
+        reconciliation_run_id["description"]
+        == "Optional durable reconciliation run identifier filter."
+    )
+    reconciliation_requested_by = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "requested_by"
+    )
+    assert (
+        reconciliation_requested_by["description"]
+        == "Optional reconciliation requester filter."
+    )
+    reconciliation_dedupe_key = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "dedupe_key"
+    )
+    assert (
+        reconciliation_dedupe_key["description"]
+        == "Optional reconciliation deduplication key filter."
     )
     assert reconciliation_type["description"].startswith("Optional reconciliation type filter")
     reconciliation_status = next(
@@ -246,6 +612,33 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "run_id"
     )
     assert run_id_param["description"] == "Reconciliation run identifier."
+    finding_id_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "finding_id"
+    )
+    assert (
+        finding_id_param["description"]
+        == "Optional durable reconciliation finding identifier filter."
+    )
+    finding_security_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert (
+        finding_security_param["description"]
+        == "Optional security identifier filter for reconciliation findings."
+    )
+    finding_transaction_param = next(
+        parameter
+        for parameter in reconciliation_findings["parameters"]
+        if parameter["name"] == "transaction_id"
+    )
+    assert (
+        finding_transaction_param["description"]
+        == "Optional transaction identifier filter for reconciliation findings."
+    )
 
     reconciliation_not_found = reconciliation_runs["responses"]["404"]["content"][
         "application/json"
@@ -277,6 +670,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "security_id"
     )
     assert reprocessing_security["description"].startswith("Optional security identifier filter")
+    reprocessing_watermark_date = next(
+        parameter
+        for parameter in reprocessing_keys["parameters"]
+        if parameter["name"] == "watermark_date"
+    )
+    assert (
+        reprocessing_watermark_date["description"]
+        == "Optional replay watermark date filter in YYYY-MM-DD format."
+    )
     control_stages_not_found = control_stages["responses"]["404"]["content"]["application/json"][
         "example"
     ]
@@ -294,9 +696,20 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     control_stage_record = components["PortfolioControlStageRecord"]
     reprocessing_key_schema = components["ReprocessingKeyListResponse"]
     reprocessing_key_record = components["ReprocessingKeyRecord"]
+    lineage_key_record = components["LineageKeyRecord"]
+    lineage_key_schema = components["LineageKeyListResponse"]
 
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
+    )
+    assert reconciliation_run_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this reconciliation-run support snapshot was generated."
+    )
+    assert reconciliation_run_record["properties"]["requested_by"]["description"] == (
+        "Principal or subsystem that requested the reconciliation run."
+    )
+    assert reconciliation_run_record["properties"]["dedupe_key"]["description"].startswith(
+        "Stable deduplication key for the run"
     )
     assert reconciliation_run_record["properties"]["failure_reason"]["description"] == (
         "Failure reason when the reconciliation run reaches FAILED state."
@@ -313,14 +726,35 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reconciliation_finding_schema["properties"]["items"]["description"] == (
         "Durable reconciliation findings for the requested run."
     )
+    assert reconciliation_finding_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this reconciliation-finding support snapshot was generated."
+    )
     assert reconciliation_finding_record["properties"]["detail"]["description"] == (
         "Structured detail describing the mismatch or control breach."
+    )
+    assert reconciliation_finding_record["properties"]["is_blocking"]["description"].startswith(
+        "True when the finding represents a publication-blocking control breach"
+    )
+    assert reconciliation_finding_record["properties"]["operational_state"]["description"] == (
+        "Derived operator-facing state for support triage of reconciliation findings."
     )
     assert control_stage_schema["properties"]["items"]["description"] == (
         "Durable portfolio-day control stage rows for support workflows."
     )
+    assert control_stage_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this control-stage support snapshot was generated."
+    )
+    assert control_stage_record["properties"]["stage_id"]["description"] == (
+        "Durable database identifier for this portfolio control stage row."
+    )
     assert control_stage_record["properties"]["last_source_event_type"]["description"] == (
         "Last event type that updated the control stage row."
+    )
+    assert control_stage_record["properties"]["created_at"]["description"] == (
+        "UTC timestamp when the durable control stage row was first created."
+    )
+    assert control_stage_record["properties"]["ready_emitted_at"]["description"] == (
+        "UTC timestamp when the control stage emitted downstream readiness, if any."
     )
     assert control_stage_record["properties"]["is_blocking"]["description"] == (
         "True when the control stage blocks downstream publication or release decisions."
@@ -331,6 +765,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reprocessing_key_schema["properties"]["items"]["description"] == (
         "Durable replay key rows for support workflows."
     )
+    assert reprocessing_key_schema["properties"]["stale_threshold_minutes"]["description"] == (
+        "Threshold in minutes used to classify stale support rows in this listing."
+    )
+    assert reprocessing_key_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this replay-key listing snapshot was generated."
+    )
+    assert lineage_key_schema["properties"]["generated_at_utc"]["description"] == (
+        "UTC timestamp when this lineage key snapshot was generated."
+    )
+    assert reprocessing_key_record["properties"]["created_at"]["description"] == (
+        "UTC timestamp when the durable replay key row was first created."
+    )
     assert reprocessing_key_record["properties"]["updated_at"]["description"] == (
         "UTC timestamp of the most recent durable lifecycle update for the key."
     )
@@ -339,6 +785,27 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert reprocessing_key_record["properties"]["operational_state"]["description"] == (
         "Derived operator-facing lifecycle state used for support triage ordering."
+    )
+    assert lineage_key_record["properties"]["latest_position_history_date"]["description"] == (
+        "Latest position-history date for the current epoch of this key."
+    )
+    assert lineage_key_record["properties"]["latest_daily_snapshot_date"]["description"] == (
+        "Latest daily snapshot date for the current epoch of this key."
+    )
+    assert lineage_key_record["properties"]["latest_valuation_job_status"]["description"] == (
+        "Status of the latest valuation job recorded for the current epoch of this key."
+    )
+    assert lineage_key_record["properties"]["latest_valuation_job_id"]["description"] == (
+        "Durable database identifier of the latest valuation job in the current epoch."
+    )
+    assert lineage_key_record["properties"]["latest_valuation_job_correlation_id"][
+        "description"
+    ].startswith("Durable correlation identifier of the latest valuation job")
+    assert lineage_key_record["properties"]["has_artifact_gap"]["description"].startswith(
+        "True when the current epoch shows missing or lagging downstream artifacts"
+    )
+    assert lineage_key_record["properties"]["operational_state"]["description"].startswith(
+        "Derived operator-facing lineage state for this key"
     )
 
 

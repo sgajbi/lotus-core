@@ -148,17 +148,32 @@ class ReprocessingWorker:
                                     "watermark reset."
                                 )
 
-                            await job_repo.update_job_status(job.id, "COMPLETE")
-                            observe_reprocessing_worker_jobs_completed("RESET_WATERMARKS")
+                            if await job_repo.update_job_status(job.id, "COMPLETE"):
+                                observe_reprocessing_worker_jobs_completed("RESET_WATERMARKS")
+                            else:
+                                observe_reprocessing_stale_skips(
+                                    "reset_watermarks_terminal_ownership_lost",
+                                    1,
+                                )
+                                logger.warning(
+                                    "Skipping replay job completion after losing job ownership.",
+                                    extra={"job_id": job.id, "security_id": security_id},
+                                )
 
                         except Exception as e:
                             logger.error(
                                 f"Failed to process reprocessing job {job.id}", exc_info=True
                             )
-                            await job_repo.update_job_status(
+                            updated = await job_repo.update_job_status(
                                 job.id, "FAILED", failure_reason=str(e)
                             )
-                            observe_reprocessing_worker_jobs_failed("RESET_WATERMARKS")
+                            if updated:
+                                observe_reprocessing_worker_jobs_failed("RESET_WATERMARKS")
+                            else:
+                                observe_reprocessing_stale_skips(
+                                    "reset_watermarks_terminal_ownership_lost",
+                                    1,
+                                )
                         finally:
                             if correlation_token is not None:
                                 correlation_id_var.reset(correlation_token)

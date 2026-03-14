@@ -1,9 +1,11 @@
+import asyncio
+
 import pytest
 from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = pytest.mark.asyncio
 
@@ -270,3 +272,105 @@ async def test_create_job_preserves_existing_correlation_when_earlier_date_has_n
     assert len(rows) == 1
     assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"
     assert rows[0].correlation_id == "corr-existing"
+
+
+async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
+    clean_db, async_db_session: AsyncSession
+):
+    job = ReprocessingJob(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S4", "earliest_impacted_date": "2025-01-05"},
+        status="PROCESSING",
+    )
+    async_db_session.add(job)
+    await async_db_session.flush()
+    await async_db_session.execute(
+        text(
+            """
+            UPDATE reprocessing_jobs
+            SET updated_at = now() - interval '20 minutes'
+            WHERE id = :job_id
+            """
+        ),
+        {"job_id": job.id},
+    )
+    await async_db_session.commit()
+
+    repository = ReprocessingJobRepository(async_db_session)
+    original_execute = async_db_session.execute
+    execute_count = 0
+    concurrent_session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def execute_with_concurrent_completion(*args, **kwargs):
+        nonlocal execute_count
+        execute_count += 1
+        if execute_count == 2:
+            async with concurrent_session_factory() as session:
+                await session.execute(
+                    update(ReprocessingJob)
+                    .where(ReprocessingJob.id == job.id)
+                    .values(status="COMPLETE")
+                )
+                await session.commit()
+        return await original_execute(*args, **kwargs)
+
+    async_db_session.execute = execute_with_concurrent_completion
+    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+    await async_db_session.commit()
+
+    assert reset_count == 0
+
+    async with concurrent_session_factory() as persisted_session:
+        persisted = (
+            (
+                await persisted_session.execute(
+                    select(ReprocessingJob).where(ReprocessingJob.id == job.id)
+                )
+            )
+            .scalars()
+            .one()
+        )
+    assert persisted.status == "COMPLETE"
+
+
+async def test_find_and_claim_jobs_does_not_double_claim_under_concurrency(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        ReprocessingJob(
+            job_type="RESET_WATERMARKS",
+            payload={"security_id": "S5", "earliest_impacted_date": "2025-01-05"},
+            status="PENDING",
+        )
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def claim_one():
+        async with session_factory() as session:
+            repository = ReprocessingJobRepository(session)
+            claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1)
+            await session.commit()
+            return claimed
+
+    first_claim, second_claim = await asyncio.gather(claim_one(), claim_one())
+    all_claimed = [*first_claim, *second_claim]
+
+    assert len(all_claimed) == 1
+    assert len({job.id for job in all_claimed}) == 1
+
+    persisted_rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(persisted_rows) == 1
+    assert persisted_rows[0].status == "PROCESSING"
+    assert persisted_rows[0].attempt_count == 1

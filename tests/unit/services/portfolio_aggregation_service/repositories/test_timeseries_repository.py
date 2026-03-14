@@ -91,6 +91,7 @@ async def test_find_and_reset_stale_jobs_refreshes_updated_at(
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PENDING'" in compiled_query
     assert "updated_at=now()" in compiled_query
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
 
 
 async def test_find_and_claim_eligible_jobs_increments_attempt_count(
@@ -114,6 +115,23 @@ async def test_find_and_claim_eligible_jobs_increments_attempt_count(
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PROCESSING'" in compiled_query
     assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
+
+
+async def test_find_and_reset_stale_jobs_rechecks_stale_processing_state(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    stale_result = MagicMock()
+    stale_result.all.return_value = [MagicMock(id=1, attempt_count=1)]
+    update_result = MagicMock()
+    update_result.rowcount = 0
+    mock_db_session.execute.side_effect = [stale_result, update_result]
+
+    reset_count = await repository.find_and_reset_stale_jobs()
+
+    assert reset_count == 0
+    executed_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
 
 
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(

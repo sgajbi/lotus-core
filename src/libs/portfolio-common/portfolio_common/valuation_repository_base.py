@@ -303,7 +303,7 @@ class ValuationRepositoryBase:
         epoch: int,
         status: str,
         failure_reason: Optional[str] = None,
-    ):
+    ) -> bool:
         values_to_update = {
             "status": status,
             "updated_at": func.now(),
@@ -319,10 +319,12 @@ class ValuationRepositoryBase:
                 PortfolioValuationJob.security_id == security_id,
                 PortfolioValuationJob.valuation_date == valuation_date,
                 PortfolioValuationJob.epoch == epoch,
+                PortfolioValuationJob.status == "PROCESSING",
             )
             .values(**values_to_update)
         )
-        await self.db.execute(stmt)
+        result = await self.db.execute(stmt)
+        return result.rowcount == 1
 
     @async_timed(repository="ValuationRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioValuationJob]:
@@ -476,7 +478,11 @@ class ValuationRepositoryBase:
         if failed_job_ids:
             failure_stmt = (
                 update(PortfolioValuationJob)
-                .where(PortfolioValuationJob.id.in_(failed_job_ids))
+                .where(
+                    PortfolioValuationJob.id.in_(failed_job_ids),
+                    PortfolioValuationJob.status == "PROCESSING",
+                    PortfolioValuationJob.updated_at < stale_threshold,
+                )
                 .values(
                     status="FAILED",
                     failure_reason="Stale processing timeout exceeded max attempts",
@@ -495,7 +501,11 @@ class ValuationRepositoryBase:
 
         stmt = (
             update(PortfolioValuationJob)
-            .where(PortfolioValuationJob.id.in_(reset_job_ids))
+            .where(
+                PortfolioValuationJob.id.in_(reset_job_ids),
+                PortfolioValuationJob.status == "PROCESSING",
+                PortfolioValuationJob.updated_at < stale_threshold,
+            )
             .values(
                 status="PENDING",
                 updated_at=func.now(),

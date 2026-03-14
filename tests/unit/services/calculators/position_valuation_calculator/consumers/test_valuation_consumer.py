@@ -325,3 +325,43 @@ async def test_process_message_marks_job_failed_when_fx_rate_missing(
     assert mock_outbox_repo.create_outbox_event.call_count == 2
     consumer._send_to_dlq_async.assert_not_called()
     mock_idempotency_repo.mark_event_processed.assert_called_once()
+
+
+async def test_valuation_consumer_skips_success_side_effects_when_job_ownership_is_lost(
+    consumer: ValuationConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("8000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency="EUR",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("90"),
+        currency="EUR",
+        price_date=mock_event.valuation_date,
+    )
+    mock_valuation_repo.get_fx_rate.return_value = FxRate(rate=Decimal("1.1"))
+    mock_valuation_repo.update_job_status.return_value = False
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_valuation_repo.update_job_status.assert_awaited_once()
+    mock_valuation_repo.upsert_daily_snapshot.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_idempotency_repo.mark_event_processed.assert_not_called()

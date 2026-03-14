@@ -239,7 +239,11 @@ class ReprocessingJobRepository:
         if failed_job_ids:
             failure_stmt = (
                 update(ReprocessingJob)
-                .where(ReprocessingJob.id.in_(failed_job_ids))
+                .where(
+                    ReprocessingJob.id.in_(failed_job_ids),
+                    ReprocessingJob.status == "PROCESSING",
+                    ReprocessingJob.updated_at < stale_cutoff,
+                )
                 .values(
                     status="FAILED",
                     failure_reason="Stale processing timeout exceeded max attempts",
@@ -258,7 +262,11 @@ class ReprocessingJobRepository:
 
         stmt = (
             update(ReprocessingJob)
-            .where(ReprocessingJob.id.in_(reset_job_ids))
+            .where(
+                ReprocessingJob.id.in_(reset_job_ids),
+                ReprocessingJob.status == "PROCESSING",
+                ReprocessingJob.updated_at < stale_cutoff,
+            )
             .values(status="PENDING", updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
@@ -286,13 +294,19 @@ class ReprocessingJobRepository:
     @async_timed(repository="ReprocessingJobRepository", method="update_job_status")
     async def update_job_status(
         self, job_id: int, status: str, failure_reason: Optional[str] = None
-    ) -> None:
+    ) -> bool:
         """Updates the status of a specific job, optionally with a failure reason."""
         values_to_update = {"status": status, "updated_at": datetime.now(timezone.utc)}
         if failure_reason:
             values_to_update["failure_reason"] = failure_reason
 
         stmt = (
-            update(ReprocessingJob).where(ReprocessingJob.id == job_id).values(**values_to_update)
+            update(ReprocessingJob)
+            .where(
+                ReprocessingJob.id == job_id,
+                ReprocessingJob.status == "PROCESSING",
+            )
+            .values(**values_to_update)
         )
-        await self.db.execute(stmt)
+        result = await self.db.execute(stmt)
+        return result.rowcount == 1
