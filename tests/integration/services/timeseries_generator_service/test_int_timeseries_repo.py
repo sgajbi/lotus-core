@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from portfolio_common.database_models import Portfolio, PortfolioAggregationJob
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -155,3 +155,46 @@ async def test_find_and_reset_stale_aggregation_jobs_marks_over_limit_rows_faile
         job1 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P1_STALE").one()
         assert job1.status == "FAILED"
         assert job1.failure_reason == "Stale processing timeout exceeded max attempts"
+
+
+async def test_find_and_reset_stale_aggregation_jobs_does_not_overwrite_completed_rows(
+    db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
+):
+    job_id = (
+        (
+            await async_db_session.execute(
+                select(PortfolioAggregationJob.id).where(
+                    PortfolioAggregationJob.portfolio_id == "P1_STALE"
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+
+    repo = TimeseriesRepository(async_db_session)
+    original_execute = async_db_session.execute
+    execute_count = 0
+
+    async def execute_with_concurrent_completion(*args, **kwargs):
+        nonlocal execute_count
+        execute_count += 1
+        if execute_count == 2:
+            with Session(db_engine) as session:
+                session.execute(
+                    update(PortfolioAggregationJob)
+                    .where(PortfolioAggregationJob.id == job_id)
+                    .values(status="COMPLETE", updated_at=datetime.now(timezone.utc))
+                )
+                session.commit()
+        return await original_execute(*args, **kwargs)
+
+    async_db_session.execute = execute_with_concurrent_completion
+    reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+    await async_db_session.commit()
+
+    assert reset_count == 0
+
+    with Session(db_engine) as session:
+        job = session.query(PortfolioAggregationJob).filter_by(id=job_id).one()
+        assert job.status == "COMPLETE"

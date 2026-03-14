@@ -476,7 +476,11 @@ class ValuationRepositoryBase:
         if failed_job_ids:
             failure_stmt = (
                 update(PortfolioValuationJob)
-                .where(PortfolioValuationJob.id.in_(failed_job_ids))
+                .where(
+                    PortfolioValuationJob.id.in_(failed_job_ids),
+                    PortfolioValuationJob.status == "PROCESSING",
+                    PortfolioValuationJob.updated_at < stale_threshold,
+                )
                 .values(
                     status="FAILED",
                     failure_reason="Stale processing timeout exceeded max attempts",
@@ -495,7 +499,11 @@ class ValuationRepositoryBase:
 
         stmt = (
             update(PortfolioValuationJob)
-            .where(PortfolioValuationJob.id.in_(reset_job_ids))
+            .where(
+                PortfolioValuationJob.id.in_(reset_job_ids),
+                PortfolioValuationJob.status == "PROCESSING",
+                PortfolioValuationJob.updated_at < stale_threshold,
+            )
             .values(
                 status="PENDING",
                 updated_at=func.now(),

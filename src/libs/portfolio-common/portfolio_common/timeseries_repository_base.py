@@ -355,7 +355,11 @@ class TimeseriesRepositoryBase:
         if failed_job_ids:
             failure_stmt = (
                 update(PortfolioAggregationJob)
-                .where(PortfolioAggregationJob.id.in_(failed_job_ids))
+                .where(
+                    PortfolioAggregationJob.id.in_(failed_job_ids),
+                    PortfolioAggregationJob.status == "PROCESSING",
+                    PortfolioAggregationJob.updated_at < stale_threshold,
+                )
                 .values(
                     status="FAILED",
                     failure_reason="Stale processing timeout exceeded max attempts",
@@ -374,7 +378,11 @@ class TimeseriesRepositoryBase:
 
         stmt = (
             update(PortfolioAggregationJob)
-            .where(PortfolioAggregationJob.id.in_(reset_job_ids))
+            .where(
+                PortfolioAggregationJob.id.in_(reset_job_ids),
+                PortfolioAggregationJob.status == "PROCESSING",
+                PortfolioAggregationJob.updated_at < stale_threshold,
+            )
             .values(status="PENDING", updated_at=func.now())
         )
 

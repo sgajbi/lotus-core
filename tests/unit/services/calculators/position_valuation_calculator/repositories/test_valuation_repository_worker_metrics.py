@@ -106,6 +106,29 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     reset_metric.assert_not_called()
 
 
+async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    select_result = MagicMock()
+    select_result.all.return_value = [MagicMock(id=101, attempt_count=1)]
+    update_result = MagicMock()
+    update_result.fetchall.return_value = []
+    mock_db_session.execute.side_effect = [select_result, update_result]
+
+    with patch(
+        "src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository.observe_valuation_worker_stale_resets"
+    ) as reset_metric:
+        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+
+    assert reset_count == 0
+    reset_metric.assert_not_called()
+    update_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_query = str(update_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
+
+
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
     mock_db_session: AsyncMock,
 ) -> None:

@@ -14,7 +14,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.valuation_job_repository import ValuationJobRepository
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
@@ -735,6 +735,55 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
         ).scalar_one()
         assert job1.status == "FAILED"
         assert job1.failure_reason == "Stale processing timeout exceeded max attempts"
+
+
+async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
+    clean_db, setup_stale_job_data, session_factory: async_sessionmaker
+):
+    async with session_factory() as session:
+        job_id = (
+            (
+                await session.execute(
+                    select(PortfolioValuationJob.id).where(
+                        PortfolioValuationJob.portfolio_id == "P1"
+                    )
+                )
+            )
+            .scalars()
+            .one()
+        )
+
+    async with session_factory() as session:
+        repo = ValuationRepository(session)
+        original_execute = session.execute
+        execute_count = 0
+
+        async def execute_with_concurrent_completion(*args, **kwargs):
+            nonlocal execute_count
+            execute_count += 1
+            if execute_count == 2:
+                async with session_factory() as concurrent_session:
+                    await concurrent_session.execute(
+                        update(PortfolioValuationJob)
+                        .where(PortfolioValuationJob.id == job_id)
+                        .values(status="COMPLETE", updated_at=datetime.now(timezone.utc))
+                    )
+                    await concurrent_session.commit()
+            return await original_execute(*args, **kwargs)
+
+        session.execute = execute_with_concurrent_completion
+        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+        await session.commit()
+
+    assert reset_count == 0
+
+    async with session_factory() as session:
+        job = (
+            await session.execute(
+                select(PortfolioValuationJob).where(PortfolioValuationJob.id == job_id)
+            )
+        ).scalar_one()
+        assert job.status == "COMPLETE"
 
 
 async def test_get_first_open_dates_for_keys(

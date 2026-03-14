@@ -239,7 +239,11 @@ class ReprocessingJobRepository:
         if failed_job_ids:
             failure_stmt = (
                 update(ReprocessingJob)
-                .where(ReprocessingJob.id.in_(failed_job_ids))
+                .where(
+                    ReprocessingJob.id.in_(failed_job_ids),
+                    ReprocessingJob.status == "PROCESSING",
+                    ReprocessingJob.updated_at < stale_cutoff,
+                )
                 .values(
                     status="FAILED",
                     failure_reason="Stale processing timeout exceeded max attempts",
@@ -258,7 +262,11 @@ class ReprocessingJobRepository:
 
         stmt = (
             update(ReprocessingJob)
-            .where(ReprocessingJob.id.in_(reset_job_ids))
+            .where(
+                ReprocessingJob.id.in_(reset_job_ids),
+                ReprocessingJob.status == "PROCESSING",
+                ReprocessingJob.updated_at < stale_cutoff,
+            )
             .values(status="PENDING", updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
