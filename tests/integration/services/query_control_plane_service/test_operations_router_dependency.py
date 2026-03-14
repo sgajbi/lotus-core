@@ -357,7 +357,7 @@ async def test_valuation_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/valuation-jobs"
-        "?job_id=101&security_id=S1&correlation_id=corr-val-101"
+        "?job_id=101&business_date=2025-08-31&security_id=S1&correlation_id=corr-val-101"
         "&status=PENDING&stale_threshold_minutes=30"
     )
 
@@ -373,6 +373,7 @@ async def test_valuation_jobs_success(async_test_client):
         skip=0,
         limit=100,
         job_id=101,
+        business_date=date(2025, 8, 31),
         security_id="S1",
         correlation_id="corr-val-101",
         status="PENDING",
@@ -422,7 +423,8 @@ async def test_aggregation_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/aggregation-jobs"
-        "?job_id=202&correlation_id=corr-agg-202&status=PROCESSING&stale_threshold_minutes=30"
+        "?job_id=202&business_date=2025-08-31"
+        "&correlation_id=corr-agg-202&status=PROCESSING&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -438,6 +440,7 @@ async def test_aggregation_jobs_success(async_test_client):
         skip=0,
         limit=100,
         job_id=202,
+        business_date=date(2025, 8, 31),
         correlation_id="corr-agg-202",
         status="PROCESSING",
         stale_threshold_minutes=30,

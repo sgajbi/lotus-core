@@ -411,6 +411,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
         skip=0,
         limit=20,
         status="PENDING",
+        business_date=None,
         security_id=None,
         job_id=None,
         correlation_id=None,
@@ -462,6 +463,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
         skip=0,
         limit=20,
         status="PROCESSING",
+        business_date=None,
         job_id=None,
         correlation_id=None,
         stale_minutes=15,
@@ -508,6 +510,7 @@ async def test_get_aggregation_jobs_honors_custom_stale_threshold(
         skip=0,
         limit=20,
         status="PROCESSING",
+        business_date=None,
         job_id=None,
         correlation_id=None,
         stale_minutes=30,
@@ -682,6 +685,7 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
     mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
         status="PENDING",
+        business_date=None,
         security_id=None,
         job_id=8801,
         correlation_id=None,
@@ -691,6 +695,7 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
         skip=0,
         limit=20,
         status="PENDING",
+        business_date=None,
         security_id=None,
         job_id=8801,
         correlation_id=None,
@@ -717,6 +722,7 @@ async def test_get_valuation_jobs_forwards_security_filter(
     mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
         status="PENDING",
+        business_date=None,
         security_id="SEC-US-IBM",
         job_id=None,
         correlation_id=None,
@@ -726,6 +732,7 @@ async def test_get_valuation_jobs_forwards_security_filter(
         skip=0,
         limit=20,
         status="PENDING",
+        business_date=None,
         security_id="SEC-US-IBM",
         job_id=None,
         correlation_id=None,
@@ -752,6 +759,7 @@ async def test_get_valuation_jobs_forwards_correlation_filter(
     mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
         status="PENDING",
+        business_date=None,
         security_id=None,
         job_id=None,
         correlation_id="corr-val-8801",
@@ -761,9 +769,82 @@ async def test_get_valuation_jobs_forwards_correlation_filter(
         skip=0,
         limit=20,
         status="PENDING",
+        business_date=None,
         security_id=None,
         job_id=None,
         correlation_id="corr-val-8801",
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_valuation_jobs_forwards_business_date_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_valuation_jobs.return_value = []
+
+    response = await service.get_valuation_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        business_date=date(2025, 8, 31),
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PENDING",
+        business_date=date(2025, 8, 31),
+        security_id=None,
+        job_id=None,
+        correlation_id=None,
+    )
+    mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        business_date=date(2025, 8, 31),
+        security_id=None,
+        job_id=None,
+        correlation_id=None,
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_aggregation_jobs_forwards_business_date_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_aggregation_jobs_count.return_value = 0
+    mock_ops_repo.get_aggregation_jobs.return_value = []
+
+    response = await service.get_aggregation_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        business_date=date(2025, 8, 31),
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_aggregation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PROCESSING",
+        business_date=date(2025, 8, 31),
+        job_id=None,
+        correlation_id=None,
+    )
+    mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        business_date=date(2025, 8, 31),
+        job_id=None,
+        correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -820,6 +901,7 @@ async def test_get_aggregation_jobs_forwards_correlation_filter(
     mock_ops_repo.get_aggregation_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
         status="PROCESSING",
+        business_date=None,
         job_id=None,
         correlation_id="corr-agg-4402",
     )
@@ -828,6 +910,7 @@ async def test_get_aggregation_jobs_forwards_correlation_filter(
         skip=0,
         limit=20,
         status="PROCESSING",
+        business_date=None,
         job_id=None,
         correlation_id="corr-agg-4402",
         stale_minutes=15,

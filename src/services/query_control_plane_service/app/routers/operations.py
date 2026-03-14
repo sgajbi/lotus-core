@@ -365,8 +365,8 @@ async def get_reprocessing_jobs(
     summary="List valuation jobs for support workflows",
     description=(
         "What: List valuation jobs for a portfolio with support filters.\n"
-        "How: Query valuation job records with pagination and optional id, security, status, "
-        "and correlation filtering.\n"
+        "How: Query valuation job records with pagination and optional id, date, security, "
+        "status, and correlation filtering.\n"
         "When: Use to triage stuck valuation workloads and verify drain progress."
     ),
 )
@@ -381,6 +381,11 @@ async def get_valuation_jobs(
         None,
         description="Optional security identifier filter for one valuation job stream.",
         examples=["SEC-US-IBM"],
+    ),
+    business_date: Optional[str] = Query(
+        None,
+        description="Optional valuation business date filter in YYYY-MM-DD format.",
+        examples=["2025-08-31"],
     ),
     correlation_id: Optional[str] = Query(
         None,
@@ -405,11 +410,13 @@ async def get_valuation_jobs(
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
+        parsed_business_date = date.fromisoformat(business_date) if business_date else None
         return await service.get_valuation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
             job_id=job_id,
+            business_date=parsed_business_date,
             security_id=security_id,
             correlation_id=correlation_id,
             status=job_status,
@@ -437,8 +444,8 @@ async def get_valuation_jobs(
     summary="List aggregation jobs for support workflows",
     description=(
         "What: List portfolio aggregation jobs for support workflows.\n"
-        "How: Query aggregation job records with pagination and optional id, status, and "
-        "correlation filtering.\n"
+        "How: Query aggregation job records with pagination and optional id, date, status, "
+        "and correlation filtering.\n"
         "When: Use when portfolio rollups are stale or downstream timeseries appears delayed."
     ),
 )
@@ -453,6 +460,11 @@ async def get_aggregation_jobs(
         None,
         description="Optional durable aggregation correlation identifier filter.",
         examples=["corr-agg-4402"],
+    ),
+    business_date: Optional[str] = Query(
+        None,
+        description="Optional aggregation business date filter in YYYY-MM-DD format.",
+        examples=["2025-08-31"],
     ),
     job_status: Optional[str] = Query(
         None,
@@ -472,11 +484,13 @@ async def get_aggregation_jobs(
     service: OperationsService = Depends(get_operations_service),
 ):
     try:
+        parsed_business_date = date.fromisoformat(business_date) if business_date else None
         return await service.get_aggregation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
             job_id=job_id,
+            business_date=parsed_business_date,
             correlation_id=correlation_id,
             status=job_status,
             stale_threshold_minutes=stale_threshold_minutes,

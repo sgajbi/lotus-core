@@ -196,6 +196,17 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert control_stage_id["description"] == "Optional durable control-stage row id filter."
     assert valuation_job_id["description"] == "Optional durable valuation job id filter."
+    valuation_business_date = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "business_date"
+    )
+    assert (
+        valuation_business_date["description"]
+        == "Optional valuation business date filter in YYYY-MM-DD format."
+    )
     valuation_security_id = next(
         parameter
         for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
@@ -226,6 +237,17 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "job_id"
     )
     assert aggregation_job_id["description"] == "Optional durable aggregation job id filter."
+    aggregation_business_date = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "business_date"
+    )
+    assert (
+        aggregation_business_date["description"]
+        == "Optional aggregation business date filter in YYYY-MM-DD format."
+    )
     aggregation_correlation_id = next(
         parameter
         for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][

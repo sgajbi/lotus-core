@@ -296,6 +296,7 @@ async def test_support_job_queries_honor_job_id_filters(
     await repository.get_valuation_jobs_count(
         "P1",
         status="PENDING",
+        business_date=date(2025, 8, 31),
         security_id="SEC-US-IBM",
         job_id=8801,
         correlation_id="corr-val-8801",
@@ -305,19 +306,25 @@ async def test_support_job_queries_honor_job_id_filters(
         skip=0,
         limit=10,
         status="PENDING",
+        business_date=date(2025, 8, 31),
         security_id="SEC-US-IBM",
         job_id=8801,
         correlation_id="corr-val-8801",
         reference_now=reference_now,
     )
     await repository.get_aggregation_jobs_count(
-        "P1", status="PROCESSING", job_id=4402, correlation_id="corr-agg-4402"
+        "P1",
+        status="PROCESSING",
+        business_date=date(2025, 8, 31),
+        job_id=4402,
+        correlation_id="corr-agg-4402",
     )
     await repository.get_aggregation_jobs(
         "P1",
         skip=0,
         limit=10,
         status="PROCESSING",
+        business_date=date(2025, 8, 31),
         job_id=4402,
         correlation_id="corr-agg-4402",
         reference_now=reference_now,
@@ -359,14 +366,18 @@ async def test_support_job_queries_honor_job_id_filters(
         str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
         for call in mock_db_session.execute.call_args_list
     ]
+    assert "portfolio_valuation_jobs.valuation_date = '2025-08-31'" in compiled_statements[0]
     assert "portfolio_valuation_jobs.security_id = 'SEC-US-IBM'" in compiled_statements[0]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[0]
     assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[0]
+    assert "portfolio_valuation_jobs.valuation_date = '2025-08-31'" in compiled_statements[1]
     assert "portfolio_valuation_jobs.security_id = 'SEC-US-IBM'" in compiled_statements[1]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[1]
     assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[1]
+    assert "portfolio_aggregation_jobs.aggregation_date = '2025-08-31'" in compiled_statements[2]
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[2]
     assert "portfolio_aggregation_jobs.correlation_id = 'corr-agg-4402'" in compiled_statements[2]
+    assert "portfolio_aggregation_jobs.aggregation_date = '2025-08-31'" in compiled_statements[3]
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[3]
     assert "portfolio_aggregation_jobs.correlation_id = 'corr-agg-4402'" in compiled_statements[3]
     assert "analytics_export_jobs.job_id = 'aexp_1234567890abcdef'" in compiled_statements[4]
