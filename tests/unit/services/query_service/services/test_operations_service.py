@@ -736,6 +736,7 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
 
 
 async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: AsyncMock):
+    created_at = datetime(2026, 3, 13, 10, 5, tzinfo=timezone.utc)
     updated_at = datetime.now(timezone.utc)
     mock_ops_repo.get_reprocessing_keys_count.return_value = 1
     mock_ops_repo.get_reprocessing_keys.return_value = [
@@ -747,6 +748,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
                 "epoch": 3,
                 "watermark_date": date(2026, 3, 10),
                 "status": "REPROCESSING",
+                "created_at": created_at,
                 "updated_at": updated_at,
             },
         )()
@@ -766,6 +768,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
     assert response.items[0].epoch == 3
     assert response.items[0].watermark_date == date(2026, 3, 10)
     assert response.items[0].status == "REPROCESSING"
+    assert response.items[0].created_at == created_at
     assert response.items[0].updated_at == updated_at
     assert response.items[0].is_stale_reprocessing is False
     assert response.items[0].operational_state == "REPROCESSING"

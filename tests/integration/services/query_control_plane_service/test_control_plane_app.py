@@ -385,6 +385,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reprocessing_key_schema["properties"]["items"]["description"] == (
         "Durable replay key rows for support workflows."
     )
+    assert reprocessing_key_record["properties"]["created_at"]["description"] == (
+        "UTC timestamp when the durable replay key row was first created."
+    )
     assert reprocessing_key_record["properties"]["updated_at"]["description"] == (
         "UTC timestamp of the most recent durable lifecycle update for the key."
     )

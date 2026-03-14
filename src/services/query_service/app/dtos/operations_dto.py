@@ -1033,6 +1033,11 @@ class ReprocessingKeyRecord(BaseModel):
         description="Current durable reprocessing state for the key.",
         examples=["REPROCESSING"],
     )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the durable replay key row was first created.",
+        examples=["2026-03-13T10:05:00Z"],
+    )
     updated_at: datetime = Field(
         ...,
         description="UTC timestamp of the most recent durable lifecycle update for the key.",
@@ -1072,6 +1077,7 @@ class ReprocessingKeyListResponse(BaseModel):
                     "epoch": 3,
                     "watermark_date": "2026-03-10",
                     "status": "REPROCESSING",
+                    "created_at": "2026-03-13T10:05:00Z",
                     "updated_at": "2026-03-13T10:15:09Z",
                     "is_stale_reprocessing": False,
                     "operational_state": "REPROCESSING",

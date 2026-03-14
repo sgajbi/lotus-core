@@ -624,6 +624,7 @@ async def test_reprocessing_keys_success(async_test_client):
                 "epoch": 3,
                 "watermark_date": "2026-03-10",
                 "status": "REPROCESSING",
+                "created_at": "2026-03-13T10:05:00Z",
                 "updated_at": "2026-03-13T10:15:09Z",
                 "is_stale_reprocessing": False,
                 "operational_state": "REPROCESSING",
@@ -639,6 +640,7 @@ async def test_reprocessing_keys_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
     assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"
+    assert response.json()["items"][0]["created_at"] == "2026-03-13T10:05:00Z"
     assert response.json()["items"][0]["is_stale_reprocessing"] is False
     assert response.json()["items"][0]["operational_state"] == "REPROCESSING"
 

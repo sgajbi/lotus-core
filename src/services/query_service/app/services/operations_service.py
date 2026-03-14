@@ -735,6 +735,7 @@ class OperationsService:
                     epoch=key.epoch,
                     watermark_date=key.watermark_date,
                     status=key.status,
+                    created_at=key.created_at,
                     updated_at=key.updated_at,
                     is_stale_reprocessing=self._is_reprocessing_key_stale(
                         key.status,
