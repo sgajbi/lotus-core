@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+from portfolio_common.kafka_admin import KafkaTopicVerificationError
 
 from src.services.valuation_orchestrator_service.app import consumer_manager
 
@@ -87,3 +88,23 @@ async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeyp
 
     assert manager.scheduler.stop_called is True
     assert manager.reprocessing_worker.stop_called is True
+
+
+async def test_consumer_manager_propagates_typed_topic_verification_failure(
+    _patch_runtime, monkeypatch
+):
+    monkeypatch.setattr(consumer_manager, "ValuationReadinessConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(consumer_manager, "PriceEventConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(
+        consumer_manager,
+        "ensure_topics_exist",
+        lambda *_: (_ for _ in ()).throw(KafkaTopicVerificationError("topics unavailable")),
+    )
+    manager = consumer_manager.ConsumerManager()
+
+    with pytest.raises(KafkaTopicVerificationError, match="topics unavailable"):
+        await manager.run()
+
+    assert manager.tasks == []
+    assert manager.scheduler.stop_called is False
+    assert manager.reprocessing_worker.stop_called is False
