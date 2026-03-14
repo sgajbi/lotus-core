@@ -178,17 +178,6 @@ class OperationsRepository:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    async def get_active_reprocessing_keys_count(self, portfolio_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PositionState)
-            .where(
-                PositionState.portfolio_id == portfolio_id,
-                PositionState.status == "REPROCESSING",
-            )
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
     async def get_reprocessing_health_summary(
         self,
         portfolio_id: str,

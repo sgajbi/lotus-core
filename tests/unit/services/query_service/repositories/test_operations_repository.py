@@ -61,20 +61,6 @@ async def test_get_current_portfolio_epoch_honors_as_of(
     assert "position_state.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
-async def test_get_active_reprocessing_keys_count(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 2)
-
-    value = await repository.get_active_reprocessing_keys_count("P1")
-
-    assert value == 2
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from position_state" in compiled.lower()
-    assert "position_state.status = 'REPROCESSING'" in compiled
-
-
 async def test_get_reprocessing_health_summary(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
