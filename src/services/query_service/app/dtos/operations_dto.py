@@ -891,6 +891,11 @@ class ReconciliationFindingListResponse(BaseModel):
 
 
 class PortfolioControlStageRecord(BaseModel):
+    stage_id: int = Field(
+        ...,
+        description="Durable database identifier for this portfolio control stage row.",
+        examples=[701],
+    )
     stage_name: str = Field(
         ...,
         description="Control-plane stage name recorded for the portfolio-day scope.",
@@ -950,6 +955,7 @@ class PortfolioControlStageListResponse(BaseModel):
         examples=[
             [
                 {
+                    "stage_id": 701,
                     "stage_name": "FINANCIAL_RECONCILIATION",
                     "business_date": "2026-03-13",
                     "epoch": 3,

@@ -676,6 +676,7 @@ class OperationsService:
             limit=limit,
             items=[
                 PortfolioControlStageRecord(
+                    stage_id=stage.id,
                     stage_name=stage.stage_name,
                     business_date=stage.business_date,
                     epoch=stage.epoch,

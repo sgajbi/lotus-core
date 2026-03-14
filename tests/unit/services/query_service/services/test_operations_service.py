@@ -674,6 +674,7 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
             "PipelineStageStub",
             (),
             {
+                "id": 701,
                 "stage_name": "FINANCIAL_RECONCILIATION",
                 "business_date": date(2026, 3, 13),
                 "epoch": 3,
@@ -695,6 +696,7 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
 
     assert response.portfolio_id == "P1"
     assert response.total == 1
+    assert response.items[0].stage_id == 701
     assert response.items[0].stage_name == "FINANCIAL_RECONCILIATION"
     assert response.items[0].business_date == date(2026, 3, 13)
     assert response.items[0].epoch == 3

@@ -352,6 +352,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert control_stage_schema["properties"]["items"]["description"] == (
         "Durable portfolio-day control stage rows for support workflows."
     )
+    assert control_stage_record["properties"]["stage_id"]["description"] == (
+        "Durable database identifier for this portfolio control stage row."
+    )
     assert control_stage_record["properties"]["last_source_event_type"]["description"] == (
         "Last event type that updated the control stage row."
     )

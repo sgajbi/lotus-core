@@ -544,6 +544,7 @@ async def test_portfolio_control_stages_success(async_test_client):
         "limit": 100,
         "items": [
             {
+                "stage_id": 701,
                 "stage_name": "FINANCIAL_RECONCILIATION",
                 "business_date": "2026-03-13",
                 "epoch": 3,
@@ -564,6 +565,7 @@ async def test_portfolio_control_stages_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["items"][0]["stage_id"] == 701
     assert response.json()["items"][0]["stage_name"] == "FINANCIAL_RECONCILIATION"
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
