@@ -804,5 +804,31 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
+    assert "from position_history join position_state on" in compiled.lower()
+    assert "position_history.position_date <=" in compiled.lower()
+    assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
+    assert "anon_1.quantity > 0" in compiled
     assert "reprocessing_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "LIMIT 10 OFFSET 0" in compiled
+
+
+async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+
+    value = await repository.get_reprocessing_jobs_count(
+        portfolio_id="P1",
+        status="PROCESSING",
+        security_id="SEC-US-IBM",
+    )
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from reprocessing_jobs" in compiled.lower()
+    assert "from position_history join position_state on" in compiled.lower()
+    assert "position_history.position_date <=" in compiled.lower()
+    assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
+    assert "anon_1.quantity > 0" in compiled
+    assert "reprocessing_jobs.status = 'PROCESSING'" in compiled

@@ -18,7 +18,7 @@ from portfolio_common.database_models import (
     ReprocessingJob,
     Transaction,
 )
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import Date, and_, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -52,6 +52,47 @@ class ReprocessingHealthSummary:
 class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _reprocessing_job_portfolio_scope_exists(
+        portfolio_id: str,
+        security_id_expr,
+        impacted_date_expr,
+    ):
+        latest_history = (
+            select(
+                PositionHistory.quantity.label("quantity"),
+                func.row_number()
+                .over(
+                    partition_by=PositionHistory.portfolio_id,
+                    order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
+                )
+                .label("rn"),
+            )
+            .join(
+                PositionState,
+                and_(
+                    PositionState.portfolio_id == PositionHistory.portfolio_id,
+                    PositionState.security_id == PositionHistory.security_id,
+                    PositionState.epoch == PositionHistory.epoch,
+                ),
+            )
+            .where(
+                PositionState.portfolio_id == portfolio_id,
+                PositionState.security_id == security_id_expr,
+                PositionHistory.security_id == security_id_expr,
+                PositionHistory.position_date <= impacted_date_expr,
+            )
+            .correlate(ReprocessingJob)
+            .subquery()
+        )
+
+        return (
+            select(1)
+            .select_from(latest_history)
+            .where(latest_history.c.rn == 1, latest_history.c.quantity > 0)
+            .exists()
+        )
 
     @staticmethod
     def _support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
@@ -879,17 +920,19 @@ class OperationsRepository:
         security_id: Optional[str] = None,
     ) -> int:
         security_id_expr = ReprocessingJob.payload["security_id"].as_string()
+        impacted_date_expr = cast(
+            ReprocessingJob.payload["earliest_impacted_date"].as_string(),
+            Date,
+        )
+        portfolio_scope_exists = self._reprocessing_job_portfolio_scope_exists(
+            portfolio_id=portfolio_id,
+            security_id_expr=security_id_expr,
+            impacted_date_expr=impacted_date_expr,
+        )
         stmt = (
             select(func.count())
             .select_from(ReprocessingJob)
-            .where(
-                select(PositionState.portfolio_id)
-                .where(
-                    PositionState.portfolio_id == portfolio_id,
-                    PositionState.security_id == security_id_expr,
-                )
-                .exists()
-            )
+            .where(portfolio_scope_exists)
         )
         if status:
             stmt = stmt.where(ReprocessingJob.status == status)
@@ -909,8 +952,14 @@ class OperationsRepository:
     ):
         security_id_expr = ReprocessingJob.payload["security_id"].as_string()
         impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
+        impacted_date_cast = cast(impacted_date_expr, Date)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
+        portfolio_scope_exists = self._reprocessing_job_portfolio_scope_exists(
+            portfolio_id=portfolio_id,
+            security_id_expr=security_id_expr,
+            impacted_date_expr=impacted_date_cast,
+        )
         stmt = (
             select(
                 ReprocessingJob.id,
@@ -924,14 +973,7 @@ class OperationsRepository:
                 ReprocessingJob.updated_at,
                 ReprocessingJob.failure_reason,
             )
-            .where(
-                select(PositionState.portfolio_id)
-                .where(
-                    PositionState.portfolio_id == portfolio_id,
-                    PositionState.security_id == security_id_expr,
-                )
-                .exists()
-            )
+            .where(portfolio_scope_exists)
         )
         if status:
             stmt = stmt.where(ReprocessingJob.status == status)
