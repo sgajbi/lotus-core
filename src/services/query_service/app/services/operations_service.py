@@ -602,6 +602,8 @@ class OperationsService:
                     epoch=run.epoch,
                     started_at=run.started_at,
                     completed_at=run.completed_at,
+                    requested_by=run.requested_by,
+                    dedupe_key=run.dedupe_key,
                     correlation_id=run.correlation_id,
                     failure_reason=run.failure_reason,
                     is_terminal_failure=run.status == "FAILED",

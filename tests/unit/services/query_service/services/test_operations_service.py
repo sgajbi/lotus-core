@@ -512,6 +512,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
                 "epoch": 3,
                 "started_at": started_at,
                 "completed_at": completed_at,
+                "requested_by": "pipeline_orchestrator_service",
+                "dedupe_key": "recon:transaction_cashflow:P1:2026-03-13:3",
                 "correlation_id": "corr-recon-20260313-001",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
             },
@@ -530,6 +532,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.items[0].run_id == "recon_1234567890abcdef"
     assert response.items[0].reconciliation_type == "transaction_cashflow"
     assert response.items[0].status == "FAILED"
+    assert response.items[0].requested_by == "pipeline_orchestrator_service"
+    assert response.items[0].dedupe_key == "recon:transaction_cashflow:P1:2026-03-13:3"
     assert response.items[0].correlation_id == "corr-recon-20260313-001"
     assert response.items[0].failure_reason == "Tolerance exceeded for portfolio totals."
     assert response.items[0].is_terminal_failure is True

@@ -752,6 +752,19 @@ class ReconciliationRunRecord(BaseModel):
         description="UTC timestamp when reconciliation execution completed.",
         examples=["2026-03-13T10:15:09Z"],
     )
+    requested_by: Optional[str] = Field(
+        None,
+        description="Principal or subsystem that requested the reconciliation run.",
+        examples=["support.ops@lotus.local", "pipeline_orchestrator_service"],
+    )
+    dedupe_key: Optional[str] = Field(
+        None,
+        description=(
+            "Stable deduplication key for the run when the control path enforces one-run-per-scope "
+            "behavior."
+        ),
+        examples=["recon:transaction_cashflow:PF-001:2026-03-13:3"],
+    )
     correlation_id: Optional[str] = Field(
         None,
         description=(
@@ -805,6 +818,8 @@ class ReconciliationRunListResponse(BaseModel):
                     "epoch": 3,
                     "started_at": "2026-03-13T10:15:00Z",
                     "completed_at": "2026-03-13T10:15:09Z",
+                    "requested_by": "pipeline_orchestrator_service",
+                    "dedupe_key": "recon:transaction_cashflow:PF-001:2026-03-13:3",
                     "correlation_id": "corr-recon-20260313-001",
                     "failure_reason": None,
                     "is_terminal_failure": False,

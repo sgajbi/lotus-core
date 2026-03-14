@@ -331,6 +331,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
     )
+    assert reconciliation_run_record["properties"]["requested_by"]["description"] == (
+        "Principal or subsystem that requested the reconciliation run."
+    )
+    assert reconciliation_run_record["properties"]["dedupe_key"]["description"].startswith(
+        "Stable deduplication key for the run"
+    )
     assert reconciliation_run_record["properties"]["failure_reason"]["description"] == (
         "Failure reason when the reconciliation run reaches FAILED state."
     )
