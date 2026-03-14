@@ -82,3 +82,29 @@ async def test_shutdown_runtime_components_stops_consumers_callbacks_and_server(
     assert consumer.shutdown_called is True
     assert server.should_exit is True
     assert stop_marker == ["consumer", "callback"]
+
+
+async def test_shutdown_runtime_components_cancels_stuck_tasks_after_timeout():
+    stop_event = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def _stuck_task():
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    task = asyncio.create_task(_stuck_task(), name="stuck-task")
+
+    def _stop_callback() -> None:
+        stop_event.set()
+
+    await shutdown_runtime_components(
+        tasks=[task],
+        stop_callbacks=[_stop_callback],
+        shutdown_timeout_seconds=0.01,
+    )
+
+    assert task.cancelled() is True
+    assert cancelled.is_set() is True

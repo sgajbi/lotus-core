@@ -60,6 +60,7 @@ async def shutdown_runtime_components(
     consumers: Sequence[object] = (),
     stop_callbacks: Sequence[Callable[[], object]] = (),
     server=None,
+    shutdown_timeout_seconds: float = 10.0,
 ) -> None:
     """
     Stop service-local runtime components and await task teardown.
@@ -79,4 +80,16 @@ async def shutdown_runtime_components(
     if server is not None:
         server.should_exit = True
 
-    await asyncio.gather(*tasks, return_exceptions=True)
+    if not tasks:
+        return
+
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=shutdown_timeout_seconds,
+        )
+    except asyncio.TimeoutError:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
