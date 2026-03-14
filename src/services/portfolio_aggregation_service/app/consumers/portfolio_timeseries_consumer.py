@@ -93,10 +93,23 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
                         repo=repo,
                     )
 
+                    claimed_terminal = await self._update_job_status(
+                        portfolio_id,
+                        a_date,
+                        "COMPLETE",
+                        db_session=db,
+                    )
+                    if not claimed_terminal:
+                        logger.warning(
+                            "Skipping aggregation completion side effects after losing "
+                            "job ownership.",
+                            extra={"portfolio_id": portfolio_id, "aggregation_date": str(a_date)},
+                        )
+                        return
+
                     await repo.upsert_portfolio_timeseries(new_portfolio_record)
                     outbox_repo = OutboxRepository(db)
 
-                    await self._update_job_status(portfolio_id, a_date, "COMPLETE", db_session=db)
                     completion_event = PortfolioAggregationDayCompletedEvent(
                         portfolio_id=portfolio_id,
                         aggregation_date=a_date,
@@ -129,19 +142,23 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
 
     async def _update_job_status(
         self, portfolio_id: str, a_date: date, status: str, db_session=None
-    ):
+    ) -> bool:
         update_stmt = (
             update(PortfolioAggregationJob)
             .where(
                 PortfolioAggregationJob.portfolio_id == portfolio_id,
                 PortfolioAggregationJob.aggregation_date == a_date,
+                PortfolioAggregationJob.status == "PROCESSING",
             )
             .values(status=status, updated_at=func.now())
         )
 
         if db_session:
-            await db_session.execute(update_stmt)
-        else:
-            async for db in get_async_db_session():
-                async with db.begin():
-                    await db.execute(update_stmt)
+            result = await db_session.execute(update_stmt)
+            return result.rowcount == 1
+
+        async for db in get_async_db_session():
+            async with db.begin():
+                result = await db.execute(update_stmt)
+                return result.rowcount == 1
+        return False

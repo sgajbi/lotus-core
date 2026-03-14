@@ -119,14 +119,24 @@ class ValuationConsumer(BaseConsumer):
                                     reason="missing_ref_data",
                                 ).inc()
                                 logger.error(f"{error_msg} Job will be marked FAILED.")
-                                await repo.update_job_status(
+                                if not await repo.update_job_status(
                                     event.portfolio_id,
                                     event.security_id,
                                     event.valuation_date,
                                     event.epoch,
                                     "FAILED",
                                     failure_reason=error_msg,
-                                )
+                                ):
+                                    logger.warning(
+                                        "Skipping valuation failure completion after "
+                                        "losing job ownership.",
+                                        extra={
+                                            "portfolio_id": event.portfolio_id,
+                                            "security_id": event.security_id,
+                                            "valuation_date": str(event.valuation_date),
+                                        },
+                                    )
+                                    return
                                 await idempotency_repo.mark_event_processed(
                                     event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                                 )
@@ -214,6 +224,30 @@ class ValuationConsumer(BaseConsumer):
                             else:
                                 snapshot.valuation_status = VALUATION_UNVALUED
 
+                            terminal_status = (
+                                "FAILED"
+                                if snapshot.valuation_status in FAILED_JOB_STATUSES
+                                else "COMPLETE"
+                            )
+                            if not await repo.update_job_status(
+                                event.portfolio_id,
+                                event.security_id,
+                                event.valuation_date,
+                                event.epoch,
+                                terminal_status,
+                                failure_reason=job_failure_reason,
+                            ):
+                                logger.warning(
+                                    "Skipping valuation completion side effects after "
+                                    "losing job ownership.",
+                                    extra={
+                                        "portfolio_id": event.portfolio_id,
+                                        "security_id": event.security_id,
+                                        "valuation_date": str(event.valuation_date),
+                                    },
+                                )
+                                return
+
                             # 5. Persist the snapshot and create completion event
                             persisted_snapshot = await repo.upsert_daily_snapshot(snapshot)
                             completion_event = DailyPositionSnapshotPersistedEvent.model_validate(
@@ -251,16 +285,6 @@ class ValuationConsumer(BaseConsumer):
                                 correlation_id=correlation_id,
                             )
 
-                            await repo.update_job_status(
-                                event.portfolio_id,
-                                event.security_id,
-                                event.valuation_date,
-                                event.epoch,
-                                "FAILED"
-                                if snapshot.valuation_status in FAILED_JOB_STATUSES
-                                else "COMPLETE",
-                                failure_reason=job_failure_reason,
-                            )
                             await idempotency_repo.mark_event_processed(
                                 event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                             )
@@ -282,14 +306,24 @@ class ValuationConsumer(BaseConsumer):
                         async with db.begin():
                             repo = ValuationRepository(db)
                             idempotency_repo = IdempotencyRepository(db)
-                            await repo.update_job_status(
+                            if not await repo.update_job_status(
                                 event.portfolio_id,
                                 event.security_id,
                                 event.valuation_date,
                                 event.epoch,
                                 status="SKIPPED_NO_POSITION",
                                 failure_reason=str(e),
-                            )
+                            ):
+                                logger.warning(
+                                    "Skipping valuation no-position completion after "
+                                    "losing job ownership.",
+                                    extra={
+                                        "portfolio_id": event.portfolio_id,
+                                        "security_id": event.security_id,
+                                        "valuation_date": str(event.valuation_date),
+                                    },
+                                )
+                                return
                             await idempotency_repo.mark_event_processed(
                                 event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                             )

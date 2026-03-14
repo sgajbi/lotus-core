@@ -303,7 +303,7 @@ class ValuationRepositoryBase:
         epoch: int,
         status: str,
         failure_reason: Optional[str] = None,
-    ):
+    ) -> bool:
         values_to_update = {
             "status": status,
             "updated_at": func.now(),
@@ -319,10 +319,12 @@ class ValuationRepositoryBase:
                 PortfolioValuationJob.security_id == security_id,
                 PortfolioValuationJob.valuation_date == valuation_date,
                 PortfolioValuationJob.epoch == epoch,
+                PortfolioValuationJob.status == "PROCESSING",
             )
             .values(**values_to_update)
         )
-        await self.db.execute(stmt)
+        result = await self.db.execute(stmt)
+        return result.rowcount == 1
 
     @async_timed(repository="ValuationRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioValuationJob]:

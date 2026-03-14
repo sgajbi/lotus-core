@@ -403,3 +403,19 @@ async def test_create_job_normalizes_sentinel_correlation_for_generic_jobs(
     )
 
     assert result.correlation_id is None
+
+
+async def test_update_job_status_requires_processing_ownership(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    update_result = MagicMock()
+    update_result.rowcount = 0
+    mock_db_session.execute.return_value = update_result
+
+    updated = await repository.update_job_status(99, "COMPLETE")
+
+    assert updated is False
+    stmt = mock_db_session.execute.await_args.args[0]
+    stmt_text = str(stmt)
+    assert "reprocessing_jobs.status = :status_1" in stmt_text

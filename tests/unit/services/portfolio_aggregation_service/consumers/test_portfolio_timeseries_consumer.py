@@ -18,6 +18,7 @@ from src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseri
 from src.services.portfolio_aggregation_service.app.repositories.timeseries_repository import (
     TimeseriesRepository,
 )
+from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 logger = logging.getLogger(__name__)
 pytestmark = pytest.mark.asyncio
@@ -64,8 +65,7 @@ def mock_dependencies():
     mock_transaction = AsyncMock()
     mock_db_session.begin.return_value = mock_transaction
 
-    async def get_session_gen():
-        yield mock_db_session
+    get_session_gen = make_single_session_getter(mock_db_session)
 
     mock_repo_class = MagicMock(return_value=mock_repo)
 
@@ -166,3 +166,37 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "test-corr-id"
     )
+
+
+async def test_process_message_skips_completion_side_effects_when_job_ownership_is_lost(
+    consumer: PortfolioTimeseriesConsumer,
+    mock_event: PortfolioAggregationRequiredEvent,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_logic = mock_dependencies["logic"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_repo.get_portfolio.return_value = Portfolio(
+        portfolio_id=mock_event.portfolio_id, base_currency="USD"
+    )
+    mock_repo.get_current_epoch_for_portfolio.return_value = 2
+    mock_repo.get_all_position_timeseries_for_date.return_value = []
+
+    with patch.object(
+        consumer,
+        "_update_job_status",
+        new=AsyncMock(return_value=False),
+    ) as mock_update_status:
+        await consumer.process_message(mock_kafka_message)
+
+    mock_logic.assert_awaited_once()
+    mock_update_status.assert_awaited_once_with(
+        mock_event.portfolio_id,
+        mock_event.aggregation_date,
+        "COMPLETE",
+        db_session=ANY,
+    )
+    mock_repo.upsert_portfolio_timeseries.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
