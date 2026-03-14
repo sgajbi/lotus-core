@@ -158,6 +158,28 @@ async def test_run_loop_retryable_error_does_not_commit(
     test_consumer._send_to_dlq_async.assert_not_called()
 
 
+async def test_run_loop_commit_failure_does_not_send_to_dlq(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-commit", {"data": "value-commit"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    mock_confluent_consumer.commit.side_effect = RuntimeError("commit failed")
+    test_consumer._send_to_dlq_async = AsyncMock()
+
+    async def process_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = process_and_stop
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+    test_consumer._send_to_dlq_async.assert_not_awaited()
+    assert "Offset commit failed after successful processing" in mock_warning.call_args.args[0]
+
+
 async def test_dlq_payload_is_correct(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):

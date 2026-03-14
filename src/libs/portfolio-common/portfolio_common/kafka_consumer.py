@@ -318,9 +318,6 @@ class BaseConsumer(ABC):
                 else:
                     await loop.run_in_executor(None, functools.partial(self.process_message, msg))
 
-                self._consumer.commit(message=msg, asynchronous=False)
-                processed_successfully = True
-
             except RetryableConsumerError as e:
                 # For transient errors, we log and do NOT commit, allowing Kafka to redeliver.
                 logger.warning(
@@ -345,6 +342,24 @@ class BaseConsumer(ABC):
                             "topic": self.topic,
                             "consumer_group": self._consumer_config["group.id"],
                             "message_key": msg.key().decode("utf-8") if msg.key() else None,
+                        },
+                    )
+            else:
+                try:
+                    self._consumer.commit(message=msg, asynchronous=False)
+                    processed_successfully = True
+                except Exception as e:
+                    logger.warning(
+                        (
+                            "Offset commit failed after successful processing; "
+                            "offset will not be committed so Kafka can redeliver."
+                        ),
+                        exc_info=True,
+                        extra={
+                            "topic": self.topic,
+                            "consumer_group": self._consumer_config["group.id"],
+                            "message_key": msg.key().decode("utf-8") if msg.key() else None,
+                            "commit_error": str(e),
                         },
                     )
 
