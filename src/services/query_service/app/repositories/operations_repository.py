@@ -168,10 +168,14 @@ class OperationsRepository:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
-    async def get_current_portfolio_epoch(self, portfolio_id: str) -> Optional[int]:
+    async def get_current_portfolio_epoch(
+        self, portfolio_id: str, as_of: Optional[datetime] = None
+    ) -> Optional[int]:
         stmt = select(func.max(PositionState.epoch)).where(
             PositionState.portfolio_id == portfolio_id
         )
+        if as_of is not None:
+            stmt = stmt.where(PositionState.updated_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_active_reprocessing_keys_count(self, portfolio_id: str) -> int:

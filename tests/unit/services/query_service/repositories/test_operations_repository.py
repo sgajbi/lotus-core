@@ -47,6 +47,20 @@ async def test_get_current_portfolio_epoch(
     assert "position_state.portfolio_id = 'P1'" in compiled
 
 
+async def test_get_current_portfolio_epoch_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one_or_none(mock_db_session, 3)
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_current_portfolio_epoch("P1", as_of=as_of)
+
+    assert value == 3
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
+
+
 async def test_get_active_reprocessing_keys_count(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

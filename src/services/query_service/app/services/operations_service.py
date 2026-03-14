@@ -255,7 +255,7 @@ class OperationsService:
             latest_control_stage,
         ) = await asyncio.gather(
             self.repo.get_latest_business_date(as_of=generated_at_utc),
-            self.repo.get_current_portfolio_epoch(portfolio_id),
+            self.repo.get_current_portfolio_epoch(portfolio_id, as_of=generated_at_utc),
             self.repo.get_reprocessing_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
