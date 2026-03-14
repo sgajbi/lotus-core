@@ -1188,8 +1188,13 @@ async def test_get_reconciliation_run_query(
 ):
     mock_run = object()
     mock_execute_scalar_one_or_none(mock_db_session, mock_run)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
 
-    value = await repository.get_reconciliation_run(portfolio_id="P1", run_id="recon_123")
+    value = await repository.get_reconciliation_run(
+        portfolio_id="P1",
+        run_id="recon_123",
+        as_of=as_of,
+    )
 
     assert value is mock_run
     stmt = mock_db_session.execute.call_args[0][0]
@@ -1197,6 +1202,7 @@ async def test_get_reconciliation_run_query(
     assert "from financial_reconciliation_runs" in compiled.lower()
     assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
+    assert "financial_reconciliation_runs.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
 
 
 async def test_get_reconciliation_findings_count(

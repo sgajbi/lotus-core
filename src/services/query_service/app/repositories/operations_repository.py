@@ -1152,13 +1152,15 @@ class OperationsRepository:
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def get_reconciliation_run(
-        self, portfolio_id: str, run_id: str
+        self, portfolio_id: str, run_id: str, as_of: Optional[datetime] = None
     ) -> Optional[FinancialReconciliationRun]:
         stmt = (
             select(FinancialReconciliationRun)
             .where(FinancialReconciliationRun.portfolio_id == portfolio_id)
             .where(FinancialReconciliationRun.run_id == run_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_reconciliation_findings(

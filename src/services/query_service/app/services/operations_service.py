@@ -1008,7 +1008,11 @@ class OperationsService:
     ) -> ReconciliationFindingListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
-        run = await self.repo.get_reconciliation_run(portfolio_id=portfolio_id, run_id=run_id)
+        run = await self.repo.get_reconciliation_run(
+            portfolio_id=portfolio_id,
+            run_id=run_id,
+            as_of=generated_at_utc,
+        )
         if run is None:
             raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
         total, findings = await asyncio.gather(
