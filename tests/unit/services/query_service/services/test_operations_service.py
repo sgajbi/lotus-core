@@ -1378,6 +1378,7 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
     )
 
     assert response.portfolio_id == "P1"
+    assert response.generated_at_utc.tzinfo == timezone.utc
     assert response.total == 1
     assert response.items[0].stage_id == 701
     assert response.items[0].stage_name == "FINANCIAL_RECONCILIATION"
@@ -1398,6 +1399,15 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
         stage_name="FINANCIAL_RECONCILIATION",
         business_date=date(2026, 3, 13),
         status="REQUIRES_REPLAY",
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_portfolio_control_stages_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        stage_id=701,
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="REQUIRES_REPLAY",
+        as_of=response.generated_at_utc,
     )
 
 

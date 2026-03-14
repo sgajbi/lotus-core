@@ -1036,6 +1036,7 @@ class OperationsService:
         status: str | None = None,
     ) -> PortfolioControlStageListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
+        generated_at_utc = datetime.now(timezone.utc)
         total, stages = await asyncio.gather(
             self.repo.get_portfolio_control_stages_count(
                 portfolio_id=portfolio_id,
@@ -1043,6 +1044,7 @@ class OperationsService:
                 stage_name=stage_name,
                 business_date=business_date,
                 status=status,
+                as_of=generated_at_utc,
             ),
             self.repo.get_portfolio_control_stages(
                 portfolio_id=portfolio_id,
@@ -1052,10 +1054,12 @@ class OperationsService:
                 stage_name=stage_name,
                 business_date=business_date,
                 status=status,
+                as_of=generated_at_utc,
             ),
         )
         return PortfolioControlStageListResponse(
             portfolio_id=portfolio_id,
+            generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,

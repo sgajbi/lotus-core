@@ -1213,6 +1213,7 @@ async def test_get_portfolio_control_stages_count_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
     mock_execute_scalar_one(mock_db_session, 6)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
 
     value = await repository.get_portfolio_control_stages_count(
         portfolio_id="P1",
@@ -1220,6 +1221,7 @@ async def test_get_portfolio_control_stages_count_with_filters(
         stage_name="FINANCIAL_RECONCILIATION",
         business_date=date(2026, 3, 13),
         status="REQUIRES_REPLAY",
+        as_of=as_of,
     )
 
     assert value == 6
@@ -1231,6 +1233,7 @@ async def test_get_portfolio_control_stages_count_with_filters(
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
     assert "pipeline_stage_state.status = 'REQUIRES_REPLAY'" in compiled
+    assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
 
 
 async def test_get_portfolio_control_stages_query(
@@ -1239,6 +1242,7 @@ async def test_get_portfolio_control_stages_query(
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = ["stage1"]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
 
     value = await repository.get_portfolio_control_stages(
         portfolio_id="P1",
@@ -1248,6 +1252,7 @@ async def test_get_portfolio_control_stages_query(
         stage_name="FINANCIAL_RECONCILIATION",
         business_date=date(2026, 3, 13),
         status="FAILED",
+        as_of=as_of,
     )
 
     assert value == ["stage1"]
@@ -1259,6 +1264,7 @@ async def test_get_portfolio_control_stages_query(
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
     assert "pipeline_stage_state.status = 'FAILED'" in compiled
+    assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "CASE WHEN (pipeline_stage_state.status IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
     assert "pipeline_stage_state.business_date DESC" in compiled
     assert "LIMIT 10 OFFSET 1" in compiled

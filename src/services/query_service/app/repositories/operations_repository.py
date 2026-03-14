@@ -1223,6 +1223,7 @@ class OperationsRepository:
         stage_name: Optional[str] = None,
         business_date: Optional[date] = None,
         status: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -1232,6 +1233,8 @@ class OperationsRepository:
                 PipelineStageState.transaction_id.like("portfolio-stage:%"),
             )
         )
+        if as_of is not None:
+            stmt = stmt.where(PipelineStageState.updated_at <= as_of)
         if stage_id is not None:
             stmt = stmt.where(PipelineStageState.id == stage_id)
         if stage_name:
@@ -1251,11 +1254,14 @@ class OperationsRepository:
         stage_name: Optional[str] = None,
         business_date: Optional[date] = None,
         status: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> list[PipelineStageState]:
         stmt = select(PipelineStageState).where(
             PipelineStageState.portfolio_id == portfolio_id,
             PipelineStageState.transaction_id.like("portfolio-stage:%"),
         )
+        if as_of is not None:
+            stmt = stmt.where(PipelineStageState.updated_at <= as_of)
         if stage_id is not None:
             stmt = stmt.where(PipelineStageState.id == stage_id)
         if stage_name:

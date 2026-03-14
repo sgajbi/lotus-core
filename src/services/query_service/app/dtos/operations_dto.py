@@ -1374,6 +1374,11 @@ class PortfolioControlStageRecord(BaseModel):
 
 class PortfolioControlStageListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this control-stage support snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
     total: int = Field(
         ..., description="Total portfolio control stage rows matching the filter.", examples=[6]
     )
