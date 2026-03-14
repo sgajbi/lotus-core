@@ -33,6 +33,21 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
     assert settings.max_retries == 7
 
 
+def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, caplog):
+    monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "nope")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "0")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "-4")
+
+    import portfolio_common.outbox_settings as module
+
+    settings = module.get_outbox_runtime_settings()
+
+    assert settings.poll_interval_seconds == 5
+    assert settings.batch_size == 50
+    assert settings.max_retries == 3
+    assert "falling back to default" in caplog.text
+
+
 def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "13")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "88")
