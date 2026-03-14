@@ -191,6 +191,10 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         ]["parameters"]
         if parameter["name"] == "job_id"
     )
+    control_stage_id = next(
+        parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_id"
+    )
+    assert control_stage_id["description"] == "Optional durable control-stage row id filter."
     assert valuation_job_id["description"] == "Optional durable valuation job id filter."
     aggregation_job_id = next(
         parameter

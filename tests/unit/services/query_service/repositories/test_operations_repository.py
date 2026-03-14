@@ -885,6 +885,7 @@ async def test_get_portfolio_control_stages_count_with_filters(
 
     value = await repository.get_portfolio_control_stages_count(
         portfolio_id="P1",
+        stage_id=701,
         stage_name="FINANCIAL_RECONCILIATION",
         business_date=date(2026, 3, 13),
         status="REQUIRES_REPLAY",
@@ -895,6 +896,7 @@ async def test_get_portfolio_control_stages_count_with_filters(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from pipeline_stage_state" in compiled.lower()
     assert "pipeline_stage_state.transaction_id LIKE 'portfolio-stage:%'" in compiled
+    assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
     assert "pipeline_stage_state.status = 'REQUIRES_REPLAY'" in compiled
@@ -911,6 +913,7 @@ async def test_get_portfolio_control_stages_query(
         portfolio_id="P1",
         skip=1,
         limit=10,
+        stage_id=701,
         stage_name="FINANCIAL_RECONCILIATION",
         business_date=date(2026, 3, 13),
         status="FAILED",
@@ -921,6 +924,7 @@ async def test_get_portfolio_control_stages_query(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from pipeline_stage_state" in compiled.lower()
     assert "pipeline_stage_state.transaction_id LIKE 'portfolio-stage:%'" in compiled
+    assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
     assert "pipeline_stage_state.status = 'FAILED'" in compiled

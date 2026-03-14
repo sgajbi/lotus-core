@@ -951,6 +951,7 @@ class OperationsService:
         portfolio_id: str,
         skip: int,
         limit: int,
+        stage_id: int | None = None,
         stage_name: str | None = None,
         business_date: date | None = None,
         status: str | None = None,
@@ -959,6 +960,7 @@ class OperationsService:
         total, stages = await asyncio.gather(
             self.repo.get_portfolio_control_stages_count(
                 portfolio_id=portfolio_id,
+                stage_id=stage_id,
                 stage_name=stage_name,
                 business_date=business_date,
                 status=status,
@@ -967,6 +969,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
+                stage_id=stage_id,
                 stage_name=stage_name,
                 business_date=business_date,
                 status=status,

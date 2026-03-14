@@ -730,7 +730,7 @@ async def test_portfolio_control_stages_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/control-stages"
-        "?stage_name=FINANCIAL_RECONCILIATION&business_date=2026-03-13"
+        "?stage_id=701&stage_name=FINANCIAL_RECONCILIATION&business_date=2026-03-13"
         "&status_filter=REQUIRES_REPLAY"
     )
 
@@ -742,6 +742,15 @@ async def test_portfolio_control_stages_success(async_test_client):
     assert response.json()["items"][0]["ready_emitted_at"] is None
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+    mock_service.get_portfolio_control_stages.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        stage_id=701,
+        stage_name="FINANCIAL_RECONCILIATION",
+        business_date=date(2026, 3, 13),
+        status="REQUIRES_REPLAY",
+    )
 
 
 async def test_portfolio_control_stages_not_found_maps_to_404(async_test_client):

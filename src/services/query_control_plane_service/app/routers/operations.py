@@ -175,6 +175,11 @@ async def get_calculator_slos(
 )
 async def get_portfolio_control_stages(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
+    stage_id: Optional[int] = Query(
+        None,
+        description="Optional durable control-stage row id filter.",
+        examples=[701],
+    ),
     stage_name: Optional[str] = Query(
         None,
         description="Optional control stage filter (e.g., FINANCIAL_RECONCILIATION).",
@@ -202,6 +207,7 @@ async def get_portfolio_control_stages(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
+            stage_id=stage_id,
             stage_name=stage_name,
             business_date=parsed_business_date,
             status=status_filter,

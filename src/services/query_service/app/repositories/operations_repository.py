@@ -1057,6 +1057,7 @@ class OperationsRepository:
     async def get_portfolio_control_stages_count(
         self,
         portfolio_id: str,
+        stage_id: Optional[int] = None,
         stage_name: Optional[str] = None,
         business_date: Optional[date] = None,
         status: Optional[str] = None,
@@ -1069,6 +1070,8 @@ class OperationsRepository:
                 PipelineStageState.transaction_id.like("portfolio-stage:%"),
             )
         )
+        if stage_id is not None:
+            stmt = stmt.where(PipelineStageState.id == stage_id)
         if stage_name:
             stmt = stmt.where(PipelineStageState.stage_name == stage_name)
         if business_date:
@@ -1082,6 +1085,7 @@ class OperationsRepository:
         portfolio_id: str,
         skip: int,
         limit: int,
+        stage_id: Optional[int] = None,
         stage_name: Optional[str] = None,
         business_date: Optional[date] = None,
         status: Optional[str] = None,
@@ -1090,6 +1094,8 @@ class OperationsRepository:
             PipelineStageState.portfolio_id == portfolio_id,
             PipelineStageState.transaction_id.like("portfolio-stage:%"),
         )
+        if stage_id is not None:
+            stmt = stmt.where(PipelineStageState.id == stage_id)
         if stage_name:
             stmt = stmt.where(PipelineStageState.stage_name == stage_name)
         if business_date:
