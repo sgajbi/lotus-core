@@ -800,6 +800,7 @@ class OperationsService:
         limit: int,
         status: str | None = None,
         job_id: str | None = None,
+        request_fingerprint: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> AnalyticsExportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
@@ -810,6 +811,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 status=status,
                 job_id=job_id,
+                request_fingerprint=request_fingerprint,
             ),
             self.repo.get_analytics_export_jobs(
                 portfolio_id=portfolio_id,
@@ -817,6 +819,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 job_id=job_id,
+                request_fingerprint=request_fingerprint,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),

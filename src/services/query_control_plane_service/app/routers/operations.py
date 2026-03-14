@@ -488,6 +488,11 @@ async def get_analytics_export_jobs(
         description="Optional durable analytics export job identifier filter.",
         examples=["aexp_20260313_00012"],
     ),
+    request_fingerprint: Optional[str] = Query(
+        None,
+        description="Optional analytics export request fingerprint filter.",
+        examples=["pf-001:positions:csv"],
+    ),
     status_filter: Optional[str] = Query(
         None,
         description="Optional export job status filter (e.g., accepted, running, failed).",
@@ -510,6 +515,7 @@ async def get_analytics_export_jobs(
             skip=skip,
             limit=limit,
             job_id=job_id,
+            request_fingerprint=request_fingerprint,
             status=status_filter,
             stale_threshold_minutes=stale_threshold_minutes,
         )

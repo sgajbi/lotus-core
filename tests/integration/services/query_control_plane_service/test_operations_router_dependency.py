@@ -481,7 +481,9 @@ async def test_analytics_export_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/analytics-export-jobs"
-        "?job_id=aexp_1234567890abcdef&status_filter=FAILED&stale_threshold_minutes=30"
+        "?job_id=aexp_1234567890abcdef"
+        "&request_fingerprint=fp_portfolio_timeseries_pf001_20260313_v1"
+        "&status_filter=FAILED&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -501,6 +503,7 @@ async def test_analytics_export_jobs_success(async_test_client):
         skip=0,
         limit=100,
         job_id="aexp_1234567890abcdef",
+        request_fingerprint="fp_portfolio_timeseries_pf001_20260313_v1",
         status="FAILED",
         stale_threshold_minutes=30,
     )

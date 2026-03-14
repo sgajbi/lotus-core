@@ -302,7 +302,10 @@ async def test_support_job_queries_honor_job_id_filters(
         "P1", skip=0, limit=10, status="PROCESSING", job_id=4402, reference_now=reference_now
     )
     await repository.get_analytics_export_jobs_count(
-        "P1", status="failed", job_id="aexp_1234567890abcdef"
+        "P1",
+        status="failed",
+        job_id="aexp_1234567890abcdef",
+        request_fingerprint="pf-001:positions:csv",
     )
     await repository.get_analytics_export_jobs(
         "P1",
@@ -310,6 +313,7 @@ async def test_support_job_queries_honor_job_id_filters(
         limit=10,
         status="failed",
         job_id="aexp_1234567890abcdef",
+        request_fingerprint="pf-001:positions:csv",
         reference_now=reference_now,
     )
     await repository.get_reprocessing_jobs_count(
@@ -334,7 +338,15 @@ async def test_support_job_queries_honor_job_id_filters(
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[2]
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[3]
     assert "analytics_export_jobs.job_id = 'aexp_1234567890abcdef'" in compiled_statements[4]
+    assert (
+        "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'"
+        in compiled_statements[4]
+    )
     assert "analytics_export_jobs.job_id = 'aexp_1234567890abcdef'" in compiled_statements[5]
+    assert (
+        "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'"
+        in compiled_statements[5]
+    )
     assert "reprocessing_jobs.id = 303" in compiled_statements[6]
     assert "reprocessing_jobs.id = 303" in compiled_statements[7]
 
@@ -709,13 +721,18 @@ async def test_get_analytics_export_jobs_count_with_status(
 ):
     mock_execute_scalar_one(mock_db_session, 5)
 
-    value = await repository.get_analytics_export_jobs_count(portfolio_id="P1", status="failed")
+    value = await repository.get_analytics_export_jobs_count(
+        portfolio_id="P1",
+        status="failed",
+        request_fingerprint="pf-001:positions:csv",
+    )
 
     assert value == 5
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.status = 'failed'" in compiled
+    assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
 
 
 async def test_get_analytics_export_jobs_query(
@@ -731,6 +748,7 @@ async def test_get_analytics_export_jobs_query(
         skip=1,
         limit=3,
         status="running",
+        request_fingerprint="pf-001:positions:csv",
         reference_now=reference_now,
     )
 
@@ -739,6 +757,7 @@ async def test_get_analytics_export_jobs_query(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.status = 'running'" in compiled
+    assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
     assert "CASE WHEN (analytics_export_jobs.status = 'failed')" in compiled
     assert "analytics_export_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "analytics_export_jobs.created_at ASC" in compiled

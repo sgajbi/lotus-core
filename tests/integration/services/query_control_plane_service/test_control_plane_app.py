@@ -209,9 +209,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         for parameter in analytics_export_jobs["parameters"]
         if parameter["name"] == "job_id"
     )
+    analytics_export_request_fingerprint = next(
+        parameter
+        for parameter in analytics_export_jobs["parameters"]
+        if parameter["name"] == "request_fingerprint"
+    )
     assert (
         analytics_export_job_id["description"]
         == "Optional durable analytics export job identifier filter."
+    )
+    assert (
+        analytics_export_request_fingerprint["description"]
+        == "Optional analytics export request fingerprint filter."
     )
     replay_job_id = next(
         parameter for parameter in reprocessing_jobs["parameters"] if parameter["name"] == "job_id"

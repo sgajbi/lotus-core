@@ -878,6 +878,7 @@ class OperationsRepository:
         portfolio_id: str,
         status: Optional[str] = None,
         job_id: Optional[str] = None,
+        request_fingerprint: Optional[str] = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -888,6 +889,8 @@ class OperationsRepository:
             stmt = stmt.where(AnalyticsExportJob.status == status)
         if job_id:
             stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
+        if request_fingerprint:
+            stmt = stmt.where(AnalyticsExportJob.request_fingerprint == request_fingerprint)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_analytics_export_jobs(
@@ -897,6 +900,7 @@ class OperationsRepository:
         limit: int,
         status: Optional[str] = None,
         job_id: Optional[str] = None,
+        request_fingerprint: Optional[str] = None,
         stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
     ) -> list[AnalyticsExportJob]:
@@ -907,6 +911,8 @@ class OperationsRepository:
             stmt = stmt.where(AnalyticsExportJob.status == status)
         if job_id:
             stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
+        if request_fingerprint:
+            stmt = stmt.where(AnalyticsExportJob.request_fingerprint == request_fingerprint)
         stmt = (
             stmt.order_by(
                 self._analytics_export_job_priority(

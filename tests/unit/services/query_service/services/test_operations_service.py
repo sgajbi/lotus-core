@@ -653,6 +653,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         limit=20,
         status="FAILED",
         job_id=None,
+        request_fingerprint=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -708,6 +709,7 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         portfolio_id="P1",
         status="FAILED",
         job_id="aexp_1234567890abcdef",
+        request_fingerprint=None,
     )
     mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -715,7 +717,41 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         limit=20,
         status="FAILED",
         job_id="aexp_1234567890abcdef",
+        request_fingerprint=None,
         stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_analytics_export_jobs_forwards_request_fingerprint_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_analytics_export_jobs_count.return_value = 0
+    mock_ops_repo.get_analytics_export_jobs.return_value = []
+
+    response = await service.get_analytics_export_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        request_fingerprint="fp_portfolio_timeseries_pf001_20260313_v1",
+        stale_threshold_minutes=30,
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status=None,
+        job_id=None,
+        request_fingerprint="fp_portfolio_timeseries_pf001_20260313_v1",
+    )
+    mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status=None,
+        job_id=None,
+        request_fingerprint="fp_portfolio_timeseries_pf001_20260313_v1",
+        stale_minutes=30,
         reference_now=response.generated_at_utc,
     )
 
