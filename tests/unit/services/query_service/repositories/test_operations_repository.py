@@ -293,13 +293,29 @@ async def test_support_job_queries_honor_job_id_filters(
 
     reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
 
-    await repository.get_valuation_jobs_count("P1", status="PENDING", job_id=8801)
-    await repository.get_valuation_jobs(
-        "P1", skip=0, limit=10, status="PENDING", job_id=8801, reference_now=reference_now
+    await repository.get_valuation_jobs_count(
+        "P1", status="PENDING", job_id=8801, correlation_id="corr-val-8801"
     )
-    await repository.get_aggregation_jobs_count("P1", status="PROCESSING", job_id=4402)
+    await repository.get_valuation_jobs(
+        "P1",
+        skip=0,
+        limit=10,
+        status="PENDING",
+        job_id=8801,
+        correlation_id="corr-val-8801",
+        reference_now=reference_now,
+    )
+    await repository.get_aggregation_jobs_count(
+        "P1", status="PROCESSING", job_id=4402, correlation_id="corr-agg-4402"
+    )
     await repository.get_aggregation_jobs(
-        "P1", skip=0, limit=10, status="PROCESSING", job_id=4402, reference_now=reference_now
+        "P1",
+        skip=0,
+        limit=10,
+        status="PROCESSING",
+        job_id=4402,
+        correlation_id="corr-agg-4402",
+        reference_now=reference_now,
     )
     await repository.get_analytics_export_jobs_count(
         "P1",
@@ -317,7 +333,11 @@ async def test_support_job_queries_honor_job_id_filters(
         reference_now=reference_now,
     )
     await repository.get_reprocessing_jobs_count(
-        "P1", status="PROCESSING", security_id="SEC-US-IBM", job_id=303
+        "P1",
+        status="PROCESSING",
+        security_id="SEC-US-IBM",
+        job_id=303,
+        correlation_id="corr-replay-303",
     )
     await repository.get_reprocessing_jobs(
         "P1",
@@ -326,6 +346,7 @@ async def test_support_job_queries_honor_job_id_filters(
         status="PROCESSING",
         security_id="SEC-US-IBM",
         job_id=303,
+        correlation_id="corr-replay-303",
         reference_now=reference_now,
     )
 
@@ -334,9 +355,13 @@ async def test_support_job_queries_honor_job_id_filters(
         for call in mock_db_session.execute.call_args_list
     ]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[0]
+    assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[0]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[1]
+    assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[1]
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[2]
+    assert "portfolio_aggregation_jobs.correlation_id = 'corr-agg-4402'" in compiled_statements[2]
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[3]
+    assert "portfolio_aggregation_jobs.correlation_id = 'corr-agg-4402'" in compiled_statements[3]
     assert "analytics_export_jobs.job_id = 'aexp_1234567890abcdef'" in compiled_statements[4]
     assert (
         "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'"
@@ -348,7 +373,9 @@ async def test_support_job_queries_honor_job_id_filters(
         in compiled_statements[5]
     )
     assert "reprocessing_jobs.id = 303" in compiled_statements[6]
+    assert "reprocessing_jobs.correlation_id = 'corr-replay-303'" in compiled_statements[6]
     assert "reprocessing_jobs.id = 303" in compiled_statements[7]
+    assert "reprocessing_jobs.correlation_id = 'corr-replay-303'" in compiled_statements[7]
 
 
 async def test_get_latest_transaction_date(
@@ -771,6 +798,7 @@ async def test_get_reconciliation_runs_count_with_filters(
     value = await repository.get_reconciliation_runs_count(
         portfolio_id="P1",
         run_id="recon_123",
+        correlation_id="corr-recon-123",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -780,6 +808,7 @@ async def test_get_reconciliation_runs_count_with_filters(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
+    assert "financial_reconciliation_runs.correlation_id = 'corr-recon-123'" in compiled
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
     assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
 
@@ -796,6 +825,7 @@ async def test_get_reconciliation_runs_query(
         skip=2,
         limit=5,
         run_id="recon_123",
+        correlation_id="corr-recon-123",
         reconciliation_type="transaction_cashflow",
         status="COMPLETED",
     )
@@ -805,6 +835,7 @@ async def test_get_reconciliation_runs_query(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
+    assert "financial_reconciliation_runs.correlation_id = 'corr-recon-123'" in compiled
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
     assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
     assert (

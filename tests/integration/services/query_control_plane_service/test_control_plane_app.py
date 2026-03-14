@@ -196,6 +196,17 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert control_stage_id["description"] == "Optional durable control-stage row id filter."
     assert valuation_job_id["description"] == "Optional durable valuation job id filter."
+    valuation_correlation_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        valuation_correlation_id["description"]
+        == "Optional durable valuation correlation identifier filter."
+    )
     aggregation_job_id = next(
         parameter
         for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][
@@ -204,6 +215,17 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "job_id"
     )
     assert aggregation_job_id["description"] == "Optional durable aggregation job id filter."
+    aggregation_correlation_id = next(
+        parameter
+        for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"][
+            "get"
+        ]["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        aggregation_correlation_id["description"]
+        == "Optional durable aggregation correlation identifier filter."
+    )
     analytics_export_job_id = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -226,6 +248,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         parameter for parameter in reprocessing_jobs["parameters"] if parameter["name"] == "job_id"
     )
     assert replay_job_id["description"] == "Optional durable replay job id filter."
+    replay_correlation_id = next(
+        parameter
+        for parameter in reprocessing_jobs["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        replay_correlation_id["description"]
+        == "Optional durable replay correlation identifier filter."
+    )
     analytics_export_not_found = analytics_export_jobs["responses"]["404"]["content"][
         "application/json"
     ]["example"]
@@ -246,6 +277,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         or reprocessing_jobs_status.get("schema", {}).get("example")
     )
     assert status_filter_example == "PROCESSING"
+    reconciliation_correlation_id = next(
+        parameter
+        for parameter in reconciliation_runs["parameters"]
+        if parameter["name"] == "correlation_id"
+    )
+    assert (
+        reconciliation_correlation_id["description"]
+        == "Optional durable reconciliation correlation identifier filter."
+    )
 
     components = schema["components"]["schemas"]
     calculator_slo = components["CalculatorSloResponse"]

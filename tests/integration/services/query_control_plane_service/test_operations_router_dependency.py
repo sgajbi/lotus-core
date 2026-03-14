@@ -357,7 +357,7 @@ async def test_valuation_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/valuation-jobs"
-        "?job_id=101&status=PENDING&stale_threshold_minutes=30"
+        "?job_id=101&correlation_id=corr-val-101&status=PENDING&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -372,6 +372,7 @@ async def test_valuation_jobs_success(async_test_client):
         skip=0,
         limit=100,
         job_id=101,
+        correlation_id="corr-val-101",
         status="PENDING",
         stale_threshold_minutes=30,
     )
@@ -419,7 +420,7 @@ async def test_aggregation_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/aggregation-jobs"
-        "?job_id=202&status=PROCESSING&stale_threshold_minutes=30"
+        "?job_id=202&correlation_id=corr-agg-202&status=PROCESSING&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -435,6 +436,7 @@ async def test_aggregation_jobs_success(async_test_client):
         skip=0,
         limit=100,
         job_id=202,
+        correlation_id="corr-agg-202",
         status="PROCESSING",
         stale_threshold_minutes=30,
     )
@@ -610,7 +612,8 @@ async def test_reconciliation_runs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/reconciliation-runs"
-        "?run_id=recon_1234567890abcdef&reconciliation_type=transaction_cashflow&status_filter=FAILED"
+        "?run_id=recon_1234567890abcdef&correlation_id=corr-recon-20260313-001"
+        "&reconciliation_type=transaction_cashflow&status_filter=FAILED"
     )
 
     assert response.status_code == 200
@@ -630,6 +633,7 @@ async def test_reconciliation_runs_success(async_test_client):
         skip=0,
         limit=100,
         run_id="recon_1234567890abcdef",
+        correlation_id="corr-recon-20260313-001",
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -891,7 +895,8 @@ async def test_reprocessing_jobs_success(async_test_client):
 
     response = await client.get(
         "/support/portfolios/P1/reprocessing-jobs"
-        "?job_id=303&status_filter=PROCESSING&security_id=SEC-US-IBM&stale_threshold_minutes=30"
+        "?job_id=303&correlation_id=corr-replay-303"
+        "&status_filter=PROCESSING&security_id=SEC-US-IBM&stale_threshold_minutes=30"
     )
 
     assert response.status_code == 200
@@ -904,6 +909,7 @@ async def test_reprocessing_jobs_success(async_test_client):
         skip=0,
         limit=100,
         job_id=303,
+        correlation_id="corr-replay-303",
         status="PROCESSING",
         security_id="SEC-US-IBM",
         stale_threshold_minutes=30,

@@ -294,7 +294,7 @@ async def get_reprocessing_keys(
     description=(
         "What: List durable replay jobs currently relevant to a portfolio.\n"
         "How: Query reprocessing jobs linked to the portfolio's replay keys, with pagination and "
-        "optional status/security filters.\n"
+        "optional id, status, correlation, and security filters.\n"
         "When: Use to inspect queued, stale, retried, or failed replay jobs without direct "
         "database access."
     ),
@@ -305,6 +305,11 @@ async def get_reprocessing_jobs(
         None,
         description="Optional durable replay job id filter.",
         examples=[303],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable replay correlation identifier filter.",
+        examples=["corr-replay-303"],
     ),
     status_filter: Optional[str] = Query(
         None,
@@ -333,6 +338,7 @@ async def get_reprocessing_jobs(
             skip=skip,
             limit=limit,
             job_id=job_id,
+            correlation_id=correlation_id,
             status=status_filter,
             security_id=security_id,
             stale_threshold_minutes=stale_threshold_minutes,
@@ -359,7 +365,8 @@ async def get_reprocessing_jobs(
     summary="List valuation jobs for support workflows",
     description=(
         "What: List valuation jobs for a portfolio with support filters.\n"
-        "How: Query valuation job records with pagination and optional status filtering.\n"
+        "How: Query valuation job records with pagination and optional id, status, and "
+        "correlation filtering.\n"
         "When: Use to triage stuck valuation workloads and verify drain progress."
     ),
 )
@@ -369,6 +376,11 @@ async def get_valuation_jobs(
         None,
         description="Optional durable valuation job id filter.",
         examples=[8801],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable valuation correlation identifier filter.",
+        examples=["corr-val-8801"],
     ),
     job_status: Optional[str] = Query(
         None,
@@ -393,6 +405,7 @@ async def get_valuation_jobs(
             skip=skip,
             limit=limit,
             job_id=job_id,
+            correlation_id=correlation_id,
             status=job_status,
             stale_threshold_minutes=stale_threshold_minutes,
         )
@@ -418,7 +431,8 @@ async def get_valuation_jobs(
     summary="List aggregation jobs for support workflows",
     description=(
         "What: List portfolio aggregation jobs for support workflows.\n"
-        "How: Query aggregation job records with pagination and optional status filtering.\n"
+        "How: Query aggregation job records with pagination and optional id, status, and "
+        "correlation filtering.\n"
         "When: Use when portfolio rollups are stale or downstream timeseries appears delayed."
     ),
 )
@@ -428,6 +442,11 @@ async def get_aggregation_jobs(
         None,
         description="Optional durable aggregation job id filter.",
         examples=[4402],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable aggregation correlation identifier filter.",
+        examples=["corr-agg-4402"],
     ),
     job_status: Optional[str] = Query(
         None,
@@ -452,6 +471,7 @@ async def get_aggregation_jobs(
             skip=skip,
             limit=limit,
             job_id=job_id,
+            correlation_id=correlation_id,
             status=job_status,
             stale_threshold_minutes=stale_threshold_minutes,
         )
@@ -541,7 +561,8 @@ async def get_analytics_export_jobs(
     summary="List reconciliation runs for support workflows",
     description=(
         "What: List durable reconciliation control runs for a portfolio.\n"
-        "How: Query reconciliation run records with pagination and optional type/status filters.\n"
+        "How: Query reconciliation run records with pagination and optional id, type, status, "
+        "and correlation filters.\n"
         "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
         "unexpected reconciliation failures."
     ),
@@ -552,6 +573,11 @@ async def get_reconciliation_runs(
         None,
         description="Optional durable reconciliation run identifier filter.",
         examples=["recon_1234567890abcdef"],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional durable reconciliation correlation identifier filter.",
+        examples=["corr-recon-20260313-001"],
     ),
     reconciliation_type: Optional[str] = Query(
         None,
@@ -573,6 +599,7 @@ async def get_reconciliation_runs(
             skip=skip,
             limit=limit,
             run_id=run_id,
+            correlation_id=correlation_id,
             reconciliation_type=reconciliation_type,
             status=status_filter,
         )

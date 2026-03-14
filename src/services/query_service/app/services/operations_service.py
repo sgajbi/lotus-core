@@ -690,6 +690,7 @@ class OperationsService:
         limit: int,
         status: str | None = None,
         job_id: int | None = None,
+        correlation_id: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
@@ -700,6 +701,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 status=status,
                 job_id=job_id,
+                correlation_id=correlation_id,
             ),
             self.repo.get_valuation_jobs(
                 portfolio_id=portfolio_id,
@@ -707,6 +709,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 job_id=job_id,
+                correlation_id=correlation_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),
@@ -745,6 +748,7 @@ class OperationsService:
         limit: int,
         status: str | None = None,
         job_id: int | None = None,
+        correlation_id: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
@@ -755,6 +759,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 status=status,
                 job_id=job_id,
+                correlation_id=correlation_id,
             ),
             self.repo.get_aggregation_jobs(
                 portfolio_id=portfolio_id,
@@ -762,6 +767,7 @@ class OperationsService:
                 limit=limit,
                 status=status,
                 job_id=job_id,
+                correlation_id=correlation_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),
@@ -872,6 +878,7 @@ class OperationsService:
         skip: int,
         limit: int,
         run_id: str | None = None,
+        correlation_id: str | None = None,
         reconciliation_type: str | None = None,
         status: str | None = None,
     ) -> ReconciliationRunListResponse:
@@ -880,6 +887,7 @@ class OperationsService:
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
                 run_id=run_id,
+                correlation_id=correlation_id,
                 reconciliation_type=reconciliation_type,
                 status=status,
             ),
@@ -888,6 +896,7 @@ class OperationsService:
                 skip=skip,
                 limit=limit,
                 run_id=run_id,
+                correlation_id=correlation_id,
                 reconciliation_type=reconciliation_type,
                 status=status,
             ),
@@ -1080,6 +1089,7 @@ class OperationsService:
         status: str | None = None,
         security_id: str | None = None,
         job_id: int | None = None,
+        correlation_id: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
@@ -1091,6 +1101,7 @@ class OperationsService:
                 status=status,
                 security_id=security_id,
                 job_id=job_id,
+                correlation_id=correlation_id,
             ),
             self.repo.get_reprocessing_jobs(
                 portfolio_id=portfolio_id,
@@ -1099,6 +1110,7 @@ class OperationsService:
                 status=status,
                 security_id=security_id,
                 job_id=job_id,
+                correlation_id=correlation_id,
                 stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
             ),

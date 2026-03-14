@@ -412,6 +412,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
         limit=20,
         status="PENDING",
         job_id=None,
+        correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -461,6 +462,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
         limit=20,
         status="PROCESSING",
         job_id=None,
+        correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -506,6 +508,7 @@ async def test_get_aggregation_jobs_honors_custom_stale_threshold(
         limit=20,
         status="PROCESSING",
         job_id=None,
+        correlation_id=None,
         stale_minutes=30,
         reference_now=response.generated_at_utc,
     )
@@ -561,6 +564,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         status="PROCESSING",
         security_id="S1",
         job_id=None,
+        correlation_id=None,
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -678,6 +682,7 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
         portfolio_id="P1",
         status="PENDING",
         job_id=8801,
+        correlation_id=None,
     )
     mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
@@ -685,6 +690,40 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
         limit=20,
         status="PENDING",
         job_id=8801,
+        correlation_id=None,
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_valuation_jobs_forwards_correlation_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_valuation_jobs_count.return_value = 0
+    mock_ops_repo.get_valuation_jobs.return_value = []
+
+    response = await service.get_valuation_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        correlation_id="corr-val-8801",
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PENDING",
+        job_id=None,
+        correlation_id="corr-val-8801",
+    )
+    mock_ops_repo.get_valuation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PENDING",
+        job_id=None,
+        correlation_id="corr-val-8801",
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -718,6 +757,39 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         status="FAILED",
         job_id="aexp_1234567890abcdef",
         request_fingerprint=None,
+        stale_minutes=15,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_aggregation_jobs_forwards_correlation_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_aggregation_jobs_count.return_value = 0
+    mock_ops_repo.get_aggregation_jobs.return_value = []
+
+    response = await service.get_aggregation_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        correlation_id="corr-agg-4402",
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_aggregation_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PROCESSING",
+        job_id=None,
+        correlation_id="corr-agg-4402",
+    )
+    mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        job_id=None,
+        correlation_id="corr-agg-4402",
         stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
@@ -841,6 +913,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
         portfolio_id="P1",
         run_id="recon_1234567890abcdef",
+        correlation_id=None,
         reconciliation_type="transaction_cashflow",
         status="FAILED",
     )
@@ -849,7 +922,41 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         skip=0,
         limit=20,
         run_id="recon_1234567890abcdef",
+        correlation_id=None,
         reconciliation_type="transaction_cashflow",
+        status="FAILED",
+    )
+
+
+async def test_get_reconciliation_runs_forwards_correlation_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_reconciliation_runs_count.return_value = 0
+    mock_ops_repo.get_reconciliation_runs.return_value = []
+
+    response = await service.get_reconciliation_runs(
+        "P1",
+        skip=0,
+        limit=20,
+        correlation_id="corr-recon-20260313-001",
+        status="FAILED",
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        run_id=None,
+        correlation_id="corr-recon-20260313-001",
+        reconciliation_type=None,
+        status="FAILED",
+    )
+    mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        run_id=None,
+        correlation_id="corr-recon-20260313-001",
+        reconciliation_type=None,
         status="FAILED",
     )
 
@@ -1150,6 +1257,41 @@ async def test_get_reprocessing_keys_honors_custom_stale_threshold(
         status="REPROCESSING",
         security_id="SEC-US-IBM",
         stale_minutes=30,
+        reference_now=response.generated_at_utc,
+    )
+
+
+async def test_get_reprocessing_jobs_forwards_correlation_filter(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_reprocessing_jobs_count.return_value = 0
+    mock_ops_repo.get_reprocessing_jobs.return_value = []
+
+    response = await service.get_reprocessing_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        correlation_id="corr-replay-303",
+    )
+
+    assert response.total == 0
+    mock_ops_repo.get_reprocessing_jobs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        status="PROCESSING",
+        security_id=None,
+        job_id=None,
+        correlation_id="corr-replay-303",
+    )
+    mock_ops_repo.get_reprocessing_jobs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        status="PROCESSING",
+        security_id=None,
+        job_id=None,
+        correlation_id="corr-replay-303",
+        stale_minutes=15,
         reference_now=response.generated_at_utc,
     )
 
