@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+from portfolio_common import kafka_consumer as shared_kafka_consumer
 from portfolio_common.kafka_admin import KafkaTopicVerificationError
 
 from src.services.valuation_orchestrator_service.app import consumer_manager
@@ -108,3 +109,34 @@ async def test_consumer_manager_propagates_typed_topic_verification_failure(
     assert manager.tasks == []
     assert manager.scheduler.stop_called is False
     assert manager.reprocessing_worker.stop_called is False
+
+
+async def test_consumer_manager_applies_only_valid_merged_runtime_overrides(
+    _patch_runtime, monkeypatch
+):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
+        '{"session.timeout.ms": 30000}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
+        '{"valuation_orchestrator_group_readiness": {"heartbeat.interval.ms": 30000}}',
+    )
+    monkeypatch.setattr(shared_kafka_consumer, "get_kafka_producer", lambda: object())
+
+    manager = consumer_manager.ConsumerManager()
+    readiness_consumer = next(
+        c
+        for c in manager.consumers
+        if c._consumer_config["group.id"] == "valuation_orchestrator_group_readiness"
+    )
+    price_consumer = next(
+        c
+        for c in manager.consumers
+        if c._consumer_config["group.id"] == "valuation_orchestrator_group_price_events"
+    )
+
+    assert readiness_consumer._consumer_config["session.timeout.ms"] == 30000
+    assert readiness_consumer._consumer_config["heartbeat.interval.ms"] == 3000
+    assert price_consumer._consumer_config["session.timeout.ms"] == 30000
+    assert price_consumer._consumer_config["heartbeat.interval.ms"] == 3000
