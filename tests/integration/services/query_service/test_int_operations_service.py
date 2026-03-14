@@ -923,6 +923,163 @@ async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
     assert response.items[0].operational_state == "HEALTHY"
 
 
+async def test_lineage_returns_coherent_snapshot_under_state_churn(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P8D",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P8D",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PositionState(
+                portfolio_id="P8D",
+                security_id="SEC-LINEAGE-DETAIL",
+                epoch=2,
+                watermark_date=date(2025, 8, 18),
+                status="CURRENT",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="TXN-LINEAGE-DETAIL-OLD",
+                portfolio_id="P8D",
+                instrument_id="INST-LINEAGE-DETAIL-OLD",
+                security_id="SEC-LINEAGE-DETAIL",
+                transaction_type="BUY",
+                quantity=10,
+                price=100,
+                gross_transaction_amount=1000,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2025, 8, 20, 9, 0, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="TXN-LINEAGE-DETAIL-LATE",
+                portfolio_id="P8D",
+                instrument_id="INST-LINEAGE-DETAIL-LATE",
+                security_id="SEC-LINEAGE-DETAIL",
+                transaction_type="BUY",
+                quantity=10,
+                price=100,
+                gross_transaction_amount=1000,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2025, 8, 31, 9, 0, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PositionHistory(
+                transaction_id="TXN-LINEAGE-DETAIL-OLD",
+                portfolio_id="P8D",
+                security_id="SEC-LINEAGE-DETAIL",
+                position_date=date(2025, 8, 20),
+                epoch=2,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+            ),
+            PositionHistory(
+                transaction_id="TXN-LINEAGE-DETAIL-LATE",
+                portfolio_id="P8D",
+                security_id="SEC-LINEAGE-DETAIL",
+                position_date=date(2025, 8, 31),
+                epoch=2,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P8D",
+                security_id="SEC-LINEAGE-DETAIL",
+                date=date(2025, 8, 20),
+                epoch=2,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                market_price=100,
+                market_value=1000,
+                valuation_status="VALUED_CURRENT",
+                created_at=datetime(2025, 8, 30, 10, 5, tzinfo=timezone.utc),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P8D",
+                security_id="SEC-LINEAGE-DETAIL",
+                date=date(2025, 8, 31),
+                epoch=2,
+                quantity=10,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                market_price=100,
+                market_value=1000,
+                valuation_status="VALUED_CURRENT",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P8D",
+                security_id="SEC-LINEAGE-DETAIL",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="COMPLETE",
+                correlation_id="corr-lineage-detail-old",
+                created_at=datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P8D",
+                security_id="SEC-LINEAGE-DETAIL",
+                valuation_date=date(2025, 8, 31),
+                epoch=2,
+                status="FAILED",
+                correlation_id="corr-lineage-detail-late",
+                failure_reason="late lineage detail failure",
+                created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_lineage("P8D", "SEC-LINEAGE-DETAIL")
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.portfolio_id == "P8D"
+    assert response.security_id == "SEC-LINEAGE-DETAIL"
+    assert response.epoch == 2
+    assert response.watermark_date == date(2025, 8, 18)
+    assert response.reprocessing_status == "CURRENT"
+    assert response.latest_position_history_date == date(2025, 8, 20)
+    assert response.latest_daily_snapshot_date == date(2025, 8, 20)
+    assert response.latest_valuation_job_date == date(2025, 8, 20)
+    assert response.latest_valuation_job_status == "COMPLETE"
+    assert response.latest_valuation_job_correlation_id == "corr-lineage-detail-old"
+    assert response.has_artifact_gap is False
+    assert response.operational_state == "HEALTHY"
+
+
 async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):
