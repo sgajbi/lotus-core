@@ -1,5 +1,7 @@
+import asyncio
 from unittest.mock import MagicMock
 
+import pytest
 from portfolio_common.kafka_utils import KafkaProducer
 
 
@@ -62,3 +64,27 @@ def test_dispatcher_constructor_uses_runtime_defaults(monkeypatch):
     assert dispatcher._poll_interval == 17
     assert dispatcher._batch_size == 91
     assert dispatcher._max_retries == 6
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_stop_interrupts_poll_sleep(monkeypatch):
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        poll_interval=60,
+    )
+    batch_started = asyncio.Event()
+
+    def _process_batch_sync():
+        batch_started.set()
+
+    monkeypatch.setattr(dispatcher, "_process_batch_sync", _process_batch_sync)
+
+    task = asyncio.create_task(dispatcher.run())
+    await batch_started.wait()
+    await asyncio.sleep(0)
+
+    dispatcher.stop()
+
+    await asyncio.wait_for(task, timeout=0.2)

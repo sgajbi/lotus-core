@@ -54,6 +54,7 @@ class OutboxDispatcher:
             max(1, int(batch_size)) if batch_size is not None else runtime_settings.batch_size
         )
         self._running = True
+        self._stop_event = asyncio.Event()
         self._session_factory = db_session_factory or SessionLocal
         self._max_retries = (
             max(1, int(max_retries)) if max_retries is not None else runtime_settings.max_retries
@@ -62,6 +63,7 @@ class OutboxDispatcher:
     def stop(self):
         logger.info("Outbox dispatcher shutdown signal received.")
         self._running = False
+        self._stop_event.set()
 
     def _read_pending_gauge(self) -> None:
         """Reads PENDING count in a short-lived session to avoid interfering with the batch tx."""
@@ -267,7 +269,10 @@ class OutboxDispatcher:
                 logger.error("Failed to process outbox batch.", exc_info=True)
 
             try:
-                await asyncio.sleep(self._poll_interval)
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
+                break
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 break
 
