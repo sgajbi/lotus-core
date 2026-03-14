@@ -429,10 +429,14 @@ class OperationsRepository:
             ),
         )
 
-    async def get_latest_transaction_date(self, portfolio_id: str) -> Optional[date]:
+    async def get_latest_transaction_date(
+        self, portfolio_id: str, as_of: Optional[datetime] = None
+    ) -> Optional[date]:
         stmt = select(func.max(func.date(Transaction.transaction_date))).where(
             Transaction.portfolio_id == portfolio_id
         )
+        if as_of is not None:
+            stmt = stmt.where(Transaction.created_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_transaction_date_as_of(
@@ -450,7 +454,9 @@ class OperationsRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    async def get_latest_snapshot_date_for_current_epoch(self, portfolio_id: str) -> Optional[date]:
+    async def get_latest_snapshot_date_for_current_epoch(
+        self, portfolio_id: str, as_of: Optional[datetime] = None
+    ) -> Optional[date]:
         stmt = (
             select(func.max(DailyPositionSnapshot.date))
             .join(
@@ -463,6 +469,8 @@ class OperationsRepository:
             )
             .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
         )
+        if as_of is not None:
+            stmt = stmt.where(DailyPositionSnapshot.created_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_snapshot_date_for_current_epoch_as_of(
