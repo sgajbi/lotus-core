@@ -448,10 +448,12 @@ class OperationsRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    async def get_latest_business_date(self) -> Optional[date]:
+    async def get_latest_business_date(self, as_of: Optional[datetime] = None) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
             BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
         )
+        if as_of is not None:
+            stmt = stmt.where(BusinessDate.created_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_snapshot_date_for_current_epoch(

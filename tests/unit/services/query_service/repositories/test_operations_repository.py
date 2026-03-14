@@ -450,6 +450,20 @@ async def test_get_latest_business_date(
     assert "from business_dates" in compiled.lower()
 
 
+async def test_get_latest_business_date_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one_or_none(mock_db_session, date(2026, 3, 1))
+    as_of = datetime(2026, 3, 1, 8, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_latest_business_date(as_of=as_of)
+
+    assert value == date(2026, 3, 1)
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "business_dates.created_at <= '2026-03-01 08:00:00+00:00'" in compiled
+
+
 async def test_get_latest_snapshot_date_for_current_epoch(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

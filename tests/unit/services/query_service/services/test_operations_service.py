@@ -204,6 +204,9 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     )
     assert response.controls_blocking is False
     assert response.publish_allowed is True
+    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(
+        as_of=response.generated_at_utc
+    )
     mock_ops_repo.get_latest_transaction_date.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
@@ -1844,6 +1847,9 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     )
     assert response.controls_blocking is True
     assert response.publish_allowed is False
+    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(
+        as_of=response.generated_at_utc
+    )
     mock_ops_repo.get_latest_transaction_date.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
@@ -1928,6 +1934,9 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         2025, 8, 29, 8, 30, tzinfo=timezone.utc
     )
     assert response.reprocessing.backlog_age_days == 12
+    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(
+        as_of=response.generated_at_utc
+    )
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
         "P1", stale_minutes=15, reference_now=response.generated_at_utc
     )

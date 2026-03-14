@@ -254,7 +254,7 @@ class OperationsService:
             position_snapshot_history_mismatch_count,
             latest_control_stage,
         ) = await asyncio.gather(
-            self.repo.get_latest_business_date(),
+            self.repo.get_latest_business_date(as_of=generated_at_utc),
             self.repo.get_current_portfolio_epoch(portfolio_id),
             self.repo.get_reprocessing_health_summary(
                 portfolio_id,
@@ -518,7 +518,7 @@ class OperationsService:
             valuation_job_health,
             aggregation_job_health,
         ) = await asyncio.gather(
-            self.repo.get_latest_business_date(),
+            self.repo.get_latest_business_date(as_of=generated_at_utc),
             self.repo.get_reprocessing_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,
