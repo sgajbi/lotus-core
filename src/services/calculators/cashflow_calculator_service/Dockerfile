@@ -1,9 +1,11 @@
+# syntax=docker/dockerfile:1.7
 # src/services/calculators/cashflow_calculator_service/Dockerfile
 
 # Stage 1: Base image setup
 FROM python:3.11-slim-bookworm as python-base
 
 ENV POETRY_VIRTUALENVS_CREATE=false \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
@@ -24,11 +26,13 @@ FROM python-base as builder
 ENV PYTHONPATH="/app/src/libs/portfolio-common:/app/src/services/calculators/cashflow_calculator_service"
 
 COPY src/libs/portfolio-common/ /app/src/libs/portfolio-common/
-RUN pip install -e /app/src/libs/portfolio-common
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e /app/src/libs/portfolio-common
 
 COPY src/services/calculators/cashflow_calculator_service/pyproject.toml /app/src/services/calculators/cashflow_calculator_service/pyproject.toml
 COPY src/services/calculators/cashflow_calculator_service/app /app/src/services/calculators/cashflow_calculator_service/app
-RUN pip install /app/src/services/calculators/cashflow_calculator_service
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install /app/src/services/calculators/cashflow_calculator_service
 
 # Stage 3: Final production stage
 FROM python-base as final

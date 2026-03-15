@@ -1,8 +1,10 @@
+# syntax=docker/dockerfile:1.7
 # src/services/calculators/cost_calculator_service/Dockerfile
 
 FROM python:3.11-slim-bookworm as python-base
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
 
@@ -25,8 +27,10 @@ COPY src/services/calculators/cost_calculator_service/pyproject.toml /app/src/se
 COPY src/services/calculators/cost_calculator_service/app /app/src/services/calculators/cost_calculator_service/app
 
 # 3. Install all packages
-RUN pip install /app/src/libs/portfolio-common
-RUN pip install /app/src/services/calculators/cost_calculator_service
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install /app/src/libs/portfolio-common
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install /app/src/services/calculators/cost_calculator_service
 
 
 FROM python-base as final

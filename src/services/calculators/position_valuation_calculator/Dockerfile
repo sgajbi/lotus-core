@@ -1,9 +1,11 @@
+# syntax=docker/dockerfile:1.7
 # src/services/calculators/position_valuation_calculator/Dockerfile
 
 # Stage 1: Base image setup
 FROM python:3.11-slim-bookworm as python-base
 
 ENV POETRY_VIRTUALENVS_CREATE=false \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
@@ -23,12 +25,14 @@ FROM python-base as builder
 
 # Shared libs first for caching
 COPY src/libs/portfolio-common/ /app/src/libs/portfolio-common/
-RUN pip install -e /app/src/libs/portfolio-common
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e /app/src/libs/portfolio-common
 
 # Copy service and install
 COPY src/services/calculators/position_valuation_calculator/pyproject.toml /app/src/services/calculators/position_valuation_calculator/pyproject.toml
 COPY src/services/calculators/position_valuation_calculator/app /app/src/services/calculators/position_valuation_calculator/app
-RUN pip install /app/src/services/calculators/position_valuation_calculator
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install /app/src/services/calculators/position_valuation_calculator
 
 # Stage 3: Final
 FROM python-base as final

@@ -1,9 +1,11 @@
+# syntax=docker/dockerfile:1.7
 # src/services/query_service/Dockerfile
 
 # Stage 1: Base image setup
 FROM python:3.11-slim-bookworm as python-base
 
 ENV POETRY_VIRTUALENVS_CREATE=false \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
@@ -22,14 +24,17 @@ FROM python-base as builder
 
 # Shared libs for caching
 COPY src/libs/portfolio-common/ /app/src/libs/portfolio-common/
-RUN pip install -e /app/src/libs/portfolio-common
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e /app/src/libs/portfolio-common
 
-RUN pip install python-dateutil
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install python-dateutil
 
 # Copy service and install
 COPY src/services/query_service/pyproject.toml /app/src/services/query_service/pyproject.toml
 COPY src/services/query_service/app /app/src/services/query_service/app
-RUN pip install /app/src/services/query_service
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install /app/src/services/query_service
 
 # Stage 3: Final
 FROM python-base as final
