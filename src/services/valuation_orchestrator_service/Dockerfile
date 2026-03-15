@@ -1,40 +1,56 @@
+# syntax=docker/dockerfile:1.7
 # src/services/valuation_orchestrator_service/Dockerfile
 
-# Stage 1: Base image setup
-FROM python:3.11-slim-bookworm as python-base
+ARG PYTHON_IMAGE=python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6
 
-ENV POETRY_VIRTUALENVS_CREATE=false \
+FROM ${PYTHON_IMAGE} AS runtime-base
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_CONSTRAINT=/app/requirements/shared-runtime.lock.txt \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
 
-# --- FIX: Add build-essential and libpq-dev for compiling dependencies ---
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl build-essential libpq-dev && \
+    apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN useradd --create-home appuser
-RUN python -m venv /opt/venv && chown -R appuser:appuser /opt/venv
+RUN useradd --create-home appuser && \
+    python -m venv /opt/venv && \
+    chown -R appuser:appuser /opt/venv
 
 WORKDIR /app
+COPY requirements/shared-runtime.lock.txt /app/requirements/shared-runtime.lock.txt
 
-# Stage 2: Builder
-FROM python-base as builder
+FROM ${PYTHON_IMAGE} AS wheel-builder
 
-# Shared libs first for caching
-COPY src/libs/portfolio-common/ /app/src/libs/portfolio-common/
-RUN pip install -e /app/src/libs/portfolio-common
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_CONSTRAINT=/build/requirements/shared-runtime.lock.txt \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Copy service and install
-COPY src/services/valuation_orchestrator_service/pyproject.toml /app/src/services/valuation_orchestrator_service/pyproject.toml
-COPY src/services/valuation_orchestrator_service/app /app/src/services/valuation_orchestrator_service/app
-RUN pip install /app/src/services/valuation_orchestrator_service
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-# Stage 3: Final
-FROM python-base as final
+WORKDIR /build
+COPY requirements/shared-runtime.lock.txt /build/requirements/shared-runtime.lock.txt
+COPY src/libs/portfolio-common /build/src/libs/portfolio-common
+COPY src/services/valuation_orchestrator_service/pyproject.toml /build/src/services/valuation_orchestrator_service/pyproject.toml
+COPY src/services/valuation_orchestrator_service/app /build/src/services/valuation_orchestrator_service/app
 
-COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
-COPY --from=builder --chown=appuser:appuser /app/src/services/valuation_orchestrator_service/app /app/app
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip wheel --wheel-dir /wheels \
+    /build/src/libs/portfolio-common \
+    /build/src/services/valuation_orchestrator_service
+
+FROM runtime-base AS final
+
+COPY --from=wheel-builder /wheels /wheels
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-index --find-links=/wheels /wheels/*.whl && \
+    rm -rf /wheels && \
+    chown -R appuser:appuser /opt/venv
 
 USER appuser
 EXPOSE 8087

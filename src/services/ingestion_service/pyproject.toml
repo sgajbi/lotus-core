@@ -9,14 +9,14 @@ version = "0.1.0"
 description = "Portfolio Analytics - Ingestion Service"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.111.0",
-    "uvicorn==0.30.1",
-    "pydantic==2.7.4",
-    "confluent-kafka==2.4.0",
+    "fastapi==0.129.0",
+    "uvicorn==0.35.0",
+    "pydantic==2.12.5",
+    "confluent-kafka==2.12.0",
     "structlog==24.1.0",
     "python-json-logger==2.0.7",
-    "python-multipart",
-    "prometheus-fastapi-instrumentator==7.0.0",
+    "python-multipart==0.0.22",
+    "prometheus-fastapi-instrumentator==7.1.0",
     "openpyxl==3.1.5"
 ]
 

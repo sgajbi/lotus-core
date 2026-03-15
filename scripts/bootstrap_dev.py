@@ -7,10 +7,26 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
+TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
 
 
 def run(cmd: list[str]) -> None:
     subprocess.run(cmd, cwd=ROOT, check=True)
+
+
+def constrained_pip_install(*args: str) -> None:
+    run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-c",
+            str(RUNTIME_LOCK_FILE),
+            *args,
+        ]
+    )
 
 
 def discover_editable_projects() -> list[Path]:
@@ -21,21 +37,10 @@ def discover_editable_projects() -> list[Path]:
 def main() -> int:
     projects = discover_editable_projects()
     for project_dir in projects:
-        run([sys.executable, "-m", "pip", "install", "-e", str(project_dir)])
+        constrained_pip_install("-e", str(project_dir))
 
-    run([sys.executable, "-m", "pip", "install", "-r", "tests/requirements.txt"])
-    run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "ruff",
-            "mypy",
-            "pip-audit",
-            "types-python-dateutil",
-        ]
-    )
+    constrained_pip_install("-r", "tests/requirements.txt")
+    constrained_pip_install("-r", str(TOOLING_LOCK_FILE))
     return 0
 
 

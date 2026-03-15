@@ -9,18 +9,18 @@ version = "0.1.0"
 description = "Portfolio Analytics - Generic Persistence Service"
 requires-python = ">=3.11"
 dependencies = [
-    "sqlalchemy==2.0.30",
-    "asyncpg==0.29.0", # <-- REPLACES psycopg2-binary
-    "confluent-kafka==2.4.0",
-    "pydantic==2.7.4",
+    "sqlalchemy==2.0.46",
+    "asyncpg==0.30.0", # <-- REPLACES psycopg2-binary
+    "confluent-kafka==2.12.0",
+    "pydantic==2.12.5",
     "tenacity==8.2.3",
     "alembic==1.13.1",
     "python-dotenv==1.0.1",
     "structlog==24.1.0",
     "python-json-logger==2.0.7",
-    "fastapi==0.111.0",
-    "uvicorn[standard]==0.30.1",
-    "prometheus-fastapi-instrumentator==7.0.0"
+    "fastapi==0.129.0",
+    "uvicorn[standard]==0.35.0",
+    "prometheus-fastapi-instrumentator==7.1.0"
 ]
 
 [tool.setuptools.packages.find]

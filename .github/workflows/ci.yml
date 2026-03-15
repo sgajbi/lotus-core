@@ -25,6 +25,8 @@ env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PYTHONUNBUFFERED: "1"
   PYTHON_VERSION: "3.12"
+  DOCKER_BUILDKIT: "1"
+  COMPOSE_DOCKER_CLI_BUILD: "1"
 
 jobs:
   workflow-lint:
@@ -204,8 +206,36 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Build query-service image
-        run: make docker-build
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Prebuild query-service image with cache
+        run: python3 scripts/prebuild_ci_images.py --cache-dir .buildx-cache --services query_service
+
+      - name: Generate runtime SBOM
+        run: |
+          mkdir -p output/build-evidence
+          python -m pip_audit -r requirements/shared-runtime.lock.txt --format cyclonedx-json -o output/build-evidence/shared-runtime-sbom.cdx.json
+
+      - name: Write build provenance manifest
+        run: |
+          python scripts/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
+
+      - name: Upload build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-evidence
+          path: output/build-evidence/*
+          if-no-files-found: error
+          retention-days: 14
 
   docker-smoke-contract:
     name: Docker Smoke Contract
@@ -220,6 +250,25 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -231,8 +280,11 @@ jobs:
           python -m pip install --upgrade pip
           make install
 
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+
       - name: Run deterministic docker endpoint smoke
-        run: make test-docker-smoke
+        run: python scripts/docker_endpoint_smoke.py
 
       - name: Capture docker compose logs on failure
         if: failure()
@@ -263,6 +315,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -274,8 +337,11 @@ jobs:
           python -m pip install --upgrade pip
           make install
 
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+
       - name: Run endpoint latency gate
-        run: make test-latency-gate
+        run: python scripts/latency_profile.py --enforce
 
       - name: Capture docker compose logs on failure
         if: failure()
@@ -306,6 +372,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -317,8 +394,11 @@ jobs:
           python -m pip install --upgrade pip
           make install
 
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+
       - name: Run deterministic performance load gate
-        run: make test-performance-load-gate
+        run: python scripts/performance_load_gate.py --profile-tier fast --enforce
 
       - name: Capture docker compose logs on failure
         if: failure()
@@ -349,6 +429,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -360,8 +451,11 @@ jobs:
           python -m pip install --upgrade pip
           make install
 
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+
       - name: Run deterministic full performance load gate
-        run: make test-performance-load-gate-full
+        run: python scripts/performance_load_gate.py --profile-tier full --enforce
 
       - name: Capture docker compose logs on failure
         if: failure()
@@ -391,6 +485,17 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -435,6 +540,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -446,8 +554,11 @@ jobs:
           python -m pip install --upgrade pip
           make install
 
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+
       - name: Run deterministic failure recovery gate
-        run: make test-failure-recovery-gate
+        run: python scripts/failure_recovery_gate.py --enforce
 
       - name: Capture docker compose logs on failure
         if: failure()

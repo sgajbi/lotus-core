@@ -52,6 +52,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+    image: lotus-core/kafka-topic-creator:local
     hostname: kafka-topic-creator
     depends_on:
        kafka:
@@ -85,6 +86,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+    image: lotus-core/migration-runner:local
     hostname: migration-runner
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
@@ -100,6 +102,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/ingestion_service/Dockerfile
+    image: lotus-core/ingestion-service:local
     hostname: ingestion_service
     ports:
       - "${LOTUS_INGESTION_HOST_PORT:-8200}:8000"
@@ -134,6 +137,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/query_service/Dockerfile
+    image: lotus-core/query-service:local
     hostname: query_service
     ports:
       - "${LOTUS_QUERY_HOST_PORT:-8201}:8001"
@@ -160,6 +164,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/query_control_plane_service/Dockerfile
+    image: lotus-core/query-control-plane-service:local
     hostname: query_control_plane_service
     ports:
       - "${LOTUS_QUERY_CONTROL_PLANE_HOST_PORT:-8202}:8002"
@@ -187,6 +192,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/event_replay_service/Dockerfile
+    image: lotus-core/event-replay-service:local
     hostname: event_replay_service
     ports:
       - "${LOTUS_EVENT_REPLAY_HOST_PORT:-8209}:8009"
@@ -217,6 +223,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/financial_reconciliation_service/Dockerfile
+    image: lotus-core/financial-reconciliation-service:local
     hostname: financial_reconciliation_service
     ports:
       - "${LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT:-8210}:8010"
@@ -243,6 +250,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+    image: lotus-core/persistence-service:local
     hostname: persistence_service
     ports:
       - "${LOTUS_PERSISTENCE_HOST_PORT:-8080}:8080"
@@ -272,6 +280,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/calculators/cost_calculator_service/Dockerfile
+    image: lotus-core/cost-calculator-service:local
     hostname: cost_calculator_service
     ports:
       - "${LOTUS_COST_CALCULATOR_HOST_PORT:-8083}:8083"
@@ -301,6 +310,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/calculators/cashflow_calculator_service/Dockerfile
+    image: lotus-core/cashflow-calculator-service:local
     hostname: cashflow_calculator_service
     ports:
      - "${LOTUS_CASHFLOW_CALCULATOR_HOST_PORT:-8082}:8082"
@@ -330,6 +340,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/calculators/position_calculator/Dockerfile
+    image: lotus-core/position-calculator-service:local
     hostname: position_calculator_service
     ports:
       - "${LOTUS_POSITION_CALCULATOR_HOST_PORT:-8081}:8081"
@@ -359,6 +370,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/pipeline_orchestrator_service/Dockerfile
+    image: lotus-core/pipeline-orchestrator-service:local
     hostname: pipeline_orchestrator_service
     ports:
       - "${LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT:-8086}:8086"
@@ -388,6 +400,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/valuation_orchestrator_service/Dockerfile
+    image: lotus-core/valuation-orchestrator-service:local
     hostname: valuation_orchestrator_service
     ports:
       - "${LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT:-8087}:8087"
@@ -418,6 +431,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/calculators/position_valuation_calculator/Dockerfile
+    image: lotus-core/position-valuation-calculator:local
     hostname: position_valuation_calculator
     ports:
       - "${LOTUS_POSITION_VALUATION_HOST_PORT:-8084}:8084"
@@ -447,6 +461,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/timeseries_generator_service/Dockerfile
+    image: lotus-core/timeseries-generator-service:local
     hostname: timeseries_generator_service
     ports:
       - "${LOTUS_TIMESERIES_GENERATOR_HOST_PORT:-8085}:8085"
@@ -476,6 +491,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/portfolio_aggregation_service/Dockerfile
+    image: lotus-core/portfolio-aggregation-service:local
     hostname: portfolio_aggregation_service
     ports:
       - "${LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT:-8088}:8088"
@@ -505,6 +521,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+    image: lotus-core/demo-data-loader:local
     hostname: demo_data_loader
     environment:
       DEMO_DATA_PACK_ENABLED: ${DEMO_DATA_PACK_ENABLED:-true}

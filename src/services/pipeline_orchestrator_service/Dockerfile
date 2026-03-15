@@ -1,7 +1,12 @@
-# Stage 1: Base image setup
-FROM python:3.11-slim-bookworm as python-base
+# syntax=docker/dockerfile:1.7
+# src/services/pipeline_orchestrator_service/Dockerfile
 
-ENV POETRY_VIRTUALENVS_CREATE=false \
+ARG PYTHON_IMAGE=python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6
+
+FROM ${PYTHON_IMAGE} AS runtime-base
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_CONSTRAINT=/app/requirements/shared-runtime.lock.txt \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
@@ -10,32 +15,43 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN useradd --create-home appuser
-RUN python -m venv /opt/venv && \
+RUN useradd --create-home appuser && \
+    python -m venv /opt/venv && \
     chown -R appuser:appuser /opt/venv
 
 WORKDIR /app
+COPY requirements/shared-runtime.lock.txt /app/requirements/shared-runtime.lock.txt
 
-# Stage 2: Builder stage
-FROM python-base as builder
+FROM ${PYTHON_IMAGE} AS wheel-builder
 
-ENV PYTHONPATH="/app/src/libs/portfolio-common:/app/src/services/pipeline_orchestrator_service"
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_CONSTRAINT=/build/requirements/shared-runtime.lock.txt \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-COPY src/libs/portfolio-common/ /app/src/libs/portfolio-common/
-RUN pip install -e /app/src/libs/portfolio-common
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY src/services/pipeline_orchestrator_service/pyproject.toml /app/src/services/pipeline_orchestrator_service/pyproject.toml
-COPY src/services/pipeline_orchestrator_service/app /app/src/services/pipeline_orchestrator_service/app
-RUN pip install /app/src/services/pipeline_orchestrator_service
+WORKDIR /build
+COPY requirements/shared-runtime.lock.txt /build/requirements/shared-runtime.lock.txt
+COPY src/libs/portfolio-common /build/src/libs/portfolio-common
+COPY src/services/pipeline_orchestrator_service/pyproject.toml /build/src/services/pipeline_orchestrator_service/pyproject.toml
+COPY src/services/pipeline_orchestrator_service/app /build/src/services/pipeline_orchestrator_service/app
 
-# Stage 3: Final production stage
-FROM python-base as final
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip wheel --wheel-dir /wheels \
+    /build/src/libs/portfolio-common \
+    /build/src/services/pipeline_orchestrator_service
 
-COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
-COPY --from=builder --chown=appuser:appuser /app/src/services/pipeline_orchestrator_service/app /app/app
+FROM runtime-base AS final
+
+COPY --from=wheel-builder /wheels /wheels
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-index --find-links=/wheels /wheels/*.whl && \
+    rm -rf /wheels && \
+    chown -R appuser:appuser /opt/venv
 
 USER appuser
-
 EXPOSE 8086
-
 CMD ["python", "-m", "app.main"]
