@@ -59,6 +59,48 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+DB_ONLY_SCOPES = {
+    "unit-db",
+    "transaction-buy-contract",
+    "transaction-dividend-contract",
+    "transaction-interest-contract",
+    "transaction-fx-contract",
+}
+
+FULL_STACK_SERVICES = [
+    "zookeeper",
+    "kafka",
+    "kafka-topic-creator",
+    "postgres",
+    "migration-runner",
+    "ingestion_service",
+    "event_replay_service",
+    "financial_reconciliation_service",
+    "query_service",
+    "query_control_plane_service",
+    "persistence_service",
+    "cost_calculator_service",
+    "cashflow_calculator_service",
+    "position_calculator_service",
+    "pipeline_orchestrator_service",
+    "position_valuation_calculator",
+    "timeseries_generator_service",
+    "valuation_orchestrator_service",
+    "portfolio_aggregation_service",
+]
+
+DB_ONLY_SERVICES = [
+    "postgres",
+    "migration-runner",
+]
+
+
+def _test_services_for_scope(scope: str) -> list[str]:
+    if scope in DB_ONLY_SCOPES:
+        return list(DB_ONLY_SERVICES)
+    return list(FULL_STACK_SERVICES)
+
+
 # REFACTORED: Use subprocess directly for more control over Docker Compose
 @pytest.fixture(scope="session")
 def docker_services(request):  # noqa: ARG001
@@ -83,27 +125,8 @@ def docker_services(request):  # noqa: ARG001
             f"query_control={os.environ['E2E_QUERY_CONTROL_PLANE_URL']}\n"
             f"event_replay={os.environ['E2E_EVENT_REPLAY_URL']}"
         )
-        test_services = [
-            "zookeeper",
-            "kafka",
-            "kafka-topic-creator",
-            "postgres",
-            "migration-runner",
-            "ingestion_service",
-            "event_replay_service",
-            "financial_reconciliation_service",
-            "query_service",
-            "query_control_plane_service",
-            "persistence_service",
-            "cost_calculator_service",
-            "cashflow_calculator_service",
-            "position_calculator_service",
-            "pipeline_orchestrator_service",
-            "position_valuation_calculator",
-            "timeseries_generator_service",
-            "valuation_orchestrator_service",
-            "portfolio_aggregation_service",
-        ]
+        test_scope = os.environ["LOTUS_TEST_SCOPE"]
+        test_services = _test_services_for_scope(test_scope)
         compose_up(
             compose_file,
             build=should_build_images(),
@@ -119,54 +142,58 @@ def docker_services(request):  # noqa: ARG001
             poll_seconds=2,
         )
         emit_test_output("--- Database migrations completed successfully ---")
-        wait_for_kafka_metadata(
-            os.environ["KAFKA_BOOTSTRAP_SERVERS"],
-            timeout_seconds=health_timeout,
-            poll_seconds=2,
-        )
-        emit_test_output(
-            f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---"
-        )
-
-        # Manual polling for service health
-        emit_test_output("\n--- Waiting for API services to become healthy ---")
-        ingestion_base_url = os.environ["E2E_INGESTION_URL"].rstrip("/")
-        query_base_url = os.environ["E2E_QUERY_URL"].rstrip("/")
-        query_control_plane_base_url = os.environ["E2E_QUERY_CONTROL_PLANE_URL"].rstrip("/")
-        services_to_check = {
-            "ingestion_service": f"{ingestion_base_url}/health/ready",
-            "event_replay_service": (
-                os.environ["E2E_EVENT_REPLAY_URL"].rstrip("/") + "/health/ready"
-            ),
-            "financial_reconciliation_service": (
-                f"http://localhost:{os.environ['LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT']}"
-            )
-            + "/health/ready",
-            "query_service": f"{query_base_url}/health/ready",
-            "query_control_plane_service": f"{query_control_plane_base_url}/health/ready",
-            "valuation_orchestrator_service": (
-                f"http://localhost:{os.environ['LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT']}"
-            )
-            + "/health/ready",
-            "portfolio_aggregation_service": (
-                f"http://localhost:{os.environ['LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT']}"
-            )
-            + "/health/ready",
-        }
-
-        for service_name, health_url in services_to_check.items():
-            wait_for_http_health(
-                service_name,
-                health_url,
+        if "kafka" in test_services:
+            wait_for_kafka_metadata(
+                os.environ["KAFKA_BOOTSTRAP_SERVERS"],
                 timeout_seconds=health_timeout,
-                poll_seconds=3,
+                poll_seconds=2,
             )
             emit_test_output(
-                f"--- Service '{service_name}' is healthy at {health_url} ---",
-                verbose_only=True,
+                f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---"
             )
 
-        emit_test_output("\n--- All API services are healthy, proceeding with tests ---")
+        # Manual polling for service health
+        health_targets = {
+            "ingestion_service": os.environ["E2E_INGESTION_URL"].rstrip("/") + "/health/ready",
+            "event_replay_service": os.environ["E2E_EVENT_REPLAY_URL"].rstrip("/")
+            + "/health/ready",
+            "financial_reconciliation_service": (
+                f"http://localhost:{os.environ['LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT']}"
+                + "/health/ready"
+            ),
+            "query_service": os.environ["E2E_QUERY_URL"].rstrip("/") + "/health/ready",
+            "query_control_plane_service": os.environ["E2E_QUERY_CONTROL_PLANE_URL"].rstrip("/")
+            + "/health/ready",
+            "valuation_orchestrator_service": (
+                f"http://localhost:{os.environ['LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT']}"
+                + "/health/ready"
+            ),
+            "portfolio_aggregation_service": (
+                f"http://localhost:{os.environ['LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT']}"
+                + "/health/ready"
+            ),
+        }
+        services_to_check = {
+            service_name: health_targets[service_name]
+            for service_name in test_services
+            if service_name in health_targets
+        }
+
+        if services_to_check:
+            emit_test_output("\n--- Waiting for API services to become healthy ---")
+            for service_name, health_url in services_to_check.items():
+                wait_for_http_health(
+                    service_name,
+                    health_url,
+                    timeout_seconds=health_timeout,
+                    poll_seconds=3,
+                )
+                emit_test_output(
+                    f"--- Service '{service_name}' is healthy at {health_url} ---",
+                    verbose_only=True,
+                )
+
+            emit_test_output("\n--- All API services are healthy, proceeding with tests ---")
         yield
     except DockerStackError as exc:
         pytest.fail(str(exc))
