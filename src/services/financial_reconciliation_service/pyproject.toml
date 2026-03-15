@@ -10,11 +10,11 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi==0.129.0",
     "uvicorn[standard]==0.35.0",
-    "sqlalchemy==2.0.30",
-    "asyncpg==0.29.0",
-    "confluent-kafka==2.4.0",
+    "sqlalchemy==2.0.46",
+    "asyncpg==0.30.0",
+    "confluent-kafka==2.12.0",
     "tenacity==8.2.3",
-    "pydantic==2.11.9",
+    "pydantic==2.12.5",
     "python-dotenv==1.0.1",
     "prometheus-fastapi-instrumentator==7.1.0",
     "httpx>=0.28.0"

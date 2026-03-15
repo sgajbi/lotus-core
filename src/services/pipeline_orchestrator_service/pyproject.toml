@@ -8,10 +8,10 @@ version = "0.1.0"
 description = "Pipeline stage-gate orchestration service for lotus-core"
 requires-python = ">=3.11"
 dependencies = [
-    "sqlalchemy==2.0.30",
-    "asyncpg==0.29.0",
-    "confluent-kafka==2.4.0",
-    "pydantic==2.7.4",
+    "sqlalchemy==2.0.46",
+    "asyncpg==0.30.0",
+    "confluent-kafka==2.12.0",
+    "pydantic==2.12.5",
     "tenacity==8.2.3",
     "python-dotenv==1.0.1",
     "structlog==24.1.0",

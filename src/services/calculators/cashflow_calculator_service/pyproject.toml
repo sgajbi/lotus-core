@@ -9,10 +9,10 @@ version = "0.1.0"
 description = "A service to calculate cashflows from transactions."
 requires-python = ">=3.11"
 dependencies = [
-    "sqlalchemy==2.0.30",
-    "asyncpg==0.29.0",
-    "confluent-kafka==2.4.0",
-    "pydantic==2.7.4",
+    "sqlalchemy==2.0.46",
+    "asyncpg==0.30.0",
+    "confluent-kafka==2.12.0",
+    "pydantic==2.12.5",
     "tenacity==8.2.3",
     "python-dotenv==1.0.1",
     "fastapi==0.111.0",
