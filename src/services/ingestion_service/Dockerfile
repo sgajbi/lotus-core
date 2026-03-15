@@ -6,6 +6,7 @@ FROM python:3.11-slim-bookworm as python-base
 
 ENV POETRY_VIRTUALENVS_CREATE=false \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_CONSTRAINT=/app/constraints/shared-build-constraints.txt \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
@@ -15,6 +16,7 @@ RUN python -m venv /opt/venv && \
     chown -R appuser:appuser /opt/venv
 
 WORKDIR /app
+COPY constraints/shared-build-constraints.txt /app/constraints/shared-build-constraints.txt
 
 # Stage 2: Builder stage
 FROM python-base as builder

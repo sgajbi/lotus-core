@@ -12,11 +12,11 @@ pytest-asyncio
 
 # HTTP client for testing APIs
 requests==2.32.4
-httpx
+httpx==0.28.1
 
 # Database drivers (sync and async)
 psycopg2-binary==2.9.10
-asyncpg==0.29.0
+asyncpg==0.30.0
 
 # Environment variable management
 python-dotenv==1.0.1
