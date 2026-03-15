@@ -100,6 +100,7 @@ def _resolve_runtime_ids(
     query_control_plane_base_url: str,
     portfolio_id: str,
     benchmark_id: str,
+    timeout_seconds: int,
 ) -> tuple[str, str]:
     resolved_portfolio_id = portfolio_id
     resolved_benchmark_id = benchmark_id
@@ -148,7 +149,7 @@ def _resolve_runtime_ids(
                 return False
         return True
 
-    deadline = time.time() + 60
+    deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         candidate_ids: list[str] = [portfolio_id]
         try:
@@ -528,6 +529,7 @@ def main() -> int:
         query_control_plane_base_url=args.query_control_plane_base_url,
         portfolio_id=args.portfolio_id,
         benchmark_id=args.benchmark_id,
+        timeout_seconds=args.ready_timeout_seconds,
     )
 
     results = run_profile(
