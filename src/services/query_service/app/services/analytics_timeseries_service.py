@@ -442,6 +442,7 @@ class AnalyticsTimeseriesService:
                     position_id=position_id,
                     security_id=row.security_id,
                     valuation_date=row.valuation_date,
+                    position_currency=row.position_currency,
                     dimensions=dimensions,
                     beginning_market_value_position_currency=Decimal(row.bod_market_value),
                     ending_market_value_position_currency=Decimal(row.eod_market_value),

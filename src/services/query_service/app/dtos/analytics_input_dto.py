@@ -346,6 +346,11 @@ class PositionTimeseriesRow(BaseModel):
     valuation_date: date = Field(
         ..., description="Business date for row valuation.", examples=["2025-01-31"]
     )
+    position_currency: str | None = Field(
+        None,
+        description="Native/local currency code of the position when available.",
+        examples=["EUR"],
+    )
     dimensions: dict[str, str | None] = Field(
         default_factory=dict,
         description="Selected dimension values for the row.",

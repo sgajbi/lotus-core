@@ -49,10 +49,10 @@ def _event(
 @pytest.mark.parametrize(
     ("transaction_type", "quantity", "gross", "net_cost", "expected_qty", "expected_cost"),
     [
-        ("DEPOSIT", "0", "25", "0", Decimal("100"), Decimal("100")),
-        ("WITHDRAWAL", "0", "30", "0", Decimal("100"), Decimal("100")),
-        ("FEE", "0", "5", "0", Decimal("100"), Decimal("100")),
-        ("TAX", "0", "7", "0", Decimal("100"), Decimal("100")),
+        ("DEPOSIT", "0", "25", "0", Decimal("125"), Decimal("125")),
+        ("WITHDRAWAL", "0", "30", "0", Decimal("70"), Decimal("70")),
+        ("FEE", "0", "5", "0", Decimal("95"), Decimal("95")),
+        ("TAX", "0", "7", "0", Decimal("93"), Decimal("93")),
         ("TRANSFER_IN", "2", "20", "20", Decimal("102"), Decimal("120")),
         ("TRANSFER_OUT", "3", "0", "-15", Decimal("97"), Decimal("85")),
         ("TRANSFER_IN", "0", "35", "0", Decimal("100"), Decimal("100")),

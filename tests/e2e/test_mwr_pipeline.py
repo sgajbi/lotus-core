@@ -1,10 +1,13 @@
 # tests/e2e/test_analytics_input_money_weighted_returns_pipeline.py
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from .api_client import E2EApiClient
-from .assertions import assert_legacy_endpoint_status
+from .assertions import as_decimal, assert_legacy_endpoint_status
 
 
 @pytest.fixture(scope="module")
@@ -90,6 +93,45 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
                     "trade_currency": "USD",
                     "currency": "USD",
                 },
+                {
+                    "transaction_id": "MWR_FEE_01",
+                    "portfolio_id": portfolio_id,
+                    "instrument_id": "CASH_USD",
+                    "security_id": "CASH_USD",
+                    "transaction_date": "2025-08-16T10:00:00Z",
+                    "transaction_type": "FEE",
+                    "quantity": 1,
+                    "price": 25,
+                    "gross_transaction_amount": 25,
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                },
+                {
+                    "transaction_id": "MWR_TAX_01",
+                    "portfolio_id": portfolio_id,
+                    "instrument_id": "CASH_USD",
+                    "security_id": "CASH_USD",
+                    "transaction_date": "2025-08-17T10:00:00Z",
+                    "transaction_type": "TAX",
+                    "quantity": 1,
+                    "price": 10,
+                    "gross_transaction_amount": 10,
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                },
+                {
+                    "transaction_id": "MWR_WITHDRAWAL_01",
+                    "portfolio_id": portfolio_id,
+                    "instrument_id": "CASH_USD",
+                    "security_id": "CASH_USD",
+                    "transaction_date": "2025-08-18T10:00:00Z",
+                    "transaction_type": "WITHDRAWAL",
+                    "quantity": 100,
+                    "price": 1,
+                    "gross_transaction_amount": 100,
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                },
             ]
         },
     )
@@ -105,8 +147,32 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
                 },
                 {
                     "security_id": "CASH_USD",
+                    "price_date": "2025-08-15",
+                    "price": 1.0,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": "CASH_USD",
+                    "price_date": "2025-08-16",
+                    "price": 1.0,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": "CASH_USD",
+                    "price_date": "2025-08-17",
+                    "price": 1.0,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": "CASH_USD",
+                    "price_date": "2025-08-18",
+                    "price": 1.0,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": "CASH_USD",
                     "price_date": "2025-08-31",
-                    "price": 1.04166667,
+                    "price": 1.0,
                     "currency": "USD",
                 },
             ]
@@ -153,3 +219,93 @@ def test_analytics_input_mwr_contract_dataset_is_queryable(
     # ACT
     response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
     assert_legacy_endpoint_status(response)
+
+
+@pytest.mark.parametrize(
+    ("as_of_date", "expected_quantity", "expected_market_value"),
+    [
+        ("2025-08-01", Decimal("1000"), Decimal("1000")),
+        ("2025-08-15", Decimal("1200"), Decimal("1200")),
+        ("2025-08-16", Decimal("1175"), Decimal("1175")),
+        ("2025-08-17", Decimal("1165"), Decimal("1165")),
+        ("2025-08-18", Decimal("1065"), Decimal("1065")),
+    ],
+)
+def test_cash_portfolio_flows_pipeline_persists_non_zero_positions_and_analytics(
+    setup_mwr_data,
+    e2e_api_client: E2EApiClient,
+    as_of_date: str,
+    expected_quantity: Decimal,
+    expected_market_value: Decimal,
+):
+    portfolio_id = setup_mwr_data["portfolio_id"]
+
+    positions_response = e2e_api_client.query(
+        f"/portfolios/{portfolio_id}/positions?as_of_date={as_of_date}"
+    )
+    positions_payload = positions_response.json()
+    assert len(positions_payload["positions"]) == 1
+    cash_position = positions_payload["positions"][0]
+    assert cash_position["security_id"] == "CASH_USD"
+    assert as_decimal(cash_position["quantity"]) == expected_quantity
+    assert as_decimal(cash_position["valuation"]["market_value"]) == expected_market_value
+
+
+def test_cash_portfolio_flows_pipeline_persists_cashflows_and_timeseries(
+    setup_mwr_data, db_engine
+):
+    portfolio_id = setup_mwr_data["portfolio_id"]
+
+    with Session(db_engine) as session:
+        cashflows = session.execute(
+            text(
+                """
+                select distinct on (transaction_id)
+                    transaction_id, amount, classification, timing, epoch
+                from cashflows
+                where portfolio_id = :portfolio_id
+                order by transaction_id, epoch desc
+                """
+            ),
+            {"portfolio_id": portfolio_id},
+        ).fetchall()
+        assert [
+            (
+                row.transaction_id,
+                as_decimal(row.amount),
+                row.classification,
+                row.timing,
+            )
+            for row in cashflows
+        ] == [
+            ("MWR_DEPOSIT_01", Decimal("1000"), "CASHFLOW_IN", "BOD"),
+            ("MWR_DEPOSIT_02", Decimal("200"), "CASHFLOW_IN", "BOD"),
+            ("MWR_FEE_01", Decimal("-25"), "EXPENSE", "EOD"),
+            ("MWR_TAX_01", Decimal("-10"), "EXPENSE", "EOD"),
+            ("MWR_WITHDRAWAL_01", Decimal("-100"), "CASHFLOW_OUT", "EOD"),
+        ]
+
+        timeseries_rows = session.execute(
+            text(
+                """
+                select distinct on (date)
+                    date, bod_market_value, eod_market_value, epoch
+                from position_timeseries
+                where portfolio_id = :portfolio_id
+                  and security_id = 'CASH_USD'
+                  and date in ('2025-08-01', '2025-08-15', '2025-08-16', '2025-08-17', '2025-08-18')
+                order by date, epoch desc
+                """
+            ),
+            {"portfolio_id": portfolio_id},
+        ).fetchall()
+        assert [
+            (str(row.date), as_decimal(row.eod_market_value))
+            for row in timeseries_rows
+        ] == [
+            ("2025-08-01", Decimal("1000")),
+            ("2025-08-15", Decimal("1200")),
+            ("2025-08-16", Decimal("1175")),
+            ("2025-08-17", Decimal("1165")),
+            ("2025-08-18", Decimal("1065")),
+        ]
