@@ -18,7 +18,7 @@ from portfolio_common.database_models import (
     ReprocessingJob,
     Transaction,
 )
-from sqlalchemy import Date, and_, case, cast, func, select
+from sqlalchemy import Date, and_, case, cast, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -186,54 +186,68 @@ class OperationsRepository:
         as_of: Optional[datetime] = None,
     ) -> ReprocessingHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = select(
-            func.count()
-            .filter(PositionState.status == "REPROCESSING")
-            .label("active_keys"),
-            func.count()
-            .filter(
-                PositionState.status == "REPROCESSING",
-                PositionState.updated_at < stale_threshold,
-            )
-            .label("stale_reprocessing_keys"),
-            func.min(PositionState.watermark_date)
-            .filter(PositionState.status == "REPROCESSING")
-            .label("oldest_reprocessing_watermark_date"),
+        base_stmt = select(
+            PositionState.status.label("status"),
+            PositionState.updated_at.label("updated_at"),
+            PositionState.watermark_date.label("watermark_date"),
+            PositionState.security_id.label("security_id"),
+            PositionState.epoch.label("epoch"),
         ).where(PositionState.portfolio_id == portfolio_id)
         if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
-        row = (await self.db.execute(stmt)).one()
-        oldest_key_stmt = (
+            base_stmt = base_stmt.where(PositionState.updated_at <= as_of)
+        base_subq = base_stmt.subquery()
+        aggregate_subq = (
             select(
-                PositionState.security_id,
-                PositionState.epoch,
-                PositionState.updated_at,
+                func.count()
+                .filter(base_subq.c.status == "REPROCESSING")
+                .label("active_keys"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "REPROCESSING",
+                    base_subq.c.updated_at < stale_threshold,
+                )
+                .label("stale_reprocessing_keys"),
+                func.min(base_subq.c.watermark_date)
+                .filter(base_subq.c.status == "REPROCESSING")
+                .label("oldest_reprocessing_watermark_date"),
             )
-            .where(
-                PositionState.portfolio_id == portfolio_id,
-                PositionState.status == "REPROCESSING",
+            .select_from(base_subq)
+            .subquery()
+        )
+        oldest_key_subq = (
+            select(
+                base_subq.c.security_id,
+                base_subq.c.epoch,
+                base_subq.c.updated_at,
             )
+            .where(base_subq.c.status == "REPROCESSING")
             .order_by(
-                PositionState.watermark_date.asc(),
-                PositionState.updated_at.asc(),
-                PositionState.security_id.asc(),
+                base_subq.c.watermark_date.asc(),
+                base_subq.c.updated_at.asc(),
+                base_subq.c.security_id.asc(),
             )
             .limit(1)
+            .subquery()
         )
-        if as_of is not None:
-            oldest_key_stmt = oldest_key_stmt.where(PositionState.updated_at <= as_of)
-        oldest_key_row = (await self.db.execute(oldest_key_stmt)).one_or_none()
+        row = (
+            await self.db.execute(
+                select(
+                    aggregate_subq.c.active_keys,
+                    aggregate_subq.c.stale_reprocessing_keys,
+                    aggregate_subq.c.oldest_reprocessing_watermark_date,
+                    oldest_key_subq.c.security_id,
+                    oldest_key_subq.c.epoch,
+                    oldest_key_subq.c.updated_at,
+                ).select_from(aggregate_subq).outerjoin(oldest_key_subq, true())
+            )
+        ).one()
         return ReprocessingHealthSummary(
             active_keys=int(row.active_keys or 0),
             stale_reprocessing_keys=int(row.stale_reprocessing_keys or 0),
             oldest_reprocessing_watermark_date=row.oldest_reprocessing_watermark_date,
-            oldest_reprocessing_security_id=(
-                oldest_key_row.security_id if oldest_key_row else None
-            ),
-            oldest_reprocessing_epoch=(oldest_key_row.epoch if oldest_key_row else None),
-            oldest_reprocessing_updated_at=(
-                oldest_key_row.updated_at if oldest_key_row else None
-            ),
+            oldest_reprocessing_security_id=row.security_id,
+            oldest_reprocessing_epoch=row.epoch,
+            oldest_reprocessing_updated_at=row.updated_at,
         )
 
     async def get_valuation_job_health_summary(
@@ -246,53 +260,75 @@ class OperationsRepository:
     ) -> JobHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
-        stmt = select(
-            func.count()
-            .filter(PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")))
-            .label("pending_jobs"),
-            func.count()
-            .filter(PortfolioValuationJob.status == "PROCESSING")
-            .label("processing_jobs"),
-            func.count()
-            .filter(
-                PortfolioValuationJob.status == "PROCESSING",
-                PortfolioValuationJob.updated_at < stale_threshold,
-            )
-            .label("stale_processing_jobs"),
-            func.count().filter(PortfolioValuationJob.status == "FAILED").label("failed_jobs"),
-            func.count()
-            .filter(
-                PortfolioValuationJob.status == "FAILED",
-                PortfolioValuationJob.updated_at >= failed_since,
-            )
-            .label("failed_jobs_last_hours"),
-            func.min(PortfolioValuationJob.valuation_date)
-            .filter(PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")))
-            .label("oldest_open_job_date"),
+        base_stmt = select(
+            PortfolioValuationJob.status.label("status"),
+            PortfolioValuationJob.updated_at.label("updated_at"),
+            PortfolioValuationJob.valuation_date.label("valuation_date"),
+            PortfolioValuationJob.id.label("id"),
+            PortfolioValuationJob.correlation_id.label("correlation_id"),
+            PortfolioValuationJob.security_id.label("security_id"),
         ).where(PortfolioValuationJob.portfolio_id == portfolio_id)
         if as_of is not None:
-            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
-        row = (await self.db.execute(stmt)).one()
-        oldest_job_stmt = (
+            base_stmt = base_stmt.where(PortfolioValuationJob.updated_at <= as_of)
+        base_subq = base_stmt.subquery()
+        aggregate_subq = (
             select(
-                PortfolioValuationJob.id,
-                PortfolioValuationJob.security_id,
-                PortfolioValuationJob.correlation_id,
+                func.count()
+                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
+                .label("pending_jobs"),
+                func.count()
+                .filter(base_subq.c.status == "PROCESSING")
+                .label("processing_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "PROCESSING",
+                    base_subq.c.updated_at < stale_threshold,
+                )
+                .label("stale_processing_jobs"),
+                func.count().filter(base_subq.c.status == "FAILED").label("failed_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "FAILED",
+                    base_subq.c.updated_at >= failed_since,
+                )
+                .label("failed_jobs_last_hours"),
+                func.min(base_subq.c.valuation_date)
+                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
+                .label("oldest_open_job_date"),
             )
-            .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
-                PortfolioValuationJob.status.in_(("PENDING", "PROCESSING")),
+            .select_from(base_subq)
+            .subquery()
+        )
+        oldest_job_subq = (
+            select(
+                base_subq.c.id,
+                base_subq.c.security_id,
+                base_subq.c.correlation_id,
             )
+            .where(base_subq.c.status.in_(("PENDING", "PROCESSING")))
             .order_by(
-                PortfolioValuationJob.valuation_date.asc(),
-                PortfolioValuationJob.updated_at.asc(),
-                PortfolioValuationJob.id.asc(),
+                base_subq.c.valuation_date.asc(),
+                base_subq.c.updated_at.asc(),
+                base_subq.c.id.asc(),
             )
             .limit(1)
+            .subquery()
         )
-        if as_of is not None:
-            oldest_job_stmt = oldest_job_stmt.where(PortfolioValuationJob.updated_at <= as_of)
-        oldest_job_row = (await self.db.execute(oldest_job_stmt)).one_or_none()
+        row = (
+            await self.db.execute(
+                select(
+                    aggregate_subq.c.pending_jobs,
+                    aggregate_subq.c.processing_jobs,
+                    aggregate_subq.c.stale_processing_jobs,
+                    aggregate_subq.c.failed_jobs,
+                    aggregate_subq.c.failed_jobs_last_hours,
+                    aggregate_subq.c.oldest_open_job_date,
+                    oldest_job_subq.c.id,
+                    oldest_job_subq.c.security_id,
+                    oldest_job_subq.c.correlation_id,
+                ).select_from(aggregate_subq).outerjoin(oldest_job_subq, true())
+            )
+        ).one()
         return JobHealthSummary(
             pending_jobs=int(row.pending_jobs or 0),
             processing_jobs=int(row.processing_jobs or 0),
@@ -300,11 +336,9 @@ class OperationsRepository:
             failed_jobs=int(row.failed_jobs or 0),
             failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
             oldest_open_job_date=row.oldest_open_job_date,
-            oldest_open_job_id=(oldest_job_row.id if oldest_job_row else None),
-            oldest_open_job_correlation_id=(
-                oldest_job_row.correlation_id if oldest_job_row else None
-            ),
-            oldest_open_security_id=(oldest_job_row.security_id if oldest_job_row else None),
+            oldest_open_job_id=row.id,
+            oldest_open_job_correlation_id=row.correlation_id,
+            oldest_open_security_id=row.security_id,
         )
 
     async def get_aggregation_job_health_summary(
@@ -317,52 +351,72 @@ class OperationsRepository:
     ) -> JobHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
-        stmt = select(
-            func.count()
-            .filter(PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")))
-            .label("pending_jobs"),
-            func.count()
-            .filter(PortfolioAggregationJob.status == "PROCESSING")
-            .label("processing_jobs"),
-            func.count()
-            .filter(
-                PortfolioAggregationJob.status == "PROCESSING",
-                PortfolioAggregationJob.updated_at < stale_threshold,
-            )
-            .label("stale_processing_jobs"),
-            func.count().filter(PortfolioAggregationJob.status == "FAILED").label("failed_jobs"),
-            func.count()
-            .filter(
-                PortfolioAggregationJob.status == "FAILED",
-                PortfolioAggregationJob.updated_at >= failed_since,
-            )
-            .label("failed_jobs_last_hours"),
-            func.min(PortfolioAggregationJob.aggregation_date)
-            .filter(PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")))
-            .label("oldest_open_job_date"),
+        base_stmt = select(
+            PortfolioAggregationJob.status.label("status"),
+            PortfolioAggregationJob.updated_at.label("updated_at"),
+            PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
+            PortfolioAggregationJob.id.label("id"),
+            PortfolioAggregationJob.correlation_id.label("correlation_id"),
         ).where(PortfolioAggregationJob.portfolio_id == portfolio_id)
         if as_of is not None:
-            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
-        row = (await self.db.execute(stmt)).one()
-        oldest_job_stmt = (
+            base_stmt = base_stmt.where(PortfolioAggregationJob.updated_at <= as_of)
+        base_subq = base_stmt.subquery()
+        aggregate_subq = (
             select(
-                PortfolioAggregationJob.id,
-                PortfolioAggregationJob.correlation_id,
+                func.count()
+                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
+                .label("pending_jobs"),
+                func.count()
+                .filter(base_subq.c.status == "PROCESSING")
+                .label("processing_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "PROCESSING",
+                    base_subq.c.updated_at < stale_threshold,
+                )
+                .label("stale_processing_jobs"),
+                func.count().filter(base_subq.c.status == "FAILED").label("failed_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "FAILED",
+                    base_subq.c.updated_at >= failed_since,
+                )
+                .label("failed_jobs_last_hours"),
+                func.min(base_subq.c.aggregation_date)
+                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
+                .label("oldest_open_job_date"),
             )
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING")),
+            .select_from(base_subq)
+            .subquery()
+        )
+        oldest_job_subq = (
+            select(
+                base_subq.c.id,
+                base_subq.c.correlation_id,
             )
+            .where(base_subq.c.status.in_(("PENDING", "PROCESSING")))
             .order_by(
-                PortfolioAggregationJob.aggregation_date.asc(),
-                PortfolioAggregationJob.updated_at.asc(),
-                PortfolioAggregationJob.id.asc(),
+                base_subq.c.aggregation_date.asc(),
+                base_subq.c.updated_at.asc(),
+                base_subq.c.id.asc(),
             )
             .limit(1)
+            .subquery()
         )
-        if as_of is not None:
-            oldest_job_stmt = oldest_job_stmt.where(PortfolioAggregationJob.updated_at <= as_of)
-        oldest_job_row = (await self.db.execute(oldest_job_stmt)).one_or_none()
+        row = (
+            await self.db.execute(
+                select(
+                    aggregate_subq.c.pending_jobs,
+                    aggregate_subq.c.processing_jobs,
+                    aggregate_subq.c.stale_processing_jobs,
+                    aggregate_subq.c.failed_jobs,
+                    aggregate_subq.c.failed_jobs_last_hours,
+                    aggregate_subq.c.oldest_open_job_date,
+                    oldest_job_subq.c.id,
+                    oldest_job_subq.c.correlation_id,
+                ).select_from(aggregate_subq).outerjoin(oldest_job_subq, true())
+            )
+        ).one()
         return JobHealthSummary(
             pending_jobs=int(row.pending_jobs or 0),
             processing_jobs=int(row.processing_jobs or 0),
@@ -370,10 +424,8 @@ class OperationsRepository:
             failed_jobs=int(row.failed_jobs or 0),
             failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
             oldest_open_job_date=row.oldest_open_job_date,
-            oldest_open_job_id=(oldest_job_row.id if oldest_job_row else None),
-            oldest_open_job_correlation_id=(
-                oldest_job_row.correlation_id if oldest_job_row else None
-            ),
+            oldest_open_job_id=row.id,
+            oldest_open_job_correlation_id=row.correlation_id,
             oldest_open_security_id=None,
         )
 
@@ -387,48 +439,68 @@ class OperationsRepository:
     ) -> ExportJobHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
-        stmt = select(
-            func.count().filter(AnalyticsExportJob.status == "accepted").label("accepted_jobs"),
-            func.count().filter(AnalyticsExportJob.status == "running").label("running_jobs"),
-            func.count()
-            .filter(
-                AnalyticsExportJob.status == "running",
-                AnalyticsExportJob.updated_at < stale_threshold,
-            )
-            .label("stale_running_jobs"),
-            func.count().filter(AnalyticsExportJob.status == "failed").label("failed_jobs"),
-            func.count()
-            .filter(
-                AnalyticsExportJob.status == "failed",
-                AnalyticsExportJob.updated_at >= failed_since,
-            )
-            .label("failed_jobs_last_hours"),
-            func.min(AnalyticsExportJob.created_at)
-            .filter(AnalyticsExportJob.status.in_(("accepted", "running")))
-            .label("oldest_open_job_created_at"),
+        base_stmt = select(
+            AnalyticsExportJob.status.label("status"),
+            AnalyticsExportJob.updated_at.label("updated_at"),
+            AnalyticsExportJob.created_at.label("created_at"),
+            AnalyticsExportJob.job_id.label("job_id"),
+            AnalyticsExportJob.request_fingerprint.label("request_fingerprint"),
         ).where(AnalyticsExportJob.portfolio_id == portfolio_id)
         if as_of is not None:
-            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
-        row = (await self.db.execute(stmt)).one()
-        oldest_job_stmt = (
+            base_stmt = base_stmt.where(AnalyticsExportJob.updated_at <= as_of)
+        base_subq = base_stmt.subquery()
+        aggregate_subq = (
             select(
-                AnalyticsExportJob.job_id,
-                AnalyticsExportJob.request_fingerprint,
+                func.count().filter(base_subq.c.status == "accepted").label("accepted_jobs"),
+                func.count().filter(base_subq.c.status == "running").label("running_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "running",
+                    base_subq.c.updated_at < stale_threshold,
+                )
+                .label("stale_running_jobs"),
+                func.count().filter(base_subq.c.status == "failed").label("failed_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "failed",
+                    base_subq.c.updated_at >= failed_since,
+                )
+                .label("failed_jobs_last_hours"),
+                func.min(base_subq.c.created_at)
+                .filter(base_subq.c.status.in_(("accepted", "running")))
+                .label("oldest_open_job_created_at"),
             )
-            .where(
-                AnalyticsExportJob.portfolio_id == portfolio_id,
-                AnalyticsExportJob.status.in_(("accepted", "running")),
+            .select_from(base_subq)
+            .subquery()
+        )
+        oldest_job_subq = (
+            select(
+                base_subq.c.job_id,
+                base_subq.c.request_fingerprint,
             )
+            .where(base_subq.c.status.in_(("accepted", "running")))
             .order_by(
-                AnalyticsExportJob.created_at.asc(),
-                AnalyticsExportJob.updated_at.asc(),
-                AnalyticsExportJob.job_id.asc(),
+                base_subq.c.created_at.asc(),
+                base_subq.c.updated_at.asc(),
+                base_subq.c.job_id.asc(),
             )
             .limit(1)
+            .subquery()
         )
-        if as_of is not None:
-            oldest_job_stmt = oldest_job_stmt.where(AnalyticsExportJob.updated_at <= as_of)
-        oldest_job_row = (await self.db.execute(oldest_job_stmt)).one_or_none()
+        row = (
+            await self.db.execute(
+                select(
+                    aggregate_subq.c.accepted_jobs,
+                    aggregate_subq.c.running_jobs,
+                    aggregate_subq.c.stale_running_jobs,
+                    aggregate_subq.c.failed_jobs,
+                    aggregate_subq.c.failed_jobs_last_hours,
+                    aggregate_subq.c.oldest_open_job_created_at,
+                    oldest_job_subq.c.job_id,
+                    oldest_job_subq.c.request_fingerprint,
+                ).select_from(aggregate_subq).outerjoin(oldest_job_subq, true())
+            )
+        ).one()
         return ExportJobHealthSummary(
             accepted_jobs=int(row.accepted_jobs or 0),
             running_jobs=int(row.running_jobs or 0),
@@ -436,10 +508,8 @@ class OperationsRepository:
             failed_jobs=int(row.failed_jobs or 0),
             failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
             oldest_open_job_created_at=row.oldest_open_job_created_at,
-            oldest_open_job_id=(oldest_job_row.job_id if oldest_job_row else None),
-            oldest_open_request_fingerprint=(
-                oldest_job_row.request_fingerprint if oldest_job_row else None
-            ),
+            oldest_open_job_id=row.job_id,
+            oldest_open_request_fingerprint=row.request_fingerprint,
         )
 
     async def get_latest_transaction_date(
@@ -1227,57 +1297,59 @@ class OperationsRepository:
     async def get_reconciliation_finding_summary(
         self, run_id: str, as_of: Optional[datetime] = None
     ) -> ReconciliationFindingSummary:
-        aggregate_stmt = (
+        base_stmt = select(
+            FinancialReconciliationFinding.severity.label("severity"),
+            FinancialReconciliationFinding.created_at.label("created_at"),
+            FinancialReconciliationFinding.id.label("id"),
+            FinancialReconciliationFinding.finding_id.label("finding_id"),
+            FinancialReconciliationFinding.finding_type.label("finding_type"),
+            FinancialReconciliationFinding.security_id.label("security_id"),
+            FinancialReconciliationFinding.transaction_id.label("transaction_id"),
+        ).where(FinancialReconciliationFinding.run_id == run_id)
+        if as_of is not None:
+            base_stmt = base_stmt.where(FinancialReconciliationFinding.created_at <= as_of)
+        base_subq = base_stmt.subquery()
+        aggregate_subq = (
             select(
                 func.count().label("total_findings"),
                 func.count()
-                .filter(FinancialReconciliationFinding.severity == "ERROR")
+                .filter(base_subq.c.severity == "ERROR")
                 .label("blocking_findings"),
             )
-            .select_from(FinancialReconciliationFinding)
-            .where(FinancialReconciliationFinding.run_id == run_id)
+            .select_from(base_subq)
+            .subquery()
         )
-        if as_of is not None:
-            aggregate_stmt = aggregate_stmt.where(
-                FinancialReconciliationFinding.created_at <= as_of
-            )
-        row = (await self.db.execute(aggregate_stmt)).one()
-        top_blocking_stmt = (
+        top_blocking_subq = (
             select(
-                FinancialReconciliationFinding.finding_id,
-                FinancialReconciliationFinding.finding_type,
-                FinancialReconciliationFinding.security_id,
-                FinancialReconciliationFinding.transaction_id,
+                base_subq.c.finding_id,
+                base_subq.c.finding_type,
+                base_subq.c.security_id,
+                base_subq.c.transaction_id,
             )
-            .where(
-                FinancialReconciliationFinding.run_id == run_id,
-                FinancialReconciliationFinding.severity == "ERROR",
-            )
+            .where(base_subq.c.severity == "ERROR")
+            .order_by(base_subq.c.created_at.desc(), base_subq.c.id.desc())
+            .limit(1)
+            .subquery()
         )
-        if as_of is not None:
-            top_blocking_stmt = top_blocking_stmt.where(
-                FinancialReconciliationFinding.created_at <= as_of
+        row = (
+            await self.db.execute(
+                select(
+                    aggregate_subq.c.total_findings,
+                    aggregate_subq.c.blocking_findings,
+                    top_blocking_subq.c.finding_id,
+                    top_blocking_subq.c.finding_type,
+                    top_blocking_subq.c.security_id,
+                    top_blocking_subq.c.transaction_id,
+                ).select_from(aggregate_subq).outerjoin(top_blocking_subq, true())
             )
-        top_blocking_stmt = top_blocking_stmt.order_by(
-            FinancialReconciliationFinding.created_at.desc(),
-            FinancialReconciliationFinding.id.desc(),
-        ).limit(1)
-        top_blocking_row = (await self.db.execute(top_blocking_stmt)).one_or_none()
+        ).one()
         return ReconciliationFindingSummary(
             total_findings=int(row.total_findings or 0),
             blocking_findings=int(row.blocking_findings or 0),
-            top_blocking_finding_id=(
-                top_blocking_row.finding_id if top_blocking_row else None
-            ),
-            top_blocking_finding_type=(
-                top_blocking_row.finding_type if top_blocking_row else None
-            ),
-            top_blocking_finding_security_id=(
-                top_blocking_row.security_id if top_blocking_row else None
-            ),
-            top_blocking_finding_transaction_id=(
-                top_blocking_row.transaction_id if top_blocking_row else None
-            ),
+            top_blocking_finding_id=row.finding_id,
+            top_blocking_finding_type=row.finding_type,
+            top_blocking_finding_security_id=row.security_id,
+            top_blocking_finding_transaction_id=row.transaction_id,
         )
 
     async def get_portfolio_control_stages_count(
