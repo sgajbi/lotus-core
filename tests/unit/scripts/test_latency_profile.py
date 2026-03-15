@@ -85,6 +85,7 @@ def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
         query_control_plane_base_url="http://localhost:8202",
         portfolio_id="DEMO_DPM_EUR_001",
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+        timeout_seconds=5,
     )
 
     assert portfolio_id == "PORT_123"

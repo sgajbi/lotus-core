@@ -201,28 +201,30 @@ def test_dispatcher_recovers_after_failure(db_engine, clean_db, smart_mock_kafka
             )
 
     call_count = 0
+    pending_deliveries: list[dict[str, object]] = []
+
+    def _publish_message(**kwargs):
+        pending_deliveries.append(kwargs)
 
     def stateful_flush_side_effect(*args, **kwargs):
         nonlocal call_count
         call_count += 1
 
         if call_count == 1:
-            for call in smart_mock_kafka_producer.publish_message.call_args_list:
-                kwargs = call.kwargs
-                cb = kwargs.get("on_delivery")
-                outbox_id = kwargs.get("outbox_id")
+            for queued in pending_deliveries:
+                cb = queued.get("on_delivery")
+                outbox_id = queued.get("outbox_id")
                 if cb and outbox_id:
                     cb(outbox_id, False, "Kafka is down!")
-            smart_mock_kafka_producer.publish_message.call_args_list.clear()
         else:
-            for call in smart_mock_kafka_producer.publish_message.call_args_list:
-                kwargs = call.kwargs
-                cb = kwargs.get("on_delivery")
-                outbox_id = kwargs.get("outbox_id")
+            for queued in pending_deliveries:
+                cb = queued.get("on_delivery")
+                outbox_id = queued.get("outbox_id")
                 if cb and outbox_id:
                     cb(outbox_id, True, None)
-            smart_mock_kafka_producer.publish_message.call_args_list.clear()
+        pending_deliveries.clear()
 
+    smart_mock_kafka_producer.publish_message.side_effect = _publish_message
     smart_mock_kafka_producer.flush.side_effect = stateful_flush_side_effect
 
     dispatcher = OutboxDispatcher(
