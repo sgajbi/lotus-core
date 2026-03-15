@@ -20,6 +20,11 @@ from typing import Any, Callable
 
 import requests
 
+try:
+    from scripts.ci_service_sets import LATENCY_GATE_SERVICES
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from ci_service_sets import LATENCY_GATE_SERVICES
+
 
 @dataclass(frozen=True)
 class EndpointCase:
@@ -72,6 +77,7 @@ def _run_compose_up(build: bool) -> None:
     cmd = ["docker", "compose", "up", "-d"]
     if build:
         cmd.append("--build")
+    cmd.extend(LATENCY_GATE_SERVICES)
     subprocess.run(cmd, check=True)
 
 
@@ -529,7 +535,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--portfolio-id", default="DEMO_DPM_EUR_001")
     parser.add_argument("--benchmark-id", default="BMK_GLOBAL_BALANCED_60_40")
-    parser.add_argument("--warmup-runs", type=int, default=3)
+    parser.add_argument("--warmup-runs", type=int, default=5)
     parser.add_argument("--measured-runs", type=int, default=30)
     parser.add_argument("--ready-timeout-seconds", type=int, default=180)
     parser.add_argument("--output-dir", default="output/task-runs")

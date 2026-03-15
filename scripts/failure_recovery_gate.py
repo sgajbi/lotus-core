@@ -30,6 +30,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+try:
+    from scripts.ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
+
 
 
 class RecoveryMode(StrEnum):
@@ -380,7 +385,11 @@ def main() -> int:
 
     try:
         if not args.skip_compose:
-            compose_up(args.compose_file, build=args.build)
+            compose_up(
+                args.compose_file,
+                build=args.build,
+                services=list(FAILURE_RECOVERY_GATE_SERVICES),
+            )
             wait_for_migration_runner(args.compose_file, timeout_seconds=args.ready_timeout_seconds)
         _wait_ready(
             ingestion_base_url=ingestion_base_url,

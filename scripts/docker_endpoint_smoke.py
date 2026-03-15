@@ -21,6 +21,11 @@ from typing import Any
 
 import requests
 
+try:
+    from scripts.ci_service_sets import DOCKER_SMOKE_SERVICES
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from ci_service_sets import DOCKER_SMOKE_SERVICES
+
 
 @dataclass(slots=True)
 class CheckResult:
@@ -56,6 +61,7 @@ def _compose_up_with_retry(*, compose_file: str, repo_root: Path, build: bool) -
     up_cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
     if build:
         up_cmd.append("--build")
+    up_cmd.extend(DOCKER_SMOKE_SERVICES)
 
     attempts = 2
     for attempt in range(1, attempts + 1):

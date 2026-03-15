@@ -7,6 +7,7 @@ from scripts.latency_profile import (
     _pick_identifier_from_payload,
     _raise_if_compose_service_failed,
     _resolve_runtime_ids,
+    _run_compose_up,
 )
 
 
@@ -119,3 +120,36 @@ def test_raise_if_compose_service_failed_raises_on_failure(monkeypatch) -> None:
         assert "exited with status 1" in str(exc)
     else:
         raise AssertionError("Expected _raise_if_compose_service_failed to raise.")
+
+
+def test_run_compose_up_limits_started_services(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd, check=False):  # noqa: ARG001
+        calls.append(cmd)
+        return CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+
+    _run_compose_up(build=False)
+
+    assert calls == [
+        [
+            "docker",
+            "compose",
+            "up",
+            "-d",
+            "ingestion_service",
+            "query_service",
+            "query_control_plane_service",
+            "event_replay_service",
+            "persistence_service",
+            "position_calculator_service",
+            "pipeline_orchestrator_service",
+            "valuation_orchestrator_service",
+            "position_valuation_calculator",
+            "timeseries_generator_service",
+            "portfolio_aggregation_service",
+            "demo_data_loader",
+        ]
+    ]
