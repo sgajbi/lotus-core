@@ -1,9 +1,11 @@
+from subprocess import CompletedProcess
 from unittest.mock import MagicMock
 
 from scripts.latency_profile import (
     _enforce_gate,
     _percentile_ms,
     _pick_identifier_from_payload,
+    _raise_if_compose_service_failed,
     _resolve_runtime_ids,
 )
 
@@ -90,3 +92,30 @@ def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
 
     assert portfolio_id == "PORT_123"
     assert benchmark_id == "BMK_ABC"
+
+
+def test_raise_if_compose_service_failed_ignores_running_service(monkeypatch) -> None:
+    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+        if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
+            return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
+        return CompletedProcess(cmd, 0, stdout="running|0\n", stderr="")
+
+    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+
+    _raise_if_compose_service_failed("demo_data_loader")
+
+
+def test_raise_if_compose_service_failed_raises_on_failure(monkeypatch) -> None:
+    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+        if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
+            return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
+        return CompletedProcess(cmd, 0, stdout="exited|1\n", stderr="")
+
+    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+
+    try:
+        _raise_if_compose_service_failed("demo_data_loader")
+    except RuntimeError as exc:
+        assert "exited with status 1" in str(exc)
+    else:
+        raise AssertionError("Expected _raise_if_compose_service_failed to raise.")
