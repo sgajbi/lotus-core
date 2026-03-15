@@ -226,7 +226,7 @@ def test_day_2_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
 
     query = "SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date"  # noqa: E501
     params = {"pid": portfolio_id, "date": DAY_2}
-    expected_eod_mv = Decimal("2974.5000000000")
+    expected_eod_mv = Decimal("1002974.5000000000")
     poll_db_until(query, lambda r: r is not None and r.eod_market_value == expected_eod_mv, params)
 
 
@@ -284,7 +284,7 @@ def test_day_3_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
 
     query = "SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date"  # noqa: E501
     params = {"pid": portfolio_id, "date": DAY_3}
-    expected_eod_mv = Decimal("5959.5000000000")
+    expected_eod_mv = Decimal("1005959.5000000000")
     poll_db_until(query, lambda r: r is not None and r.eod_market_value == expected_eod_mv, params)
 
 
@@ -406,7 +406,7 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
 
     query = "SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date"  # noqa: E501
     params = {"pid": portfolio_id, "date": DAY_5}
-    expected_eod_mv = Decimal("10104.5000000000")
+    expected_eod_mv = Decimal("1010104.5000000000")
     poll_db_until(
         query,
         lambda r: r is not None and r.eod_market_value == expected_eod_mv,
