@@ -38,12 +38,14 @@ def ensure_docker_engine_available(
         ) from exc
 
 
-def _load_compose_images(compose_file: str) -> list[str]:
+def _load_compose_pull_images(compose_file: str) -> list[str]:
     compose_path = Path(compose_file)
     data = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
     services = data.get("services", {})
     images: list[str] = []
     for service in services.values():
+        if service.get("build"):
+            continue
         image = service.get("image")
         if image and image not in images:
             images.append(image)
@@ -63,7 +65,7 @@ def ensure_required_images_available(
         return
 
     missing_images: list[str] = []
-    for image in _load_compose_images(compose_file):
+    for image in _load_compose_pull_images(compose_file):
         result = runner(
             ["docker", "image", "inspect", image],
             check=False,

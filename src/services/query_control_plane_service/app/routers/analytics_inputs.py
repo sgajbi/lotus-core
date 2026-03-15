@@ -32,6 +32,7 @@ ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE = {"detail": "Analytics export job JOB-AN
 ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = {
     "detail": "Analytics export job JOB-AN-0001 is not complete."
 }
+HTTP_422_UNPROCESSABLE_CONTENT = 422
 
 
 def get_analytics_timeseries_service(
@@ -46,9 +47,9 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
     if exc.code == "INVALID_REQUEST":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if exc.code == "INSUFFICIENT_DATA":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
     if exc.code == "UNSUPPORTED_CONFIGURATION":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 
@@ -64,7 +65,7 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE}},
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Insufficient data or unsupported configuration.",
             "content": {"application/json": {"example": ANALYTICS_INSUFFICIENT_DATA_EXAMPLE}},
         },
@@ -108,7 +109,7 @@ async def get_portfolio_analytics_timeseries(
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE}},
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Insufficient data or unsupported configuration.",
             "content": {"application/json": {"example": ANALYTICS_INSUFFICIENT_DATA_EXAMPLE}},
         },
@@ -189,7 +190,7 @@ async def get_portfolio_analytics_reference(
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE}},
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Insufficient source data or unsupported configuration.",
             "content": {"application/json": {"example": ANALYTICS_INSUFFICIENT_DATA_EXAMPLE}},
         },
@@ -253,7 +254,7 @@ async def get_analytics_export_job(
             "description": "Export job not found.",
             "content": {"application/json": {"example": ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE}},
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Export job is incomplete or source payload unavailable.",
             "content": {"application/json": {"example": ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE}},
         },

@@ -68,6 +68,7 @@ BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
 BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
 }
+HTTP_422_UNPROCESSABLE_CONTENT = 422
 
 
 def get_integration_service(
@@ -136,7 +137,7 @@ async def get_effective_integration_policy(
             "description": "Simulation expected version mismatch or portfolio/session conflict.",
             "content": {"application/json": {"example": CORE_SNAPSHOT_CONFLICT_EXAMPLE}},
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Section cannot be fulfilled due to missing valuation dependencies.",
             "content": {"application/json": {"example": CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE}},
         },
@@ -235,7 +236,7 @@ async def create_core_snapshot(
     except CoreSnapshotConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except CoreSnapshotUnavailableSectionError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
 
 
 @router.post(

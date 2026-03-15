@@ -111,7 +111,7 @@ def test_ensure_required_images_available_pulls_missing_image(
 ) -> None:
     compose_file = "docker-compose.yml"
     monkeypatch.setattr(
-        "tests.test_support.docker_stack._load_compose_images",
+        "tests.test_support.docker_stack._load_compose_pull_images",
         lambda _: ["postgres:16-alpine", "confluentinc/cp-zookeeper:7.5.0"],
     )
 
@@ -143,7 +143,7 @@ def test_ensure_required_images_available_raises_on_pull_failure(
 ) -> None:
     compose_file = "docker-compose.yml"
     monkeypatch.setattr(
-        "tests.test_support.docker_stack._load_compose_images",
+        "tests.test_support.docker_stack._load_compose_pull_images",
         lambda _: ["confluentinc/cp-zookeeper:7.5.0"],
     )
 
@@ -160,6 +160,37 @@ def test_ensure_required_images_available_raises_on_pull_failure(
 
     with pytest.raises(DockerStackError, match="Failed to pull required Docker image"):
         ensure_required_images_available(compose_file, runner)
+
+
+def test_ensure_required_images_available_skips_repo_built_images(
+    tmp_path,
+) -> None:
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text(
+        """
+services:
+  query-service:
+    image: lotus-core/query-service:local
+    build:
+      context: .
+      dockerfile: src/services/query_service/Dockerfile
+  postgres:
+    image: postgres:16-alpine
+""".strip(),
+        encoding="utf-8",
+    )
+
+    calls: list[list[str]] = []
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        calls.append(list(args))
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        raise AssertionError(f"unexpected call: {args}")
+
+    ensure_required_images_available(str(compose_file), runner)
+
+    assert calls == [["docker", "image", "inspect", "postgres:16-alpine"]]
 
 
 def test_wait_for_migration_runner_success() -> None:
