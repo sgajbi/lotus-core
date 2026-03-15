@@ -1,7 +1,10 @@
-.PHONY: install lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack security-audit check coverage-gate ci ci-local docker-build docker-prebuild-ci clean
+.PHONY: install compile-runtime-lock lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack security-audit check coverage-gate ci ci-local docker-build docker-prebuild-ci clean
 
 install:
 	python scripts/bootstrap_dev.py
+
+compile-runtime-lock:
+	python scripts/update_shared_runtime_lock.py
 
 lint:
 	python -m ruff check src/services/query_service/app src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py tests/unit/services/query_service tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/test_support tests/unit/test_support scripts/test_manifest.py scripts/coverage_gate.py scripts/openapi_quality_gate.py scripts/warning_budget_gate.py scripts/api_vocabulary_inventory.py scripts/no_alias_contract_guard.py scripts/ingestion_endpoint_contract_gate.py --ignore E501,I001

@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
 # src/services/calculators/cost_calculator_service/Dockerfile
 
-ARG PYTHON_IMAGE=python:3.11-slim-bookworm
+ARG PYTHON_IMAGE=python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6
 
 FROM ${PYTHON_IMAGE} AS runtime-base
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_CONSTRAINT=/app/constraints/shared-build-constraints.txt \
+    PIP_CONSTRAINT=/app/requirements/shared-runtime.lock.txt \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
@@ -20,12 +20,12 @@ RUN useradd --create-home appuser && \
     chown -R appuser:appuser /opt/venv
 
 WORKDIR /app
-COPY constraints/shared-build-constraints.txt /app/constraints/shared-build-constraints.txt
+COPY requirements/shared-runtime.lock.txt /app/requirements/shared-runtime.lock.txt
 
 FROM ${PYTHON_IMAGE} AS wheel-builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_CONSTRAINT=/build/constraints/shared-build-constraints.txt \
+    PIP_CONSTRAINT=/build/requirements/shared-runtime.lock.txt \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -34,7 +34,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-COPY constraints/shared-build-constraints.txt /build/constraints/shared-build-constraints.txt
+COPY requirements/shared-runtime.lock.txt /build/requirements/shared-runtime.lock.txt
 COPY src/libs/portfolio-common /build/src/libs/portfolio-common
 COPY src/services/calculators/cost_calculator_service/pyproject.toml /build/src/services/calculators/cost_calculator_service/pyproject.toml
 COPY src/services/calculators/cost_calculator_service/app /build/src/services/calculators/cost_calculator_service/app

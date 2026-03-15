@@ -17,7 +17,7 @@ dependencies = [
     "pydantic==2.12.5",
     "python-dotenv==1.0.1",
     "prometheus-fastapi-instrumentator==7.1.0",
-    "httpx>=0.28.0"
+    "httpx==0.28.1"
 ]
 
 [tool.setuptools.packages.find]

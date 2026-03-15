@@ -15,7 +15,7 @@ dependencies = [
     "confluent-kafka==2.12.0",
     "structlog==24.1.0",
     "python-json-logger==2.0.7",
-    "python-multipart",
+    "python-multipart==0.0.22",
     "prometheus-fastapi-instrumentator==7.1.0",
     "openpyxl==3.1.5"
 ]

@@ -213,12 +213,29 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'constraints/shared-build-constraints.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
 
       - name: Prebuild query-service image with cache
         run: python3 scripts/prebuild_ci_images.py --cache-dir .buildx-cache --services query_service
+
+      - name: Generate runtime SBOM
+        run: |
+          mkdir -p output/build-evidence
+          python -m pip_audit -r requirements/shared-runtime.lock.txt --format cyclonedx-json -o output/build-evidence/shared-runtime-sbom.cdx.json
+
+      - name: Write build provenance manifest
+        run: |
+          python scripts/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
+
+      - name: Upload build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-evidence
+          path: output/build-evidence/*
+          if-no-files-found: error
+          retention-days: 14
 
   docker-smoke-contract:
     name: Docker Smoke Contract
@@ -240,7 +257,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'constraints/shared-build-constraints.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
 
@@ -297,7 +322,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'constraints/shared-build-constraints.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
 
@@ -354,7 +379,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'constraints/shared-build-constraints.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
 
@@ -411,7 +436,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'constraints/shared-build-constraints.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
 
@@ -468,7 +493,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'constraints/shared-build-constraints.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
 

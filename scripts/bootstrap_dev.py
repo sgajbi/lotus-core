@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CONSTRAINTS_FILE = ROOT / "constraints" / "shared-build-constraints.txt"
+RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
 TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
 
 
@@ -23,7 +23,7 @@ def constrained_pip_install(*args: str) -> None:
             "pip",
             "install",
             "-c",
-            str(CONSTRAINTS_FILE),
+            str(RUNTIME_LOCK_FILE),
             *args,
         ]
     )
