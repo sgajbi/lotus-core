@@ -37,8 +37,8 @@ class _FixedDateTime(datetime):
         return FIXED_STALE_NOW.astimezone(tz)
 
 
-@pytest.fixture(scope="function")
-def setup_stale_job_data(clean_db, db_engine):
+@pytest_asyncio.fixture(scope="function")
+async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
     """
     Sets up a variety of valuation jobs in the database:
     - One recent 'PROCESSING' job (should not be reset).
@@ -46,7 +46,7 @@ def setup_stale_job_data(clean_db, db_engine):
     - One stale 'PENDING' job (should not be reset).
     - One stale 'COMPLETE' job (should not be reset).
     """
-    with Session(db_engine) as session:
+    async with session_factory() as session:
         now = FIXED_STALE_NOW
         stale_time = now - timedelta(minutes=30)
 
@@ -81,7 +81,7 @@ def setup_stale_job_data(clean_db, db_engine):
             ),
         ]
         session.add_all(jobs)
-        session.commit()
+        await session.commit()
 
 
 @pytest.fixture(scope="function")
