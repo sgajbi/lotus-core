@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import requests
 
@@ -75,6 +75,40 @@ def _run_compose_up(build: bool) -> None:
     subprocess.run(cmd, check=True)
 
 
+def _raise_if_compose_service_failed(
+    service_name: str,
+) -> None:
+    ps = subprocess.run(
+        ["docker", "compose", "ps", "-a", "-q", service_name],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    container_id = ps.stdout.strip()
+    if not container_id:
+        return
+
+    inspect = subprocess.run(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            "{{.State.Status}}|{{.State.ExitCode}}",
+            container_id,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    status, _, exit_code = inspect.stdout.strip().partition("|")
+    if status == "exited" and exit_code != "0":
+        raise RuntimeError(
+            "Compose service "
+            f"'{service_name}' exited with status {exit_code} "
+            "before latency profiling."
+        )
+
+
 def _pick_identifier_from_payload(payload: Any, keys: tuple[str, ...]) -> str | None:
     if isinstance(payload, dict):
         for key in keys:
@@ -101,6 +135,7 @@ def _resolve_runtime_ids(
     portfolio_id: str,
     benchmark_id: str,
     timeout_seconds: int,
+    progress_check: Callable[[], None] | None = None,
 ) -> tuple[str, str]:
     resolved_portfolio_id = portfolio_id
     resolved_benchmark_id = benchmark_id
@@ -151,6 +186,8 @@ def _resolve_runtime_ids(
 
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
+        if progress_check is not None:
+            progress_check()
         candidate_ids: list[str] = [portfolio_id]
         try:
             response = session.get(f"{query_base_url}/lookups/portfolios?limit=50", timeout=10)
@@ -530,6 +567,11 @@ def main() -> int:
         portfolio_id=args.portfolio_id,
         benchmark_id=args.benchmark_id,
         timeout_seconds=args.ready_timeout_seconds,
+        progress_check=(
+            None
+            if args.skip_compose
+            else lambda: _raise_if_compose_service_failed("demo_data_loader")
+        ),
     )
 
     results = run_profile(

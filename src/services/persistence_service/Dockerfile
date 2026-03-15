@@ -50,6 +50,7 @@ COPY --from=wheel-builder /wheels /wheels
 COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 COPY tools/kafka_setup.py /app/tools/kafka_setup.py
+COPY tools/demo_data_pack.py /app/tools/demo_data_pack.py
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \
