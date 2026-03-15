@@ -3,6 +3,7 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from threading import Lock
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,16 +24,26 @@ def smart_mock_kafka_producer() -> MagicMock:
     and simulates successful delivery callbacks when flush is called.
     """
     mock = MagicMock(spec=KafkaProducer)
+    pending_deliveries: list[dict[str, object]] = []
+    delivery_lock = Lock()
+
+    def _publish_message(**kwargs):
+        with delivery_lock:
+            pending_deliveries.append(kwargs)
 
     def _flush(timeout=10):
-        # Simulate successful delivery for all captured calls to publish_message
-        for call in mock.publish_message.call_args_list:
-            kwargs = call.kwargs
+        # Drain a stable snapshot so concurrent dispatcher threads don't race on call_args_list.
+        with delivery_lock:
+            queued_deliveries = list(pending_deliveries)
+            pending_deliveries.clear()
+
+        for kwargs in queued_deliveries:
             cb = kwargs.get("on_delivery")
             outbox_id = kwargs.get("outbox_id")
             if cb and outbox_id:
                 cb(outbox_id, True, None)  # Simulate success
 
+    mock.publish_message.side_effect = _publish_message
     mock.flush.side_effect = _flush
     return mock
 
