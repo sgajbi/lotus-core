@@ -139,6 +139,7 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
     )
 
     assert len(response.rows) == 1
+    assert response.rows[0].position_currency == "USD"
     assert response.page.next_page_token is not None
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
@@ -498,6 +499,7 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
 
     assert len(day_1.rows) == 1
     assert day_1.rows[0].security_id == "SEC_EUR_STOCK"
+    assert day_1.rows[0].position_currency == "EUR"
     assert day_1.rows[0].quantity == Decimal("100")
     assert day_1.rows[0].ending_market_value_portfolio_currency == Decimal("5720")
 
