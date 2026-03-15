@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONSTRAINTS_FILE = ROOT / "constraints" / "shared-build-constraints.txt"
+TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
 
 
 def run(cmd: list[str]) -> None:
@@ -39,7 +40,7 @@ def main() -> int:
         constrained_pip_install("-e", str(project_dir))
 
     constrained_pip_install("-r", "tests/requirements.txt")
-    constrained_pip_install("ruff", "mypy", "pip-audit", "types-python-dateutil")
+    constrained_pip_install("-r", str(TOOLING_LOCK_FILE))
     return 0
 
 
