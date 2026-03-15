@@ -23,6 +23,11 @@ from uuid import uuid4
 
 import requests
 
+try:
+    from scripts.ci_service_sets import PERFORMANCE_GATE_SERVICES
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from ci_service_sets import PERFORMANCE_GATE_SERVICES
+
 
 @dataclass(slots=True)
 class ProfileResult:
@@ -56,6 +61,7 @@ def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
     cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
     if build:
         cmd.append("--build")
+    cmd.extend(PERFORMANCE_GATE_SERVICES)
     _run(cmd, cwd=repo_root)
 
 

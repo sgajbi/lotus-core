@@ -7,8 +7,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
+try:
+    from scripts.ci_service_sets import PREBUILD_GROUPS
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from ci_service_sets import PREBUILD_GROUPS
 
 SERVICE_BUILDS: dict[str, tuple[str, str]] = {
     "kafka-topic-creator": (
@@ -129,21 +132,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--services",
         nargs="*",
-        default=sorted(SERVICE_BUILDS),
+        default=None,
         help="Subset of compose service names to prebuild.",
+    )
+    parser.add_argument(
+        "--group",
+        choices=sorted(PREBUILD_GROUPS),
+        help="Named CI service subset to prebuild.",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    unknown = sorted(set(args.services) - set(SERVICE_BUILDS))
+    services = list(args.services) if args.services is not None else []
+    if args.group:
+        for service in PREBUILD_GROUPS[args.group]:
+            if service not in services:
+                services.append(service)
+    if not services:
+        services = sorted(SERVICE_BUILDS)
+
+    unknown = sorted(set(services) - set(SERVICE_BUILDS))
     if unknown:
         raise SystemExit(f"Unknown services: {', '.join(unknown)}")
 
     cache_dir = (REPO_ROOT / args.cache_dir).resolve()
     cache_dir.parent.mkdir(parents=True, exist_ok=True)
-    for service in args.services:
+    for service in services:
         _build(service, cache_dir)
     return 0
 

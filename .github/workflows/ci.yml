@@ -272,14 +272,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Restore Docker build cache
-        uses: actions/cache@v4
-        with:
-          path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -292,7 +284,7 @@ jobs:
           make install
 
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
 
       - name: Run deterministic docker endpoint smoke
         run: python scripts/docker_endpoint_smoke.py
@@ -349,7 +341,7 @@ jobs:
           make install
 
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group latency-gate
 
       - name: Run endpoint latency gate
         run: python scripts/latency_profile.py --enforce
@@ -406,7 +398,7 @@ jobs:
           make install
 
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group performance-gate
 
       - name: Run deterministic performance load gate
         run: python scripts/performance_load_gate.py --profile-tier fast --enforce
@@ -463,7 +455,7 @@ jobs:
           make install
 
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group performance-gate
 
       - name: Run deterministic full performance load gate
         run: python scripts/performance_load_gate.py --profile-tier full --enforce
@@ -566,7 +558,7 @@ jobs:
           make install
 
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group failure-recovery-gate
 
       - name: Run deterministic failure recovery gate
         run: python scripts/failure_recovery_gate.py --enforce
