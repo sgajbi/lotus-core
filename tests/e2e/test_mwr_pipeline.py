@@ -1,10 +1,11 @@
 # tests/e2e/test_analytics_input_money_weighted_returns_pipeline.py
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 
 from .api_client import E2EApiClient
-from .assertions import assert_legacy_endpoint_status
+from .assertions import as_decimal, assert_legacy_endpoint_status
 
 
 @pytest.fixture(scope="module")
@@ -153,3 +154,41 @@ def test_analytics_input_mwr_contract_dataset_is_queryable(
     # ACT
     response = e2e_api_client.post_query(api_url, request_payload, raise_for_status=False)
     assert_legacy_endpoint_status(response)
+
+
+def test_cash_deposit_pipeline_persists_non_zero_positions_and_analytics(
+    setup_mwr_data, e2e_api_client: E2EApiClient
+):
+    portfolio_id = setup_mwr_data["portfolio_id"]
+
+    positions_response = e2e_api_client.query(f"/portfolios/{portfolio_id}/positions")
+    positions_payload = positions_response.json()
+    assert len(positions_payload["positions"]) == 1
+    cash_position = positions_payload["positions"][0]
+    assert cash_position["security_id"] == "CASH_USD"
+    assert as_decimal(cash_position["quantity"]) == Decimal("1200")
+    assert as_decimal(cash_position["valuation"]["market_value"]) > Decimal("1200")
+
+    analytics_response = e2e_api_client.post_query(
+        f"/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
+        {
+            "as_of_date": "2025-08-31",
+            "window": {"start_date": "2025-08-01", "end_date": "2025-08-31"},
+            "reporting_currency": "USD",
+            "frequency": "daily",
+            "consumer_system": "lotus-performance",
+            "page": {"page_size": 100, "page_token": None},
+        },
+    )
+    analytics_payload = analytics_response.json()
+    observations = {
+        row["valuation_date"]: row for row in analytics_payload["observations"]
+    }
+    day_1 = observations["2025-08-01"]
+    assert as_decimal(day_1["beginning_market_value"]) == Decimal("0")
+    assert as_decimal(day_1["ending_market_value"]) == Decimal("1000")
+    assert len(day_1["cash_flows"]) == 1
+    day_1_flow = day_1["cash_flows"][0]
+    assert as_decimal(day_1_flow["amount"]) == Decimal("1000")
+    assert day_1_flow["timing"] == "bod"
+    assert day_1_flow["cash_flow_type"] == "external_flow"

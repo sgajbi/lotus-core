@@ -449,6 +449,7 @@ class CoreSnapshotService:
         return transaction_quantity_effect_decimal(
             transaction_type=getattr(change, "transaction_type", None),
             quantity=getattr(change, "quantity", None),
+            amount=getattr(change, "amount", None),
         )
 
     async def get_instrument_enrichment_bulk(

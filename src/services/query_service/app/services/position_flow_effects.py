@@ -32,13 +32,20 @@ POSITION_DECREASE_TRANSACTION_TYPES = {
     "RIGHTS_SELL",
     "RIGHTS_EXPIRE",
 }
+CASH_POSITION_INCREASE_TRANSACTION_TYPES = {"DEPOSIT"}
+CASH_POSITION_DECREASE_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
 
-
-def transaction_quantity_effect_decimal(transaction_type: str | None, quantity) -> Decimal:
+def transaction_quantity_effect_decimal(
+    transaction_type: str | None, quantity, amount=None
+) -> Decimal:
     normalized_type = str(transaction_type or "").upper()
     magnitude = Decimal(str(quantity or 0))
     if normalized_type in POSITION_INCREASE_TRANSACTION_TYPES:
         return magnitude
     if normalized_type in POSITION_DECREASE_TRANSACTION_TYPES:
         return -magnitude
+    if normalized_type in CASH_POSITION_INCREASE_TRANSACTION_TYPES:
+        return abs(Decimal(str(amount or 0)))
+    if normalized_type in CASH_POSITION_DECREASE_TRANSACTION_TYPES:
+        return -abs(Decimal(str(amount or 0)))
     return Decimal(0)

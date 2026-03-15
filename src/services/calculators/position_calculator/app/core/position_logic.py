@@ -21,6 +21,10 @@ from ..repositories.position_repository import PositionRepository
 logger = logging.getLogger(__name__)
 
 
+CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
+CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
+
+
 class PositionCalculator:
     """
     Handles position recalculation. Detects back-dated transactions and triggers
@@ -213,12 +217,13 @@ class PositionCalculator:
             if transaction.net_cost_local is not None:
                 cost_basis_local += transaction.net_cost_local
 
-        elif txn_type in ["DEPOSIT", "FEE", "TAX", "WITHDRAWAL"]:
-            logger.debug(
-                "[CalculateNext] Txn type %s is portfolio-level cashflow and does not "
-                "change security position quantity/cost.",
-                txn_type,
-            )
+        elif txn_type in (
+            CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
+        ):
+            signed = PositionCalculator._cash_position_amount_delta(transaction, txn_type)
+            quantity += signed
+            cost_basis += signed
+            cost_basis_local += signed
 
         elif txn_type in [
             "TRANSFER_IN",
@@ -336,3 +341,10 @@ class PositionCalculator:
         return PositionStateDTO(
             quantity=quantity, cost_basis=cost_basis, cost_basis_local=cost_basis_local
         )
+
+    @staticmethod
+    def _cash_position_amount_delta(transaction: TransactionEvent, txn_type: str) -> Decimal:
+        magnitude = abs(Decimal(str(transaction.gross_transaction_amount or 0)))
+        if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES:
+            return magnitude
+        return -magnitude

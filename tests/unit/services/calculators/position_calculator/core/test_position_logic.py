@@ -583,6 +583,47 @@ def test_calculate_next_position_for_fx_contract_lifecycle_tracks_open_state() -
 
 
 @pytest.mark.parametrize(
+    ("transaction_type", "gross_amount", "expected_quantity", "expected_cost"),
+    [
+        ("DEPOSIT", Decimal("25"), Decimal("125"), Decimal("125")),
+        ("WITHDRAWAL", Decimal("30"), Decimal("70"), Decimal("70")),
+        ("FEE", Decimal("5"), Decimal("95"), Decimal("95")),
+        ("TAX", Decimal("7"), Decimal("93"), Decimal("93")),
+    ],
+)
+def test_calculate_next_position_for_cash_portfolio_flows_updates_cash_balance(
+    transaction_type: str,
+    gross_amount: Decimal,
+    expected_quantity: Decimal,
+    expected_cost: Decimal,
+) -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+    event = TransactionEvent(
+        transaction_id=f"{transaction_type}_CASH_01",
+        transaction_type=transaction_type,
+        quantity=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("1"),
+        gross_transaction_amount=gross_amount,
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+
+    assert next_state.quantity == expected_quantity
+    assert next_state.cost_basis == expected_cost
+    assert next_state.cost_basis_local == expected_cost
+
+
+@pytest.mark.parametrize(
     ("transaction_type", "quantity", "gross_amount", "expected_quantity", "expected_cost"),
     [
         ("MERGER_OUT", Decimal("10"), Decimal("1000"), Decimal("90"), Decimal("9000")),
