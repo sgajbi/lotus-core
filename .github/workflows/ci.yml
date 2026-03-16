@@ -248,6 +248,65 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  e2e-smoke:
+    name: E2E Smoke
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request'
+    needs: [quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Tooling and Project Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          make install
+
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group e2e-smoke
+
+      - name: Run E2E smoke suite
+        env:
+          LOTUS_TEST_ENV_PROFILE: e2e
+          E2E_INGESTION_URL: http://localhost:8400
+          E2E_QUERY_URL: http://localhost:8401
+          HOST_DATABASE_URL: postgresql://user:password@localhost:57432/portfolio_db
+        run: make test-e2e-smoke
+
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > e2e-smoke-logs.txt
+
+      - name: Upload E2E smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-artifacts
+          path: e2e-smoke-logs.txt
+          if-no-files-found: warn
+          retention-days: 14
+
   docker-smoke-contract:
     name: Docker Smoke Contract
     if: >
@@ -482,7 +541,7 @@ jobs:
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    needs: [quality, coverage-gate, integration-all, performance-load-gate-full]
+    needs: [quality]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

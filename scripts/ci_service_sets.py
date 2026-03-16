@@ -39,9 +39,26 @@ PERFORMANCE_GATE_SERVICES: tuple[str, ...] = (
 
 FAILURE_RECOVERY_GATE_SERVICES: tuple[str, ...] = PERFORMANCE_GATE_SERVICES
 
+E2E_SMOKE_SERVICES: tuple[str, ...] = (
+    "ingestion_service",
+    "event_replay_service",
+    "query_service",
+    "query_control_plane_service",
+    "persistence_service",
+    "cost_calculator_service",
+    "cashflow_calculator_service",
+    "position_calculator_service",
+    "pipeline_orchestrator_service",
+    "position_valuation_calculator",
+    "timeseries_generator_service",
+    "valuation_orchestrator_service",
+    "portfolio_aggregation_service",
+)
+
 PREBUILD_GROUPS: dict[str, tuple[str, ...]] = {
     "query-only": QUERY_BUILD_SERVICES,
     "docker-smoke": DOCKER_SMOKE_SERVICES,
+    "e2e-smoke": E2E_SMOKE_SERVICES,
     "latency-gate": LATENCY_GATE_SERVICES,
     "performance-gate": PERFORMANCE_GATE_SERVICES,
     "failure-recovery-gate": FAILURE_RECOVERY_GATE_SERVICES,
