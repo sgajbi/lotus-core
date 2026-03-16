@@ -7,6 +7,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from .api_client import E2EApiClient
+from .state_assertions import assert_portfolio_timeseries_value, assert_positions_state
 
 # Constants for our test data
 DAY_1 = "2025-08-19"
@@ -172,6 +173,24 @@ def test_day_1_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     query = "SELECT valuation_status FROM daily_position_snapshots WHERE portfolio_id = :pid AND security_id = :sid AND date = :date"  # noqa: E501
     params = {"pid": portfolio_id, "sid": cash_usd_id, "date": DAY_1}
     poll_db_until(query, lambda r: r is not None and r.valuation_status == "VALUED_CURRENT", params)
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=DAY_1,
+        expected_positions={
+            cash_usd_id: {
+                "quantity": Decimal("1000000"),
+                "cost_basis": Decimal("1000000"),
+                "market_value": Decimal("1000000"),
+            }
+        },
+    )
+    assert_portfolio_timeseries_value(
+        poll_db_until,
+        portfolio_id=portfolio_id,
+        date=DAY_1,
+        expected_eod_market_value=Decimal("1000000.0000000000"),
+    )
 
 
 @pytest.mark.dependency(depends=["test_day_1_workflow"])
@@ -224,10 +243,29 @@ def test_day_2_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     }
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
 
-    query = "SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date"  # noqa: E501
-    params = {"pid": portfolio_id, "date": DAY_2}
-    expected_eod_mv = Decimal("1002974.5000000000")
-    poll_db_until(query, lambda r: r is not None and r.eod_market_value == expected_eod_mv, params)
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=DAY_2,
+        expected_positions={
+            aapl_id: {
+                "quantity": Decimal("1000"),
+                "cost_basis": Decimal("175025.5"),
+                "market_value": Decimal("178000"),
+            },
+            cash_usd_id: {
+                "quantity": Decimal("824974.5"),
+                "cost_basis": Decimal("824974.5"),
+                "market_value": Decimal("824974.5"),
+            },
+        },
+    )
+    assert_portfolio_timeseries_value(
+        poll_db_until,
+        portfolio_id=portfolio_id,
+        date=DAY_2,
+        expected_eod_market_value=Decimal("1002974.5000000000"),
+    )
 
 
 @pytest.mark.dependency(depends=["test_day_2_workflow"])
@@ -282,10 +320,34 @@ def test_day_3_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     }
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
 
-    query = "SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date"  # noqa: E501
-    params = {"pid": portfolio_id, "date": DAY_3}
-    expected_eod_mv = Decimal("1005959.5000000000")
-    poll_db_until(query, lambda r: r is not None and r.eod_market_value == expected_eod_mv, params)
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=DAY_3,
+        expected_positions={
+            aapl_id: {
+                "quantity": Decimal("1000"),
+                "cost_basis": Decimal("175025.5"),
+                "market_value": Decimal("180000"),
+            },
+            ibm_id: {
+                "quantity": Decimal("500"),
+                "cost_basis": Decimal("70015"),
+                "market_value": Decimal("71000"),
+            },
+            cash_usd_id: {
+                "quantity": Decimal("754959.5"),
+                "cost_basis": Decimal("754959.5"),
+                "market_value": Decimal("754959.5"),
+            },
+        },
+    )
+    assert_portfolio_timeseries_value(
+        poll_db_until,
+        portfolio_id=portfolio_id,
+        date=DAY_3,
+        expected_eod_market_value=Decimal("1005959.5000000000"),
+    )
 
 
 @pytest.mark.dependency(depends=["test_day_3_workflow"])
@@ -352,6 +414,34 @@ def test_day_4_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
         )
 
     poll_db_until(query, validation_func, params)
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=DAY_4,
+        expected_positions={
+            aapl_id: {
+                "quantity": Decimal("800"),
+                "cost_basis": Decimal("140020.4"),
+                "market_value": Decimal("144800"),
+            },
+            ibm_id: {
+                "quantity": Decimal("500"),
+                "cost_basis": Decimal("70015"),
+                "market_value": Decimal("70500"),
+            },
+            cash_usd_id: {
+                "quantity": Decimal("791354.5"),
+                "cost_basis": Decimal("791354.5"),
+                "market_value": Decimal("791354.5"),
+            },
+        },
+    )
+    assert_portfolio_timeseries_value(
+        poll_db_until,
+        portfolio_id=portfolio_id,
+        date=DAY_4,
+        expected_eod_market_value=Decimal("1006654.5000000000"),
+    )
 
 
 @pytest.mark.dependency(depends=["test_day_4_workflow"])
@@ -404,12 +494,31 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     }
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
 
-    query = "SELECT eod_market_value FROM portfolio_timeseries WHERE portfolio_id = :pid AND date = :date"  # noqa: E501
-    params = {"pid": portfolio_id, "date": DAY_5}
-    expected_eod_mv = Decimal("1010104.5000000000")
-    poll_db_until(
-        query,
-        lambda r: r is not None and r.eod_market_value == expected_eod_mv,
-        params,
-        timeout=180,
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=DAY_5,
+        expected_positions={
+            aapl_id: {
+                "quantity": Decimal("800"),
+                "cost_basis": Decimal("140020.4"),
+                "market_value": Decimal("148000"),
+            },
+            ibm_id: {
+                "quantity": Decimal("500"),
+                "cost_basis": Decimal("70015"),
+                "market_value": Decimal("70000"),
+            },
+            cash_usd_id: {
+                "quantity": Decimal("792104.5"),
+                "cost_basis": Decimal("792104.5"),
+                "market_value": Decimal("792104.5"),
+            },
+        },
+    )
+    assert_portfolio_timeseries_value(
+        poll_db_until,
+        portfolio_id=portfolio_id,
+        date=DAY_5,
+        expected_eod_market_value=Decimal("1010104.5000000000"),
     )

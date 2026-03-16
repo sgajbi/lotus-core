@@ -98,6 +98,7 @@ class E2EApiClient:
         """Polls a query endpoint until the validation function returns True."""
         start_time = time.time()
         last_response_data = None
+        last_error = None
         while time.time() - start_time < timeout:
             try:
                 response = self.query(endpoint)
@@ -105,11 +106,45 @@ class E2EApiClient:
                     last_response_data = response.json()
                     if validation_func(last_response_data):
                         return last_response_data
-            except RequestException:
-                pass  # Ignore connection errors during polling
+            except RequestException as exc:
+                last_error = repr(exc)
             time.sleep(interval)
 
         pytest.fail(
             f"{fail_message} after {timeout} seconds for endpoint {endpoint}. "
-            f"Last response: {last_response_data}"
+            f"Last response: {last_response_data}. Last error: {last_error}"
+        )
+
+    def poll_for_post_query_data(
+        self,
+        endpoint: str,
+        payload: Dict[str, Any],
+        validation_func: Callable[[Any], bool],
+        timeout: int = 60,
+        interval: int = 2,
+        fail_message: str = "Polling timed out",
+    ):
+        """Poll a POST-based query endpoint until the validation function returns True."""
+        start_time = time.time()
+        last_response_data = None
+        last_status_code = None
+        last_error = None
+        while time.time() - start_time < timeout:
+            try:
+                response = self.post_query(endpoint, payload, raise_for_status=False)
+                last_status_code = response.status_code
+                if response.status_code == 200:
+                    last_response_data = response.json()
+                    if validation_func(last_response_data):
+                        return last_response_data
+                else:
+                    last_response_data = response.text
+            except RequestException as exc:
+                last_error = repr(exc)
+            time.sleep(interval)
+
+        pytest.fail(
+            f"{fail_message} after {timeout} seconds for endpoint {endpoint}. "
+            f"Last status: {last_status_code}. Last response: {last_response_data}. "
+            f"Last error: {last_error}"
         )
