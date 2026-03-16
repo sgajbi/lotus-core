@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from .api_client import E2EApiClient
+from .state_assertions import assert_positions_state
 
 
 @pytest.fixture(scope="module")
@@ -111,20 +112,17 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
         fail_message="Initial position_state was not created or did not become CURRENT.",
     )
 
-    def _has_initial_position(data: dict) -> bool:
-        positions = data.get("positions", [])
-        if len(positions) != 1:
-            return False
-        position = positions[0]
-        quantity = Decimal(str(position["quantity"])).quantize(Decimal("0.01"))
-        cost_basis = Decimal(str(position["cost_basis"])).quantize(Decimal("0.01"))
-        return quantity == Decimal("150.00") and cost_basis == Decimal("1600.00")
-
-    e2e_api_client.poll_for_data(
-        f"/portfolios/{portfolio_id}/positions",
-        _has_initial_position,
-        timeout=180,
-        fail_message="Initial seeded position did not converge to the expected business state.",
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=day4,
+        expected_positions={
+            security_id: {
+                "quantity": Decimal("150"),
+                "cost_basis": Decimal("1600"),
+                "market_value": Decimal("15000"),
+            }
+        },
     )
 
     return {
@@ -146,7 +144,7 @@ def test_rapid_back_to_back_reprocessing(
     portfolio_id = setup_rapid_repro_data["portfolio_id"]
     security_id = setup_rapid_repro_data["security_id"]
     initial_epoch = setup_rapid_repro_data["initial_epoch"]
-    day2, day3 = "2025-09-12", "2025-09-13"
+    day2, day3, day4 = "2025-09-12", "2025-09-13", "2025-09-14"
 
     back_dated_payload_1 = {
         "transactions": [
@@ -211,23 +209,15 @@ def test_rapid_back_to_back_reprocessing(
         fail_message="Reprocessing did not converge to a CURRENT state.",
     )
 
-    def _has_expected_position(data: dict) -> bool:
-        positions = data.get("positions", [])
-        if len(positions) != 1:
-            return False
-
-        position = positions[0]
-        quantity = Decimal(str(position["quantity"])).quantize(Decimal("0.01"))
-        cost_basis = Decimal(str(position["cost_basis"])).quantize(Decimal("0.01"))
-        return quantity == Decimal("100.00") and cost_basis == Decimal("1100.00")
-
-    data = e2e_api_client.poll_for_data(
-        f"/portfolios/{portfolio_id}/positions",
-        _has_expected_position,
-        timeout=180,
-        fail_message="Reprocessing did not converge to the expected final position.",
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=day4,
+        expected_positions={
+            security_id: {
+                "quantity": Decimal("100"),
+                "cost_basis": Decimal("1100"),
+                "market_value": Decimal("10000"),
+            }
+        },
     )
-
-    position = data["positions"][0]
-    assert Decimal(str(position["quantity"])).quantize(Decimal("0.01")) == Decimal("100.00")
-    assert Decimal(str(position["cost_basis"])).quantize(Decimal("0.01")) == Decimal("1100.00")

@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from .api_client import E2EApiClient
-from .assertions import as_decimal
+from .state_assertions import assert_positions_state
 
 
 @pytest.fixture(scope="module")
@@ -173,24 +173,15 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     # ASSERT 3: The final query-facing position must converge too.
     # Final Qty = 100 + 50 - 40 = 110
     # Final Cost = (60 * 200) + (50 * 220) = 12000 + 11000 = 23000
-    def _has_expected_position(data: dict) -> bool:
-        positions = data.get("positions", [])
-        if len(positions) != 1:
-            return False
-
-        position = positions[0]
-        return (
-            as_decimal(position["quantity"]) == Decimal("110")
-            and as_decimal(position["cost_basis"]) == Decimal("23000")
-        )
-
-    data = e2e_api_client.poll_for_data(
-        f"/portfolios/{portfolio_id}/positions",
-        _has_expected_position,
-        timeout=180,
-        fail_message="Reprocessing did not converge to the expected final position.",
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date="2025-09-03",
+        expected_positions={
+            security_id: {
+                "quantity": Decimal("110"),
+                "cost_basis": Decimal("23000"),
+                "market_value": Decimal("24200"),
+            }
+        },
     )
-
-    position = data["positions"][0]
-    assert as_decimal(position["quantity"]) == Decimal("110")
-    assert as_decimal(position["cost_basis"]) == Decimal("23000")

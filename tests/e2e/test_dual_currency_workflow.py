@@ -6,6 +6,7 @@ import pytest
 
 from .api_client import E2EApiClient
 from .assertions import as_decimal
+from .state_assertions import assert_positions_state
 
 
 @pytest.fixture(scope="module")
@@ -122,7 +123,7 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
         return data.get("positions") and len(data["positions"]) == 1 and data["positions"][0].get("valuation", {}).get("unrealized_gain_loss") is not None  # noqa: E501
     e2e_api_client.poll_for_data(pos_url, pos_validation, timeout=120)
 
-    return {"portfolio_id": portfolio_id}
+    return {"portfolio_id": portfolio_id, "security_id": security_id}
 
 
 def test_realized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: E2EApiClient):
@@ -179,4 +180,23 @@ def test_unrealized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: 
     # base unrealized = base market value - base cost basis
     assert as_decimal(valuation["unrealized_gain_loss"]) == (
         as_decimal(valuation["market_value"]) - as_decimal(position["cost_basis"])
+    )
+
+
+def test_final_position_state_dual_currency(
+    setup_dual_currency_data, e2e_api_client: E2EApiClient
+):
+    portfolio_id = setup_dual_currency_data["portfolio_id"]
+    security_id = setup_dual_currency_data["security_id"]
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date="2025-08-15",
+        expected_positions={
+            security_id: {
+                "quantity": Decimal("60"),
+                "cost_basis": Decimal("9900"),
+                "market_value": Decimal("12960"),
+            }
+        },
     )

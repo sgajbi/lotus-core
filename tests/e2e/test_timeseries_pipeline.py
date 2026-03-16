@@ -1,4 +1,3 @@
-import time
 import uuid
 from decimal import Decimal
 
@@ -6,6 +5,41 @@ import pytest
 
 from .api_client import E2EApiClient
 from .assertions import as_decimal
+
+EXPECTED_TIMESERIES_ROWS = {
+    "2025-08-28": {
+        "SEC_EUR_STOCK": {
+            "position_currency": "EUR",
+            "quantity": Decimal("100"),
+            "ending_market_value_portfolio_currency": Decimal("5200"),
+            "valuation_status": "final",
+        },
+        "CASH_": {
+            "position_currency": "USD",
+            "quantity": Decimal("0"),
+            "ending_market_value_portfolio_currency": Decimal("0"),
+            "valuation_status": "restated",
+        },
+        "total_ending_market_value_portfolio_currency": Decimal("5200"),
+        "quality_status_distribution": {"final": 1, "restated": 1},
+    },
+    "2025-08-29": {
+        "SEC_EUR_STOCK": {
+            "position_currency": "EUR",
+            "quantity": Decimal("100"),
+            "ending_market_value_portfolio_currency": Decimal("5500"),
+            "valuation_status": "final",
+        },
+        "CASH_": {
+            "position_currency": "USD",
+            "quantity": Decimal("-25"),
+            "ending_market_value_portfolio_currency": Decimal("-25"),
+            "valuation_status": "restated",
+        },
+        "total_ending_market_value_portfolio_currency": Decimal("5475"),
+        "quality_status_distribution": {"final": 1, "restated": 1},
+    },
+}
 
 
 @pytest.fixture(scope="module")
@@ -204,24 +238,21 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
     )
     for valuation_date in ("2025-08-28", "2025-08-29"):
         payload = _position_timeseries_request(valuation_date)
-        start = time.time()
-        last_response = None
-        while time.time() - start < 180:
-            response = e2e_api_client.post_query(
-                f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
-                payload,
-                raise_for_status=False,
-            )
-            if response.status_code == 200:
-                last_response = response.json()
-                if _has_stock_timeseries_row(last_response, valuation_date=valuation_date):
-                    break
-            time.sleep(2)
-        else:
-            pytest.fail(
+        e2e_api_client.poll_for_post_query_data(
+            f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+            payload,
+            lambda data: _has_expected_timeseries_rows(
+                data,
+                valuation_date=valuation_date,
+                stock_security_id=stock_security_id,
+                cash_security_id=cash_security_id,
+            ),
+            timeout=180,
+            fail_message=(
                 "Pipeline did not produce analytics position-timeseries rows for "
-                f"{valuation_date}. Last response: {last_response}"
-            )
+                f"{valuation_date}."
+            ),
+        )
     return {
         "portfolio_id": portfolio_id,
         "stock_security_id": stock_security_id,
@@ -249,16 +280,6 @@ def _sum_portfolio_currency(rows: list[dict]) -> Decimal:
     return total
 
 
-def _has_stock_timeseries_row(payload: dict, *, valuation_date: str) -> bool:
-    for row in payload.get("rows", []):
-        if (
-            row.get("security_id", "").startswith("SEC_EUR_STOCK_")
-            and row.get("valuation_date") == valuation_date
-        ):
-            return True
-    return False
-
-
 def _has_expected_positions(
     payload: dict,
     *,
@@ -273,7 +294,100 @@ def _has_expected_positions(
     cash_row = next((row for row in positions if row.get("security_id") == cash_security_id), None)
     if stock_row is None or cash_row is None:
         return False
-    return as_decimal(stock_row["quantity"]) == Decimal("100")
+    return (
+        as_decimal(stock_row["quantity"]) == Decimal("100")
+        and as_decimal(cash_row["quantity"]) == Decimal("-25")
+    )
+
+
+def _row_by_security_id(payload: dict, security_id: str) -> dict:
+    return next(row for row in payload["rows"] if row["security_id"] == security_id)
+
+
+def _expected_row_for_security(valuation_date: str, security_id: str) -> dict:
+    for prefix, expected in EXPECTED_TIMESERIES_ROWS[valuation_date].items():
+        if prefix == "total_ending_market_value_portfolio_currency":
+            continue
+        if security_id.startswith(prefix):
+            return expected
+    raise KeyError(f"No expected row configured for {valuation_date=} {security_id=}")
+
+
+def _assert_timeseries_payload(
+    payload: dict,
+    *,
+    valuation_date: str,
+    portfolio_id: str,
+    stock_security_id: str,
+    cash_security_id: str,
+) -> None:
+    expected_for_day = EXPECTED_TIMESERIES_ROWS[valuation_date]
+    assert payload["portfolio_id"] == portfolio_id
+    assert payload["portfolio_currency"] == "USD"
+    assert payload["reporting_currency"] == "USD"
+    assert payload["frequency"] == "daily"
+    assert payload["contract_version"] == "rfc_063_v1"
+    assert payload["calendar_id"] == "business_date_calendar"
+    assert payload["missing_observation_policy"] == "strict"
+    assert payload["resolved_window"] == {"start_date": valuation_date, "end_date": valuation_date}
+    assert payload["page"] == {"next_page_token": None}
+
+    diagnostics = payload["diagnostics"]
+    assert diagnostics["missing_dates_count"] == 0
+    assert diagnostics["stale_points_count"] == 0
+    assert diagnostics["quality_status_distribution"] == expected_for_day[
+        "quality_status_distribution"
+    ]
+
+    rows = payload["rows"]
+    assert len(rows) == 2
+    assert {row["security_id"] for row in rows} == {stock_security_id, cash_security_id}
+
+    for security_id in (stock_security_id, cash_security_id):
+        row = _row_by_security_id(payload, security_id)
+        expected = _expected_row_for_security(valuation_date, security_id)
+        assert row["valuation_date"] == valuation_date
+        assert row["position_currency"] == expected["position_currency"]
+        assert row["dimensions"] == {}
+        assert row["valuation_status"] == expected["valuation_status"]
+        assert as_decimal(row["quantity"]) == expected["quantity"]
+        assert (
+            as_decimal(row["ending_market_value_portfolio_currency"])
+            == expected["ending_market_value_portfolio_currency"]
+        )
+
+    assert _sum_portfolio_currency(rows) == expected_for_day[
+        "total_ending_market_value_portfolio_currency"
+    ]
+
+
+def _has_expected_timeseries_rows(
+    payload: dict,
+    *,
+    valuation_date: str,
+    stock_security_id: str,
+    cash_security_id: str,
+) -> bool:
+    try:
+        rows = payload.get("rows", [])
+        if len(rows) != 2:
+            return False
+        stock_row = _row_by_security_id(payload, stock_security_id)
+        cash_row = _row_by_security_id(payload, cash_security_id)
+        stock_expected = _expected_row_for_security(valuation_date, stock_security_id)
+        cash_expected = _expected_row_for_security(valuation_date, cash_security_id)
+        return (
+            stock_row["valuation_date"] == valuation_date
+            and cash_row["valuation_date"] == valuation_date
+            and as_decimal(stock_row["quantity"]) == stock_expected["quantity"]
+            and as_decimal(cash_row["quantity"]) == cash_expected["quantity"]
+            and as_decimal(stock_row["ending_market_value_portfolio_currency"])
+            == stock_expected["ending_market_value_portfolio_currency"]
+            and as_decimal(cash_row["ending_market_value_portfolio_currency"])
+            == cash_expected["ending_market_value_portfolio_currency"]
+        )
+    except (KeyError, StopIteration):
+        return False
 
 
 def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(
@@ -285,18 +399,13 @@ def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(
         _position_timeseries_request("2025-08-28"),
     )
     payload = response.json()
-    assert payload["portfolio_id"] == portfolio_id
-    assert "rows" in payload
-    assert payload["rows"]
-    stock_row = next(
-        row
-        for row in payload["rows"]
-        if row["security_id"] == setup_timeseries_data["stock_security_id"]
+    _assert_timeseries_payload(
+        payload,
+        valuation_date="2025-08-28",
+        portfolio_id=portfolio_id,
+        stock_security_id=setup_timeseries_data["stock_security_id"],
+        cash_security_id=setup_timeseries_data["cash_security_id"],
     )
-    assert as_decimal(stock_row["quantity"]) == Decimal("100")
-    assert as_decimal(stock_row["ending_market_value_portfolio_currency"]) > Decimal("0")
-    assert stock_row["valuation_date"] == "2025-08-28"
-    assert "diagnostics" in payload
 
 
 def test_analytics_input_timeseries_contract_day_2_returns_expected_rows(
@@ -308,18 +417,13 @@ def test_analytics_input_timeseries_contract_day_2_returns_expected_rows(
         _position_timeseries_request("2025-08-29"),
     )
     payload = response.json()
-    assert payload["portfolio_id"] == portfolio_id
-    assert "rows" in payload
-    assert payload["rows"]
-    stock_row = next(
-        row
-        for row in payload["rows"]
-        if row["security_id"] == setup_timeseries_data["stock_security_id"]
+    _assert_timeseries_payload(
+        payload,
+        valuation_date="2025-08-29",
+        portfolio_id=portfolio_id,
+        stock_security_id=setup_timeseries_data["stock_security_id"],
+        cash_security_id=setup_timeseries_data["cash_security_id"],
     )
-    assert as_decimal(stock_row["quantity"]) == Decimal("100")
-    assert as_decimal(stock_row["ending_market_value_portfolio_currency"]) > Decimal("0")
-    assert stock_row["valuation_date"] == "2025-08-29"
-    assert "diagnostics" in payload
 
 
 def test_analytics_input_position_timeseries_contract_day_2_returns_expected_rows(
@@ -336,19 +440,17 @@ def test_analytics_input_position_timeseries_contract_day_2_returns_expected_row
         _position_timeseries_request("2025-08-29"),
     )
     payload = response.json()
-    assert payload["portfolio_id"] == portfolio_id
-    assert payload["rows"]
-    day_1_stock = next(
-        row
-        for row in day_1_payload["rows"]
-        if row["security_id"] == setup_timeseries_data["stock_security_id"]
+    _assert_timeseries_payload(
+        day_1_payload,
+        valuation_date="2025-08-28",
+        portfolio_id=portfolio_id,
+        stock_security_id=setup_timeseries_data["stock_security_id"],
+        cash_security_id=setup_timeseries_data["cash_security_id"],
     )
-    day_2_stock = next(
-        row
-        for row in payload["rows"]
-        if row["security_id"] == setup_timeseries_data["stock_security_id"]
+    _assert_timeseries_payload(
+        payload,
+        valuation_date="2025-08-29",
+        portfolio_id=portfolio_id,
+        stock_security_id=setup_timeseries_data["stock_security_id"],
+        cash_security_id=setup_timeseries_data["cash_security_id"],
     )
-    assert as_decimal(day_2_stock["ending_market_value_portfolio_currency"]) > as_decimal(
-        day_1_stock["ending_market_value_portfolio_currency"]
-    )
-    assert "diagnostics" in payload

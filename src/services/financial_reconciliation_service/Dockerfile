@@ -40,6 +40,7 @@ COPY src/services/financial_reconciliation_service/pyproject.toml /build/src/ser
 COPY src/services/financial_reconciliation_service/app /build/src/services/financial_reconciliation_service/app
 
 RUN --mount=type=cache,target=/root/.cache/pip \
+    rm -rf /wheels && mkdir -p /wheels && \
     pip wheel --wheel-dir /wheels \
     /build/src/libs/portfolio-common \
     /build/src/services/financial_reconciliation_service
