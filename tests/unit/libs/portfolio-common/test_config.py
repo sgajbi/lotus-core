@@ -157,12 +157,17 @@ def test_canonical_topic_defaults_match_rfc_runtime_names(monkeypatch):
     assert reloaded.KAFKA_TRANSACTIONS_PERSISTED_TOPIC == "transactions.persisted"
 
 
-def test_topic_registry_includes_active_and_inactive_topics():
+def test_topic_registry_limits_runtime_names_to_active_topics():
     import portfolio_common.config as config_module
 
     statuses = {topic.lifecycle_status for topic in config_module.KAFKA_TOPIC_DEFINITIONS}
     runtime_names = set(config_module.KAFKA_TOPIC_RUNTIME_NAMES)
+    inactive_names = {
+        topic.runtime_name
+        for topic in config_module.KAFKA_TOPIC_DEFINITIONS
+        if topic.lifecycle_status == "inactive"
+    }
 
     assert {"active", "inactive"} <= statuses
     assert config_module.KAFKA_TRANSACTIONS_PERSISTED_TOPIC in runtime_names
-    assert config_module.KAFKA_POSITION_VALUED_TOPIC in runtime_names
+    assert inactive_names.isdisjoint(runtime_names)

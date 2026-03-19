@@ -128,15 +128,8 @@ KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC = os.getenv(
 KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC = os.getenv(
     "KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC", "valuation.snapshot.persisted"
 )
-KAFKA_POSITION_VALUED_TOPIC = os.getenv("KAFKA_POSITION_VALUED_TOPIC", "positions.valued")
 KAFKA_CASHFLOWS_CALCULATED_TOPIC = os.getenv(
     "KAFKA_CASHFLOWS_CALCULATED_TOPIC", "cashflows.calculated"
-)
-KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC = os.getenv(
-    "KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC", "timeseries.position.generated"
-)
-KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC = os.getenv(
-    "KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC", "timeseries.portfolio.generated"
 )
 KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC = os.getenv(
     "KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC",
@@ -340,21 +333,21 @@ KAFKA_TOPIC_DEFINITIONS = (
     ),
     KafkaTopicDefinition(
         canonical_name="positions.valued",
-        runtime_name=KAFKA_POSITION_VALUED_TOPIC,
+        runtime_name="positions.valued",
         lifecycle_status="inactive",
         semantic_type="fact",
         scope="portfolio_security_day",
     ),
     KafkaTopicDefinition(
         canonical_name="timeseries.position.generated",
-        runtime_name=KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC,
+        runtime_name="timeseries.position.generated",
         lifecycle_status="inactive",
         semantic_type="fact",
         scope="portfolio_security_day",
     ),
     KafkaTopicDefinition(
         canonical_name="timeseries.portfolio.generated",
-        runtime_name=KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC,
+        runtime_name="timeseries.portfolio.generated",
         lifecycle_status="inactive",
         semantic_type="fact",
         scope="portfolio_day",
@@ -362,7 +355,9 @@ KAFKA_TOPIC_DEFINITIONS = (
 )
 
 KAFKA_TOPIC_RUNTIME_NAMES = tuple(
-    dict.fromkeys(topic.runtime_name for topic in KAFKA_TOPIC_DEFINITIONS)
+    dict.fromkeys(
+        topic.runtime_name for topic in KAFKA_TOPIC_DEFINITIONS if topic.lifecycle_status == "active"
+    )
 )
 
 # Business-date calendar and guardrail policy
