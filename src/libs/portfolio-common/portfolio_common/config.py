@@ -356,7 +356,9 @@ KAFKA_TOPIC_DEFINITIONS = (
 
 KAFKA_TOPIC_RUNTIME_NAMES = tuple(
     dict.fromkeys(
-        topic.runtime_name for topic in KAFKA_TOPIC_DEFINITIONS if topic.lifecycle_status == "active"
+        topic.runtime_name
+        for topic in KAFKA_TOPIC_DEFINITIONS
+        if topic.lifecycle_status == "active"
     )
 )
 
