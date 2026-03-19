@@ -6,8 +6,8 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
-    KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC,
-    KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -40,7 +40,7 @@ class ConsumerManager:
         self.consumers.append(
             PortfolioTimeseriesConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+                topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
                 group_id="portfolio_aggregation_group",
                 dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
                 service_prefix="PTA",
@@ -65,7 +65,7 @@ class ConsumerManager:
     async def run(self):
         ensure_topics_exist(
             [consumer.topic for consumer in self.consumers]
-            + [KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC]
+            + [KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC]
         )
 
         signal.signal(signal.SIGINT, self._signal_handler)

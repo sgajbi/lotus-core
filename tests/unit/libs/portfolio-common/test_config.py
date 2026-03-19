@@ -133,3 +133,38 @@ def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
     assert reloaded.BUSINESS_DATE_MAX_FUTURE_DAYS == 0
     assert reloaded.CASHFLOW_RULE_CACHE_TTL_SECONDS == 300
     assert reloaded.BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE is False
+
+
+def test_canonical_topic_alias_uses_legacy_env_when_canonical_env_missing(monkeypatch):
+    monkeypatch.setenv("KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC", "legacy.transactions.persisted")
+    monkeypatch.delenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", raising=False)
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_TRANSACTIONS_PERSISTED_TOPIC == "legacy.transactions.persisted"
+    assert reloaded.KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC == "legacy.transactions.persisted"
+
+
+def test_canonical_topic_env_overrides_legacy_env_and_keeps_legacy_alias_in_sync(monkeypatch):
+    monkeypatch.setenv("KAFKA_VALUATION_REQUIRED_TOPIC", "legacy.valuation.required")
+    monkeypatch.setenv("KAFKA_VALUATION_JOB_REQUESTED_TOPIC", "canonical.valuation.job.requested")
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_VALUATION_JOB_REQUESTED_TOPIC == "canonical.valuation.job.requested"
+    assert reloaded.KAFKA_VALUATION_REQUIRED_TOPIC == "canonical.valuation.job.requested"
+
+
+def test_topic_registry_includes_active_and_compatibility_topics():
+    import portfolio_common.config as config_module
+
+    statuses = {topic.lifecycle_status for topic in config_module.KAFKA_TOPIC_DEFINITIONS}
+    runtime_names = set(config_module.KAFKA_TOPIC_RUNTIME_NAMES)
+
+    assert {"active", "compatibility-only"} <= statuses
+    assert config_module.KAFKA_TRANSACTIONS_PERSISTED_TOPIC in runtime_names
+    assert config_module.KAFKA_POSITION_VALUED_TOPIC in runtime_names

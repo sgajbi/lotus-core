@@ -5,9 +5,9 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
+    KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
-    KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
+    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.runtime_supervision import (
@@ -44,7 +44,7 @@ class ConsumerManager:
         self.consumers.append(
             ValuationReadinessConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
+                topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
                 group_id=f"{group_id}_readiness",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
@@ -53,7 +53,7 @@ class ConsumerManager:
         self.consumers.append(
             PriceEventConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
+                topic=KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
                 group_id=f"{group_id}_price_events",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,

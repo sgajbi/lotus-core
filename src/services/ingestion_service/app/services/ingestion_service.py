@@ -9,6 +9,7 @@ from portfolio_common.config import (
     KAFKA_RAW_BUSINESS_DATES_TOPIC,
     KAFKA_RAW_PORTFOLIOS_TOPIC,
     KAFKA_RAW_TRANSACTIONS_TOPIC,
+    KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
@@ -21,8 +22,6 @@ from ..DTOs.market_price_dto import MarketPrice
 from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
 from ..DTOs.portfolio_dto import Portfolio
 from ..DTOs.transaction_dto import Transaction
-
-KAFKA_REPROCESSING_REQUESTED_TOPIC = "transactions_reprocessing_requested"
 
 
 class IngestionPublishError(RuntimeError):
@@ -345,12 +344,14 @@ class IngestionService:
         for idx, txn_id in enumerate(transaction_ids):
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_REPROCESSING_REQUESTED_TOPIC,
+                    topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
                     key=txn_id,
                     value={"transaction_id": txn_id},
                     headers=headers,
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_REPROCESSING_REQUESTED_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(
+                    topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC
+                ).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(

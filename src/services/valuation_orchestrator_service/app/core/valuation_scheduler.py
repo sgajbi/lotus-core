@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
-from portfolio_common.config import KAFKA_VALUATION_REQUIRED_TOPIC
+from portfolio_common.config import KAFKA_VALUATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioValuationRequiredEvent
@@ -337,7 +337,7 @@ class ValuationScheduler:
                 headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
             try:
                 self._producer.publish_message(
-                    topic=KAFKA_VALUATION_REQUIRED_TOPIC,
+                    topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
                     key=job.portfolio_id,
                     value=event.model_dump(mode="json"),
                     headers=headers,

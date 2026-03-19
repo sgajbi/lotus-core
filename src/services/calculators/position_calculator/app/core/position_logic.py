@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import List
 
-from portfolio_common.config import KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC
+from portfolio_common.config import KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC
 from portfolio_common.database_models import PositionHistory
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
@@ -130,7 +130,7 @@ class PositionCalculator:
                     aggregate_type="ReprocessTransaction",
                     aggregate_id=str(event_to_publish.portfolio_id),
                     event_type="ReprocessTransactionReplay",
-                    topic=KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+                    topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
                     payload=event_to_publish.model_dump(mode="json"),
                     correlation_id=replay_correlation_id,
                 )

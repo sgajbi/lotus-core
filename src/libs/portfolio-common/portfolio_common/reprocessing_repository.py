@@ -5,7 +5,7 @@ from typing import List
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
+from .config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from .database_models import Transaction as DBTransaction
 from .events import TransactionEvent
 from .kafka_utils import KafkaProducer
@@ -123,13 +123,13 @@ class ReprocessingRepository:
                 "Republishing event for transaction.",
                 extra={
                     "transaction_id": txn.transaction_id,
-                    "topic": KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
+                    "topic": KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
                 },
             )
 
             try:
                 self.kafka_producer.publish_message(
-                    topic=KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
+                    topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
                     key=txn.portfolio_id,
                     value=event_to_publish.model_dump(mode="json"),
                     headers=headers,

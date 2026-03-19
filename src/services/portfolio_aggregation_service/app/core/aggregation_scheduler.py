@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List
 
-from portfolio_common.config import KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC
+from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioAggregationRequiredEvent
@@ -72,7 +72,7 @@ class AggregationScheduler:
                 headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
             try:
                 self._producer.publish_message(
-                    topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+                    topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
                     key=job.portfolio_id,
                     value=event.model_dump(mode="json"),
                     headers=headers,

@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 
 from confluent_kafka import Message
-from portfolio_common.config import KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC
+from portfolio_common.config import KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC
 from portfolio_common.database_models import DailyPositionSnapshot, PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
@@ -235,7 +235,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                                 f"{event.portfolio_id}:{event.security_id}:{event.date}:{event.epoch}"
                             ),
                             event_type="PositionTimeseriesDayCompleted",
-                            topic=KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC,
+                            topic=KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC,
                             payload=position_completion_event.model_dump(mode="json"),
                             correlation_id=correlation_id,
                         )

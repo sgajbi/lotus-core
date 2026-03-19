@@ -1,8 +1,8 @@
 from portfolio_common.config import (
-    KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC,
     KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
-    KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
-    KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
+    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+    KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
 )
 from portfolio_common.events import (
     CashflowCalculatedEvent,
@@ -76,7 +76,7 @@ class PipelineOrchestratorService:
             aggregate_type="FinancialReconciliation",
             aggregate_id=f"{event.portfolio_id}:{event.aggregation_date}:{event.epoch}",
             event_type="FinancialReconciliationRequested",
-            topic=KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC,
+            topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
             payload=reconciliation_event.model_dump(mode="json"),
             correlation_id=correlation_id,
         )
@@ -149,7 +149,7 @@ class PipelineOrchestratorService:
             aggregate_type="PipelineStage",
             aggregate_id=f"{stage.portfolio_id}:{stage.transaction_id}:{stage.epoch}",
             event_type="TransactionProcessingCompleted",
-            topic=KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
+            topic=KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
             payload=completion_event.model_dump(mode="json"),
             correlation_id=correlation_id,
         )
@@ -168,7 +168,7 @@ class PipelineOrchestratorService:
                     f"{stage.portfolio_id}:{stage.security_id}:{stage.business_date}:{stage.epoch}"
                 ),
                 event_type="PortfolioDayReadyForValuation",
-                topic=KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
+                topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
                 payload=readiness_event.model_dump(mode="json"),
                 correlation_id=correlation_id,
             )

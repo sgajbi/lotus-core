@@ -7,7 +7,8 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_PERSISTENCE_DLQ_TOPIC,
-    KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
+    KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+    KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -18,7 +19,7 @@ from portfolio_common.runtime_supervision import (
 )
 
 from .consumer import CostCalculatorConsumer
-from .consumers.reprocessing_consumer import REPROCESSING_REQUESTED_TOPIC, ReprocessingConsumer
+from .consumers.reprocessing_consumer import ReprocessingConsumer
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class ConsumerManager:
         self.consumers.append(
             CostCalculatorConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
+                topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
                 group_id="cost_calculator_group",
                 dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
                 service_prefix="COST",
@@ -49,7 +50,7 @@ class ConsumerManager:
         self.consumers.append(
             ReprocessingConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=REPROCESSING_REQUESTED_TOPIC,
+                topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
                 group_id="cost_reprocessing_group",
                 dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,  # Share DLQ for now
                 service_prefix="COST_REPRO",
