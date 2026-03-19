@@ -13,6 +13,23 @@ def make_service() -> IntegrationService:
     return IntegrationService(AsyncMock(spec=AsyncSession))
 
 
+def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
+    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+        coverage={
+            "total_points": 6,
+            "observed_start_date": date(2026, 1, 1),
+            "observed_end_date": date(2026, 1, 3),
+            "observed_dates": [date(2026, 1, 1), date(2026, 1, 3)],
+            "quality_status_counts": {"accepted": 6},
+        },
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 3),
+    )
+
+    assert response.missing_dates_count == 1
+    assert response.missing_dates_sample == [date(2026, 1, 2)]
+
+
 def test_canonical_consumer_system_mappings() -> None:
     service = make_service()
     assert service._canonical_consumer_system("lotus-manage") == "lotus-manage"

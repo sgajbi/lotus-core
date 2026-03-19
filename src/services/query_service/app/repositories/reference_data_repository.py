@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -349,11 +349,14 @@ class ReferenceDataRepository:
         start_date: date,
         end_date: date,
     ) -> dict[str, Any]:
+        components = await self.list_benchmark_components_overlapping_window(
+            benchmark_id=benchmark_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        index_ids = sorted({row.index_id for row in components})
         price_points = await self.list_index_price_points(
-            index_ids=[
-                row.index_id
-                for row in await self.list_benchmark_components(benchmark_id, as_of_date=end_date)
-            ],
+            index_ids=index_ids,
             start_date=start_date,
             end_date=end_date,
         )
@@ -363,20 +366,47 @@ class ReferenceDataRepository:
             end_date,
         )
         total_points = len(price_points) + len(benchmark_returns)
-        all_dates = {row.series_date for row in price_points} | {
-            row.series_date for row in benchmark_returns
-        }
         quality_counts: dict[str, int] = defaultdict(int)
         for row in price_points:
             quality_counts[row.quality_status] += 1
         for row in benchmark_returns:
             quality_counts[row.quality_status] += 1
-        observed_start = min(all_dates) if all_dates else None
-        observed_end = max(all_dates) if all_dates else None
+
+        active_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
+        for component in components:
+            component_start = max(
+                getattr(component, "composition_effective_from", start_date),
+                start_date,
+            )
+            component_end = min(
+                getattr(component, "composition_effective_to", None) or end_date,
+                end_date,
+            )
+            cursor = component_start
+            while cursor <= component_end:
+                active_index_ids_by_date[cursor].add(component.index_id)
+                cursor = cursor + timedelta(days=1)
+
+        price_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
+        for row in price_points:
+            price_index_ids_by_date[row.series_date].add(row.index_id)
+
+        benchmark_return_dates = {row.series_date for row in benchmark_returns}
+        observed_dates = sorted(
+            current_date
+            for current_date, required_index_ids in active_index_ids_by_date.items()
+            if required_index_ids
+            and required_index_ids.issubset(price_index_ids_by_date.get(current_date, set()))
+            and current_date in benchmark_return_dates
+        )
+
+        observed_start = min(observed_dates) if observed_dates else None
+        observed_end = max(observed_dates) if observed_dates else None
         return {
             "total_points": total_points,
             "observed_start_date": observed_start,
             "observed_end_date": observed_end,
+            "observed_dates": observed_dates,
             "quality_status_counts": dict(quality_counts),
         }
 

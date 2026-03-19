@@ -172,3 +172,87 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         end_date=date(2026, 1, 2),
     )
     assert fx_rates[date(2026, 1, 1)] == Decimal("1.1")
+
+
+@pytest.mark.asyncio
+async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                composition_effective_from=date(2026, 1, 1),
+                composition_effective_to=date(2026, 1, 1),
+            ),
+            SimpleNamespace(
+                index_id="IDX_B",
+                composition_effective_from=date(2026, 1, 2),
+                composition_effective_to=date(2026, 1, 2),
+            ),
+        ]
+    )
+    repo.list_index_price_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 1),
+                quality_status="accepted",
+            ),
+            SimpleNamespace(
+                index_id="IDX_B",
+                series_date=date(2026, 1, 2),
+                quality_status="accepted",
+            ),
+        ]
+    )
+    repo.list_benchmark_return_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 2), quality_status="accepted"),
+        ]
+    )
+
+    coverage = await repo.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 2))
+
+    assert coverage["observed_dates"] == [date(2026, 1, 1), date(2026, 1, 2)]
+    assert coverage["observed_start_date"] == date(2026, 1, 1)
+    assert coverage["observed_end_date"] == date(2026, 1, 2)
+
+
+@pytest.mark.asyncio
+async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                composition_effective_from=date(2026, 1, 1),
+                composition_effective_to=date(2026, 1, 3),
+            )
+        ]
+    )
+    repo.list_index_price_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 1),
+                quality_status="accepted",
+            ),
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 3),
+                quality_status="accepted",
+            ),
+        ]
+    )
+    repo.list_benchmark_return_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 2), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 3), quality_status="accepted"),
+        ]
+    )
+
+    coverage = await repo.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
+
+    assert coverage["observed_dates"] == [date(2026, 1, 1), date(2026, 1, 3)]

@@ -836,8 +836,12 @@ class IntegrationService:
 
         observed_start = coverage.get("observed_start_date")
         observed_end = coverage.get("observed_end_date")
-        observed_dates = set()
-        if observed_start and observed_end:
+        observed_dates = {
+            value
+            for value in coverage.get("observed_dates", [])
+            if isinstance(value, date)
+        }
+        if not observed_dates and observed_start and observed_end:
             observed_cursor = observed_start
             while observed_cursor <= observed_end:
                 observed_dates.add(observed_cursor)
