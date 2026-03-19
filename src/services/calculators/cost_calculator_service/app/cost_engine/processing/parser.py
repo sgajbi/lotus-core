@@ -19,9 +19,9 @@ class TransactionParser:
         self._single_transaction_adapter = TypeAdapter(Transaction)
         self._error_reporter = error_reporter
 
-    def parse_transactions(self, raw_transactions_data: list[dict[str, Any]]) -> list[Transaction]:
+    def parse_transactions(self, raw_transaction_data: list[dict[str, Any]]) -> list[Transaction]:
         parsed_transactions: list[Transaction] = []
-        for raw_txn_data in raw_transactions_data:
+        for raw_txn_data in raw_transaction_data:
             transaction_id = raw_txn_data.get("transaction_id", "UNKNOWN_ID_BEFORE_PARSE")
             try:
                 validated_txn = self._single_transaction_adapter.validate_python(raw_txn_data)

@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.config import KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC
+from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioAggregationJob
 from portfolio_common.kafka_utils import KafkaProducer
 
@@ -49,7 +49,7 @@ async def test_scheduler_dispatches_claimed_jobs_with_correlation_header(
     await scheduler._dispatch_jobs(claimed_jobs)
 
     mock_kafka_producer.publish_message.assert_called_once_with(
-        topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+        topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
         key="P1",
         value={
             "portfolio_id": "P1",
@@ -76,7 +76,7 @@ async def test_scheduler_omits_empty_correlation_header(
     await scheduler._dispatch_jobs(claimed_jobs)
 
     mock_kafka_producer.publish_message.assert_called_once_with(
-        topic=KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC,
+        topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
         key="P2",
         value={
             "portfolio_id": "P2",

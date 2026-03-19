@@ -5,9 +5,9 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
-    KAFKA_PERSISTENCE_DLQ_TOPIC,
-    KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+    KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC,
+    KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -37,13 +37,13 @@ class ConsumerManager:
         self.tasks = []
         self._shutdown_event = asyncio.Event()
 
-        dlq_topic = KAFKA_PERSISTENCE_DLQ_TOPIC
+        dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
         service_prefix = "TS"
 
         self.consumers.append(
             PositionTimeseriesConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
+                topic=KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
                 group_id="timeseries_generator_group_positions",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
@@ -65,7 +65,7 @@ class ConsumerManager:
 
     async def run(self):
         required_topics = [consumer.topic for consumer in self.consumers]
-        required_topics.append(KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC)
+        required_topics.append(KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC)
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)

@@ -46,7 +46,7 @@ def cashflow_consumer():
     """Provides an instance of the consumer for testing."""
     consumer = CashflowCalculatorConsumer(
         bootstrap_servers="mock_server",
-        topic="raw_transactions_completed",
+        topic="transactions.persisted",
         group_id="test_group",
         dlq_topic="test.dlq",
     )
@@ -76,7 +76,7 @@ def mock_kafka_message():
     mock_msg = MagicMock()
     mock_msg.value.return_value = event.model_dump_json().encode("utf-8")
     mock_msg.key.return_value = event.portfolio_id.encode("utf-8")
-    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.topic.return_value = "transactions.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 123
     mock_msg.error.return_value = None
@@ -185,7 +185,7 @@ async def test_process_message_success(
 
         # Assert
         mock_idempotency_repo.is_event_processed.assert_called_once_with(
-            "raw_transactions_completed-0-123", "cashflow-calculator"
+            "transactions.persisted-0-123", "cashflow-calculator"
         )
         mock_rules_repo.get_all_rules.assert_awaited_once()
         mock_cashflow_repo.create_cashflow.assert_called_once()
@@ -297,7 +297,7 @@ async def test_process_message_skips_replay_event_when_canonical_state_was_remov
     mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_rules_repo = mock_dependencies["rules_repo"]
 
-    mock_kafka_message.topic.return_value = "processed_transactions_completed"
+    mock_kafka_message.topic.return_value = "transactions.cost.processed"
     mock_idempotency_repo.is_event_processed.return_value = False
     mock_cashflow_repo.portfolio_exists.return_value = False
     mock_cashflow_repo.transaction_exists.return_value = False

@@ -37,7 +37,7 @@ def consumer() -> ValuationConsumer:
     """Provides a clean instance of the ValuationConsumer."""
     consumer = ValuationConsumer(
         bootstrap_servers="mock_server",
-        topic="valuation_required",
+        topic="valuation.job.requested",
         group_id="test_group",
     )
     consumer._send_to_dlq_async = AsyncMock()
@@ -61,7 +61,7 @@ def mock_kafka_message(mock_event: PortfolioValuationRequiredEvent) -> MagicMock
     mock_msg = MagicMock()
     mock_msg.value.return_value = mock_event.model_dump_json().encode("utf-8")
     mock_msg.key.return_value = mock_event.portfolio_id.encode("utf-8")
-    mock_msg.topic.return_value = "valuation_required"
+    mock_msg.topic.return_value = "valuation.job.requested"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 1
     mock_msg.error.return_value = None

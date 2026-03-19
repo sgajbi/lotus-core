@@ -22,13 +22,13 @@ The service routes data from each API endpoint to a specific Kafka topic with a 
 
 | API Endpoint | Kafka Topic | Kafka Message Key | Purpose of Key |
 | :--- | :--- | :--- | :--- |
-| `/ingest/portfolios` | `raw_portfolios` | `portfolioId` | Group all events for a portfolio. |
-| `/ingest/instruments` | `instruments` | `securityId` | Group all events for an instrument. |
-| `/ingest/transactions` | `raw_transactions` | `portfolio_id` | **Sequential processing** for a portfolio's activity. |
-| `/ingest/market-prices` | `market_prices` | `securityId` | Group all prices for an instrument. |
-| `/ingest/fx-rates` | `fx_rates` | `from-to` (e.g., EUR-USD) | Group all rates for a currency pair. |
-| `/ingest/business-dates` | `raw_business_dates` | `businessDate` | Group events for a specific day. |
-| `/reprocess/transactions` | `transactions_reprocessing_requested` | `transaction_id` | Target a specific transaction for reprocessing. |
+| `/ingest/portfolios` | `portfolios.raw.received` | `portfolioId` | Group all events for a portfolio. |
+| `/ingest/instruments` | `instruments.received` | `securityId` | Group all events for an instrument. |
+| `/ingest/transactions` | `transactions.raw.received` | `portfolio_id` | **Sequential processing** for a portfolio's activity. |
+| `/ingest/market-prices` | `market_prices.raw.received` | `securityId` | Group all prices for an instrument. |
+| `/ingest/fx-rates` | `fx_rates.raw.received` | `from-to` (e.g., EUR-USD) | Group all rates for a currency pair. |
+| `/ingest/business-dates` | `business_dates.raw.received` | `businessDate` | Group events for a specific day. |
+| `/reprocess/transactions` | `transactions.reprocessing.requested` | `transaction_id` | Target a specific transaction for reprocessing. |
 
 ## 3. Design Considerations
 

@@ -23,7 +23,7 @@ control outcome onto the bus.
 ## Change
 
 - Added `get_latest_portfolio_control_stage_epoch(...)` to `PipelineStageRepository`
-- Hardened `PipelineOrchestratorService.register_financial_reconciliation_completed(...)`
+- Hardened `PipelineOrchestratorService.register_portfolio_day.reconciliation.completed(...)`
   to suppress control-event emission when the just-updated epoch is not the latest epoch
   for that portfolio-day control stage
 - Added:

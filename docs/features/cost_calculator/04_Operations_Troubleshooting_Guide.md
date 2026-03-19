@@ -8,7 +8,7 @@ The service is a standard Kafka consumer and exposes metrics via its `/metrics` 
 
 ### Key Metrics to Watch
 
-* **Consumer Lag**: The most critical metric for any consumer. High or growing consumer lag on the `raw_transactions_completed` topic indicates that the service cannot keep up with the volume of incoming transactions. This could be due to a performance bottleneck or a persistent error causing messages to be retried.
+* **Consumer Lag**: The most critical metric for any consumer. High or growing consumer lag on the `transactions.persisted` topic indicates that the service cannot keep up with the volume of incoming transactions. This could be due to a performance bottleneck or a persistent error causing messages to be retried.
 * **`events_processed_total` (Counter)**: Tracks the number of transactions successfully processed. A flat line on this metric when there is known traffic indicates the service is stuck or failing.
 * **`events_dlqd_total` (Counter)**: Tracks the number of messages sent to the Dead-Letter Queue. Any increase in this metric requires immediate investigation, as it signifies a "poison pill" message that could not be processed.
 * **`recalculation_depth` (Histogram)**: **(NEW)** Tracks the number of historical transactions fetched and replayed for each incoming event. High values in the upper buckets (e.g., >500) indicate that transactions are frequently affecting positions with very long histories, which can be a source of latency.

@@ -1,7 +1,7 @@
 # services/persistence_service/app/consumers/transaction_consumer.py
 from typing import Any, Dict, Optional
 
-from portfolio_common.config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
+from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
@@ -59,6 +59,6 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
             "aggregate_type": "RawTransaction",
             "aggregate_id": str(persisted_object.portfolio_id),
             "event_type": "RawTransactionPersisted",
-            "topic": KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC,
+            "topic": KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
             "payload": persisted_object.model_dump(mode="json"),
         }

@@ -201,7 +201,7 @@ async def test_reconciliation_completion_updates_control_stage_and_emits_control
     outbox_repo = AsyncMock()
     service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
 
-    await service.register_financial_reconciliation_completed(
+    await service.register_reconciliation_completed(
         FinancialReconciliationCompletedEvent(
             portfolio_id="PORT-1",
             business_date=date(2026, 3, 7),
@@ -230,7 +230,7 @@ async def test_reconciliation_completion_updates_control_stage_and_emits_control
     outbox_repo.create_outbox_event.assert_awaited_once()
     call = outbox_repo.create_outbox_event.await_args
     assert call.kwargs["event_type"] == "PortfolioDayControlsEvaluated"
-    assert call.kwargs["topic"] == "portfolio_day_controls_evaluated"
+    assert call.kwargs["topic"] == "portfolio_day.controls.evaluated"
     assert call.kwargs["payload"]["status"] == "REQUIRES_REPLAY"
     assert call.kwargs["payload"]["controls_blocking"] is True
     assert call.kwargs["payload"]["publish_allowed"] is False
@@ -243,7 +243,7 @@ async def test_completed_reconciliation_emits_publish_allowed_controls_event():
     outbox_repo = AsyncMock()
     service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
 
-    await service.register_financial_reconciliation_completed(
+    await service.register_reconciliation_completed(
         FinancialReconciliationCompletedEvent(
             portfolio_id="PORT-1",
             business_date=date(2026, 3, 7),
@@ -271,7 +271,7 @@ async def test_stale_completed_reconciliation_does_not_downgrade_blocking_stage(
     outbox_repo = AsyncMock()
     service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
 
-    await service.register_financial_reconciliation_completed(
+    await service.register_reconciliation_completed(
         FinancialReconciliationCompletedEvent(
             portfolio_id="PORT-1",
             business_date=date(2026, 3, 7),
@@ -288,7 +288,7 @@ async def test_stale_completed_reconciliation_does_not_downgrade_blocking_stage(
     )
     outbox_repo.create_outbox_event.reset_mock()
 
-    await service.register_financial_reconciliation_completed(
+    await service.register_reconciliation_completed(
         FinancialReconciliationCompletedEvent(
             portfolio_id="PORT-1",
             business_date=date(2026, 3, 7),
@@ -318,7 +318,7 @@ async def test_older_epoch_reconciliation_completion_does_not_emit_controls_even
     outbox_repo = AsyncMock()
     service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
 
-    await service.register_financial_reconciliation_completed(
+    await service.register_reconciliation_completed(
         FinancialReconciliationCompletedEvent(
             portfolio_id="PORT-1",
             business_date=date(2026, 3, 7),
@@ -335,7 +335,7 @@ async def test_older_epoch_reconciliation_completion_does_not_emit_controls_even
     )
     outbox_repo.create_outbox_event.reset_mock()
 
-    await service.register_financial_reconciliation_completed(
+    await service.register_reconciliation_completed(
         FinancialReconciliationCompletedEvent(
             portfolio_id="PORT-1",
             business_date=date(2026, 3, 7),

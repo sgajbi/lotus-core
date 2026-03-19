@@ -7,7 +7,7 @@ This guide provides developers with instructions for understanding and extending
 The platform is designed as a two-stage pipeline to transform daily snapshots into the final, aggregated time-series data used for analytics.
 
 1.  **Stage 1: Position Time-Series Generation**
-    * The **`PositionTimeseriesConsumer`** in `timeseries_generator_service` listens for `daily_position_snapshot_persisted` events.
+    * The **`PositionTimeseriesConsumer`** in `timeseries_generator_service` listens for `valuation.snapshot.persisted` events.
     * For each event, it fetches the snapshot, the previous day's snapshot, and all of the day's cash flows for that specific security.
     * It then calls **`PositionTimeseriesLogic`** to calculate and create a single `position_timeseries` record.
     * Finally, it idempotently creates a `PortfolioAggregationJob` for that portfolio and date, which acts as a trigger for the next stage.
@@ -15,7 +15,7 @@ The platform is designed as a two-stage pipeline to transform daily snapshots in
 2.  **Stage 2: Portfolio Time-Series Aggregation**
     * The **`AggregationScheduler`** in `portfolio_aggregation_service` is a background process that continuously polls the `portfolio_aggregation_jobs` table for pending work.
     * It has special logic to only claim a job for a given day `D` if the portfolio time-series for day `D-1` already exists, ensuring sequential processing.
-    * Once a job is claimed, it publishes a `portfolio_aggregation_required` event to Kafka.
+    * Once a job is claimed, it publishes a `portfolio_day.aggregation.job.requested` event to Kafka.
     * The **`PortfolioTimeseriesConsumer`** in `portfolio_aggregation_service` consumes this event, fetches all the necessary `position_timeseries` records for that day, and calls **`PortfolioTimeseriesLogic`** to perform the final aggregation and currency conversion, creating a single `portfolio_timeseries` record.
 
 ## 2. Adding a New Field to the Time-Series

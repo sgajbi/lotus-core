@@ -21,9 +21,9 @@ pytestmark = pytest.mark.asyncio
 def instrument_consumer():
     return InstrumentConsumer(
         bootstrap_servers="mock_server",
-        topic="instruments",
+        topic="instruments.received",
         group_id="test_group",
-        dlq_topic="persistence.dlq",
+        dlq_topic="dlq.persistence_service",
     )
 
 
@@ -55,7 +55,7 @@ def mock_kafka_message(valid_instrument_event: InstrumentEvent):
     mock_message.value.return_value = valid_instrument_event.model_dump_json().encode("utf-8")
     mock_message.key.return_value = valid_instrument_event.security_id.encode("utf-8")
     mock_message.error.return_value = None
-    mock_message.topic.return_value = "instruments"
+    mock_message.topic.return_value = "instruments.received"
     mock_message.partition.return_value = 0
     mock_message.offset.return_value = 1
     mock_message.headers.return_value = [("correlation_id", b"test-corr-id")]
@@ -134,7 +134,7 @@ async def test_process_message_success_without_portfolio_id(
 
     mock_repo.create_or_update_instrument.assert_awaited_once_with(valid_instrument_event)
     mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        event_id="instruments-0-1",
+        event_id="instruments.received-0-1",
         portfolio_id="N/A",
         service_name="persistence-instruments",
         correlation_id="test-corr-id",
@@ -178,7 +178,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
         correlation_id_var.reset(token)
 
     mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        event_id="instruments-0-1",
+        event_id="instruments.received-0-1",
         portfolio_id="N/A",
         service_name="persistence-instruments",
         correlation_id="test-corr-id",

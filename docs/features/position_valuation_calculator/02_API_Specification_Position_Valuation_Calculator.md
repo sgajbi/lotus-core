@@ -20,7 +20,7 @@ The service's main function is to consume, process, and produce Kafka events.
 
 The service listens to two topics:
 
-#### Topic: `valuation_required`
+#### Topic: `valuation.job.requested`
 
 * **Purpose:** This is the primary work queue for the service. Each message represents a job to value a single position on a single day for a specific epoch.
 * **Producer:** `ValuationScheduler` (within this same service).
@@ -36,7 +36,7 @@ The service listens to two topics:
     }
     ```
 
-#### Topic: `market_price_persisted`
+#### Topic: `market_prices.persisted`
 
 * **Purpose:** This topic signals that a new market price has been saved to the database. The service consumes these events to detect if the price is for a past date, which would trigger a reprocessing flow.
 * **Producer:** `persistence_service`
@@ -55,7 +55,7 @@ The service listens to two topics:
 
 The service produces events to one topic after successfully completing a valuation.
 
-#### Topic: `daily_position_snapshot_persisted`
+#### Topic: `valuation.snapshot.persisted`
 
 * **Purpose:** This event signals that a `daily_position_snapshot` has been successfully created or updated with valuation data. This event is a critical trigger for the downstream `timeseries-generator-service`.
 * **Consumer:** `timeseries-generator-service`

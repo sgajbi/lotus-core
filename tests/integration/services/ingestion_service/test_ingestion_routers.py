@@ -347,9 +347,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             return [
                 {
                     "event_id": "cdlq_test_001",
-                    "original_topic": original_topic or "raw_transactions",
+                    "original_topic": original_topic or "transactions.raw.received",
                     "consumer_group": consumer_group or "persistence-service-group",
-                    "dlq_topic": "persistence_service.dlq",
+                    "dlq_topic": "dlq.persistence_service",
                     "original_key": "TXN-2026-000145",
                     "error_reason_code": "VALIDATION_ERROR",
                     "error_reason": "ValidationError: portfolio_id is required",
@@ -364,9 +364,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 return None
             return SimpleNamespace(
                 event_id=event_id,
-                original_topic="raw_transactions",
+                original_topic="transactions.raw.received",
                 consumer_group="persistence-service-group",
-                dlq_topic="persistence_service.dlq",
+                dlq_topic="dlq.persistence_service",
                 original_key="TXN-2026-000145",
                 error_reason_code="VALIDATION_ERROR",
                 error_reason="ValidationError: portfolio_id is required",
@@ -388,7 +388,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "groups": [
                     {
                         "consumer_group": "persistence-service-group",
-                        "original_topic": "raw_transactions",
+                        "original_topic": "transactions.raw.received",
                         "dlq_events": 3,
                         "last_observed_at": datetime.now(UTC),
                         "lag_severity": "low",

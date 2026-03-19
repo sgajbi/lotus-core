@@ -2,12 +2,22 @@
 import json
 import logging
 import os
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
 # Load environment variables from a .env file for local development.
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class KafkaTopicDefinition:
+    canonical_name: str
+    runtime_name: str
+    lifecycle_status: str
+    semantic_type: str
+    scope: str
 
 
 def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
@@ -82,64 +92,274 @@ MONGO_URL = (
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS_HOST") or os.getenv(
     "KAFKA_BOOTSTRAP_SERVERS", "kafka:9093"
 )
-KAFKA_RAW_PORTFOLIOS_TOPIC = os.getenv("KAFKA_RAW_PORTFOLIOS_TOPIC", "raw_portfolios")
-KAFKA_RAW_TRANSACTIONS_TOPIC = os.getenv("KAFKA_RAW_TRANSACTIONS_TOPIC", "raw_transactions")
-KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC = os.getenv(
-    "KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC", "raw_transactions_completed"
+KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC", "portfolios.raw.received"
 )
-KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC = os.getenv(
-    "KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC", "processed_transactions_completed"
+KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC = os.getenv(
+    "KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC", "transactions.raw.received"
 )
-KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC = os.getenv(
-    "KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC", "transaction_processing_completed"
+KAFKA_TRANSACTIONS_PERSISTED_TOPIC = os.getenv(
+    "KAFKA_TRANSACTIONS_PERSISTED_TOPIC", "transactions.persisted"
 )
-KAFKA_INSTRUMENTS_TOPIC = os.getenv("KAFKA_INSTRUMENTS_TOPIC", "instruments")
-KAFKA_MARKET_PRICES_TOPIC = os.getenv("KAFKA_MARKET_PRICES_TOPIC", "market_prices")
-KAFKA_MARKET_PRICE_PERSISTED_TOPIC = os.getenv(
-    "KAFKA_MARKET_PRICE_PERSISTED_TOPIC", "market_price_persisted"
+KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC = os.getenv(
+    "KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC", "transactions.cost.processed"
 )
-KAFKA_FX_RATES_TOPIC = os.getenv("KAFKA_FX_RATES_TOPIC", "fx_rates")
-KAFKA_RAW_BUSINESS_DATES_TOPIC = os.getenv(
-    "KAFKA_RAW_BUSINESS_DATES_TOPIC", "raw_business_dates"
-)  # New Topic
-KAFKA_PERSISTENCE_DLQ_TOPIC = os.getenv("KAFKA_PERSISTENCE_DLQ_TOPIC", "persistence_service.dlq")
-KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC = os.getenv(
-    "KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC", "daily_position_snapshot_persisted"
+KAFKA_TRANSACTION_PROCESSING_READY_TOPIC = os.getenv(
+    "KAFKA_TRANSACTION_PROCESSING_READY_TOPIC", "transaction_processing.ready"
 )
-KAFKA_POSITION_VALUED_TOPIC = os.getenv("KAFKA_POSITION_VALUED_TOPIC", "position_valued")
-KAFKA_CASHFLOW_CALCULATED_TOPIC = os.getenv(
-    "KAFKA_CASHFLOW_CALCULATED_TOPIC", "cashflow_calculated"
+KAFKA_INSTRUMENTS_RECEIVED_TOPIC = os.getenv(
+    "KAFKA_INSTRUMENTS_RECEIVED_TOPIC", "instruments.received"
 )
-KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC = os.getenv(
-    "KAFKA_POSITION_TIMESERIES_GENERATED_TOPIC", "position_timeseries_generated"
+KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC = os.getenv(
+    "KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC", "market_prices.raw.received"
 )
-KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC = os.getenv(
-    "KAFKA_PORTFOLIO_TIMESERIES_GENERATED_TOPIC", "portfolio_timeseries_generated"
+KAFKA_MARKET_PRICES_PERSISTED_TOPIC = os.getenv(
+    "KAFKA_MARKET_PRICES_PERSISTED_TOPIC", "market_prices.persisted"
 )
-KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC = os.getenv(
-    "KAFKA_PORTFOLIO_AGGREGATION_REQUIRED_TOPIC", "portfolio_aggregation_required"
+KAFKA_FX_RATES_RAW_RECEIVED_TOPIC = os.getenv(
+    "KAFKA_FX_RATES_RAW_RECEIVED_TOPIC", "fx_rates.raw.received"
 )
-KAFKA_VALUATION_REQUIRED_TOPIC = os.getenv("KAFKA_VALUATION_REQUIRED_TOPIC", "valuation_required")
-KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC = os.getenv(
-    "KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC", "portfolio_day_ready_for_valuation"
+KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC = os.getenv(
+    "KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC", "business_dates.raw.received"
 )
-KAFKA_VALUATION_DAY_COMPLETED_TOPIC = os.getenv(
-    "KAFKA_VALUATION_DAY_COMPLETED_TOPIC", "valuation_day_completed"
+KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC = os.getenv(
+    "KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC", "dlq.persistence_service"
 )
-KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC = os.getenv(
-    "KAFKA_POSITION_TIMESERIES_DAY_COMPLETED_TOPIC", "position_timeseries_day_completed"
+KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC = os.getenv(
+    "KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC", "valuation.snapshot.persisted"
 )
-KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC = os.getenv(
-    "KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC", "portfolio_aggregation_day_completed"
+KAFKA_CASHFLOWS_CALCULATED_TOPIC = os.getenv(
+    "KAFKA_CASHFLOWS_CALCULATED_TOPIC", "cashflows.calculated"
 )
-KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC = os.getenv(
-    "KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC", "financial_reconciliation_requested"
+KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC",
+    "portfolio_day.aggregation.job.requested",
 )
-KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC = os.getenv(
-    "KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC", "financial_reconciliation_completed"
+KAFKA_VALUATION_JOB_REQUESTED_TOPIC = os.getenv(
+    "KAFKA_VALUATION_JOB_REQUESTED_TOPIC", "valuation.job.requested"
+)
+KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC",
+    "portfolio_security_day.valuation.ready",
+)
+KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC",
+    "portfolio_security_day.valuation.completed",
+)
+KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC",
+    "portfolio_security_day.position_timeseries.completed",
+)
+KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC",
+    "portfolio_day.aggregation.completed",
+)
+KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC",
+    "portfolio_day.reconciliation.requested",
+)
+KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC",
+    "portfolio_day.reconciliation.completed",
 )
 KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC = os.getenv(
-    "KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC", "portfolio_day_controls_evaluated"
+    "KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC", "portfolio_day.controls.evaluated"
+)
+KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC = os.getenv(
+    "KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC", "transactions.reprocessing.requested"
+)
+
+KAFKA_TOPIC_DEFINITIONS = (
+    KafkaTopicDefinition(
+        canonical_name="portfolios.raw.received",
+        runtime_name=KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="portfolio",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="transactions.raw.received",
+        runtime_name=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="transaction",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="instruments.received",
+        runtime_name=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="instrument",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="market_prices.raw.received",
+        runtime_name=KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="market_price",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="fx_rates.raw.received",
+        runtime_name=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="fx_rate",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="business_dates.raw.received",
+        runtime_name=KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="business_date",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="transactions.persisted",
+        runtime_name=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="transaction",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="market_prices.persisted",
+        runtime_name=KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="market_price",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="transactions.cost.processed",
+        runtime_name=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="transaction",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="transaction_processing.ready",
+        runtime_name=KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
+        lifecycle_status="active",
+        semantic_type="readiness",
+        scope="transaction",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="cashflows.calculated",
+        runtime_name=KAFKA_CASHFLOWS_CALCULATED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="transaction",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="valuation.snapshot.persisted",
+        runtime_name=KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="portfolio_security_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="valuation.job.requested",
+        runtime_name=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="command",
+        scope="portfolio_security_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_security_day.valuation.ready",
+        runtime_name=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+        lifecycle_status="active",
+        semantic_type="readiness",
+        scope="portfolio_security_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_security_day.valuation.completed",
+        runtime_name=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="portfolio_security_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_security_day.position_timeseries.completed",
+        runtime_name=KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="portfolio_security_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_day.aggregation.job.requested",
+        runtime_name=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="command",
+        scope="portfolio_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_day.aggregation.completed",
+        runtime_name=KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="portfolio_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_day.reconciliation.requested",
+        runtime_name=KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="command",
+        scope="portfolio_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_day.reconciliation.completed",
+        runtime_name=KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="portfolio_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio_day.controls.evaluated",
+        runtime_name=KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="portfolio_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="transactions.reprocessing.requested",
+        runtime_name=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="command",
+        scope="transaction",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="dlq.persistence_service",
+        runtime_name=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+        lifecycle_status="active",
+        semantic_type="dlq",
+        scope="service",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="positions.valued",
+        runtime_name="positions.valued",
+        lifecycle_status="inactive",
+        semantic_type="fact",
+        scope="portfolio_security_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="timeseries.position.generated",
+        runtime_name="timeseries.position.generated",
+        lifecycle_status="inactive",
+        semantic_type="fact",
+        scope="portfolio_security_day",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="timeseries.portfolio.generated",
+        runtime_name="timeseries.portfolio.generated",
+        lifecycle_status="inactive",
+        semantic_type="fact",
+        scope="portfolio_day",
+    ),
+)
+
+KAFKA_TOPIC_RUNTIME_NAMES = tuple(
+    dict.fromkeys(
+        topic.runtime_name
+        for topic in KAFKA_TOPIC_DEFINITIONS
+        if topic.lifecycle_status == "active"
+    )
 )
 
 # Business-date calendar and guardrail policy

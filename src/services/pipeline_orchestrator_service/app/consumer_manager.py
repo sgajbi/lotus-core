@@ -5,15 +5,15 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_CASHFLOW_CALCULATED_TOPIC,
-    KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC,
-    KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC,
-    KAFKA_PERSISTENCE_DLQ_TOPIC,
-    KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC,
+    KAFKA_CASHFLOWS_CALCULATED_TOPIC,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+    KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
-    KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC,
-    KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
-    KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
+    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+    KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
+    KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -43,36 +43,36 @@ class ConsumerManager:
         self.consumers.append(
             ProcessedTransactionStageConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+                topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
                 group_id="pipeline_orchestrator_processed_txn_group",
-                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 service_prefix="PIPE",
             )
         )
         self.consumers.append(
             CashflowStageConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_CASHFLOW_CALCULATED_TOPIC,
+                topic=KAFKA_CASHFLOWS_CALCULATED_TOPIC,
                 group_id="pipeline_orchestrator_cashflow_group",
-                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 service_prefix="PIPE",
             )
         )
         self.consumers.append(
             PortfolioAggregationStageConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC,
+                topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
                 group_id="pipeline_orchestrator_portfolio_aggregation_group",
-                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 service_prefix="PIPE",
             )
         )
         self.consumers.append(
             FinancialReconciliationCompletionConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC,
+                topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
                 group_id="pipeline_orchestrator_reconciliation_completion_group",
-                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 service_prefix="PIPE",
             )
         )
@@ -85,9 +85,9 @@ class ConsumerManager:
 
     async def run(self):
         required_topics = [consumer.topic for consumer in self.consumers]
-        required_topics.append(KAFKA_TRANSACTION_PROCESSING_COMPLETED_TOPIC)
-        required_topics.append(KAFKA_PORTFOLIO_DAY_READY_FOR_VALUATION_TOPIC)
-        required_topics.append(KAFKA_FINANCIAL_RECONCILIATION_REQUESTED_TOPIC)
+        required_topics.append(KAFKA_TRANSACTION_PROCESSING_READY_TOPIC)
+        required_topics.append(KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC)
+        required_topics.append(KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC)
         required_topics.append(KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC)
         ensure_topics_exist(required_topics)
 

@@ -24,7 +24,7 @@ pytestmark = pytest.mark.asyncio
 def consumer() -> PriceEventConsumer:
     consumer = PriceEventConsumer(
         bootstrap_servers="mock_server",
-        topic="market_price_persisted",
+        topic="market_prices.persisted",
         group_id="test_group",
     )
     consumer._send_to_dlq_async = AsyncMock()
@@ -46,7 +46,7 @@ def mock_kafka_message(mock_event: MarketPricePersistedEvent) -> MagicMock:
     mock_msg = MagicMock()
     mock_msg.value.return_value = mock_event.model_dump_json().encode("utf-8")
     mock_msg.key.return_value = mock_event.security_id.encode("utf-8")
-    mock_msg.topic.return_value = "market_price_persisted"
+    mock_msg.topic.return_value = "market_prices.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 1
     mock_msg.headers.return_value = []

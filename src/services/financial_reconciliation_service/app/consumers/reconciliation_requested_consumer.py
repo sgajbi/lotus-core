@@ -2,7 +2,7 @@ import json
 import logging
 
 from confluent_kafka import Message
-from portfolio_common.config import KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC
+from portfolio_common.config import KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
     FinancialReconciliationCompletedEvent,
@@ -64,7 +64,7 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                         aggregate_type="FinancialReconciliation",
                         aggregate_id=f"{event.portfolio_id}:{event.business_date}:{event.epoch}",
                         event_type="FinancialReconciliationCompleted",
-                        topic=KAFKA_FINANCIAL_RECONCILIATION_COMPLETED_TOPIC,
+                        topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
                         payload=FinancialReconciliationCompletedEvent(
                             portfolio_id=event.portfolio_id,
                             business_date=event.business_date,

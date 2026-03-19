@@ -4,7 +4,7 @@ from httpx import AsyncClient
 from unittest.mock import MagicMock, call
 from datetime import datetime
 
-from portfolio_common.config import KAFKA_RAW_TRANSACTIONS_TOPIC
+from portfolio_common.config import KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
@@ -65,12 +65,12 @@ async def test_ingest_transactions_success(
     
     # Check the content of the first published message
     first_call = mock_kafka_producer.publish_message.call_args_list[0]
-    assert first_call.kwargs["topic"] == KAFKA_RAW_TRANSACTIONS_TOPIC
+    assert first_call.kwargs["topic"] == KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC
     assert first_call.kwargs["key"] == "INT_TEST_001"
     assert first_call.kwargs["value"]["portfolio_id"] == "PORT_INT_01"
 
     # Check the content of the second published message
     second_call = mock_kafka_producer.publish_message.call_args_list[1]
-    assert second_call.kwargs["topic"] == KAFKA_RAW_TRANSACTIONS_TOPIC
+    assert second_call.kwargs["topic"] == KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC
     assert second_call.kwargs["key"] == "INT_TEST_002"
     assert second_call.kwargs["value"]["instrument_id"] == "GOOG"

@@ -6,7 +6,7 @@ import time
 
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient, NewTopic
-from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS
+from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_RUNTIME_NAMES
 from portfolio_common.logging_utils import setup_logging
 
 # Setup basic logging for the tool
@@ -30,40 +30,7 @@ TOPIC_CONFIG = {
     "retention.ms": "604800000"
 }
 
-TOPICS_TO_CREATE = [
-    # Raw ingestion topics
-    "raw_portfolios",
-    "raw_transactions",
-    "instruments",
-    "market_prices",
-    "fx_rates",
-    "raw_business_dates",
-    # Persistence completion topics
-    "raw_transactions_completed",
-    "market_price_persisted", # Restored topic
-    # Calculation completion topics
-    "processed_transactions_completed",
-    "transaction_processing_completed",
-    "cashflow_calculated",
-    "daily_position_snapshot_persisted",
-    "position_valued",
-    # Timeseries topics
-    "position_timeseries_generated",
-    "portfolio_aggregation_required",
-    # DLQ topics
-    "persistence_service.dlq",
-    # Valuation Job Topic
-    "valuation_required",
-    "portfolio_day_ready_for_valuation",
-    "valuation_day_completed",
-    "position_timeseries_day_completed",
-    "portfolio_aggregation_day_completed",
-    "financial_reconciliation_requested",
-    "financial_reconciliation_completed",
-    "portfolio_day_controls_evaluated",
-    # Reprocessing Topic
-    "transactions_reprocessing_requested", # <-- NEW TOPIC
-]
+TOPICS_TO_CREATE = list(KAFKA_TOPIC_RUNTIME_NAMES)
 
 def create_topics(admin_client: AdminClient):
     """Creates topics in Kafka."""

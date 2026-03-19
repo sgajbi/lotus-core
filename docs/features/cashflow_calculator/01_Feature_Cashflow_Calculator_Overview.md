@@ -4,11 +4,11 @@ The **Cashflow Calculator** service is a core component of the system responsibl
 
 ## 1. Core Responsibilities
 
-- **Consumption**: Listens to the `processed_transactions_completed` Kafka topic for new, validated transaction events.
+- **Consumption**: Listens to the `transactions.cost.processed` Kafka topic for new, validated transaction events.
 - **Enrichment**: For each transaction, it applies a set of business rules to determine the cashflow's financial characteristics.
 - **Calculation**: It calculates the net cashflow amount, adjusting for fees and applying the correct sign (inflow/outflow).
 - **Persistence**: Saves the resulting `Cashflow` record to the main database.
-- **Publication**: Publishes a `CashflowCalculated` event to the `cashflows_calculated_completed` topic via the outbox pattern for downstream consumers like the `timeseries_generator_service`.
+- **Publication**: Publishes a `CashflowCalculated` event to the `cashflows.calculated` topic via the outbox pattern for downstream consumers like the `timeseries_generator_service`.
 
 ## 2. Key Features
 

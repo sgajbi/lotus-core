@@ -29,9 +29,9 @@ Implemented under RFC 081 as of 2026-03-08:
 - `event_replay_service` split from ingestion write ingress
 - `financial_reconciliation_service` added as the independent controls plane
 - automatic post-aggregation reconciliation trigger path:
-  `portfolio_aggregation_day_completed -> pipeline_orchestrator_service -> financial_reconciliation_requested -> financial_reconciliation_service`
+  `portfolio_day.aggregation.completed -> pipeline_orchestrator_service -> portfolio_day.reconciliation.requested -> financial_reconciliation_service`
 - automatic reconciliation outcome hardening path:
-  `financial_reconciliation_completed -> pipeline_orchestrator_service -> portfolio_day_controls_evaluated`
+  `portfolio_day.reconciliation.completed -> pipeline_orchestrator_service -> portfolio_day.controls.evaluated`
 - explicit control policy decisioning on the orchestrator-owned controls event:
   blocking outcomes now set `controls_blocking=true` and `publish_allowed=false`
   for the affected `(portfolio_id, business_date, epoch)` scope
@@ -237,14 +237,14 @@ Risk:
 
 Introduce explicit gate events:
 
-- `transaction_processing_completed` (cost + cashflow required signals attached)
-- `portfolio_day_ready_for_valuation`
-- `valuation_day_completed`
-- `position_timeseries_day_completed`
-- `portfolio_aggregation_day_completed`
-- `financial_reconciliation_requested`
-- `financial_reconciliation_completed`
-- `portfolio_day_controls_evaluated`
+- `transaction_processing.ready` (cost + cashflow required signals attached)
+- `portfolio_security_day.valuation.ready`
+- `portfolio_security_day.valuation.completed`
+- `portfolio_security_day.position_timeseries.completed`
+- `portfolio_day.aggregation.completed`
+- `portfolio_day.reconciliation.requested`
+- `portfolio_day.reconciliation.completed`
+- `portfolio_day.controls.evaluated`
 
 Orchestrator enforces prerequisites before emitting next-stage events.
 
@@ -432,8 +432,8 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 ### 15.1 Delivered in this iteration (Phase 1 foundation)
 
 - Added new `pipeline_orchestrator_service` runtime surface:
-  - dual consumers for `processed_transactions_completed` and `cashflow_calculated`
-  - durable outbox emission of `transaction_processing_completed`
+  - dual consumers for `transactions.cost.processed` and `cashflows.calculated`
+  - durable outbox emission of `transaction_processing.ready`
   - service packaging, Docker image, compose integration, and Prometheus scrape target.
 - Added durable stage-state model:
   - `pipeline_stage_state` table + Alembic migration
@@ -447,21 +447,21 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   - unit tests for orchestrator gate logic
   - integration tests for repository merge/idempotent-completion behavior.
 - Routed position calculation trigger to orchestrator gate:
-  - `position_calculator_service` now consumes `transaction_processing_completed`
+  - `position_calculator_service` now consumes `transaction_processing.ready`
   - consumer resolves canonical transaction from persistence by `transaction_id`
   - gate epoch is applied before position calculation for deterministic replay alignment.
-  - replay compatibility retained by continuing to accept `processed_transactions_completed`
+  - replay compatibility retained by continuing to accept `transactions.cost.processed`
     for epoch-based reprocessing emissions.
 - Added valuation-readiness trigger path:
-  - orchestrator emits `portfolio_day_ready_for_valuation` alongside transaction completion
+  - orchestrator emits `portfolio_security_day.valuation.ready` alongside transaction completion
   - valuation service consumes readiness events and idempotently upserts valuation jobs.
 - Added valuation completion gate path:
-  - valuation service emits `valuation_day_completed` after valuation snapshot persistence
-  - timeseries service consumes `valuation_day_completed` as canonical trigger while
-    retaining `daily_position_snapshot_persisted` compatibility.
+  - valuation service emits `portfolio_security_day.valuation.completed` after valuation snapshot persistence
+  - timeseries service consumes `portfolio_security_day.valuation.completed` as canonical trigger while
+    retaining `valuation.snapshot.persisted` compatibility.
 - Added timeseries completion gate path:
-  - timeseries service emits `position_timeseries_day_completed` after position-timeseries persistence
-  - timeseries service emits `portfolio_aggregation_day_completed` after portfolio aggregation completion
+  - timeseries service emits `portfolio_security_day.position_timeseries.completed` after position-timeseries persistence
+  - timeseries service emits `portfolio_day.aggregation.completed` after portfolio aggregation completion
   - outbox dispatcher is now active in timeseries runtime for durable gate publication.
 
 ### 15.4 Race-condition safeguards applied in this slice
@@ -500,9 +500,9 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 
 Implemented trigger chain:
 
-1. `portfolio_aggregation_service` emits `portfolio_aggregation_day_completed`.
+1. `portfolio_aggregation_service` emits `portfolio_day.aggregation.completed`.
 2. `pipeline_orchestrator_service` consumes that event and publishes
-   `financial_reconciliation_requested` through the outbox.
+   `portfolio_day.reconciliation.requested` through the outbox.
 3. `financial_reconciliation_service` consumes the request and runs:
    - `transaction_cashflow`
    - `position_valuation`
@@ -530,7 +530,7 @@ Validation completed for this slice:
 
 Implemented additions:
 
-1. `financial_reconciliation_service` now emits `financial_reconciliation_completed`
+1. `financial_reconciliation_service` now emits `portfolio_day.reconciliation.completed`
    after the automatic bundle finishes.
 2. Bundle outcome is deterministic:
    - `FAILED` if any reconciliation run fails terminally
@@ -538,7 +538,7 @@ Implemented additions:
    - `COMPLETED` if all runs complete without blocking findings
 3. `pipeline_orchestrator_service` consumes that completion event, upserts the
    `FINANCIAL_RECONCILIATION` portfolio-day control stage, and emits
-   `portfolio_day_controls_evaluated`.
+   `portfolio_day.controls.evaluated`.
 4. Portfolio-day control stage status merges monotonically:
    a duplicate or late event may preserve or worsen the current status but never
    downgrade `REQUIRES_REPLAY` or `FAILED` back to `COMPLETED`.
@@ -593,14 +593,14 @@ Testing completed for this slice:
   - added `valuation_orchestrator_service` for valuation readiness ingestion,
     market-price reprocessing triggers, scheduler dispatch, and reprocessing worker loops.
   - narrowed `position_valuation_calculator` to worker-only valuation compute
-    (`valuation_required` consumer + outbox publication).
+    (`valuation.job.requested` consumer + outbox publication).
   - updated container topology and observability wiring for the new service.
 - Phase 3 timeseries split delivered:
   - narrowed `timeseries_generator_service` to position-timeseries worker-only
-    processing (`daily_position_snapshot_persisted` and `valuation_day_completed`
+    processing (`valuation.snapshot.persisted` and `portfolio_security_day.valuation.completed`
     consumers + position completion publication).
   - added `portfolio_aggregation_service` for aggregation job scheduling,
-    `portfolio_aggregation_required` consumption, portfolio-timeseries persistence,
+    `portfolio_day.aggregation.job.requested` consumption, portfolio-timeseries persistence,
     and completion publication.
   - removed duplicate in-process scheduler/dispatcher startup from
     `timeseries_generator_service/app/main.py`, ensuring a single runtime owner
@@ -630,12 +630,12 @@ Testing completed for this slice:
 ### 15.2 Current scope boundary
 
 - Implemented gates in this slice are:
-  - `transaction_processing_completed` based on:
+  - `transaction_processing.ready` based on:
   - processed transaction signal present
   - cashflow signal present.
-  - `portfolio_day_ready_for_valuation` for security-scoped stage completions.
-- `valuation_day_completed` from valuation to timeseries is now implemented.
-- `position_timeseries_day_completed` and `portfolio_aggregation_day_completed`
+  - `portfolio_security_day.valuation.ready` for security-scoped stage completions.
+- `portfolio_security_day.valuation.completed` from valuation to timeseries is now implemented.
+- `portfolio_security_day.position_timeseries.completed` and `portfolio_day.aggregation.completed`
   are now implemented.
 
 ### 15.3 Remaining roadmap alignment
@@ -659,7 +659,7 @@ Implemented service-boundary outcomes:
 - `query_control_plane_service` split from core query read-plane ownership
 - `event_replay_service` split from ingestion write-ingress ownership
 - `financial_reconciliation_service` established as an independent controls plane
-- orchestrator-owned `portfolio_day_controls_evaluated` event introduced as the
+- orchestrator-owned `portfolio_day.controls.evaluated` event introduced as the
   canonical portfolio-day control decision surface
 
 Validation evidence:
@@ -710,7 +710,7 @@ Concrete defects found after the original closure:
 
 1. Position-timeseries duplicate fan-out
 - duplicate snapshot/completion processing could produce repeated
-  `position_timeseries_day_completed` events and noisy downstream re-arms
+  `portfolio_security_day.position_timeseries.completed` events and noisy downstream re-arms
 
 2. Premature portfolio aggregation completion
 - aggregation could complete for a day before all same-day position-timeseries inputs

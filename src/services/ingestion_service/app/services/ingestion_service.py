@@ -3,12 +3,13 @@ from typing import List
 
 from fastapi import Depends
 from portfolio_common.config import (
-    KAFKA_FX_RATES_TOPIC,
-    KAFKA_INSTRUMENTS_TOPIC,
-    KAFKA_MARKET_PRICES_TOPIC,
-    KAFKA_RAW_BUSINESS_DATES_TOPIC,
-    KAFKA_RAW_PORTFOLIOS_TOPIC,
-    KAFKA_RAW_TRANSACTIONS_TOPIC,
+    KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
+    KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
+    KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
+    KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
+    KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
+    KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
+    KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
@@ -21,8 +22,6 @@ from ..DTOs.market_price_dto import MarketPrice
 from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
 from ..DTOs.portfolio_dto import Portfolio
 from ..DTOs.transaction_dto import Transaction
-
-KAFKA_REPROCESSING_REQUESTED_TOPIC = "transactions_reprocessing_requested"
 
 
 class IngestionPublishError(RuntimeError):
@@ -113,9 +112,9 @@ class IngestionService:
             payload = business_date.model_dump()
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_RAW_BUSINESS_DATES_TOPIC, key=key, value=payload, headers=headers
+                    topic=KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC, key=key, value=payload, headers=headers
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_RAW_BUSINESS_DATES_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(
@@ -137,12 +136,12 @@ class IngestionService:
             portfolio_payload = portfolio.model_dump()
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_RAW_PORTFOLIOS_TOPIC,
+                    topic=KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
                     key=portfolio.portfolio_id,
                     value=portfolio_payload,
                     headers=headers,
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_RAW_PORTFOLIOS_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(
@@ -165,12 +164,12 @@ class IngestionService:
         )
         try:
             self._kafka_producer.publish_message(
-                topic=KAFKA_RAW_TRANSACTIONS_TOPIC,
+                topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
                 key=partition_key,
                 value=transaction_payload,
                 headers=headers,
             )
-            KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_RAW_TRANSACTIONS_TOPIC).inc()
+            KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC).inc()
         except Exception as exc:
             raise IngestionPublishError(
                 f"Failed to publish transaction '{transaction.transaction_id}'.",
@@ -190,12 +189,12 @@ class IngestionService:
             )
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_RAW_TRANSACTIONS_TOPIC,
+                    topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
                     key=partition_key,
                     value=transaction_payload,
                     headers=headers,
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_RAW_TRANSACTIONS_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(
@@ -217,12 +216,12 @@ class IngestionService:
             instrument_payload = instrument.model_dump()
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_INSTRUMENTS_TOPIC,
+                    topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
                     key=instrument.security_id,
                     value=instrument_payload,
                     headers=headers,
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_INSTRUMENTS_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(
@@ -244,12 +243,12 @@ class IngestionService:
             price_payload = price.model_dump()
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_MARKET_PRICES_TOPIC,
+                    topic=KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
                     key=price.security_id,
                     value=price_payload,
                     headers=headers,
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_MARKET_PRICES_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(
@@ -275,9 +274,9 @@ class IngestionService:
             rate_payload = rate.model_dump()
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_FX_RATES_TOPIC, key=key, value=rate_payload, headers=headers
+                    topic=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC, key=key, value=rate_payload, headers=headers
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_FX_RATES_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(
@@ -345,12 +344,14 @@ class IngestionService:
         for idx, txn_id in enumerate(transaction_ids):
             try:
                 self._kafka_producer.publish_message(
-                    topic=KAFKA_REPROCESSING_REQUESTED_TOPIC,
+                    topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
                     key=txn_id,
                     value={"transaction_id": txn_id},
                     headers=headers,
                 )
-                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_REPROCESSING_REQUESTED_TOPIC).inc()
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(
+                    topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC
+                ).inc()
             except Exception as exc:
                 try:
                     self._raise_batch_publish_error(

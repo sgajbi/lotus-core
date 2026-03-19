@@ -20,7 +20,7 @@ The service's function is to consume, process, and produce Kafka events.
 
 The service listens to two topics:
 
-#### Topic: `raw_transactions_completed`
+#### Topic: `transactions.persisted`
 
 * **Purpose:** This is the primary work queue. Each message represents a raw transaction that has been successfully persisted and is ready for cost calculation.
 * **Producer:** `persistence_service`
@@ -43,7 +43,7 @@ The service listens to two topics:
     }
     ```
 
-#### Topic: `transactions_reprocessing_requested`
+#### Topic: `transactions.reprocessing.requested`
 
 * **Purpose:** Consumes requests to reprocess a transaction.
 * **Producer:** `ingestion_service` (via API) or `tools/reprocess_transactions.py` (via script).
@@ -59,16 +59,16 @@ The service listens to two topics:
 
 The service produces events to two different topics depending on the flow:
 
-#### Topic: `processed_transactions_completed`
+#### Topic: `transactions.cost.processed`
 
 * **Purpose:** This event signals that a transaction has been successfully processed and enriched with cost basis and/or realized P&L information.
 * **Consumer:** `position-calculator-service`
 * **Key:** `portfolio_id`
 * **Payload (`TransactionEvent`):** The payload is the full, enriched `TransactionEvent`, now including calculated fields like `net_cost`, `realized_gain_loss`, `transaction_fx_rate`, etc.
 
-#### Topic: `raw_transactions_completed` (Reprocessing Flow)
+#### Topic: `transactions.persisted` (Reprocessing Flow)
 
-* **Purpose:** When triggered by the `transactions_reprocessing_requested` topic, the consumer re-publishes the original raw transaction event back to this topic to restart the calculation pipeline for that specific transaction.
+* **Purpose:** When triggered by the `transactions.reprocessing.requested` topic, the consumer re-publishes the original raw transaction event back to this topic to restart the calculation pipeline for that specific transaction.
 * **Consumer:** Itself (`cost-calculator-service`).
 * **Key:** `portfolio_id`
 * **Payload (`TransactionEvent`):** The original, raw `TransactionEvent` as it exists in the database.

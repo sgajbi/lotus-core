@@ -18,7 +18,7 @@ def consumer() -> ReprocessingConsumer:
     """Provides a clean instance of the ReprocessingConsumer."""
     consumer = ReprocessingConsumer(
         bootstrap_servers="mock_server",
-        topic="transactions_reprocessing_requested",
+        topic="transactions.reprocessing.requested",
         group_id="test_reprocessing_group",
     )
     consumer._send_to_dlq_async = AsyncMock()

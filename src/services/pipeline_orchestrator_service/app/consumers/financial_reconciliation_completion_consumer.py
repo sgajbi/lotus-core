@@ -47,7 +47,7 @@ class FinancialReconciliationCompletionConsumer(BaseConsumer):
                             repo=PipelineStageRepository(db),
                             outbox_repo=OutboxRepository(db),
                         )
-                        await service.register_financial_reconciliation_completed(
+                        await service.register_reconciliation_completed(
                             event,
                             correlation_id,
                         )

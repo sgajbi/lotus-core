@@ -1,7 +1,7 @@
 # src/services/persistence_service/app/consumers/market_price_consumer.py
 from typing import Any, Dict, Optional
 
-from portfolio_common.config import KAFKA_MARKET_PRICE_PERSISTED_TOPIC
+from portfolio_common.config import KAFKA_MARKET_PRICES_PERSISTED_TOPIC
 from portfolio_common.events import MarketPriceEvent, MarketPricePersistedEvent
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,6 @@ class MarketPriceConsumer(GenericPersistenceConsumer):
             "aggregate_type": "MarketPrice",
             "aggregate_id": persisted_object.security_id,
             "event_type": "MarketPricePersisted",
-            "topic": KAFKA_MARKET_PRICE_PERSISTED_TOPIC,
+            "topic": KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
             "payload": outbound_event.model_dump(mode="json"),
         }

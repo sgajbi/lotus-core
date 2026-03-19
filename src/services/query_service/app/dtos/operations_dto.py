@@ -322,7 +322,7 @@ class SupportOverviewResponse(BaseModel):
             "Most recent durable source event type recorded on the latest portfolio-day "
             "financial reconciliation control stage."
         ),
-        examples=["financial_reconciliation_completed"],
+        examples=["portfolio_day.reconciliation.completed"],
     )
     controls_created_at: Optional[datetime] = Field(
         None,
@@ -1352,7 +1352,7 @@ class PortfolioControlStageRecord(BaseModel):
     last_source_event_type: Optional[str] = Field(
         None,
         description="Last event type that updated the control stage row.",
-        examples=["financial_reconciliation_completed"],
+        examples=["portfolio_day.reconciliation.completed"],
     )
     created_at: datetime = Field(
         ...,
@@ -1408,7 +1408,7 @@ class PortfolioControlStageListResponse(BaseModel):
                     "business_date": "2026-03-13",
                     "epoch": 3,
                     "status": "REQUIRES_REPLAY",
-                    "last_source_event_type": "financial_reconciliation_completed",
+                    "last_source_event_type": "portfolio_day.reconciliation.completed",
                     "created_at": "2026-03-13T10:10:00Z",
                     "ready_emitted_at": None,
                     "updated_at": "2026-03-13T10:15:09Z",

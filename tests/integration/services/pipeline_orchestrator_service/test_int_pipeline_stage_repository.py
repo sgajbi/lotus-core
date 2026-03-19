@@ -35,7 +35,7 @@ async def test_upsert_stage_flags_merges_prerequisite_signals(
         security_id="SEC-INT-1",
         business_date=date(2026, 3, 7),
         epoch=0,
-        source_event_type="cashflow_calculated",
+        source_event_type="cashflows.calculated",
         cost_event_seen=False,
         cashflow_event_seen=True,
     )
@@ -58,7 +58,7 @@ async def test_mark_stage_completed_if_pending_is_idempotent(
         security_id="SEC-INT-2",
         business_date=date(2026, 3, 7),
         epoch=0,
-        source_event_type="cashflow_calculated",
+        source_event_type="cashflows.calculated",
         cost_event_seen=True,
         cashflow_event_seen=True,
     )
@@ -101,7 +101,7 @@ async def test_upsert_stage_flags_rejects_cross_portfolio_collision(
             security_id="SEC-INT-1",
             business_date=date(2026, 3, 7),
             epoch=0,
-            source_event_type="cashflow_calculated",
+            source_event_type="cashflows.calculated",
             cost_event_seen=False,
             cashflow_event_seen=True,
         )
@@ -120,7 +120,7 @@ async def test_upsert_portfolio_control_stage_status_is_monotonic(
         business_date=date(2026, 3, 7),
         epoch=2,
         status="REQUIRES_REPLAY",
-        source_event_type="financial_reconciliation_completed",
+        source_event_type="portfolio_day.reconciliation.completed",
     )
     second = await repo.upsert_portfolio_control_stage_status(
         stage_name="FINANCIAL_RECONCILIATION",
@@ -128,7 +128,7 @@ async def test_upsert_portfolio_control_stage_status_is_monotonic(
         business_date=date(2026, 3, 7),
         epoch=2,
         status="COMPLETED",
-        source_event_type="financial_reconciliation_completed",
+        source_event_type="portfolio_day.reconciliation.completed",
     )
     await async_db_session.commit()
 
@@ -151,7 +151,7 @@ async def test_upsert_portfolio_control_stage_status_escalates_to_failed(
         business_date=date(2026, 3, 7),
         epoch=2,
         status="COMPLETED",
-        source_event_type="financial_reconciliation_completed",
+        source_event_type="portfolio_day.reconciliation.completed",
     )
     stage = await repo.upsert_portfolio_control_stage_status(
         stage_name="FINANCIAL_RECONCILIATION",
@@ -159,7 +159,7 @@ async def test_upsert_portfolio_control_stage_status_escalates_to_failed(
         business_date=date(2026, 3, 7),
         epoch=2,
         status="FAILED",
-        source_event_type="financial_reconciliation_completed",
+        source_event_type="portfolio_day.reconciliation.completed",
     )
     await async_db_session.commit()
 
@@ -177,7 +177,7 @@ async def test_get_latest_portfolio_control_stage_epoch_returns_highest_epoch(
         business_date=date(2026, 3, 7),
         epoch=2,
         status="COMPLETED",
-        source_event_type="financial_reconciliation_completed",
+        source_event_type="portfolio_day.reconciliation.completed",
     )
     await repo.upsert_portfolio_control_stage_status(
         stage_name="FINANCIAL_RECONCILIATION",
@@ -185,7 +185,7 @@ async def test_get_latest_portfolio_control_stage_epoch_returns_highest_epoch(
         business_date=date(2026, 3, 7),
         epoch=4,
         status="COMPLETED",
-        source_event_type="financial_reconciliation_completed",
+        source_event_type="portfolio_day.reconciliation.completed",
     )
     await async_db_session.commit()
 

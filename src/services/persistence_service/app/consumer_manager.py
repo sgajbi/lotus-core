@@ -6,13 +6,13 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_FX_RATES_TOPIC,
-    KAFKA_INSTRUMENTS_TOPIC,
-    KAFKA_MARKET_PRICES_TOPIC,
-    KAFKA_PERSISTENCE_DLQ_TOPIC,
-    KAFKA_RAW_BUSINESS_DATES_TOPIC,
-    KAFKA_RAW_PORTFOLIOS_TOPIC,
-    KAFKA_RAW_TRANSACTIONS_TOPIC,
+    KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
+    KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
+    KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
+    KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+    KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
+    KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -49,13 +49,13 @@ class ConsumerManager:
         self.web_app = web_app
         custom_metrics = setup_metrics(self.web_app)
 
-        dlq_topic = KAFKA_PERSISTENCE_DLQ_TOPIC
+        dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
         service_prefix = "PST"
 
         self.consumers.append(
             PortfolioConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_RAW_PORTFOLIOS_TOPIC,
+                topic=KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
                 group_id="persistence_group_portfolios",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
@@ -65,7 +65,7 @@ class ConsumerManager:
         self.consumers.append(
             TransactionPersistenceConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_RAW_TRANSACTIONS_TOPIC,
+                topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
                 group_id="persistence_group_transactions",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
@@ -75,7 +75,7 @@ class ConsumerManager:
         self.consumers.append(
             InstrumentConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_INSTRUMENTS_TOPIC,
+                topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
                 group_id="persistence_group_instruments",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
@@ -85,7 +85,7 @@ class ConsumerManager:
         self.consumers.append(
             MarketPriceConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_MARKET_PRICES_TOPIC,
+                topic=KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
                 group_id="persistence_group_market_prices",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
@@ -95,7 +95,7 @@ class ConsumerManager:
         self.consumers.append(
             FxRateConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_FX_RATES_TOPIC,
+                topic=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
                 group_id="persistence_group_fx_rates",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
@@ -105,7 +105,7 @@ class ConsumerManager:
         self.consumers.append(
             BusinessDateConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_RAW_BUSINESS_DATES_TOPIC,
+                topic=KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
                 group_id="persistence_group_business_dates",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,

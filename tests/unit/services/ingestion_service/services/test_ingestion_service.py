@@ -56,7 +56,7 @@ async def test_publish_portfolios(
     # ASSERT
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
-    assert call_args["topic"] == "raw_portfolios"
+    assert call_args["topic"] == "portfolios.raw.received"
     assert call_args["key"] == "P1"
     assert call_args["value"]["portfolio_id"] == "P1"
 
@@ -88,7 +88,7 @@ async def test_publish_transactions(
     # ASSERT
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
-    assert call_args["topic"] == "raw_transactions"
+    assert call_args["topic"] == "transactions.raw.received"
     assert call_args["key"] == "P1"
     assert call_args["value"]["transaction_id"] == "T1"
 

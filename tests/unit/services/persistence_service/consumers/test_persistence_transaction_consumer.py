@@ -24,9 +24,9 @@ def transaction_consumer():
     """Provides an instance of the consumer for testing."""
     return TransactionPersistenceConsumer(
         bootstrap_servers="mock_server",
-        topic="raw_transactions",
+        topic="transactions.raw.received",
         group_id="test_group",
-        dlq_topic="persistence.dlq",
+        dlq_topic="dlq.persistence_service",
     )
 
 
@@ -55,7 +55,7 @@ def mock_kafka_message(valid_transaction_event: TransactionEvent):
     mock_message.value.return_value = valid_transaction_event.model_dump_json().encode("utf-8")
     mock_message.key.return_value = "test_key".encode("utf-8")
     mock_message.error.return_value = None
-    mock_message.topic.return_value = "raw_transactions"
+    mock_message.topic.return_value = "transactions.raw.received"
     mock_message.partition.return_value = 0
     mock_message.offset.return_value = 1
     mock_message.headers.return_value = [("correlation_id", b"test-corr-id")]

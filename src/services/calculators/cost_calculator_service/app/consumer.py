@@ -7,8 +7,8 @@ from typing import Any, List
 
 from confluent_kafka import Message
 from portfolio_common.config import (
-    KAFKA_INSTRUMENTS_TOPIC,
-    KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+    KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
+    KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.db import get_async_db_session
@@ -503,7 +503,7 @@ class CostCalculatorConsumer(BaseConsumer):
                                 aggregate_type="ProcessedTransaction",
                                 aggregate_id=str(publish_event.portfolio_id),
                                 event_type="ProcessedTransactionPersisted",
-                                topic=KAFKA_PROCESSED_TRANSACTIONS_COMPLETED_TOPIC,
+                                topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
                                 payload=publish_event.model_dump(mode="json"),
                                 correlation_id=correlation_id,
                             )
@@ -516,7 +516,7 @@ class CostCalculatorConsumer(BaseConsumer):
                                 aggregate_type="Instrument",
                                 aggregate_id=str(instrument_event.security_id),
                                 event_type="InstrumentUpserted",
-                                topic=KAFKA_INSTRUMENTS_TOPIC,
+                                topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
                                 payload=instrument_event.model_dump(mode="json"),
                                 correlation_id=correlation_id,
                             )

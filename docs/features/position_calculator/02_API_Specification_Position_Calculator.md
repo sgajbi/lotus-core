@@ -20,7 +20,7 @@ The service consumes from and produces to the same topic, forming a loop during 
 
 The service listens to a single topic:
 
-#### Topic: `processed_transactions_completed`
+#### Topic: `transactions.cost.processed`
 
 * **Purpose:** This is the work queue. Each message represents a transaction that has been enriched by the `cost_calculator_service` and is ready to be incorporated into the `position_history`.
 * **Producer:** `cost_calculator_service` (for new events), or Itself (for replayed events).
@@ -48,7 +48,7 @@ The service listens to a single topic:
 
 The service only produces messages when it triggers a reprocessing flow.
 
-#### Topic: `processed_transactions_completed`
+#### Topic: `transactions.cost.processed`
 
 * **Purpose:** When a back-dated transaction is detected, this service re-publishes all historical transactions for that security to this same topic. This ensures the entire history is re-calculated deterministically.
 * **Consumer:** Itself (`position_calculator_service`) and other services like `cashflow_calculator_service`.

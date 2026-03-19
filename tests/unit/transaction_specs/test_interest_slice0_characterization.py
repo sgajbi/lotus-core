@@ -61,7 +61,7 @@ def test_interest_ingestion_allows_zero_quantity_and_price_with_default_fee() ->
 def test_interest_fee_transformation_to_engine_fees_structure() -> None:
     consumer = CostCalculatorConsumer(
         bootstrap_servers="test",
-        topic="raw_transactions_completed",
+        topic="transactions.persisted",
         group_id="slice0",
     )
     event = TransactionEvent(

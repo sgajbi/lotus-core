@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.config import KAFKA_VALUATION_REQUIRED_TOPIC
+from portfolio_common.config import KAFKA_VALUATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import (
     InstrumentReprocessingState,
     PortfolioValuationJob,
@@ -392,7 +392,7 @@ async def test_scheduler_dispatches_claimed_jobs(
     await scheduler._dispatch_jobs(claimed_jobs)
 
     mock_kafka_producer.publish_message.assert_called_once_with(
-        topic=KAFKA_VALUATION_REQUIRED_TOPIC,
+        topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
         key="P1",
         value={
             "portfolio_id": "P1",
@@ -423,7 +423,7 @@ async def test_scheduler_omits_empty_correlation_header(
     await scheduler._dispatch_jobs(claimed_jobs)
 
     mock_kafka_producer.publish_message.assert_called_once_with(
-        topic=KAFKA_VALUATION_REQUIRED_TOPIC,
+        topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
         key="P2",
         value={
             "portfolio_id": "P2",

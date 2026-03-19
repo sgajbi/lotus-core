@@ -1155,9 +1155,9 @@ async def list_ingestion_stalled_jobs(
                         "events": [
                             {
                                 "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
-                                "original_topic": "raw_transactions",
+                                "original_topic": "transactions.raw.received",
                                 "consumer_group": "persistence-service-group",
-                                "dlq_topic": "persistence_service.dlq",
+                                "dlq_topic": "dlq.persistence_service",
                                 "original_key": "TXN-2026-000145",
                                 "error_reason_code": "VALIDATION_ERROR",
                                 "error_reason": "ValidationError: portfolio_id is required",
@@ -1184,7 +1184,7 @@ async def list_consumer_dlq_events(
     original_topic: str | None = Query(
         default=None,
         description="Optional original Kafka topic filter.",
-        examples=["raw_transactions"],
+        examples=["transactions.raw.received"],
     ),
     consumer_group: str | None = Query(
         default=None,

@@ -133,3 +133,41 @@ def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
     assert reloaded.BUSINESS_DATE_MAX_FUTURE_DAYS == 0
     assert reloaded.CASHFLOW_RULE_CACHE_TTL_SECONDS == 300
     assert reloaded.BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE is False
+
+
+def test_canonical_topic_env_overrides_default_runtime_name(monkeypatch):
+    monkeypatch.setenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", "custom.transactions.persisted")
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_TRANSACTIONS_PERSISTED_TOPIC == "custom.transactions.persisted"
+
+
+def test_canonical_topic_defaults_match_rfc_runtime_names(monkeypatch):
+    monkeypatch.delenv("KAFKA_VALUATION_JOB_REQUESTED_TOPIC", raising=False)
+    monkeypatch.delenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", raising=False)
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_VALUATION_JOB_REQUESTED_TOPIC == "valuation.job.requested"
+    assert reloaded.KAFKA_TRANSACTIONS_PERSISTED_TOPIC == "transactions.persisted"
+
+
+def test_topic_registry_limits_runtime_names_to_active_topics():
+    import portfolio_common.config as config_module
+
+    statuses = {topic.lifecycle_status for topic in config_module.KAFKA_TOPIC_DEFINITIONS}
+    runtime_names = set(config_module.KAFKA_TOPIC_RUNTIME_NAMES)
+    inactive_names = {
+        topic.runtime_name
+        for topic in config_module.KAFKA_TOPIC_DEFINITIONS
+        if topic.lifecycle_status == "inactive"
+    }
+
+    assert {"active", "inactive"} <= statuses
+    assert config_module.KAFKA_TRANSACTIONS_PERSISTED_TOPIC in runtime_names
+    assert inactive_names.isdisjoint(runtime_names)

@@ -4,8 +4,8 @@ import logging
 
 from confluent_kafka import Message
 from portfolio_common.config import (
-    KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
-    KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
+    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC,
+    KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
 )
 from portfolio_common.database_models import DailyPositionSnapshot
 from portfolio_common.db import get_async_db_session
@@ -258,7 +258,7 @@ class ValuationConsumer(BaseConsumer):
                                 aggregate_type="DailyPositionSnapshot",
                                 aggregate_id=persisted_snapshot.portfolio_id,
                                 event_type="DailyPositionSnapshotPersisted",
-                                topic=KAFKA_DAILY_POSITION_SNAPSHOT_PERSISTED_TOPIC,
+                                topic=KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
                                 payload=completion_event.model_dump(mode="json"),
                                 correlation_id=correlation_id,
                             )
@@ -280,7 +280,7 @@ class ValuationConsumer(BaseConsumer):
                                     f"{persisted_snapshot.epoch}"
                                 ),
                                 event_type="ValuationDayCompleted",
-                                topic=KAFKA_VALUATION_DAY_COMPLETED_TOPIC,
+                                topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC,
                                 payload=valuation_completion_event.model_dump(mode="json"),
                                 correlation_id=correlation_id,
                             )

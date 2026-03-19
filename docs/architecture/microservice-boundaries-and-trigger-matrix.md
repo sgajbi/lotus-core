@@ -7,36 +7,36 @@ Source authority: RFC 081
 
 | Service | Primary Role | Owns State | Consumes | Emits | Trigger Type |
 | --- | --- | --- | --- | --- | --- |
-| `ingestion_service` | Canonical write-ingress and contract validation | Canonical ingress submission state and request payload persistence | HTTP API | Raw domain topics (`raw_transactions`, `instruments`, `market_prices`, `fx_rates`) | API |
+| `ingestion_service` | Canonical write-ingress and contract validation | Canonical ingress submission state and request payload persistence | HTTP API | Raw domain topics (`transactions.raw.received`, `instruments.received`, `market_prices.raw.received`, `fx_rates.raw.received`, `business_dates.raw.received`, `portfolios.raw.received`) | API |
 | `event_replay_service` | Replay/remediation control plane for ingestion jobs, DLQ recovery, and RFC-065 diagnostics | `ingestion_jobs`, `ingestion_job_failures`, `ingestion_ops_control`, `consumer_dlq_*` | HTTP API | Republished raw domain topics via controlled replay | API |
-| `financial_reconciliation_service` | Independent financial controls plane for cross-domain reconciliation and integrity verification | `financial_reconciliation_runs`, `financial_reconciliation_findings` | HTTP API, `financial_reconciliation_requested` | `financial_reconciliation_completed` | API + Event |
-| `persistence_service` | Canonical persistence and completion publication | `portfolios`, `transactions`, `instruments`, `market_prices`, `fx_rates`, `business_dates` | Raw domain topics | `raw_transactions_completed`, `market_price_persisted` | Event |
-| `cost_calculator_service` | Cost basis and lot-state authority | `transaction_costs`, `position_lot_state`, `accrued_income_offset_state`, `position_state` | `raw_transactions_completed`, `transactions_reprocessing_requested` | `processed_transactions_completed` | Event |
-| `cashflow_calculator_service` | Cashflow rule/classification authority | `cashflows`, `cashflow_rules` | `raw_transactions_completed` | `cashflow_calculated` | Event |
-| `pipeline_orchestrator_service` | Stage-gate orchestrator for deterministic downstream readiness | `pipeline_stage_state` | `processed_transactions_completed`, `cashflow_calculated`, `portfolio_aggregation_day_completed`, `financial_reconciliation_completed` | `transaction_processing_completed`, `portfolio_day_ready_for_valuation`, `financial_reconciliation_requested`, `portfolio_day_controls_evaluated` | Event |
-| `position_calculator_service` | Position history and snapshot materialization | `position_history`, `daily_position_snapshots`, `position_state` | `transaction_processing_completed`, `processed_transactions_completed` (replay path) | `daily_position_snapshot_persisted`, `transactions_reprocessing_requested` | Event |
-| `valuation_orchestrator_service` | Valuation orchestration (job creation, scheduling, and reprocessing) | `portfolio_valuation_jobs`, `instrument_reprocessing_state`, `reprocessing_jobs` | `portfolio_day_ready_for_valuation`, `market_price_persisted` | `valuation_required` | Event + scheduler |
-| `position_valuation_calculator` | Valuation compute worker and completion publication | `daily_position_snapshots` (valuation fields) | `valuation_required` | `daily_position_snapshot_persisted`, `valuation_day_completed` | Event |
-| `timeseries_generator_service` | Position-timeseries compute worker and completion publication | `position_timeseries`, `portfolio_aggregation_jobs` | `daily_position_snapshot_persisted`, `valuation_day_completed` | `position_timeseries_day_completed` | Event |
-| `portfolio_aggregation_service` | Portfolio aggregation orchestration and portfolio-timeseries compute | `portfolio_timeseries`, `portfolio_aggregation_jobs` | `portfolio_aggregation_required` | `portfolio_aggregation_required`, `portfolio_aggregation_day_completed` | Event + scheduler |
+| `financial_reconciliation_service` | Independent financial controls plane for cross-domain reconciliation and integrity verification | `financial_reconciliation_runs`, `financial_reconciliation_findings` | HTTP API, `portfolio_day.reconciliation.requested` | `portfolio_day.reconciliation.completed` | API + Event |
+| `persistence_service` | Canonical persistence and completion publication | `portfolios`, `transactions`, `instruments`, `market_prices`, `fx_rates`, `business_dates` | Raw domain topics | `transactions.persisted`, `market_prices.persisted` | Event |
+| `cost_calculator_service` | Cost basis and lot-state authority | `transaction_costs`, `position_lot_state`, `accrued_income_offset_state`, `position_state` | `transactions.persisted`, `transactions.reprocessing.requested` | `transactions.cost.processed` | Event |
+| `cashflow_calculator_service` | Cashflow rule/classification authority | `cashflows`, `cashflow_rules` | `transactions.persisted` | `cashflows.calculated` | Event |
+| `pipeline_orchestrator_service` | Stage-gate orchestrator for deterministic downstream readiness | `pipeline_stage_state` | `transactions.cost.processed`, `cashflows.calculated`, `portfolio_day.aggregation.completed`, `portfolio_day.reconciliation.completed` | `transaction_processing.ready`, `portfolio_security_day.valuation.ready`, `portfolio_day.reconciliation.requested`, `portfolio_day.controls.evaluated` | Event |
+| `position_calculator_service` | Position history and snapshot materialization | `position_history`, `daily_position_snapshots`, `position_state` | `transaction_processing.ready`, `transactions.cost.processed` (replay path) | `valuation.snapshot.persisted`, `transactions.reprocessing.requested` | Event |
+| `valuation_orchestrator_service` | Valuation orchestration (job creation, scheduling, and reprocessing) | `portfolio_valuation_jobs`, `instrument_reprocessing_state`, `reprocessing_jobs` | `portfolio_security_day.valuation.ready`, `market_prices.persisted` | `valuation.job.requested` | Event + scheduler |
+| `position_valuation_calculator` | Valuation compute worker and completion publication | `daily_position_snapshots` (valuation fields) | `valuation.job.requested` | `valuation.snapshot.persisted`, `portfolio_security_day.valuation.completed` | Event |
+| `timeseries_generator_service` | Position-timeseries compute worker and completion publication | `position_timeseries`, `portfolio_aggregation_jobs` | `valuation.snapshot.persisted`, `portfolio_security_day.valuation.completed` | `portfolio_security_day.position_timeseries.completed` | Event |
+| `portfolio_aggregation_service` | Portfolio aggregation orchestration and portfolio-timeseries compute | `portfolio_timeseries`, `portfolio_aggregation_jobs` | `portfolio_day.aggregation.job.requested` | `portfolio_day.aggregation.job.requested`, `portfolio_day.aggregation.completed` | Event + scheduler |
 | `query_service` | Core read-plane APIs for canonical portfolio, position, transaction, market-data, and lookup reads | Read-only over canonical/calculator tables | HTTP API | N/A | API |
 | `query_control_plane_service` | Control-plane APIs for integration contracts, operational diagnostics, and simulation workflows | Read-only over canonical/calculator tables plus export/control metadata | HTTP API | N/A | API |
 
 ## Stage Gate Sequence (Current)
 
-1. `persistence_service` emits `raw_transactions_completed`.
-2. `cost_calculator_service` emits `processed_transactions_completed`.
-3. `cashflow_calculator_service` emits `cashflow_calculated`.
-4. `pipeline_orchestrator_service` waits until both signals are observed for `(stage_name, transaction_id, epoch)` and emits `transaction_processing_completed`.
-5. For security-scoped transactions, orchestrator also emits `portfolio_day_ready_for_valuation` to stage valuation jobs deterministically.
-6. `valuation_orchestrator_service` creates and dispatches `valuation_required` jobs; `position_valuation_calculator` consumes those jobs and emits `valuation_day_completed` after persisting valuation snapshots.
-7. `timeseries_generator_service` consumes `valuation_day_completed` as the canonical valuation-to-timeseries trigger (while retaining `daily_position_snapshot_persisted` compatibility).
-8. `timeseries_generator_service` emits `position_timeseries_day_completed` after position-timeseries persistence and stages aggregation jobs.
-9. `portfolio_aggregation_service` claims eligible aggregation jobs, emits `portfolio_aggregation_required`, computes portfolio timeseries, and emits `portfolio_aggregation_day_completed`.
-10. `pipeline_orchestrator_service` consumes `portfolio_aggregation_day_completed` and emits `financial_reconciliation_requested` for deterministic post-aggregation controls.
-11. `financial_reconciliation_service` consumes `financial_reconciliation_requested`, runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch)`, and emits `financial_reconciliation_completed`.
-12. `pipeline_orchestrator_service` consumes `financial_reconciliation_completed`, upserts the `FINANCIAL_RECONCILIATION` portfolio-day control stage using monotonic status merge, and emits `portfolio_day_controls_evaluated`.
-13. `portfolio_day_controls_evaluated` is the canonical portfolio-day controls decision:
+1. `persistence_service` emits `transactions.persisted`.
+2. `cost_calculator_service` emits `transactions.cost.processed`.
+3. `cashflow_calculator_service` emits `cashflows.calculated`.
+4. `pipeline_orchestrator_service` waits until both signals are observed for `(stage_name, transaction_id, epoch)` and emits `transaction_processing.ready`.
+5. For security-scoped transactions, orchestrator also emits `portfolio_security_day.valuation.ready` to stage valuation jobs deterministically.
+6. `valuation_orchestrator_service` creates and dispatches `valuation.job.requested` jobs; `position_valuation_calculator` consumes those jobs and emits `portfolio_security_day.valuation.completed` after persisting valuation snapshots.
+7. `timeseries_generator_service` consumes `portfolio_security_day.valuation.completed` as the canonical valuation-to-timeseries trigger (while retaining `valuation.snapshot.persisted` compatibility).
+8. `timeseries_generator_service` emits `portfolio_security_day.position_timeseries.completed` after position-timeseries persistence and stages aggregation jobs.
+9. `portfolio_aggregation_service` claims eligible aggregation jobs, emits `portfolio_day.aggregation.job.requested`, computes portfolio timeseries, and emits `portfolio_day.aggregation.completed`.
+10. `pipeline_orchestrator_service` consumes `portfolio_day.aggregation.completed` and emits `portfolio_day.reconciliation.requested` for deterministic post-aggregation controls.
+11. `financial_reconciliation_service` consumes `portfolio_day.reconciliation.requested`, runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch)`, and emits `portfolio_day.reconciliation.completed`.
+12. `pipeline_orchestrator_service` consumes `portfolio_day.reconciliation.completed`, upserts the `FINANCIAL_RECONCILIATION` portfolio-day control stage using monotonic status merge, and emits `portfolio_day.controls.evaluated`.
+13. `portfolio_day.controls.evaluated` is the canonical portfolio-day controls decision:
     `controls_blocking=true` and `publish_allowed=false` for `FAILED` / `REQUIRES_REPLAY`,
     otherwise `controls_blocking=false` and `publish_allowed=true`.
 

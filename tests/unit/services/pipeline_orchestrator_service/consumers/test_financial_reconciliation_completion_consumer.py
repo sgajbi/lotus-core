@@ -34,7 +34,7 @@ class _SingleSessionAsyncIterable:
 def consumer() -> consumer_module.FinancialReconciliationCompletionConsumer:
     c = consumer_module.FinancialReconciliationCompletionConsumer(
         bootstrap_servers="mock_server",
-        topic="financial_reconciliation_completed",
+        topic="portfolio_day.reconciliation.completed",
         group_id="test_group",
     )
     c._send_to_dlq_async = AsyncMock()
@@ -66,7 +66,7 @@ def mock_kafka_message(mock_event: FinancialReconciliationCompletedEvent) -> Mag
     msg = MagicMock()
     msg.value.return_value = mock_event.model_dump_json().encode("utf-8")
     msg.key.return_value = b"PORT-CTRL-1"
-    msg.topic.return_value = "financial_reconciliation_completed"
+    msg.topic.return_value = "portfolio_day.reconciliation.completed"
     msg.partition.return_value = 0
     msg.offset.return_value = 9
     msg.headers.return_value = []
@@ -120,12 +120,12 @@ async def test_completion_consumer_updates_orchestrator_stage_and_marks_idempote
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_service.register_financial_reconciliation_completed.assert_awaited_once_with(
+    mock_service.register_reconciliation_completed.assert_awaited_once_with(
         mock_event,
         "corr-ctrl",
     )
     mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        "financial_reconciliation_completed-0-9",
+        "portfolio_day.reconciliation.completed-0-9",
         mock_event.portfolio_id,
         consumer_module.SERVICE_NAME,
         "corr-ctrl",
@@ -138,7 +138,7 @@ async def test_completion_consumer_sends_invalid_payload_to_dlq(
     msg = MagicMock()
     msg.value.return_value = json.dumps({"portfolio_id": "bad"}).encode("utf-8")
     msg.key.return_value = b"bad"
-    msg.topic.return_value = "financial_reconciliation_completed"
+    msg.topic.return_value = "portfolio_day.reconciliation.completed"
     msg.partition.return_value = 0
     msg.offset.return_value = 10
     msg.headers.return_value = []
@@ -161,7 +161,7 @@ async def test_completion_consumer_preserves_payload_correlation_over_header_ove
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_service.register_financial_reconciliation_completed.assert_awaited_once_with(
+    mock_service.register_reconciliation_completed.assert_awaited_once_with(
         mock_event,
         "corr-ctrl",
     )

@@ -49,14 +49,14 @@ async def test_adjustment_message_persists_outbox_and_idempotency(
     )
     msg = MagicMock()
     msg.value.return_value = event.model_dump_json().encode("utf-8")
-    msg.topic.return_value = "raw_transactions_completed"
+    msg.topic.return_value = "transactions.persisted"
     msg.partition.return_value = 0
     msg.offset.return_value = 42
     msg.headers.return_value = [("correlation_id", b"corr-cost-int-01")]
 
     consumer = CostCalculatorConsumer(
         bootstrap_servers="mock_server",
-        topic="raw_transactions_completed",
+        topic="transactions.persisted",
         group_id="test_group",
     )
     consumer._send_to_dlq_async = AsyncMock()
@@ -86,7 +86,7 @@ async def test_adjustment_message_persists_outbox_and_idempotency(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id == "raw_transactions_completed-0-42",
+                    ProcessedEvent.event_id == "transactions.persisted-0-42",
                     ProcessedEvent.service_name == "cost-calculator",
                 )
             )
