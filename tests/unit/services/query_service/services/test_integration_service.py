@@ -236,6 +236,16 @@ async def test_reference_contract_methods() -> None:
                 source_record_id="src1",
             )
         ),
+        list_benchmark_definitions_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    benchmark_currency="USD",
+                    effective_from=date(2026, 1, 1),
+                    effective_to=None,
+                )
+            ]
+        ),
         list_benchmark_components=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -243,6 +253,17 @@ async def test_reference_contract_methods() -> None:
                     composition_weight=Decimal("0.5"),
                     composition_effective_from=date(2026, 1, 1),
                     composition_effective_to=None,
+                    rebalance_event_id="r1",
+                )
+            ]
+        ),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX1",
+                    composition_weight=Decimal("0.5"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=date(2026, 3, 31),
                     rebalance_event_id="r1",
                 )
             ]
@@ -391,6 +412,16 @@ async def test_reference_contract_methods() -> None:
     assert definition is not None
     assert definition.benchmark_id == "B1"
 
+    composition_window = await service.get_benchmark_composition_window(
+        "B1",
+        SimpleNamespace(
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 3, 31))
+        ),
+    )
+    assert composition_window is not None
+    assert composition_window.benchmark_currency == "USD"
+    assert composition_window.segments[0].index_id == "IDX1"
+
     benchmark_catalog = await service.list_benchmark_catalog(date(2026, 1, 1), None, None, None)
     assert benchmark_catalog.records == []
 
@@ -464,7 +495,9 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
         get_benchmark_definition=AsyncMock(
             side_effect=[None, SimpleNamespace(benchmark_currency="EUR")]
         ),
+        list_benchmark_definitions_overlapping_window=AsyncMock(return_value=[]),
         list_benchmark_components=AsyncMock(return_value=[]),
+        list_benchmark_components_overlapping_window=AsyncMock(return_value=[]),
         list_benchmark_components_for_benchmarks=AsyncMock(return_value={}),
         list_benchmark_definitions=AsyncMock(
             return_value=[
@@ -518,6 +551,15 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
 
     assert await service.resolve_benchmark_assignment("P1", date(2026, 1, 1)) is None
     assert await service.get_benchmark_definition("B1", date(2026, 1, 1)) is None
+    assert (
+        await service.get_benchmark_composition_window(
+            "B1",
+            SimpleNamespace(
+                window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2))
+            ),
+        )
+        is None
+    )
 
     benchmark_catalog = await service.list_benchmark_catalog(
         date(2026, 1, 1), "single_index", "EUR", "active"
@@ -551,3 +593,25 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
         include_sections=None,
     )
     assert effective.allowed_sections == []
+
+
+@pytest.mark.asyncio
+async def test_benchmark_composition_window_rejects_currency_changes_within_window() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_benchmark_definitions_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(benchmark_currency="USD"),
+                SimpleNamespace(benchmark_currency="EUR"),
+            ]
+        ),
+        list_benchmark_components_overlapping_window=AsyncMock(return_value=[]),
+    )
+
+    with pytest.raises(ValueError, match="currency changed within requested composition window"):
+        await service.get_benchmark_composition_window(
+            "B1",
+            SimpleNamespace(
+                window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 31))
+            ),
+        )

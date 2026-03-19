@@ -468,24 +468,30 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["oldest_reprocessing_updated_at"][
         "description"
     ].startswith("UTC timestamp of the most recent durable update for the oldest")
-    assert support_overview["properties"]["oldest_pending_valuation_job_id"][
-        "description"
-    ] == "Durable job id for the oldest open valuation job in the backlog."
-    assert support_overview["properties"]["oldest_pending_valuation_security_id"][
-        "description"
-    ] == "Security identifier for the oldest open valuation job in the backlog."
-    assert support_overview["properties"]["oldest_pending_valuation_correlation_id"][
-        "description"
-    ] == "Durable correlation identifier for the oldest open valuation job in the backlog."
-    assert support_overview["properties"]["oldest_pending_aggregation_job_id"][
-        "description"
-    ] == "Durable job id for the oldest open aggregation job in the backlog."
-    assert support_overview["properties"]["oldest_pending_aggregation_correlation_id"][
-        "description"
-    ] == "Durable correlation identifier for the oldest open aggregation job in the backlog."
-    assert support_overview["properties"]["oldest_pending_analytics_export_job_id"][
-        "description"
-    ] == "Durable job id for the oldest open analytics export job in the backlog."
+    assert (
+        support_overview["properties"]["oldest_pending_valuation_job_id"]["description"]
+        == "Durable job id for the oldest open valuation job in the backlog."
+    )
+    assert (
+        support_overview["properties"]["oldest_pending_valuation_security_id"]["description"]
+        == "Security identifier for the oldest open valuation job in the backlog."
+    )
+    assert (
+        support_overview["properties"]["oldest_pending_valuation_correlation_id"]["description"]
+        == "Durable correlation identifier for the oldest open valuation job in the backlog."
+    )
+    assert (
+        support_overview["properties"]["oldest_pending_aggregation_job_id"]["description"]
+        == "Durable job id for the oldest open aggregation job in the backlog."
+    )
+    assert (
+        support_overview["properties"]["oldest_pending_aggregation_correlation_id"]["description"]
+        == "Durable correlation identifier for the oldest open aggregation job in the backlog."
+    )
+    assert (
+        support_overview["properties"]["oldest_pending_analytics_export_job_id"]["description"]
+        == "Durable job id for the oldest open analytics export job in the backlog."
+    )
     assert support_overview["properties"]["oldest_pending_analytics_export_request_fingerprint"][
         "description"
     ].startswith("Request fingerprint for the oldest open analytics export job")
@@ -507,9 +513,10 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_jobs_schema["properties"]["items"]["description"] == (
         "Durable analytics export jobs for support workflows."
     )
-    assert analytics_export_jobs_schema["properties"]["stale_threshold_minutes"][
-        "description"
-    ] == "Threshold in minutes used to classify stale support rows in this listing."
+    assert (
+        analytics_export_jobs_schema["properties"]["stale_threshold_minutes"]["description"]
+        == "Threshold in minutes used to classify stale support rows in this listing."
+    )
     assert analytics_export_jobs_schema["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this analytics export listing snapshot was generated."
     )
@@ -539,12 +546,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert reprocessing_slo["properties"]["stale_reprocessing_keys"]["description"].startswith(
         "Number of REPROCESSING position keys whose last update is older"
     )
-    assert reprocessing_slo["properties"]["oldest_reprocessing_watermark_date"][
-        "description"
-    ] == "Oldest watermark date among position keys currently in REPROCESSING state."
-    assert reprocessing_slo["properties"]["oldest_reprocessing_security_id"][
-        "description"
-    ] == "Security identifier for the oldest active reprocessing key."
+    assert (
+        reprocessing_slo["properties"]["oldest_reprocessing_watermark_date"]["description"]
+        == "Oldest watermark date among position keys currently in REPROCESSING state."
+    )
+    assert (
+        reprocessing_slo["properties"]["oldest_reprocessing_security_id"]["description"]
+        == "Security identifier for the oldest active reprocessing key."
+    )
     assert reprocessing_slo["properties"]["oldest_reprocessing_epoch"]["description"] == (
         "Current epoch of the oldest active reprocessing key."
     )
@@ -557,9 +566,10 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert calculator_bucket["properties"]["oldest_open_job_id"]["description"] == (
         "Durable job id for the oldest open job contributing to this backlog."
     )
-    assert calculator_bucket["properties"]["oldest_open_job_correlation_id"][
-        "description"
-    ] == "Durable correlation identifier for the oldest open job contributing to this backlog."
+    assert (
+        calculator_bucket["properties"]["oldest_open_job_correlation_id"]["description"]
+        == "Durable correlation identifier for the oldest open job contributing to this backlog."
+    )
     assert calculator_bucket["properties"]["failed_jobs_within_window"]["description"] == (
         "Count of jobs that moved to FAILED state within the configured failed-job window."
     )
@@ -586,10 +596,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         for parameter in reconciliation_runs["parameters"]
         if parameter["name"] == "requested_by"
     )
-    assert (
-        reconciliation_requested_by["description"]
-        == "Optional reconciliation requester filter."
-    )
+    assert reconciliation_requested_by["description"] == "Optional reconciliation requester filter."
     reconciliation_dedupe_key = next(
         parameter
         for parameter in reconciliation_runs["parameters"]
@@ -961,6 +968,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     benchmark_assignment = schema["paths"][
         "/integration/portfolios/{portfolio_id}/benchmark-assignment"
     ]["post"]
+    benchmark_composition_window = schema["paths"][
+        "/integration/benchmarks/{benchmark_id}/composition-window"
+    ]["post"]
     benchmark_definition = schema["paths"]["/integration/benchmarks/{benchmark_id}/definition"][
         "post"
     ]
@@ -985,6 +995,22 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     ]
     assert assignment_not_found["detail"] == (
         "No effective benchmark assignment found for portfolio and as_of_date."
+    )
+
+    benchmark_id = next(
+        parameter
+        for parameter in benchmark_composition_window["parameters"]
+        if parameter["name"] == "benchmark_id"
+    )
+    assert benchmark_id["description"] == (
+        "Benchmark identifier for the requested composition window contract."
+    )
+
+    composition_not_found = benchmark_composition_window["responses"]["404"]["content"][
+        "application/json"
+    ]["example"]
+    assert composition_not_found["detail"] == (
+        "No overlapping benchmark definition found for benchmark_id and requested window."
     )
 
     benchmark_id = next(
@@ -1037,13 +1063,21 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
 
     components = schema["components"]["schemas"]
     benchmark_catalog = components["BenchmarkCatalogResponse"]
+    benchmark_composition_window_response = components["BenchmarkCompositionWindowResponse"]
     benchmark_market_series_response = components["BenchmarkMarketSeriesResponse"]
     risk_free_series_response = components["RiskFreeSeriesResponse"]
     coverage_response = components["CoverageResponse"]
     classification_taxonomy_response = components["ClassificationTaxonomyResponse"]
+    benchmark_component_response = components["BenchmarkComponentResponse"]
 
     assert benchmark_catalog["properties"]["records"]["description"] == (
         "Benchmark definition records effective for the requested date."
+    )
+    assert benchmark_composition_window_response["properties"]["segments"]["description"] == (
+        "Ordered benchmark composition segments overlapping the requested window."
+    )
+    assert benchmark_component_response["properties"]["rebalance_event_id"]["description"] == (
+        "Rebalance event identifier linking related composition changes."
     )
     assert benchmark_market_series_response["properties"]["quality_status_summary"]["examples"] == [
         {"accepted": 31, "estimated": 2}

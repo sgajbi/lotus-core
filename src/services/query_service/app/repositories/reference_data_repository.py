@@ -74,6 +74,27 @@ class ReferenceDataRepository:
         result = await self._db.execute(stmt)
         return result.scalars().first()
 
+    async def list_benchmark_definitions_overlapping_window(
+        self,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> list[BenchmarkDefinition]:
+        stmt = (
+            select(BenchmarkDefinition)
+            .where(
+                BenchmarkDefinition.benchmark_id == benchmark_id,
+                BenchmarkDefinition.effective_from <= end_date,
+                or_(
+                    BenchmarkDefinition.effective_to.is_(None),
+                    BenchmarkDefinition.effective_to >= start_date,
+                ),
+            )
+            .order_by(BenchmarkDefinition.effective_from.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_benchmark_definitions(
         self,
         as_of_date: date,
@@ -105,7 +126,11 @@ class ReferenceDataRepository:
         index_status: str | None = None,
     ) -> list[IndexDefinition]:
         stmt = select(IndexDefinition).where(
-            _effective_filter(IndexDefinition.effective_from, IndexDefinition.effective_to, as_of_date)
+            _effective_filter(
+                IndexDefinition.effective_from,
+                IndexDefinition.effective_to,
+                as_of_date,
+            )
         )
         if index_currency:
             stmt = stmt.where(IndexDefinition.index_currency == index_currency.upper())
@@ -132,6 +157,30 @@ class ReferenceDataRepository:
                 ),
             )
             .order_by(BenchmarkCompositionSeries.index_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_benchmark_components_overlapping_window(
+        self,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> list[BenchmarkCompositionSeries]:
+        stmt = (
+            select(BenchmarkCompositionSeries)
+            .where(
+                BenchmarkCompositionSeries.benchmark_id == benchmark_id,
+                BenchmarkCompositionSeries.composition_effective_from <= end_date,
+                or_(
+                    BenchmarkCompositionSeries.composition_effective_to.is_(None),
+                    BenchmarkCompositionSeries.composition_effective_to >= start_date,
+                ),
+            )
+            .order_by(
+                BenchmarkCompositionSeries.composition_effective_from.asc(),
+                BenchmarkCompositionSeries.index_id.asc(),
+            )
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
@@ -308,9 +357,15 @@ class ReferenceDataRepository:
             start_date=start_date,
             end_date=end_date,
         )
-        benchmark_returns = await self.list_benchmark_return_points(benchmark_id, start_date, end_date)
+        benchmark_returns = await self.list_benchmark_return_points(
+            benchmark_id,
+            start_date,
+            end_date,
+        )
         total_points = len(price_points) + len(benchmark_returns)
-        all_dates = {row.series_date for row in price_points} | {row.series_date for row in benchmark_returns}
+        all_dates = {row.series_date for row in price_points} | {
+            row.series_date for row in benchmark_returns
+        }
         quality_counts: dict[str, int] = defaultdict(int)
         for row in price_points:
             quality_counts[row.quality_status] += 1

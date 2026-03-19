@@ -11,11 +11,13 @@ from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyPro
 from ..dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
     BenchmarkCatalogResponse,
+    BenchmarkCompositionWindowRequest,
+    BenchmarkCompositionWindowResponse,
     BenchmarkDefinitionResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
-    BenchmarkReturnSeriesResponse,
     BenchmarkReturnSeriesRequest,
+    BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyEntry,
     ClassificationTaxonomyResponse,
     ComponentSeriesResponse,
@@ -212,7 +214,10 @@ class IntegrationService:
     async def resolve_benchmark_assignment(
         self, portfolio_id: str, as_of_date: date
     ) -> BenchmarkAssignmentResponse | None:
-        row = await self._reference_repository.resolve_benchmark_assignment(portfolio_id, as_of_date)
+        row = await self._reference_repository.resolve_benchmark_assignment(
+            portfolio_id,
+            as_of_date,
+        )
         if row is None:
             return None
         return BenchmarkAssignmentResponse(
@@ -235,7 +240,10 @@ class IntegrationService:
         row = await self._reference_repository.get_benchmark_definition(benchmark_id, as_of_date)
         if row is None:
             return None
-        components = await self._reference_repository.list_benchmark_components(benchmark_id, as_of_date)
+        components = await self._reference_repository.list_benchmark_components(
+            benchmark_id,
+            as_of_date,
+        )
         return BenchmarkDefinitionResponse(
             benchmark_id=row.benchmark_id,
             benchmark_name=row.benchmark_name,
@@ -264,6 +272,57 @@ class IntegrationService:
                 }
                 for component in components
             ],
+        )
+
+    async def get_benchmark_composition_window(
+        self,
+        benchmark_id: str,
+        request: BenchmarkCompositionWindowRequest,
+    ) -> BenchmarkCompositionWindowResponse | None:
+        definitions = (
+            await self._reference_repository.list_benchmark_definitions_overlapping_window(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            )
+        )
+        if not definitions:
+            return None
+
+        benchmark_currencies = {row.benchmark_currency for row in definitions}
+        if len(benchmark_currencies) != 1:
+            raise ValueError(
+                "Benchmark definition currency changed within requested composition window."
+            )
+
+        components = await self._reference_repository.list_benchmark_components_overlapping_window(
+            benchmark_id=benchmark_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
+
+        return BenchmarkCompositionWindowResponse(
+            benchmark_id=benchmark_id,
+            benchmark_currency=next(iter(benchmark_currencies)),
+            resolved_window=IntegrationWindow(
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            ),
+            segments=[
+                {
+                    "index_id": component.index_id,
+                    "composition_weight": self._as_decimal(component.composition_weight),
+                    "composition_effective_from": component.composition_effective_from,
+                    "composition_effective_to": component.composition_effective_to,
+                    "rebalance_event_id": component.rebalance_event_id,
+                }
+                for component in components
+            ],
+            lineage={
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core-query-service",
+                "generated_by": "integration.benchmark_composition_window",
+            },
         )
 
     async def list_benchmark_catalog(
@@ -405,10 +464,7 @@ class IntegrationService:
         }
 
         all_dates = sorted(
-            {
-                row.series_date
-                for row in index_prices + index_returns + benchmark_returns
-            }
+            {row.series_date for row in index_prices + index_returns + benchmark_returns}
         )
         quality_status_summary: dict[str, int] = {}
         component_series: list[ComponentSeriesResponse] = []
@@ -431,7 +487,9 @@ class IntegrationService:
                     SeriesPoint(
                         series_date=current_date,
                         index_price=self._as_decimal(price_row.index_price) if price_row else None,
-                        index_return=self._as_decimal(return_row.index_return) if return_row else None,
+                        index_return=(
+                            self._as_decimal(return_row.index_return) if return_row else None
+                        ),
                         benchmark_return=(
                             self._as_decimal(benchmark_return_row.benchmark_return)
                             if benchmark_return_row
