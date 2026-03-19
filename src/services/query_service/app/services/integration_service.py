@@ -422,6 +422,12 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
+        definition = await self._reference_repository.get_benchmark_definition(
+            benchmark_id, request.as_of_date
+        )
+        benchmark_currency = (
+            definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
+        )
         components = await self._reference_repository.list_benchmark_components(
             benchmark_id, request.as_of_date
         )
@@ -443,17 +449,30 @@ class IntegrationService:
         )
 
         fx_rates: dict[date, Decimal] = {}
+        fx_context_source_currency: str | None = None
+        fx_context_target_currency: str | None = None
+        normalization_status = "native_component_series_only"
         if request.target_currency:
-            definition = await self._reference_repository.get_benchmark_definition(
-                benchmark_id, request.as_of_date
-            )
-            from_currency = definition.benchmark_currency if definition else request.target_currency
-            if from_currency != request.target_currency:
+            fx_context_source_currency = benchmark_currency
+            fx_context_target_currency = request.target_currency
+            if benchmark_currency != request.target_currency:
                 fx_rates = await self._reference_repository.get_fx_rates(
-                    from_currency=from_currency,
+                    from_currency=benchmark_currency,
                     to_currency=request.target_currency,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
+                )
+                if fx_rates:
+                    normalization_status = (
+                        "native_component_series_with_benchmark_to_target_fx_context"
+                    )
+                else:
+                    normalization_status = (
+                        "native_component_series_with_missing_benchmark_to_target_fx_context"
+                    )
+            else:
+                normalization_status = (
+                    "native_component_series_with_identity_benchmark_to_target_fx_context"
                 )
 
         prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
@@ -486,6 +505,14 @@ class IntegrationService:
                 points.append(
                     SeriesPoint(
                         series_date=current_date,
+                        series_currency=(
+                            (price_row and price_row.series_currency)
+                            or (return_row and return_row.series_currency)
+                            or (
+                                benchmark_return_row
+                                and benchmark_return_row.series_currency
+                            )
+                        ),
                         index_price=self._as_decimal(price_row.index_price) if price_row else None,
                         index_return=(
                             self._as_decimal(return_row.index_return) if return_row else None
@@ -505,6 +532,8 @@ class IntegrationService:
         return BenchmarkMarketSeriesResponse(
             benchmark_id=benchmark_id,
             as_of_date=request.as_of_date,
+            benchmark_currency=benchmark_currency,
+            target_currency=request.target_currency,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
@@ -512,6 +541,10 @@ class IntegrationService:
             frequency=request.frequency,
             component_series=component_series,
             quality_status_summary=quality_status_summary,
+            fx_context_source_currency=fx_context_source_currency,
+            fx_context_target_currency=fx_context_target_currency,
+            normalization_policy="native_component_series_downstream_normalization_required",
+            normalization_status=normalization_status,
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",

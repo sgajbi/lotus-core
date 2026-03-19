@@ -643,10 +643,18 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         return_value={
             "benchmark_id": "B1",
             "as_of_date": "2026-01-31",
+            "benchmark_currency": "USD",
+            "target_currency": "USD",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
             "component_series": [],
             "quality_status_summary": {},
+            "fx_context_source_currency": "USD",
+            "fx_context_target_currency": "USD",
+            "normalization_policy": "native_component_series_downstream_normalization_required",
+            "normalization_status": (
+                "native_component_series_with_identity_benchmark_to_target_fx_context"
+            ),
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
@@ -716,6 +724,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert benchmark_market_response["benchmark_id"] == "B1"
+    assert benchmark_market_response["benchmark_currency"] == "USD"
     mock_service.get_benchmark_market_series.assert_awaited_once()
 
     benchmark_composition_response = await fetch_benchmark_composition_window(

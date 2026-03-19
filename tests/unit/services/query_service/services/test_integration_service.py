@@ -309,6 +309,7 @@ async def test_reference_contract_methods() -> None:
                     index_id="IDX1",
                     series_date=date(2026, 1, 1),
                     index_price=Decimal("100"),
+                    series_currency="USD",
                     quality_status="accepted",
                 )
             ]
@@ -319,6 +320,7 @@ async def test_reference_contract_methods() -> None:
                     index_id="IDX1",
                     series_date=date(2026, 1, 1),
                     index_return=Decimal("0.01"),
+                    series_currency="USD",
                     quality_status="accepted",
                 )
             ]
@@ -439,6 +441,17 @@ async def test_reference_contract_methods() -> None:
         ),
     )
     assert market_series.component_series
+    assert market_series.benchmark_currency == "USD"
+    assert market_series.target_currency == "USD"
+    assert (
+        market_series.normalization_status
+        == "native_component_series_with_identity_benchmark_to_target_fx_context"
+    )
+    assert (
+        market_series.normalization_policy
+        == "native_component_series_downstream_normalization_required"
+    )
+    assert market_series.component_series[0].points[0].series_currency == "USD"
 
     index_price = await service.get_index_price_series(
         index_id="IDX1",
@@ -493,7 +506,11 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         resolve_benchmark_assignment=AsyncMock(return_value=None),
         get_benchmark_definition=AsyncMock(
-            side_effect=[None, SimpleNamespace(benchmark_currency="EUR")]
+            side_effect=[
+                None,
+                SimpleNamespace(benchmark_currency="EUR"),
+                SimpleNamespace(benchmark_currency="EUR"),
+            ]
         ),
         list_benchmark_definitions_overlapping_window=AsyncMock(return_value=[]),
         list_benchmark_components=AsyncMock(return_value=[]),
@@ -577,6 +594,24 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
         ),
     )
     service._reference_repository.get_fx_rates.assert_awaited_once()
+    benchmark_market_series = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency="USD",
+            series_fields=["index_price"],
+        ),
+    )
+    assert benchmark_market_series.benchmark_currency == "EUR"
+    assert benchmark_market_series.target_currency == "USD"
+    assert (
+        benchmark_market_series.normalization_status
+        == "native_component_series_with_missing_benchmark_to_target_fx_context"
+    )
+    assert benchmark_market_series.fx_context_source_currency == "EUR"
+    assert benchmark_market_series.fx_context_target_currency == "USD"
 
     monkeypatch.setenv(
         "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",

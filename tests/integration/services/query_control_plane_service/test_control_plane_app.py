@@ -1082,6 +1082,36 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_market_series_response["properties"]["quality_status_summary"]["examples"] == [
         {"accepted": 31, "estimated": 2}
     ]
+    assert benchmark_market_series_response["properties"]["benchmark_currency"]["description"] == (
+        "Benchmark currency resolved for the requested benchmark context."
+    )
+    assert (
+        benchmark_market_series_response["properties"]["series_currency"]["description"]
+        if "series_currency" in benchmark_market_series_response["properties"]
+        else None
+    ) is None
+    component_series_ref = benchmark_market_series_response["properties"]["component_series"][
+        "items"
+    ]["$ref"]
+    component_series_name = component_series_ref.rsplit("/", maxsplit=1)[-1]
+    series_point_ref = components[component_series_name]["properties"]["points"]["items"]["$ref"]
+    series_point_name = series_point_ref.rsplit("/", maxsplit=1)[-1]
+    assert components[series_point_name]["properties"]["series_currency"]["description"] == (
+        "Native component series currency for the returned price or return point."
+    )
+    assert (
+        components[series_point_name]["properties"]["fx_rate"]["description"]
+        == (
+            "Benchmark-currency to target-currency FX context rate when target currency "
+            "is requested. This is not component-to-benchmark normalization."
+        )
+    )
+    assert benchmark_market_series_response["properties"]["normalization_policy"]["examples"] == [
+        "native_component_series_downstream_normalization_required"
+    ]
+    assert benchmark_market_series_response["properties"]["normalization_status"]["examples"] == [
+        "native_component_series_with_benchmark_to_target_fx_context"
+    ]
     assert risk_free_series_response["properties"]["lineage"]["examples"] == [
         {"contract_version": "rfc_062_v1", "source_system": "lotus-core"}
     ]
