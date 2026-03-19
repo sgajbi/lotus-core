@@ -452,6 +452,10 @@ async def test_reference_contract_methods() -> None:
         == "native_component_series_downstream_normalization_required"
     )
     assert market_series.component_series[0].points[0].series_currency == "USD"
+    assert market_series.request_fingerprint
+    assert market_series.page.page_size == 250
+    assert market_series.page.sort_key == "index_id:asc"
+    assert market_series.page.next_page_token is None
 
     index_price = await service.get_index_price_series(
         index_id="IDX1",
@@ -648,5 +652,81 @@ async def test_benchmark_composition_window_rejects_currency_changes_within_wind
             "B1",
             SimpleNamespace(
                 window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 31))
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_supports_paging_tokens() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_components=AsyncMock(
+            return_value=[
+                SimpleNamespace(index_id="IDX1", composition_weight=Decimal("0.5")),
+                SimpleNamespace(index_id="IDX2", composition_weight=Decimal("0.3")),
+                SimpleNamespace(index_id="IDX3", composition_weight=Decimal("0.2")),
+            ]
+        ),
+        list_index_price_points=AsyncMock(return_value=[]),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(return_value=[]),
+        get_fx_rates=AsyncMock(return_value={}),
+    )
+
+    first_page = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price"],
+            page=SimpleNamespace(page_size=2, page_token=None),
+        ),
+    )
+    assert [row.index_id for row in first_page.component_series] == ["IDX1", "IDX2"]
+    assert first_page.page.next_page_token is not None
+
+    second_page = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price"],
+            page=SimpleNamespace(page_size=2, page_token=first_page.page.next_page_token),
+        ),
+    )
+    assert [row.index_id for row in second_page.component_series] == ["IDX3"]
+    assert second_page.page.next_page_token is None
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_rejects_page_token_scope_mismatch() -> None:
+    service = make_service()
+    token = service._encode_page_token(  # pylint: disable=protected-access
+        {"scope_fingerprint": "other-scope", "last_index_id": "IDX1"}
+    )
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_components=AsyncMock(return_value=[]),
+        list_index_price_points=AsyncMock(return_value=[]),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(return_value=[]),
+        get_fx_rates=AsyncMock(return_value={}),
+    )
+
+    with pytest.raises(ValueError, match="page token does not match request scope"):
+        await service.get_benchmark_market_series(
+            benchmark_id="B1",
+            request=SimpleNamespace(
+                as_of_date=date(2026, 1, 1),
+                window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+                frequency="daily",
+                target_currency=None,
+                series_fields=["index_price"],
+                page=SimpleNamespace(page_size=2, page_token=token),
             ),
         )

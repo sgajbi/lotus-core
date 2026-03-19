@@ -474,12 +474,15 @@ async def fetch_benchmark_market_series(
     ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkMarketSeriesResponse:
-    return cast(
-        BenchmarkMarketSeriesResponse,
-        await integration_service.get_benchmark_market_series(
-            benchmark_id=benchmark_id, request=request
-        ),
-    )
+    try:
+        return cast(
+            BenchmarkMarketSeriesResponse,
+            await integration_service.get_benchmark_market_series(
+                benchmark_id=benchmark_id, request=request
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post(

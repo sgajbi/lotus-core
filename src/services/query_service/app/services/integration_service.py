@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 import json
 import logging
 from dataclasses import dataclass
@@ -30,6 +33,7 @@ from ..dtos.reference_integration_dto import (
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
     IntegrationWindow,
+    ReferencePageMetadata,
     RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
@@ -61,6 +65,7 @@ class IntegrationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self._reference_repository = ReferenceDataRepository(db)
+        self._page_token_secret = load_query_service_settings().page_token_secret
 
     @staticmethod
     def _as_decimal(value: Any) -> Decimal:
@@ -75,6 +80,45 @@ class IntegrationService:
             return "unknown"
         key = raw.upper()
         return _CONSUMER_CANONICAL_MAP.get(key, raw.lower())
+
+    @staticmethod
+    def _request_fingerprint(payload: dict[str, Any]) -> str:
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
+
+    def _encode_page_token(self, payload: dict[str, Any]) -> str:
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        signature = hmac.new(
+            self._page_token_secret.encode("utf-8"),
+            serialized.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        envelope = {"p": payload, "s": signature}
+        return base64.urlsafe_b64encode(json.dumps(envelope).encode("utf-8")).decode("utf-8")
+
+    def _decode_page_token(self, token: str | None) -> dict[str, Any]:
+        if not token:
+            return {}
+        try:
+            decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+            envelope = json.loads(decoded)
+            payload = envelope["p"]
+            signature = envelope["s"]
+            serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+            expected = hmac.new(
+                self._page_token_secret.encode("utf-8"),
+                serialized.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(signature, expected):
+                raise ValueError("Invalid page token signature.")
+            if not isinstance(payload, dict):
+                raise ValueError("Malformed page token payload.")
+            return payload
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError("Malformed page token.") from exc
 
     @staticmethod
     def _load_policy() -> dict[str, Any]:
@@ -447,6 +491,27 @@ class IntegrationService:
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "benchmark_id": benchmark_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "window": {
+                    "start_date": request.window.start_date.isoformat(),
+                    "end_date": request.window.end_date.isoformat(),
+                },
+                "frequency": request.frequency,
+                "target_currency": request.target_currency,
+                "series_fields": sorted(request.series_fields),
+            }
+        )
+        page = getattr(request, "page", None)
+        page_size = getattr(page, "page_size", 250)
+        page_token = getattr(page, "page_token", None)
+        cursor = self._decode_page_token(page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope and token_scope != request_scope_fingerprint:
+            raise ValueError("Benchmark market series page token does not match request scope.")
+        cursor_index_id = cursor.get("last_index_id")
 
         fx_rates: dict[date, Decimal] = {}
         fx_context_source_currency: str | None = None
@@ -486,7 +551,7 @@ class IntegrationService:
             {row.series_date for row in index_prices + index_returns + benchmark_returns}
         )
         quality_status_summary: dict[str, int] = {}
-        component_series: list[ComponentSeriesResponse] = []
+        component_series_all: list[ComponentSeriesResponse] = []
         for index_id in sorted(index_ids):
             points: list[SeriesPoint] = []
             for current_date in all_dates:
@@ -527,7 +592,23 @@ class IntegrationService:
                         quality_status=quality_status,
                     )
                 )
-            component_series.append(ComponentSeriesResponse(index_id=index_id, points=points))
+            component_series_all.append(ComponentSeriesResponse(index_id=index_id, points=points))
+
+        if cursor_index_id:
+            component_series_all = [
+                series for series in component_series_all if series.index_id > cursor_index_id
+            ]
+
+        has_more = len(component_series_all) > page_size
+        component_series = component_series_all[:page_size]
+        next_page_token: str | None = None
+        if has_more and component_series:
+            next_page_token = self._encode_page_token(
+                {
+                    "scope_fingerprint": request_scope_fingerprint,
+                    "last_index_id": component_series[-1].index_id,
+                }
+            )
 
         return BenchmarkMarketSeriesResponse(
             benchmark_id=benchmark_id,
@@ -545,6 +626,12 @@ class IntegrationService:
             fx_context_target_currency=fx_context_target_currency,
             normalization_policy="native_component_series_downstream_normalization_required",
             normalization_status=normalization_status,
+            request_fingerprint=request_scope_fingerprint,
+            page=ReferencePageMetadata(
+                page_size=page_size,
+                sort_key="index_id:asc",
+                next_page_token=next_page_token,
+            ),
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",

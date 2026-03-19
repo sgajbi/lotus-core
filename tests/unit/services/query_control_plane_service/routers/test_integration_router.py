@@ -655,6 +655,8 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "normalization_status": (
                 "native_component_series_with_identity_benchmark_to_target_fx_context"
             ),
+            "request_fingerprint": "fp1",
+            "page": {"page_size": 250, "sort_key": "index_id:asc", "next_page_token": None},
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
@@ -725,6 +727,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     )
     assert benchmark_market_response["benchmark_id"] == "B1"
     assert benchmark_market_response["benchmark_currency"] == "USD"
+    assert benchmark_market_response["page"]["page_size"] == 250
     mock_service.get_benchmark_market_series.assert_awaited_once()
 
     benchmark_composition_response = await fetch_benchmark_composition_window(
@@ -811,3 +814,26 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         start_date=request_window.start_date,
         end_date=request_window.end_date,
     )
+
+
+@pytest.mark.asyncio
+async def test_fetch_benchmark_market_series_maps_invalid_page_token_to_400() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_benchmark_market_series = AsyncMock(
+        side_effect=ValueError("Malformed page token.")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await fetch_benchmark_market_series(
+            benchmark_id="B1",
+            request=BenchmarkMarketSeriesRequest(
+                as_of_date="2026-01-31",
+                window=IntegrationWindow(start_date="2026-01-01", end_date="2026-01-31"),
+                frequency="daily",
+                target_currency="USD",
+                series_fields=["index_price"],
+            ),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 400

@@ -1085,6 +1085,12 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_market_series_response["properties"]["benchmark_currency"]["description"] == (
         "Benchmark currency resolved for the requested benchmark context."
     )
+    assert benchmark_market_series_response["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic request fingerprint for the benchmark market-series scope."
+    )
+    assert benchmark_market_series_response["properties"]["page"]["description"] == (
+        "Deterministic paging metadata for benchmark component series results."
+    )
     assert (
         benchmark_market_series_response["properties"]["series_currency"]["description"]
         if "series_currency" in benchmark_market_series_response["properties"]
@@ -1112,6 +1118,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_market_series_response["properties"]["normalization_status"]["examples"] == [
         "native_component_series_with_benchmark_to_target_fx_context"
     ]
+    benchmark_market_series_request = components["BenchmarkMarketSeriesRequest"]
+    assert benchmark_market_series_request["properties"]["page"]["description"] == (
+        "Optional deterministic paging controls for large benchmark component universes."
+    )
     assert risk_free_series_response["properties"]["lineage"]["examples"] == [
         {"contract_version": "rfc_062_v1", "source_system": "lotus-core"}
     ]
