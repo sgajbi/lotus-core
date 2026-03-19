@@ -26,7 +26,7 @@ def position_consumer():
     """Provides a clean instance of the consumer for each test."""
     consumer = TransactionEventConsumer(
         bootstrap_servers="mock_server",
-        topic="transaction_processing_completed",
+        topic="transaction_processing.ready",
         group_id="test_group",
         dlq_topic="test.dlq",
     )
@@ -73,7 +73,7 @@ def mock_kafka_message(mock_stage_event: TransactionProcessingCompletedEvent) ->
     mock_msg = MagicMock()
     mock_msg.value.return_value = mock_stage_event.model_dump_json().encode("utf-8")
     mock_msg.key.return_value = mock_stage_event.portfolio_id.encode("utf-8")
-    mock_msg.topic.return_value = "transaction_processing_completed"
+    mock_msg.topic.return_value = "transaction_processing.ready"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 123
     mock_msg.error.return_value = None
@@ -86,7 +86,7 @@ def mock_kafka_message_replay(mock_transaction_event: TransactionEvent) -> Magic
     mock_msg = MagicMock()
     mock_msg.value.return_value = mock_transaction_event.model_dump_json().encode("utf-8")
     mock_msg.key.return_value = mock_transaction_event.portfolio_id.encode("utf-8")
-    mock_msg.topic.return_value = "processed_transactions_completed"
+    mock_msg.topic.return_value = "transactions.cost.processed"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 124
     mock_msg.error.return_value = None
@@ -245,7 +245,7 @@ async def test_consumer_marks_replay_payload_processed_without_canonical_lookup(
     passed_event: TransactionEvent = mock_dependencies["calculate_logic"].await_args.kwargs["event"]
     assert passed_event.epoch == 9
     mock_dependencies["idempotency_repo"].mark_event_processed.assert_awaited_once_with(
-        "processed_transactions_completed-0-124",
+        "transactions.cost.processed-0-124",
         mock_transaction_event.portfolio_id,
         "position-calculator",
         "test-corr-id",
@@ -284,7 +284,7 @@ async def test_consumer_marks_stage_gate_processed_with_header_correlation(
     await position_consumer.process_message(mock_kafka_message)
 
     mock_dependencies["idempotency_repo"].mark_event_processed.assert_awaited_once_with(
-        "transaction_processing_completed-0-123",
+        "transaction_processing.ready-0-123",
         mock_transaction_event.portfolio_id,
         "position-calculator",
         "test-corr-id",

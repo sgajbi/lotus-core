@@ -4,7 +4,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.config import KAFKA_MARKET_PRICE_PERSISTED_TOPIC
+from portfolio_common.config import KAFKA_MARKET_PRICES_PERSISTED_TOPIC
 from portfolio_common.database_models import MarketPrice as DBMarketPrice
 from portfolio_common.events import MarketPriceEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
@@ -25,9 +25,9 @@ def market_price_consumer():
     """Provides an instance of the consumer for testing."""
     return MarketPriceConsumer(
         bootstrap_servers="mock_server",
-        topic="market_prices",
+        topic="market_prices.raw.received",
         group_id="test_group",
-        dlq_topic="persistence.dlq",
+        dlq_topic="dlq.persistence_service",
     )
 
 
@@ -49,7 +49,7 @@ def mock_kafka_message(valid_market_price_event: MarketPriceEvent):
     mock_message.value.return_value = valid_market_price_event.model_dump_json().encode("utf-8")
     mock_message.key.return_value = valid_market_price_event.security_id.encode("utf-8")
     mock_message.error.return_value = None
-    mock_message.topic.return_value = "market_prices"
+    mock_message.topic.return_value = "market_prices.raw.received"
     mock_message.partition.return_value = 0
     mock_message.offset.return_value = 1
     mock_message.headers.return_value = [("correlation_id", b"test-corr-id")]
@@ -131,13 +131,13 @@ async def test_process_message_success(
         # Assert an outbox event was created for the correct topic
         mock_outbox_repo.create_outbox_event.assert_called_once()
         call_args = mock_outbox_repo.create_outbox_event.call_args.kwargs
-        assert call_args["topic"] == KAFKA_MARKET_PRICE_PERSISTED_TOPIC
+        assert call_args["topic"] == KAFKA_MARKET_PRICES_PERSISTED_TOPIC
         assert call_args["aggregate_id"] == valid_market_price_event.security_id
         assert call_args["payload"]["security_id"] == valid_market_price_event.security_id
         assert call_args["correlation_id"] == "test-corr-id"
 
         mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-            event_id="market_prices-0-1",
+            event_id="market_prices.raw.received-0-1",
             portfolio_id="N/A",
             service_name="persistence-market-prices",
             correlation_id="test-corr-id",
@@ -170,7 +170,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
         "test-corr-id"
     )
     mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        event_id="market_prices-0-1",
+        event_id="market_prices.raw.received-0-1",
         portfolio_id="N/A",
         service_name="persistence-market-prices",
         correlation_id="test-corr-id",

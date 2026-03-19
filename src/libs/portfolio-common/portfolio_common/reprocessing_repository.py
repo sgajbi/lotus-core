@@ -74,7 +74,7 @@ class ReprocessingRepository:
     async def reprocess_transactions_by_ids(self, transaction_ids: List[str]) -> int:
         """
         Fetches a list of transactions by their IDs and republishes their
-        'raw_transactions_completed' event to trigger a full recalculation.
+        'transactions.persisted' event to trigger a full recalculation.
 
         Args:
             transaction_ids: A list of transaction_id strings to reprocess.

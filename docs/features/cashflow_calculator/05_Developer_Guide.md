@@ -6,7 +6,7 @@ This guide provides developers with instructions for understanding and extending
 
 The `cashflow_calculator_service` is designed to be extremely simple and maintainable. It has two main parts:
 
-* **`TransactionConsumer`:** The Kafka consumer that subscribes to `raw_transactions_completed` events. Its primary job is to look up the correct rule for the incoming transaction type and pass it to the logic layer.
+* **`TransactionConsumer`:** The Kafka consumer that subscribes to `transactions.persisted` events. Its primary job is to look up the correct rule for the incoming transaction type and pass it to the logic layer.
 * **`cashflow_rules` (Database Table):** This table contains the core of the service's business logic. It declaratively maps transaction types to their corresponding cash flow attributes. The consumer loads these rules into an in-memory cache at startup for high performance.
 
 The philosophy of this service is to keep all business rules declarative and centralized in the database, making the system easy for business users to modify without code changes.

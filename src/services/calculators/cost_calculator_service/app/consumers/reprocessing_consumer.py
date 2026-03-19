@@ -12,7 +12,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
-REPROCESSING_REQUESTED_TOPIC = "transactions_reprocessing_requested"
+REPROCESSING_REQUESTED_TOPIC = "transactions.reprocessing.requested"
 
 
 class ReprocessingConsumer(BaseConsumer):

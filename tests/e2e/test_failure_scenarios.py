@@ -7,7 +7,7 @@ import uuid
 import pytest
 import requests
 from confluent_kafka import Consumer
-from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_DLQ_TOPIC
+from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
 from sqlalchemy import exc, text
 
 from tests.test_support.output_control import emit_test_output
@@ -85,7 +85,7 @@ def test_db_outage_recovery(
         "auto.offset.reset": "latest",
     }
     dlq_consumer = Consumer(dlq_consumer_conf)
-    dlq_consumer.subscribe([KAFKA_PERSISTENCE_DLQ_TOPIC])
+    dlq_consumer.subscribe([KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC])
 
     # 3. ARRANGE: Ingest prerequisite portfolio data
     portfolio_payload = {

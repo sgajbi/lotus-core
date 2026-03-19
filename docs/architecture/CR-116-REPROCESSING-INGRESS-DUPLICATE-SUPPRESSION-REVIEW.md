@@ -4,7 +4,7 @@
 - ingestion write-plane reprocessing router
 
 ### Finding
-The replay API consumer and repository were already being hardened for deterministic ordering and duplicate suppression, but the ingress router still accepted duplicate transaction IDs and published duplicate `transactions_reprocessing_requested` commands before the downstream layers saw them.
+The replay API consumer and repository were already being hardened for deterministic ordering and duplicate suppression, but the ingress router still accepted duplicate transaction IDs and published duplicate `transactions.reprocessing.requested` commands before the downstream layers saw them.
 
 ### Change
 - Deduplicated caller-provided `transaction_ids` at ingress while preserving first-seen order.

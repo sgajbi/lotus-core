@@ -75,7 +75,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
             "A tool to reprocess specific transactions by re-publishing them to the "
-            "'raw_transactions_completed' topic."
+            "'transactions.persisted' topic."
         )
     )
     parser.add_argument(

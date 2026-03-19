@@ -4,7 +4,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.config import KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
+from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import correlation_id_var
@@ -79,7 +79,7 @@ async def test_reprocess_transactions_by_ids_success(
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
 
-    assert call_args["topic"] == KAFKA_RAW_TRANSACTIONS_COMPLETED_TOPIC
+    assert call_args["topic"] == KAFKA_TRANSACTIONS_PERSISTED_TOPIC
     assert call_args["key"] == "P1"
     assert call_args["value"]["transaction_id"] == "TXN1"
 

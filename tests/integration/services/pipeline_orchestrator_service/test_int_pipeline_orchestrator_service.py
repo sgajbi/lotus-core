@@ -50,7 +50,7 @@ async def test_emit_if_ready_skips_outbox_after_losing_stage_ownership(
         security_id=txn.security_id,
         business_date=txn.transaction_date.date(),
         epoch=txn.epoch or 0,
-        source_event_type="cashflow_calculated",
+        source_event_type="cashflows.calculated",
         cost_event_seen=True,
         cashflow_event_seen=True,
     )

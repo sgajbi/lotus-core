@@ -5,7 +5,7 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC,
     KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
 )
@@ -37,7 +37,7 @@ class ConsumerManager:
         self.tasks = []
         self._shutdown_event = asyncio.Event()
 
-        dlq_topic = KAFKA_PERSISTENCE_DLQ_TOPIC
+        dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
         service_prefix = "TS"
 
         self.consumers.append(

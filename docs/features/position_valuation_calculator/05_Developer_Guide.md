@@ -6,8 +6,8 @@ This guide provides developers with instructions for understanding, extending, a
 
 The service is composed of several key classes, each with a distinct responsibility:
 
-* **`ValuationConsumer`:** The primary worker. It consumes `valuation_required` jobs from Kafka and orchestrates the process of fetching data, calling the valuation logic, and saving the result.
-* **`PriceEventConsumer`:** A specialized consumer that listens for `market_price_persisted` events to detect back-dated prices and create reprocessing triggers.
+* **`ValuationConsumer`:** The primary worker. It consumes `valuation.job.requested` jobs from Kafka and orchestrates the process of fetching data, calling the valuation logic, and saving the result.
+* **`PriceEventConsumer`:** A specialized consumer that listens for `market_prices.persisted` events to detect back-dated prices and create reprocessing triggers.
 * **`ValuationScheduler`:** A powerful background task that acts as the system's "brain" for data integrity. It finds gaps in position histories, creates valuation jobs, and manages the state of the reprocessing engine.
 * **`ValuationLogic`:** A stateless, pure-Python class containing the core financial formulas for calculating market value and unrealized P&L, including all dual-currency logic.
 * **Repositories (`ValuationRepository`, `InstrumentReprocessingStateRepository`):** These classes encapsulate all database interactions, abstracting the SQL queries away from the business logic.
@@ -18,13 +18,13 @@ The primary data flow for a standard valuation job is as follows:
 
 1.  The **`ValuationScheduler`** identifies a gap in a position's history (e.g., `watermark_date` < `latest_business_date`).
 2.  It creates a `PortfolioValuationJob` record in the database with `status='PENDING'`.
-3.  On a subsequent cycle, the scheduler claims the `PENDING` job, updates its status to `PROCESSING`, and publishes a `PortfolioValuationRequiredEvent` to the `valuation_required` Kafka topic.
+3.  On a subsequent cycle, the scheduler claims the `PENDING` job, updates its status to `PROCESSING`, and publishes a `PortfolioValuationRequiredEvent` to the `valuation.job.requested` Kafka topic.
 4.  The **`ValuationConsumer`** consumes this event.
 5.  It calls the `ValuationRepository` to fetch all necessary data (position history, price, FX rates, etc.) for the correct epoch.
 6.  It executes `ValuationLogic.calculate_valuation`.
 7.  It saves the result by upserting a record into the `daily_position_snapshots` table.
 8.  It writes a `DailyPositionSnapshotPersistedEvent` to the `outbox_events` table within the same database transaction.
-9.  The external **`OutboxDispatcher`** process publishes this final event to the `daily_position_snapshot_persisted` Kafka topic for downstream consumers (like the `timeseries-generator-service`).
+9.  The external **`OutboxDispatcher`** process publishes this final event to the `valuation.snapshot.persisted` Kafka topic for downstream consumers (like the `timeseries-generator-service`).
 
 ## 3. Extending the Logic
 

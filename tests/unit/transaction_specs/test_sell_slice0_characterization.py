@@ -36,7 +36,7 @@ def test_sell_ingestion_transaction_defaults_trade_fee_to_zero() -> None:
 def test_sell_fee_transformation_to_engine_fees_structure() -> None:
     consumer = CostCalculatorConsumer(
         bootstrap_servers="test",
-        topic="raw_transactions_completed",
+        topic="transactions.persisted",
         group_id="slice0",
     )
     event = TransactionEvent(

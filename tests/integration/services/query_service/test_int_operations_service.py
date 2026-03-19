@@ -63,7 +63,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
         cost_event_seen=False,
         cashflow_event_seen=False,
         ready_emitted_at=datetime(2025, 8, 30, 10, 5, tzinfo=timezone.utc),
-        last_source_event_type="financial_reconciliation_completed",
+        last_source_event_type="portfolio_day.reconciliation.completed",
         created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
         updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
     )
@@ -78,7 +78,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
         cost_event_seen=False,
         cashflow_event_seen=False,
         ready_emitted_at=None,
-        last_source_event_type="financial_reconciliation_completed",
+        last_source_event_type="portfolio_day.reconciliation.completed",
         created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
         updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
     )
@@ -529,7 +529,7 @@ async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_chu
                 cost_event_seen=False,
                 cashflow_event_seen=False,
                 ready_emitted_at=datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
-                last_source_event_type="financial_reconciliation_completed",
+                last_source_event_type="portfolio_day.reconciliation.completed",
                 created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
                 updated_at=datetime(2025, 8, 30, 10, 20, tzinfo=timezone.utc),
             ),
@@ -544,7 +544,7 @@ async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_chu
                 cost_event_seen=False,
                 cashflow_event_seen=False,
                 ready_emitted_at=None,
-                last_source_event_type="financial_reconciliation_completed",
+                last_source_event_type="portfolio_day.reconciliation.completed",
                 created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
                 updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
             ),
@@ -563,7 +563,7 @@ async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_chu
     assert response.items[0].business_date == date(2025, 8, 30)
     assert response.items[0].epoch == 2
     assert response.items[0].status == "COMPLETED"
-    assert response.items[0].last_source_event_type == "financial_reconciliation_completed"
+    assert response.items[0].last_source_event_type == "portfolio_day.reconciliation.completed"
     assert response.items[0].operational_state == "COMPLETED"
 
 

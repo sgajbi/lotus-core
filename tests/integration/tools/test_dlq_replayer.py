@@ -78,7 +78,7 @@ async def test_dlq_replayer_consumes_and_republishes(
     kafka_bootstrap_host = _kafka_bootstrap_host()
     dlq_topic = unique_dlq_topic  # Use the isolated topic for this test
 
-    original_topic = "raw_transactions"
+    original_topic = "transactions.raw.received"
     original_key = f"txn-{uuid.uuid4()}"
     original_value = {"transaction_id": original_key, "amount": 1000}
     correlation_id = f"corr-{uuid.uuid4()}"
@@ -141,7 +141,7 @@ async def test_dlq_replayer_skips_malformed_message(
 
     # 2. Publish a valid DLQ message
     valid_dlq_payload = {
-        "original_topic": "raw_portfolios",
+        "original_topic": "portfolios.raw.received",
         "original_key": "valid-key-01",
         "original_value": json.dumps({"portfolioId": "P01"}),
         "error_reason": "Test failure",
@@ -170,7 +170,7 @@ async def test_dlq_replayer_skips_malformed_message(
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
 
-    assert call_args["topic"] == "raw_portfolios"
+    assert call_args["topic"] == "portfolios.raw.received"
     assert call_args["key"] == "valid-key-01"
     assert call_args["value"] == {"portfolioId": "P01"}
 
@@ -181,7 +181,7 @@ async def test_dlq_replayer_does_not_commit_when_replay_flush_times_out(
     kafka_bootstrap_host = _kafka_bootstrap_host()
     dlq_topic = unique_dlq_topic
 
-    original_topic = "raw_transactions"
+    original_topic = "transactions.raw.received"
     original_key = f"txn-{uuid.uuid4()}"
     original_value = {"transaction_id": original_key, "amount": 1000}
 

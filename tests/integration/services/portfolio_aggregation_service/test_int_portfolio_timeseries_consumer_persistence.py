@@ -57,7 +57,7 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
 
     consumer = portfolio_timeseries_consumer_module.PortfolioTimeseriesConsumer(
         bootstrap_servers="mock_server",
-        topic="portfolio_aggregation_required",
+        topic="portfolio_day.aggregation.job.requested",
         group_id="test_group",
         dlq_topic="test.dlq",
     )

@@ -55,7 +55,7 @@ class PipelineOrchestratorService:
             security_id=event.security_id,
             business_date=event.cashflow_date,
             epoch=event.epoch or 0,
-            source_event_type="cashflow_calculated",
+            source_event_type="cashflows.calculated",
             cost_event_seen=False,
             cashflow_event_seen=True,
         )
@@ -81,7 +81,7 @@ class PipelineOrchestratorService:
             correlation_id=correlation_id,
         )
 
-    async def register_financial_reconciliation_completed(
+    async def register_reconciliation_completed(
         self,
         event: FinancialReconciliationCompletedEvent,
         correlation_id: str | None,
@@ -92,7 +92,7 @@ class PipelineOrchestratorService:
             business_date=event.business_date,
             epoch=event.epoch,
             status=event.outcome_status,
-            source_event_type="financial_reconciliation_completed",
+            source_event_type="portfolio_day.reconciliation.completed",
         )
         latest_epoch = await self.repo.get_latest_portfolio_control_stage_epoch(
             stage_name=FINANCIAL_RECONCILIATION_STAGE,

@@ -348,7 +348,7 @@ class PortfolioDayReadyForValuationEvent(BaseModel):
     security_id: str
     valuation_date: date
     epoch: int = 0
-    readiness_reason: str = "transaction_processing_completed"
+    readiness_reason: str = "transaction_processing.ready"
     correlation_id: Optional[str] = None
 
 
@@ -417,7 +417,7 @@ class FinancialReconciliationRequestedEvent(BaseModel):
         ]
     )
     requested_by: str = "system_pipeline"
-    trigger_stage: str = "portfolio_aggregation_day_completed"
+    trigger_stage: str = "portfolio_day.aggregation.completed"
     correlation_id: Optional[str] = None
 
 
@@ -440,7 +440,7 @@ class FinancialReconciliationCompletedEvent(BaseModel):
     error_count: int = 0
     warning_count: int = 0
     requested_by: str = "system_pipeline"
-    trigger_stage: str = "portfolio_aggregation_day_completed"
+    trigger_stage: str = "portfolio_day.aggregation.completed"
     correlation_id: Optional[str] = None
 
 
@@ -461,5 +461,5 @@ class PortfolioDayControlsEvaluatedEvent(BaseModel):
     blocking_reconciliation_types: list[str] = Field(default_factory=list)
     error_count: int = 0
     warning_count: int = 0
-    source_event_type: str = "financial_reconciliation_completed"
+    source_event_type: str = "portfolio_day.reconciliation.completed"
     correlation_id: Optional[str] = None

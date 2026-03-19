@@ -35,7 +35,7 @@ class _SingleSessionAsyncIterator:
 def consumer() -> ValuationReadinessConsumer:
     consumer = ValuationReadinessConsumer(
         bootstrap_servers="mock_server",
-        topic="portfolio_day_ready_for_valuation",
+        topic="portfolio_security_day.valuation.ready",
         group_id="test_group",
     )
     consumer._send_to_dlq_async = AsyncMock()
@@ -57,7 +57,7 @@ def mock_kafka_message(mock_event: PortfolioDayReadyForValuationEvent) -> MagicM
     msg = MagicMock()
     msg.value.return_value = mock_event.model_dump_json().encode("utf-8")
     msg.key.return_value = b"PORT-VAL-1:SEC-VAL-1"
-    msg.topic.return_value = "portfolio_day_ready_for_valuation"
+    msg.topic.return_value = "portfolio_security_day.valuation.ready"
     msg.partition.return_value = 0
     msg.offset.return_value = 1
     msg.headers.return_value = []
@@ -113,7 +113,7 @@ async def test_readiness_event_upserts_valuation_job_and_marks_idempotency(
 
     mock_idempotency_repo.mark_event_processed.assert_awaited_once()
     mark_args = mock_idempotency_repo.mark_event_processed.await_args.args
-    assert mark_args[0] == "portfolio_day_ready_for_valuation-0-1"
+    assert mark_args[0] == "portfolio_security_day.valuation.ready-0-1"
     assert mark_args[1] == mock_event.portfolio_id
     assert mark_args[2] == SERVICE_NAME
 
@@ -137,7 +137,7 @@ async def test_invalid_payload_is_sent_to_dlq(consumer: ValuationReadinessConsum
     msg = MagicMock()
     msg.value.return_value = json.dumps({"portfolio_id": "x"}).encode("utf-8")
     msg.key.return_value = b"bad"
-    msg.topic.return_value = "portfolio_day_ready_for_valuation"
+    msg.topic.return_value = "portfolio_security_day.valuation.ready"
     msg.partition.return_value = 0
     msg.offset.return_value = 2
     msg.headers.return_value = []

@@ -6,7 +6,7 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
@@ -41,7 +41,7 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
                 group_id="cost_calculator_group",
-                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 service_prefix="COST",
             )
         )
@@ -52,7 +52,7 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
                 group_id="cost_reprocessing_group",
-                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,  # Share DLQ for now
+                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,  # Share DLQ for now
                 service_prefix="COST_REPRO",
             )
         )

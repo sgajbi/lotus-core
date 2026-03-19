@@ -42,7 +42,7 @@ def cost_calculator_consumer():
     Provides an instance of the consumer.
     """
     consumer = CostCalculatorConsumer(
-        bootstrap_servers="mock_server", topic="raw_transactions_completed", group_id="test_group"
+        bootstrap_servers="mock_server", topic="transactions.persisted", group_id="test_group"
     )
     consumer._send_to_dlq_async = AsyncMock()
     return consumer
@@ -106,7 +106,7 @@ def mock_sell_kafka_message():
     )
     mock_msg = MagicMock()
     mock_msg.value.return_value = sell_event.model_dump_json().encode("utf-8")
-    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.topic.return_value = "transactions.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 1
     mock_msg.headers.return_value = [("correlation_id", b"cost-corr-id")]
@@ -132,7 +132,7 @@ def mock_buy_kafka_message() -> MagicMock:
     )
     mock_msg = MagicMock()
     mock_msg.value.return_value = buy_event.model_dump_json().encode("utf-8")
-    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.topic.return_value = "transactions.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 2
     mock_msg.headers.return_value = []
@@ -158,7 +158,7 @@ def mock_dividend_kafka_message() -> MagicMock:
     )
     mock_msg = MagicMock()
     mock_msg.value.return_value = dividend_event.model_dump_json().encode("utf-8")
-    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.topic.return_value = "transactions.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 3
     mock_msg.headers.return_value = []
@@ -184,7 +184,7 @@ def mock_interest_kafka_message() -> MagicMock:
     )
     mock_msg = MagicMock()
     mock_msg.value.return_value = interest_event.model_dump_json().encode("utf-8")
-    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.topic.return_value = "transactions.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 4
     mock_msg.headers.return_value = []
@@ -361,7 +361,7 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
     )
     mock_msg = MagicMock()
     mock_msg.value.return_value = fx_event.model_dump_json().encode("utf-8")
-    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.topic.return_value = "transactions.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 99
     mock_msg.headers.return_value = []
@@ -424,7 +424,7 @@ async def test_consumer_rejects_invalid_fx_event(
     )
     mock_msg = MagicMock()
     mock_msg.value.return_value = fx_event.model_dump_json().encode("utf-8")
-    mock_msg.topic.return_value = "raw_transactions_completed"
+    mock_msg.topic.return_value = "transactions.persisted"
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 100
     mock_msg.headers.return_value = []

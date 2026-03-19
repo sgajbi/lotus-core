@@ -104,14 +104,14 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     msg = MagicMock()
     msg.value.return_value = event.model_dump_json().encode("utf-8")
     msg.key.return_value = event.portfolio_id.encode("utf-8")
-    msg.topic.return_value = "valuation_required"
+    msg.topic.return_value = "valuation.job.requested"
     msg.partition.return_value = 0
     msg.offset.return_value = 7
     msg.headers.return_value = [("correlation_id", b"corr-val-int-01")]
 
     consumer = valuation_consumer_module.ValuationConsumer(
         bootstrap_servers="mock_server",
-        topic="valuation_required",
+        topic="valuation.job.requested",
         group_id="test_group",
     )
     consumer._send_to_dlq_async = AsyncMock()
@@ -155,7 +155,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id == "valuation_required-0-7",
+                    ProcessedEvent.event_id == "valuation.job.requested-0-7",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )
@@ -261,14 +261,14 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
     msg = MagicMock()
     msg.value.return_value = event.model_dump_json().encode("utf-8")
     msg.key.return_value = event.portfolio_id.encode("utf-8")
-    msg.topic.return_value = "valuation_required"
+    msg.topic.return_value = "valuation.job.requested"
     msg.partition.return_value = 0
     msg.offset.return_value = 8
     msg.headers.return_value = [("correlation_id", b"corr-val-int-02")]
 
     consumer = valuation_consumer_module.ValuationConsumer(
         bootstrap_servers="mock_server",
-        topic="valuation_required",
+        topic="valuation.job.requested",
         group_id="test_group",
     )
     consumer._send_to_dlq_async = AsyncMock()
@@ -353,7 +353,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id == "valuation_required-0-8",
+                    ProcessedEvent.event_id == "valuation.job.requested-0-8",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )

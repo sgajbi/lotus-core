@@ -29,7 +29,7 @@ def consumer() -> PortfolioTimeseriesConsumer:
     """Provides a clean instance of the PortfolioTimeseriesConsumer."""
     consumer = PortfolioTimeseriesConsumer(
         bootstrap_servers="mock_server",
-        topic="portfolio_aggregation_required",
+        topic="portfolio_day.aggregation.job.requested",
         group_id="test_group",
         dlq_topic="test.dlq",
     )

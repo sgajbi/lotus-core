@@ -9,10 +9,10 @@ The health of this service is critical for the availability of all performance a
 ### Key Metrics to Watch
 
 * **Consumer Lag:** Monitor consumer lag on both primary topics:
-  * `daily_position_snapshot_persisted`: High lag here indicates the service is failing to generate the base `position_timeseries` records.
-  * `position_timeseries_day_completed`: High lag downstream of this signal usually indicates portfolio aggregation orchestration is stalled in `portfolio_aggregation_service`, not in the position-timeseries worker.
+  * `valuation.snapshot.persisted`: High lag here indicates the service is failing to generate the base `position_timeseries` records.
+  * `portfolio_security_day.position_timeseries.completed`: High lag downstream of this signal usually indicates portfolio aggregation orchestration is stalled in `portfolio_aggregation_service`, not in the position-timeseries worker.
 * **`events_dlqd_total` (Counter):** An increase in this metric signifies a "poison pill" message that could not be processed, likely due to a persistent error like a missing FX rate.
-* **`event_processing_latency_seconds` (Histogram):** A sudden increase in the latency for the `portfolio_aggregation_required` consumer can indicate that it is processing portfolios with a very large number of positions.
+* **`event_processing_latency_seconds` (Histogram):** A sudden increase in the latency for the `portfolio_day.aggregation.job.requested` consumer can indicate that it is processing portfolios with a very large number of positions.
 
 ## 2. Structured Logging & Tracing
 

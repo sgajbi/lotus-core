@@ -37,7 +37,7 @@ class _SingleSessionAsyncIterable:
 def consumer() -> consumer_module.ReconciliationRequestedConsumer:
     c = consumer_module.ReconciliationRequestedConsumer(
         bootstrap_servers="mock_server",
-        topic="financial_reconciliation_requested",
+        topic="portfolio_day.reconciliation.requested",
         group_id="test_group",
     )
     c._send_to_dlq_async = AsyncMock()
@@ -59,7 +59,7 @@ def mock_kafka_message(mock_event: FinancialReconciliationRequestedEvent) -> Mag
     msg = MagicMock()
     msg.value.return_value = mock_event.model_dump_json().encode("utf-8")
     msg.key.return_value = b"PORT-RECON-1"
-    msg.topic.return_value = "financial_reconciliation_requested"
+    msg.topic.return_value = "portfolio_day.reconciliation.requested"
     msg.partition.return_value = 0
     msg.offset.return_value = 7
     msg.headers.return_value = []
@@ -160,7 +160,7 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     }
 
     mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        "financial_reconciliation_requested-0-7",
+        "portfolio_day.reconciliation.requested-0-7",
         mock_event.portfolio_id,
         consumer_module.SERVICE_NAME,
         "corr-recon",
@@ -189,7 +189,7 @@ async def test_invalid_reconciliation_request_payload_is_sent_to_dlq(
     msg = MagicMock()
     msg.value.return_value = json.dumps({"portfolio_id": "bad"}).encode("utf-8")
     msg.key.return_value = b"bad"
-    msg.topic.return_value = "financial_reconciliation_requested"
+    msg.topic.return_value = "portfolio_day.reconciliation.requested"
     msg.partition.return_value = 0
     msg.offset.return_value = 8
     msg.headers.return_value = []

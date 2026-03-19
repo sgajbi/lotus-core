@@ -31,7 +31,7 @@ pytestmark = pytest.mark.asyncio
 def consumer() -> PositionTimeseriesConsumer:
     consumer = PositionTimeseriesConsumer(
         bootstrap_servers="mock_server",
-        topic="daily_position_snapshot_persisted",
+        topic="valuation.snapshot.persisted",
         group_id="test_group",
     )
     consumer._send_to_dlq_async = AsyncMock()
@@ -167,7 +167,7 @@ async def test_process_message_skips_stale_epoch(
         # The key assertion is that the business logic was not executed.
 
 
-async def test_process_message_accepts_valuation_day_completed_event(
+async def test_process_message_accepts_valuation_completed_event(
     consumer: PositionTimeseriesConsumer,
     mock_dependencies: dict,
 ):

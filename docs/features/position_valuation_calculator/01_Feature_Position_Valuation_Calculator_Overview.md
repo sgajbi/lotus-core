@@ -6,7 +6,7 @@ The **`position-valuation-calculator`** is a critical backend service responsibl
 
 The service is composed of three distinct components, each with a critical responsibility for data integrity and scalability:
 
-1.  **`ValuationConsumer`**: The primary worker that consumes `valuation_required` jobs to calculate market value and unrealized P&L for a single position on a single day.
+1.  **`ValuationConsumer`**: The primary worker that consumes `valuation.job.requested` jobs to calculate market value and unrealized P&L for a single position on a single day.
 2.  **`ValuationScheduler`**: A powerful, built-in background scheduler that acts as the "brain" of the system's data integrity. It detects data gaps, creates backfill jobs, and initiates the reprocessing flow for back-dated price events by creating durable jobs.
 3.  **`ReprocessingWorker`**: A dedicated background worker that consumes the durable "Reset Watermark" jobs created by the scheduler. It performs the high-volume fan-out work in a controlled, scalable manner, protecting the system from "thundering herd" scenarios.
 

@@ -6,7 +6,7 @@ This guide provides developers with instructions for understanding and extending
 
 The `position_calculator_service` is a stateful consumer that builds an auditable trail of position history. Its architecture is straightforward:
 
-* **`TransactionEventConsumer`:** The Kafka consumer that subscribes to `processed_transactions_completed` events. It is the main entry point and orchestrates the calls to the logic layer. It also contains the logic to check for stale epochs (epoch fencing).
+* **`TransactionEventConsumer`:** The Kafka consumer that subscribes to `transactions.cost.processed` events. It is the main entry point and orchestrates the calls to the logic layer. It also contains the logic to check for stale epochs (epoch fencing).
 * **`PositionLogic`:** A class that contains the core business logic for calculating the next position state based on an incoming transaction. It also houses the critical logic for detecting back-dated events and triggering the reprocessing flow.
 * **`PositionRepository`:** Encapsulates all database queries for fetching historical data and saving new `position_history` records.
 

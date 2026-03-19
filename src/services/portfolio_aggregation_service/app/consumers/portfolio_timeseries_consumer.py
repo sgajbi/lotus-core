@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional
 
 from confluent_kafka import Message
-from portfolio_common.config import KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC
+from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC
 from portfolio_common.database_models import PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
@@ -120,7 +120,7 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
                         aggregate_type="PortfolioAggregationStage",
                         aggregate_id=f"{portfolio_id}:{a_date}:{target_epoch}",
                         event_type="PortfolioAggregationDayCompleted",
-                        topic=KAFKA_PORTFOLIO_AGGREGATION_DAY_COMPLETED_TOPIC,
+                        topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
                         payload=completion_event.model_dump(mode="json"),
                         correlation_id=correlation_id,
                     )

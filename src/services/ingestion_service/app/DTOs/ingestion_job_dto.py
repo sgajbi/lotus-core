@@ -58,7 +58,7 @@ class IngestionJobResponse(BaseModel):
     failure_reason: str | None = Field(
         default=None,
         description="Failure reason when status is failed.",
-        examples=["Kafka publish timeout for topic raw_transactions."],
+        examples=["Kafka publish timeout for topic transactions.raw.received."],
     )
     retry_count: int = Field(
         ge=0,
@@ -120,7 +120,7 @@ class IngestionJobFailureResponse(BaseModel):
     )
     failure_reason: str = Field(
         description="Detailed failure reason captured at runtime.",
-        examples=["Kafka publish timeout for topic raw_transactions."],
+        examples=["Kafka publish timeout for topic transactions.raw.received."],
     )
     failed_record_keys: list[str] = Field(
         default_factory=list,
@@ -145,7 +145,7 @@ class IngestionJobFailureListResponse(BaseModel):
                     "failure_id": "fail_01J5S27P16BSKQ3R2P2HK67GQZ",
                     "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
                     "failure_phase": "publish",
-                    "failure_reason": "Kafka publish timeout for topic raw_transactions.",
+                    "failure_reason": "Kafka publish timeout for topic transactions.raw.received.",
                     "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
                     "failed_at": "2026-02-28T13:23:09.021Z",
                 }
@@ -799,7 +799,7 @@ class ConsumerDlqEventResponse(BaseModel):
     )
     original_topic: str = Field(
         description="Original Kafka topic where message processing failed.",
-        examples=["raw_transactions"],
+        examples=["transactions.raw.received"],
     )
     consumer_group: str = Field(
         description="Consumer group that rejected the message.",
@@ -807,7 +807,7 @@ class ConsumerDlqEventResponse(BaseModel):
     )
     dlq_topic: str = Field(
         description="Dead-letter topic where failed message was published.",
-        examples=["persistence_service.dlq"],
+        examples=["dlq.persistence_service"],
     )
     original_key: str | None = Field(
         default=None,
@@ -856,7 +856,7 @@ class IngestionConsumerLagGroupResponse(BaseModel):
     )
     original_topic: str = Field(
         description="Original topic associated with the lag signal.",
-        examples=["raw_transactions"],
+        examples=["transactions.raw.received"],
     )
     dlq_events: int = Field(
         ge=0,

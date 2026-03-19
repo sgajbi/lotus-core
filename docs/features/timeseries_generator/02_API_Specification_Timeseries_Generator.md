@@ -20,7 +20,7 @@ The service consumes events, generates time-series data, and produces new events
 
 The service listens to two topics:
 
-#### Topic: `daily_position_snapshot_persisted`
+#### Topic: `valuation.snapshot.persisted`
 
 * **Purpose:** This is the primary trigger for position-level time-series generation. Each message signals that a new or updated daily position snapshot is ready.
 * **Producer:** `position-valuation-calculator`
@@ -36,7 +36,7 @@ The service listens to two topics:
     }
     ```
 
-#### Topic: `portfolio_aggregation_required`
+#### Topic: `portfolio_day.aggregation.job.requested`
 
 * **Purpose:** This is the work queue for the portfolio-level aggregation. Each message is a job to aggregate all of a portfolio's position time-series records for a single day.
 * **Producer:** `AggregationScheduler` (within `portfolio_aggregation_service`).
@@ -54,7 +54,7 @@ The service listens to two topics:
 
 The service's components produce events to orchestrate the aggregation workflow.
 
-#### Topic: `portfolio_aggregation_required`
+#### Topic: `portfolio_day.aggregation.job.requested`
 
 * **Purpose:** The `AggregationScheduler` component of `portfolio_aggregation_service` produces messages to this topic. `timeseries_generator_service` consumes those work assignments but does not own the scheduler.
 * **Key:** `portfolio_id`

@@ -5,7 +5,7 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
 )
@@ -29,8 +29,8 @@ class ConsumerManager:
             ReconciliationRequestedConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
-                group_id="financial_reconciliation_requested_group",
-                dlq_topic=KAFKA_PERSISTENCE_DLQ_TOPIC,
+                group_id="portfolio_day.reconciliation.requested_group",
+                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 service_prefix="FRC",
             )
         ]

@@ -6,7 +6,7 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
-    KAFKA_PERSISTENCE_DLQ_TOPIC,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -39,7 +39,7 @@ class ConsumerManager:
 
         group_id = "valuation_orchestrator_group"
         service_prefix = "VAL-ORCH"
-        dlq_topic = KAFKA_PERSISTENCE_DLQ_TOPIC
+        dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
 
         self.consumers.append(
             ValuationReadinessConsumer(

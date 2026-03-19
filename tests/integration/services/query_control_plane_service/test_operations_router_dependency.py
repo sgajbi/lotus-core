@@ -76,7 +76,7 @@ async def test_support_overview_success(async_test_client):
         "position_snapshot_history_mismatch_count": 0,
         "controls_business_date": date(2025, 8, 31),
         "controls_stage_id": 701,
-        "controls_last_source_event_type": "financial_reconciliation_completed",
+        "controls_last_source_event_type": "portfolio_day.reconciliation.completed",
         "controls_created_at": "2025-08-31T10:10:00Z",
         "controls_ready_emitted_at": "2025-08-31T10:15:00Z",
         "controls_epoch": 3,
@@ -119,7 +119,7 @@ async def test_support_overview_success(async_test_client):
     assert response.json()["controls_stage_id"] == 701
     assert (
         response.json()["controls_last_source_event_type"]
-        == "financial_reconciliation_completed"
+        == "portfolio_day.reconciliation.completed"
     )
     assert response.json()["controls_created_at"] == "2025-08-31T10:10:00Z"
     assert response.json()["controls_ready_emitted_at"] == "2025-08-31T10:15:00Z"
@@ -762,7 +762,7 @@ async def test_portfolio_control_stages_success(async_test_client):
                 "business_date": "2026-03-13",
                 "epoch": 3,
                 "status": "REQUIRES_REPLAY",
-                "last_source_event_type": "financial_reconciliation_completed",
+                "last_source_event_type": "portfolio_day.reconciliation.completed",
                 "created_at": "2026-03-13T10:10:00Z",
                 "ready_emitted_at": None,
                 "updated_at": "2026-03-13T10:15:09Z",

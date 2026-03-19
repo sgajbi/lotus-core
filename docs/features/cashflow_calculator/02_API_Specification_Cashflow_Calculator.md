@@ -20,7 +20,7 @@ The service's main function is to consume, process, and produce Kafka events.
 
 The service listens to a single topic:
 
-#### Topic: `raw_transactions_completed`
+#### Topic: `transactions.persisted`
 
 * **Purpose:** This is the primary work queue for the service. Each message represents a raw transaction that has been persisted and is ready for cashflow generation.
 * **Producer:** `persistence_service`
@@ -47,7 +47,7 @@ The service listens to a single topic:
 
 The service produces events to one topic after successfully generating a cash flow record.
 
-#### Topic: `cashflow_calculated`
+#### Topic: `cashflows.calculated`
 
 * **Purpose:** This event signals that a cash flow record has been successfully created for a transaction. This event is not currently consumed by any downstream services but is available for future use (e.g., auditing, real-time dashboards).
 * **Consumer:** (None currently)
