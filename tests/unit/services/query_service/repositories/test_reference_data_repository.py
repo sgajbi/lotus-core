@@ -33,116 +33,109 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     db.execute.side_effect = [
         _FakeExecuteResult([SimpleNamespace(portfolio_id="P1", benchmark_id="B1")]),
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1")]),
+        _FakeExecuteResult([SimpleNamespace(benchmark_id="B1", benchmark_currency="USD")]),
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1")]),
         _FakeExecuteResult([SimpleNamespace(index_id="IDX_1")]),
-        _FakeExecuteResult([SimpleNamespace(index_id="IDX_1")]),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    index_id="IDX_1",
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    benchmark_id="B1", index_id="IDX_1", composition_weight=Decimal("0.5")
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    index_id="IDX_1",
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    benchmark_id="B1", index_id="IDX_1", composition_weight=Decimal("0.5")
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    benchmark_id="B1",
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    index_id="IDX_1", series_date=date(2026, 1, 1), quality_status="accepted"
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    index_id="IDX_1",
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    index_id="IDX_1", series_date=date(2026, 1, 1), quality_status="accepted"
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    index_id="IDX_1",
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    benchmark_id="B1", series_date=date(2026, 1, 1), quality_status="accepted"
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    index_id="IDX_1", series_date=date(2026, 1, 1), quality_status="accepted"
                 )
             ]
+        ),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(
+                    index_id="IDX_1", series_date=date(2026, 1, 1), quality_status="accepted"
+                )
+            ]
+        ),
+        _FakeExecuteResult(
+            [SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted")]
         ),
         _FakeExecuteResult([SimpleNamespace(taxonomy_scope="index")]),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    benchmark_id="B1",
-                    index_id="IDX_1",
-                    composition_weight=Decimal("0.5"),
-                )
-            ]
-        ),
-        _FakeExecuteResult([SimpleNamespace(index_id="IDX_1", composition_weight=Decimal("0.5"))]),
-        _FakeExecuteResult(
-            [
-                SimpleNamespace(
-                    index_id="IDX_1",
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    benchmark_id="B1", index_id="IDX_1", composition_weight=Decimal("0.5")
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    benchmark_id="B1",
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    benchmark_id="B1", index_id="IDX_1", composition_weight=Decimal("0.5")
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    series_date=date(2026, 1, 1),
-                    quality_status="accepted",
+                    index_id="IDX_1", series_date=date(2026, 1, 1), quality_status="accepted"
                 )
             ]
         ),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    rate_date=date(2026, 1, 1),
-                    rate=Decimal("1.1"),
+                    benchmark_id="B1", series_date=date(2026, 1, 1), quality_status="accepted"
                 )
             ]
         ),
+        _FakeExecuteResult(
+            [SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted")]
+        ),
+        _FakeExecuteResult([SimpleNamespace(rate_date=date(2026, 1, 1), rate=Decimal("1.1"))]),
     ]
 
     repo = ReferenceDataRepository(db)
 
     assert await repo.resolve_benchmark_assignment("P1", date(2026, 1, 1)) is not None
     assert await repo.get_benchmark_definition("B1", date(2026, 1, 1)) is not None
+    assert await repo.list_benchmark_definitions_overlapping_window(
+        "B1", date(2026, 1, 1), date(2026, 1, 2)
+    )
     assert await repo.list_benchmark_definitions(date(2026, 1, 1), "composite", "USD", "active")
     assert await repo.list_index_definitions(date(2026, 1, 1), "USD", "equity", "active")
     assert await repo.list_benchmark_components("B1", date(2026, 1, 1))
+    assert await repo.list_benchmark_components_overlapping_window(
+        "B1", date(2026, 1, 1), date(2026, 1, 2)
+    )
     assert await repo.list_index_price_points(["IDX_1"], date(2026, 1, 1), date(2026, 1, 2))
     assert await repo.list_index_return_points(["IDX_1"], date(2026, 1, 1), date(2026, 1, 2))
     assert await repo.list_index_price_points([], date(2026, 1, 1), date(2026, 1, 2)) == []
@@ -179,3 +172,87 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         end_date=date(2026, 1, 2),
     )
     assert fx_rates[date(2026, 1, 1)] == Decimal("1.1")
+
+
+@pytest.mark.asyncio
+async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                composition_effective_from=date(2026, 1, 1),
+                composition_effective_to=date(2026, 1, 1),
+            ),
+            SimpleNamespace(
+                index_id="IDX_B",
+                composition_effective_from=date(2026, 1, 2),
+                composition_effective_to=date(2026, 1, 2),
+            ),
+        ]
+    )
+    repo.list_index_price_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 1),
+                quality_status="accepted",
+            ),
+            SimpleNamespace(
+                index_id="IDX_B",
+                series_date=date(2026, 1, 2),
+                quality_status="accepted",
+            ),
+        ]
+    )
+    repo.list_benchmark_return_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 2), quality_status="accepted"),
+        ]
+    )
+
+    coverage = await repo.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 2))
+
+    assert coverage["observed_dates"] == [date(2026, 1, 1), date(2026, 1, 2)]
+    assert coverage["observed_start_date"] == date(2026, 1, 1)
+    assert coverage["observed_end_date"] == date(2026, 1, 2)
+
+
+@pytest.mark.asyncio
+async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                composition_effective_from=date(2026, 1, 1),
+                composition_effective_to=date(2026, 1, 3),
+            )
+        ]
+    )
+    repo.list_index_price_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 1),
+                quality_status="accepted",
+            ),
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 3),
+                quality_status="accepted",
+            ),
+        ]
+    )
+    repo.list_benchmark_return_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 2), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 3), quality_status="accepted"),
+        ]
+    )
+
+    coverage = await repo.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
+
+    assert coverage["observed_dates"] == [date(2026, 1, 1), date(2026, 1, 3)]

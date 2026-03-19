@@ -129,6 +129,15 @@ class BenchmarkDefinitionRequest(BaseModel):
     model_config = ConfigDict()
 
 
+class BenchmarkCompositionWindowRequest(BaseModel):
+    window: IntegrationWindow = Field(
+        ...,
+        description="Window used to resolve overlapping benchmark composition segments.",
+    )
+
+    model_config = ConfigDict()
+
+
 class BenchmarkComponentResponse(BaseModel):
     index_id: str = Field(
         ...,
@@ -154,6 +163,40 @@ class BenchmarkComponentResponse(BaseModel):
         None,
         description="Rebalance event identifier linking related composition changes.",
         examples=["rebalance_2026q1"],
+    )
+
+    model_config = ConfigDict()
+
+
+class BenchmarkCompositionWindowResponse(BaseModel):
+    benchmark_id: str = Field(
+        ...,
+        description="Canonical benchmark identifier.",
+        examples=["BMK_GLOBAL_BALANCED_60_40"],
+    )
+    benchmark_currency: str = Field(
+        ...,
+        description="Benchmark currency enforced across the requested composition window.",
+        examples=["USD"],
+    )
+    resolved_window: IntegrationWindow = Field(
+        ...,
+        description="Resolved date window returned by the composition contract.",
+    )
+    segments: list[BenchmarkComponentResponse] = Field(
+        default_factory=list,
+        description="Ordered benchmark composition segments overlapping the requested window.",
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Lineage metadata (contract_version, source_system, generated_by).",
+        examples=[
+            {
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core",
+                "generated_by": "query_control_plane_service",
+            }
+        ],
     )
 
     model_config = ConfigDict()
@@ -213,8 +256,7 @@ class BenchmarkDefinitionResponse(BaseModel):
     classification_labels: dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "Canonical benchmark classification labels "
-            "(asset_class, sector, region, style)."
+            "Canonical benchmark classification labels " "(asset_class, sector, region, style)."
         ),
         examples=[{"asset_class": "multi_asset", "region": "global"}],
     )
@@ -415,6 +457,46 @@ class SeriesRequest(BaseModel):
     model_config = ConfigDict()
 
 
+class ReferencePageRequest(BaseModel):
+    page_size: int = Field(
+        250,
+        ge=1,
+        le=1000,
+        description="Maximum number of component series records to return per page.",
+        examples=[250],
+    )
+    page_token: str | None = Field(
+        None,
+        description="Opaque continuation token from a previous benchmark market-series page.",
+        examples=["eyJwIjp7Imxhc3RfaW5kZXhfaWQiOiJJRFhfTVNDSSJ9LCJzIjoiLi4uIn0="],
+    )
+
+    model_config = ConfigDict()
+
+
+class ReferencePageMetadata(BaseModel):
+    page_size: int = Field(
+        ...,
+        description="Effective component page size used for this response.",
+        examples=[250],
+    )
+    sort_key: str = Field(
+        ...,
+        description="Deterministic ordering applied to the paged component series.",
+        examples=["index_id:asc"],
+    )
+    next_page_token: str | None = Field(
+        None,
+        description=(
+            "Opaque continuation token for the next page, null when no additional "
+            "pages remain."
+        ),
+        examples=["eyJwIjp7Imxhc3RfaW5kZXhfaWQiOiJJRFhfTVNDSSJ9LCJzIjoiLi4uIn0="],
+    )
+
+    model_config = ConfigDict()
+
+
 class BenchmarkMarketSeriesRequest(SeriesRequest):
     target_currency: str | None = Field(
         None,
@@ -429,12 +511,24 @@ class BenchmarkMarketSeriesRequest(SeriesRequest):
         ),
         examples=[["index_price", "index_return", "component_weight"]],
     )
+    page: ReferencePageRequest = Field(
+        default_factory=ReferencePageRequest,
+        description=(
+            "Optional deterministic paging controls for large benchmark component "
+            "universes."
+        ),
+    )
 
     model_config = ConfigDict()
 
 
 class SeriesPoint(BaseModel):
     series_date: date = Field(..., description="Series point date.", examples=["2026-01-02"])
+    series_currency: str | None = Field(
+        None,
+        description="Native component series currency for the returned price or return point.",
+        examples=["USD"],
+    )
     index_price: Decimal | None = Field(
         None,
         description="Index price value when requested.",
@@ -457,7 +551,11 @@ class SeriesPoint(BaseModel):
     )
     fx_rate: Decimal | None = Field(
         None,
-        description="FX conversion rate used for target currency context when requested.",
+        description=(
+            "Benchmark-currency to target-currency FX context rate when target "
+            "currency is requested. This is not component-to-benchmark "
+            "normalization."
+        ),
         examples=["1.0842000000"],
     )
     quality_status: str | None = Field(
@@ -486,6 +584,16 @@ class BenchmarkMarketSeriesResponse(BaseModel):
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )
     as_of_date: date = Field(..., description="As-of date used for composition resolution.")
+    benchmark_currency: str = Field(
+        ...,
+        description="Benchmark currency resolved for the requested benchmark context.",
+        examples=["USD"],
+    )
+    target_currency: str | None = Field(
+        None,
+        description="Optional target currency requested by the caller for response context.",
+        examples=["EUR"],
+    )
     resolved_window: IntegrationWindow = Field(
         ..., description="Resolved window returned by query service."
     )
@@ -500,6 +608,42 @@ class BenchmarkMarketSeriesResponse(BaseModel):
         default_factory=dict,
         description="Aggregate quality status counts over all returned points.",
         examples=[{"accepted": 31, "estimated": 2}],
+    )
+    fx_context_source_currency: str | None = Field(
+        None,
+        description="Source currency for the optional FX context series returned in `fx_rate`.",
+        examples=["USD"],
+    )
+    fx_context_target_currency: str | None = Field(
+        None,
+        description="Target currency for the optional FX context series returned in `fx_rate`.",
+        examples=["EUR"],
+    )
+    normalization_policy: str = Field(
+        ...,
+        description=(
+            "Contract policy label describing how downstream consumers should "
+            "interpret the series. Current policy returns native component "
+            "series and requires downstream benchmark-currency normalization."
+        ),
+        examples=["native_component_series_downstream_normalization_required"],
+    )
+    normalization_status: str = Field(
+        ...,
+        description=(
+            "Status of the optional benchmark-to-target FX context attached to "
+            "this response."
+        ),
+        examples=["native_component_series_with_benchmark_to_target_fx_context"],
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the benchmark market-series scope.",
+        examples=["a6b8f6456a6d89cfcc1ce572f2cfcedb"],
+    )
+    page: ReferencePageMetadata = Field(
+        ...,
+        description="Deterministic paging metadata for benchmark component series results.",
     )
     lineage: dict[str, str] = Field(
         default_factory=dict,

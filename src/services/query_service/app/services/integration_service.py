@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 import json
 import logging
 from dataclasses import dataclass
@@ -11,11 +14,13 @@ from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyPro
 from ..dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
     BenchmarkCatalogResponse,
+    BenchmarkCompositionWindowRequest,
+    BenchmarkCompositionWindowResponse,
     BenchmarkDefinitionResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
-    BenchmarkReturnSeriesResponse,
     BenchmarkReturnSeriesRequest,
+    BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyEntry,
     ClassificationTaxonomyResponse,
     ComponentSeriesResponse,
@@ -28,6 +33,7 @@ from ..dtos.reference_integration_dto import (
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
     IntegrationWindow,
+    ReferencePageMetadata,
     RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
@@ -59,6 +65,7 @@ class IntegrationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self._reference_repository = ReferenceDataRepository(db)
+        self._page_token_secret = load_query_service_settings().page_token_secret
 
     @staticmethod
     def _as_decimal(value: Any) -> Decimal:
@@ -73,6 +80,45 @@ class IntegrationService:
             return "unknown"
         key = raw.upper()
         return _CONSUMER_CANONICAL_MAP.get(key, raw.lower())
+
+    @staticmethod
+    def _request_fingerprint(payload: dict[str, Any]) -> str:
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
+
+    def _encode_page_token(self, payload: dict[str, Any]) -> str:
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        signature = hmac.new(
+            self._page_token_secret.encode("utf-8"),
+            serialized.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        envelope = {"p": payload, "s": signature}
+        return base64.urlsafe_b64encode(json.dumps(envelope).encode("utf-8")).decode("utf-8")
+
+    def _decode_page_token(self, token: str | None) -> dict[str, Any]:
+        if not token:
+            return {}
+        try:
+            decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+            envelope = json.loads(decoded)
+            payload = envelope["p"]
+            signature = envelope["s"]
+            serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+            expected = hmac.new(
+                self._page_token_secret.encode("utf-8"),
+                serialized.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(signature, expected):
+                raise ValueError("Invalid page token signature.")
+            if not isinstance(payload, dict):
+                raise ValueError("Malformed page token payload.")
+            return payload
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError("Malformed page token.") from exc
 
     @staticmethod
     def _load_policy() -> dict[str, Any]:
@@ -212,7 +258,10 @@ class IntegrationService:
     async def resolve_benchmark_assignment(
         self, portfolio_id: str, as_of_date: date
     ) -> BenchmarkAssignmentResponse | None:
-        row = await self._reference_repository.resolve_benchmark_assignment(portfolio_id, as_of_date)
+        row = await self._reference_repository.resolve_benchmark_assignment(
+            portfolio_id,
+            as_of_date,
+        )
         if row is None:
             return None
         return BenchmarkAssignmentResponse(
@@ -235,7 +284,10 @@ class IntegrationService:
         row = await self._reference_repository.get_benchmark_definition(benchmark_id, as_of_date)
         if row is None:
             return None
-        components = await self._reference_repository.list_benchmark_components(benchmark_id, as_of_date)
+        components = await self._reference_repository.list_benchmark_components(
+            benchmark_id,
+            as_of_date,
+        )
         return BenchmarkDefinitionResponse(
             benchmark_id=row.benchmark_id,
             benchmark_name=row.benchmark_name,
@@ -264,6 +316,57 @@ class IntegrationService:
                 }
                 for component in components
             ],
+        )
+
+    async def get_benchmark_composition_window(
+        self,
+        benchmark_id: str,
+        request: BenchmarkCompositionWindowRequest,
+    ) -> BenchmarkCompositionWindowResponse | None:
+        definitions = (
+            await self._reference_repository.list_benchmark_definitions_overlapping_window(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            )
+        )
+        if not definitions:
+            return None
+
+        benchmark_currencies = {row.benchmark_currency for row in definitions}
+        if len(benchmark_currencies) != 1:
+            raise ValueError(
+                "Benchmark definition currency changed within requested composition window."
+            )
+
+        components = await self._reference_repository.list_benchmark_components_overlapping_window(
+            benchmark_id=benchmark_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
+
+        return BenchmarkCompositionWindowResponse(
+            benchmark_id=benchmark_id,
+            benchmark_currency=next(iter(benchmark_currencies)),
+            resolved_window=IntegrationWindow(
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            ),
+            segments=[
+                {
+                    "index_id": component.index_id,
+                    "composition_weight": self._as_decimal(component.composition_weight),
+                    "composition_effective_from": component.composition_effective_from,
+                    "composition_effective_to": component.composition_effective_to,
+                    "rebalance_event_id": component.rebalance_event_id,
+                }
+                for component in components
+            ],
+            lineage={
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core-query-service",
+                "generated_by": "integration.benchmark_composition_window",
+            },
         )
 
     async def list_benchmark_catalog(
@@ -363,10 +466,18 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
-        components = await self._reference_repository.list_benchmark_components(
+        definition = await self._reference_repository.get_benchmark_definition(
             benchmark_id, request.as_of_date
         )
-        index_ids = [component.index_id for component in components]
+        benchmark_currency = (
+            definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
+        )
+        components = await self._reference_repository.list_benchmark_components_overlapping_window(
+            benchmark_id=benchmark_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
+        index_ids = sorted({component.index_id for component in components})
         index_prices = await self._reference_repository.list_index_price_points(
             index_ids=index_ids,
             start_date=request.window.start_date,
@@ -382,71 +493,144 @@ class IntegrationService:
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "benchmark_id": benchmark_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "window": {
+                    "start_date": request.window.start_date.isoformat(),
+                    "end_date": request.window.end_date.isoformat(),
+                },
+                "frequency": request.frequency,
+                "target_currency": request.target_currency,
+                "series_fields": sorted(request.series_fields),
+            }
+        )
+        page = getattr(request, "page", None)
+        page_size = getattr(page, "page_size", 250)
+        page_token = getattr(page, "page_token", None)
+        cursor = self._decode_page_token(page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope and token_scope != request_scope_fingerprint:
+            raise ValueError("Benchmark market series page token does not match request scope.")
+        cursor_index_id = cursor.get("last_index_id")
 
         fx_rates: dict[date, Decimal] = {}
+        fx_context_source_currency: str | None = None
+        fx_context_target_currency: str | None = None
+        normalization_status = "native_component_series_only"
         if request.target_currency:
-            definition = await self._reference_repository.get_benchmark_definition(
-                benchmark_id, request.as_of_date
-            )
-            from_currency = definition.benchmark_currency if definition else request.target_currency
-            if from_currency != request.target_currency:
+            fx_context_source_currency = benchmark_currency
+            fx_context_target_currency = request.target_currency
+            if benchmark_currency != request.target_currency:
                 fx_rates = await self._reference_repository.get_fx_rates(
-                    from_currency=from_currency,
+                    from_currency=benchmark_currency,
                     to_currency=request.target_currency,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
+                )
+                if fx_rates:
+                    normalization_status = (
+                        "native_component_series_with_benchmark_to_target_fx_context"
+                    )
+                else:
+                    normalization_status = (
+                        "native_component_series_with_missing_benchmark_to_target_fx_context"
+                    )
+            else:
+                normalization_status = (
+                    "native_component_series_with_identity_benchmark_to_target_fx_context"
                 )
 
         prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
         returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
         benchmark_return_by_date = {row.series_date: row for row in benchmark_returns}
-        component_weight = {
-            row.index_id: self._as_decimal(row.composition_weight) for row in components
-        }
+        component_segments_by_index: dict[str, list[Any]] = {}
+        for row in components:
+            component_segments_by_index.setdefault(row.index_id, []).append(row)
 
         all_dates = sorted(
-            {
-                row.series_date
-                for row in index_prices + index_returns + benchmark_returns
-            }
+            {row.series_date for row in index_prices + index_returns + benchmark_returns}
         )
-        quality_status_summary: dict[str, int] = {}
-        component_series: list[ComponentSeriesResponse] = []
+        component_series_all: list[ComponentSeriesResponse] = []
         for index_id in sorted(index_ids):
             points: list[SeriesPoint] = []
             for current_date in all_dates:
                 price_row = prices_by_index_date.get((index_id, current_date))
                 return_row = returns_by_index_date.get((index_id, current_date))
                 benchmark_return_row = benchmark_return_by_date.get(current_date)
+                component_weight = None
+                for segment in component_segments_by_index.get(index_id, []):
+                    if (
+                        segment.composition_effective_from <= current_date
+                        and (
+                            segment.composition_effective_to is None
+                            or segment.composition_effective_to >= current_date
+                        )
+                    ):
+                        component_weight = self._as_decimal(segment.composition_weight)
+                        break
                 quality_status = (
                     (price_row and price_row.quality_status)
                     or (return_row and return_row.quality_status)
                     or (benchmark_return_row and benchmark_return_row.quality_status)
                 )
-                if quality_status:
-                    quality_status_summary[quality_status] = (
-                        quality_status_summary.get(quality_status, 0) + 1
-                    )
                 points.append(
                     SeriesPoint(
                         series_date=current_date,
+                        series_currency=(
+                            (price_row and price_row.series_currency)
+                            or (return_row and return_row.series_currency)
+                            or (
+                                benchmark_return_row
+                                and benchmark_return_row.series_currency
+                            )
+                        ),
                         index_price=self._as_decimal(price_row.index_price) if price_row else None,
-                        index_return=self._as_decimal(return_row.index_return) if return_row else None,
+                        index_return=(
+                            self._as_decimal(return_row.index_return) if return_row else None
+                        ),
                         benchmark_return=(
                             self._as_decimal(benchmark_return_row.benchmark_return)
                             if benchmark_return_row
                             else None
                         ),
-                        component_weight=component_weight.get(index_id),
+                        component_weight=component_weight,
                         fx_rate=fx_rates.get(current_date),
                         quality_status=quality_status,
                     )
                 )
-            component_series.append(ComponentSeriesResponse(index_id=index_id, points=points))
+            component_series_all.append(ComponentSeriesResponse(index_id=index_id, points=points))
+
+        if cursor_index_id:
+            component_series_all = [
+                series for series in component_series_all if series.index_id > cursor_index_id
+            ]
+
+        has_more = len(component_series_all) > page_size
+        component_series = component_series_all[:page_size]
+        next_page_token: str | None = None
+        if has_more and component_series:
+            next_page_token = self._encode_page_token(
+                {
+                    "scope_fingerprint": request_scope_fingerprint,
+                    "last_index_id": component_series[-1].index_id,
+                }
+            )
+
+        quality_status_summary: dict[str, int] = {}
+        for component in component_series:
+            for point in component.points:
+                if point.quality_status:
+                    quality_status_summary[point.quality_status] = (
+                        quality_status_summary.get(point.quality_status, 0) + 1
+                    )
 
         return BenchmarkMarketSeriesResponse(
             benchmark_id=benchmark_id,
             as_of_date=request.as_of_date,
+            benchmark_currency=benchmark_currency,
+            target_currency=request.target_currency,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
@@ -454,6 +638,16 @@ class IntegrationService:
             frequency=request.frequency,
             component_series=component_series,
             quality_status_summary=quality_status_summary,
+            fx_context_source_currency=fx_context_source_currency,
+            fx_context_target_currency=fx_context_target_currency,
+            normalization_policy="native_component_series_downstream_normalization_required",
+            normalization_status=normalization_status,
+            request_fingerprint=request_scope_fingerprint,
+            page=ReferencePageMetadata(
+                page_size=page_size,
+                sort_key="index_id:asc",
+                next_page_token=next_page_token,
+            ),
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
@@ -658,8 +852,12 @@ class IntegrationService:
 
         observed_start = coverage.get("observed_start_date")
         observed_end = coverage.get("observed_end_date")
-        observed_dates = set()
-        if observed_start and observed_end:
+        observed_dates = {
+            value
+            for value in coverage.get("observed_dates", [])
+            if isinstance(value, date)
+        }
+        if not observed_dates and observed_start and observed_end:
             observed_cursor = observed_start
             while observed_cursor <= observed_end:
                 observed_dates.add(observed_cursor)

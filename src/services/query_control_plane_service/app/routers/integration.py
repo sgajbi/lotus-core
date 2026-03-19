@@ -19,6 +19,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
     BenchmarkCatalogRequest,
     BenchmarkCatalogResponse,
+    BenchmarkCompositionWindowRequest,
+    BenchmarkCompositionWindowResponse,
     BenchmarkDefinitionRequest,
     BenchmarkDefinitionResponse,
     BenchmarkMarketSeriesRequest,
@@ -67,6 +69,9 @@ BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
 }
 BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
+}
+BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = {
+    "detail": "No overlapping benchmark definition found for benchmark_id and requested window."
 }
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 
@@ -272,9 +277,7 @@ async def get_instrument_enrichment_bulk(
     responses={
         status.HTTP_404_NOT_FOUND: {
             "description": "No effective benchmark assignment found.",
-            "content": {
-                "application/json": {"example": BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE}
-            },
+            "content": {"application/json": {"example": BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE}},
         },
     },
     summary="Resolve effective portfolio benchmark assignment",
@@ -310,14 +313,66 @@ async def resolve_portfolio_benchmark_assignment(
 
 
 @router.post(
+    "/benchmarks/{benchmark_id}/composition-window",
+    response_model=BenchmarkCompositionWindowResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "No overlapping benchmark definition found.",
+            "content": {
+                "application/json": {"example": BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE}
+            },
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": "Benchmark definition changed incompatibly inside the requested window."
+        },
+    },
+    summary="Fetch overlapping benchmark composition segments",
+    description=(
+        "What: Return all effective benchmark composition segments overlapping a "
+        "requested window.\n"
+        "How: Resolves overlapping benchmark definition and composition records with deterministic "
+        "ordering and without daily-expanding weights.\n"
+        "When: Used by lotus-performance and other downstream consumers to calculate benchmark "
+        "returns across rebalance windows."
+    ),
+)
+async def fetch_benchmark_composition_window(
+    request: BenchmarkCompositionWindowRequest,
+    benchmark_id: str = Path(
+        ...,
+        description="Benchmark identifier for the requested composition window contract.",
+        examples=["BENCH-SP500-TR"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> BenchmarkCompositionWindowResponse:
+    try:
+        response = cast(
+            BenchmarkCompositionWindowResponse | None,
+            await integration_service.get_benchmark_composition_window(
+                benchmark_id=benchmark_id,
+                request=request,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No overlapping benchmark definition found for benchmark_id and "
+                "requested window."
+            ),
+        )
+    return response
+
+
+@router.post(
     "/benchmarks/{benchmark_id}/definition",
     response_model=BenchmarkDefinitionResponse,
     responses={
         status.HTTP_404_NOT_FOUND: {
             "description": "No effective benchmark definition found.",
-            "content": {
-                "application/json": {"example": BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE}
-            },
+            "content": {"application/json": {"example": BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE}},
         }
     },
     summary="Fetch effective benchmark definition",
@@ -419,12 +474,15 @@ async def fetch_benchmark_market_series(
     ),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> BenchmarkMarketSeriesResponse:
-    return cast(
-        BenchmarkMarketSeriesResponse,
-        await integration_service.get_benchmark_market_series(
-            benchmark_id=benchmark_id, request=request
-        ),
-    )
+    try:
+        return cast(
+            BenchmarkMarketSeriesResponse,
+            await integration_service.get_benchmark_market_series(
+                benchmark_id=benchmark_id, request=request
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post(
