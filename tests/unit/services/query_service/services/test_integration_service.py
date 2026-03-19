@@ -678,11 +678,26 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
-        list_benchmark_components=AsyncMock(
+        list_benchmark_components_overlapping_window=AsyncMock(
             return_value=[
-                SimpleNamespace(index_id="IDX1", composition_weight=Decimal("0.5")),
-                SimpleNamespace(index_id="IDX2", composition_weight=Decimal("0.3")),
-                SimpleNamespace(index_id="IDX3", composition_weight=Decimal("0.2")),
+                SimpleNamespace(
+                    index_id="IDX1",
+                    composition_weight=Decimal("0.5"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
+                SimpleNamespace(
+                    index_id="IDX2",
+                    composition_weight=Decimal("0.3"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
+                SimpleNamespace(
+                    index_id="IDX3",
+                    composition_weight=Decimal("0.2"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
             ]
         ),
         list_index_price_points=AsyncMock(return_value=[]),
@@ -728,7 +743,7 @@ async def test_benchmark_market_series_rejects_page_token_scope_mismatch() -> No
     )
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
-        list_benchmark_components=AsyncMock(return_value=[]),
+        list_benchmark_components_overlapping_window=AsyncMock(return_value=[]),
         list_index_price_points=AsyncMock(return_value=[]),
         list_index_return_points=AsyncMock(return_value=[]),
         list_benchmark_return_points=AsyncMock(return_value=[]),
@@ -747,3 +762,112 @@ async def test_benchmark_market_series_rejects_page_token_scope_mismatch() -> No
                 page=SimpleNamespace(page_size=2, page_token=token),
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_honors_window_rebalances() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    composition_weight=Decimal("0.60"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=date(2026, 1, 1),
+                ),
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    composition_weight=Decimal("0.55"),
+                    composition_effective_from=date(2026, 1, 2),
+                    composition_effective_to=None,
+                ),
+                SimpleNamespace(
+                    index_id="IDX_B",
+                    composition_weight=Decimal("0.40"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=date(2026, 1, 1),
+                ),
+                SimpleNamespace(
+                    index_id="IDX_C",
+                    composition_weight=Decimal("0.45"),
+                    composition_effective_from=date(2026, 1, 2),
+                    composition_effective_to=None,
+                ),
+            ]
+        ),
+        list_index_price_points=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    series_date=date(2026, 1, 1),
+                    index_price=Decimal("100"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    series_date=date(2026, 1, 2),
+                    index_price=Decimal("101"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+                SimpleNamespace(
+                    index_id="IDX_B",
+                    series_date=date(2026, 1, 1),
+                    index_price=Decimal("200"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+                SimpleNamespace(
+                    index_id="IDX_C",
+                    series_date=date(2026, 1, 2),
+                    index_price=Decimal("300"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+            ]
+        ),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    series_date=date(2026, 1, 1),
+                    benchmark_return=Decimal("0.01"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+                SimpleNamespace(
+                    series_date=date(2026, 1, 2),
+                    benchmark_return=Decimal("0.02"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+            ]
+        ),
+        get_fx_rates=AsyncMock(return_value={}),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 2),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price", "component_weight", "benchmark_return"],
+            page=SimpleNamespace(page_size=10, page_token=None),
+        ),
+    )
+
+    assert [row.index_id for row in response.component_series] == ["IDX_A", "IDX_B", "IDX_C"]
+    idx_a_points = next(row.points for row in response.component_series if row.index_id == "IDX_A")
+    idx_b_points = next(row.points for row in response.component_series if row.index_id == "IDX_B")
+    idx_c_points = next(row.points for row in response.component_series if row.index_id == "IDX_C")
+    assert [point.component_weight for point in idx_a_points] == [
+        Decimal("0.60"),
+        Decimal("0.55"),
+    ]
+    assert [point.component_weight for point in idx_b_points] == [Decimal("0.40"), None]
+    assert [point.component_weight for point in idx_c_points] == [None, Decimal("0.45")]

@@ -472,10 +472,12 @@ class IntegrationService:
         benchmark_currency = (
             definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
         )
-        components = await self._reference_repository.list_benchmark_components(
-            benchmark_id, request.as_of_date
+        components = await self._reference_repository.list_benchmark_components_overlapping_window(
+            benchmark_id=benchmark_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
         )
-        index_ids = [component.index_id for component in components]
+        index_ids = sorted({component.index_id for component in components})
         index_prices = await self._reference_repository.list_index_price_points(
             index_ids=index_ids,
             start_date=request.window.start_date,
@@ -543,9 +545,9 @@ class IntegrationService:
         prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
         returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
         benchmark_return_by_date = {row.series_date: row for row in benchmark_returns}
-        component_weight = {
-            row.index_id: self._as_decimal(row.composition_weight) for row in components
-        }
+        component_segments_by_index: dict[str, list[Any]] = {}
+        for row in components:
+            component_segments_by_index.setdefault(row.index_id, []).append(row)
 
         all_dates = sorted(
             {row.series_date for row in index_prices + index_returns + benchmark_returns}
@@ -558,6 +560,17 @@ class IntegrationService:
                 price_row = prices_by_index_date.get((index_id, current_date))
                 return_row = returns_by_index_date.get((index_id, current_date))
                 benchmark_return_row = benchmark_return_by_date.get(current_date)
+                component_weight = None
+                for segment in component_segments_by_index.get(index_id, []):
+                    if (
+                        segment.composition_effective_from <= current_date
+                        and (
+                            segment.composition_effective_to is None
+                            or segment.composition_effective_to >= current_date
+                        )
+                    ):
+                        component_weight = self._as_decimal(segment.composition_weight)
+                        break
                 quality_status = (
                     (price_row and price_row.quality_status)
                     or (return_row and return_row.quality_status)
@@ -587,7 +600,7 @@ class IntegrationService:
                             if benchmark_return_row
                             else None
                         ),
-                        component_weight=component_weight.get(index_id),
+                        component_weight=component_weight,
                         fx_rate=fx_rates.get(current_date),
                         quality_status=quality_status,
                     )
