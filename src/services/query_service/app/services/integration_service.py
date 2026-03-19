@@ -552,7 +552,6 @@ class IntegrationService:
         all_dates = sorted(
             {row.series_date for row in index_prices + index_returns + benchmark_returns}
         )
-        quality_status_summary: dict[str, int] = {}
         component_series_all: list[ComponentSeriesResponse] = []
         for index_id in sorted(index_ids):
             points: list[SeriesPoint] = []
@@ -576,10 +575,6 @@ class IntegrationService:
                     or (return_row and return_row.quality_status)
                     or (benchmark_return_row and benchmark_return_row.quality_status)
                 )
-                if quality_status:
-                    quality_status_summary[quality_status] = (
-                        quality_status_summary.get(quality_status, 0) + 1
-                    )
                 points.append(
                     SeriesPoint(
                         series_date=current_date,
@@ -622,6 +617,14 @@ class IntegrationService:
                     "last_index_id": component_series[-1].index_id,
                 }
             )
+
+        quality_status_summary: dict[str, int] = {}
+        for component in component_series:
+            for point in component.points:
+                if point.quality_status:
+                    quality_status_summary[point.quality_status] = (
+                        quality_status_summary.get(point.quality_status, 0) + 1
+                    )
 
         return BenchmarkMarketSeriesResponse(
             benchmark_id=benchmark_id,

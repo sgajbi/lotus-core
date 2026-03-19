@@ -736,6 +736,66 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
 
 
 @pytest.mark.asyncio
+async def test_benchmark_market_series_quality_summary_is_page_scoped() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX1",
+                    composition_weight=Decimal("0.5"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
+                SimpleNamespace(
+                    index_id="IDX2",
+                    composition_weight=Decimal("0.5"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
+            ]
+        ),
+        list_index_price_points=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX1",
+                    series_date=date(2026, 1, 1),
+                    index_price=Decimal("100"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+                SimpleNamespace(
+                    index_id="IDX2",
+                    series_date=date(2026, 1, 1),
+                    index_price=Decimal("200"),
+                    series_currency="USD",
+                    quality_status="estimated",
+                ),
+            ]
+        ),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(return_value=[]),
+        get_fx_rates=AsyncMock(return_value={}),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price"],
+            page=SimpleNamespace(page_size=1, page_token=None),
+        ),
+    )
+
+    assert [row.index_id for row in response.component_series] == ["IDX1"]
+    assert response.quality_status_summary == {"accepted": 1}
+
+
+@pytest.mark.asyncio
 async def test_benchmark_market_series_rejects_page_token_scope_mismatch() -> None:
     service = make_service()
     token = service._encode_page_token(  # pylint: disable=protected-access
