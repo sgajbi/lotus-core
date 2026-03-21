@@ -699,7 +699,14 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def upsert_portfolio_benchmark_assignments(
             self, records: list[dict[str, object]]
         ) -> None:
-            self.persisted["benchmark_assignments"].extend(records)
+            now = datetime.now(UTC)
+            normalized = []
+            for record in records:
+                row = dict(record)
+                if row.get("assignment_recorded_at") is None:
+                    row["assignment_recorded_at"] = now
+                normalized.append(row)
+            self.persisted["benchmark_assignments"].extend(normalized)
 
         async def upsert_benchmark_definitions(
             self, records: list[dict[str, object]]
@@ -1095,6 +1102,33 @@ async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failure_phase"] == "persist_bookkeeping"
+
+
+async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when_omitted(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = {
+        "benchmark_assignments": [
+            {
+                "portfolio_id": "LIVE_REAL_005607",
+                "benchmark_id": "BMK_US_60_40_005607",
+                "effective_from": "2026-01-01",
+                "assignment_source": "benchmark_policy_engine",
+                "assignment_status": "active",
+                "source_system": "lotus-manage",
+            }
+        ]
+    }
+
+    response = await async_test_client.post("/ingest/benchmark-assignments", json=payload)
+
+    assert response.status_code == 202
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_assignments"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["assignment_recorded_at"] is not None
 
 
 async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(

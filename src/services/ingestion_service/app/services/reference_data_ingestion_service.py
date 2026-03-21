@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
@@ -25,9 +25,16 @@ class ReferenceDataIngestionService:
         self._db = db
 
     async def upsert_portfolio_benchmark_assignments(self, records: list[dict[str, Any]]) -> None:
+        now = datetime.now(UTC)
+        normalized_records = []
+        for record in records:
+            row = dict(record)
+            if row.get("assignment_recorded_at") is None:
+                row["assignment_recorded_at"] = now
+            normalized_records.append(row)
         await self._upsert_many(
             model=PortfolioBenchmarkAssignment,
-            records=records,
+            records=normalized_records,
             conflict_columns=[
                 "portfolio_id",
                 "benchmark_id",
@@ -206,7 +213,7 @@ class ReferenceDataIngestionService:
         if not records:
             return
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         payload = []
         for record in records:
             row = dict(record)
