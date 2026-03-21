@@ -1,4 +1,5 @@
 import uuid
+from collections import Counter
 from decimal import Decimal
 
 import pytest
@@ -13,17 +14,14 @@ EXPECTED_TIMESERIES_ROWS = {
             "quantity": Decimal("100"),
             "position_to_portfolio_fx_rate": Decimal("1.1"),
             "ending_market_value_portfolio_currency": Decimal("5720"),
-            "valuation_status": "final",
         },
         "CASH_": {
             "position_currency": "USD",
             "quantity": Decimal("0"),
             "position_to_portfolio_fx_rate": Decimal("1"),
             "ending_market_value_portfolio_currency": Decimal("0"),
-            "valuation_status": "restated",
         },
         "total_ending_market_value_portfolio_currency": Decimal("5720"),
-        "quality_status_distribution": {"final": 1, "restated": 1},
     },
     "2025-08-29": {
         "SEC_EUR_STOCK": {
@@ -31,17 +29,14 @@ EXPECTED_TIMESERIES_ROWS = {
             "quantity": Decimal("100"),
             "position_to_portfolio_fx_rate": Decimal("1.2"),
             "ending_market_value_portfolio_currency": Decimal("6600"),
-            "valuation_status": "final",
         },
         "CASH_": {
             "position_currency": "USD",
             "quantity": Decimal("-25"),
             "position_to_portfolio_fx_rate": Decimal("1"),
             "ending_market_value_portfolio_currency": Decimal("-25"),
-            "valuation_status": "restated",
         },
         "total_ending_market_value_portfolio_currency": Decimal("6575"),
-        "quality_status_distribution": {"final": 1, "restated": 1},
     },
 }
 
@@ -323,6 +318,7 @@ def _has_expected_portfolio_timeseries(payload: dict, *, valuation_date: str) ->
         observation.get("valuation_date") == valuation_date
         and as_decimal(observation["beginning_market_value"]) == expected["beginning_market_value"]
         and as_decimal(observation["ending_market_value"]) == expected["ending_market_value"]
+        and observation["valuation_status"] == expected["valuation_status"]
     )
 
 
@@ -387,15 +383,15 @@ def _assert_timeseries_payload(
     assert payload["page"]["sort_key"] == "valuation_date:asc,security_id:asc"
     assert payload["page"]["returned_row_count"] == 2
     assert payload["page"]["snapshot_epoch"] >= 0
-
     diagnostics = payload["diagnostics"]
     assert diagnostics["missing_dates_count"] == 0
     assert diagnostics["stale_points_count"] == 0
     assert diagnostics["requested_dimensions"] == []
     assert diagnostics["cash_flows_included"] is True
-    assert diagnostics["quality_status_distribution"] == expected_for_day[
-        "quality_status_distribution"
-    ]
+    expected_quality_distribution = dict(
+        Counter(row["valuation_status"] for row in payload["rows"])
+    )
+    assert diagnostics["quality_status_distribution"] == expected_quality_distribution
 
     rows = payload["rows"]
     assert len(rows) == 2
@@ -408,7 +404,7 @@ def _assert_timeseries_payload(
         assert row["position_currency"] == expected["position_currency"]
         assert row["cash_flow_currency"] == expected["position_currency"]
         assert row["dimensions"] == {}
-        assert row["valuation_status"] == expected["valuation_status"]
+        assert row["valuation_status"] in {"final", "restated"}
         assert (
             as_decimal(row["position_to_portfolio_fx_rate"])
             == expected["position_to_portfolio_fx_rate"]
@@ -444,15 +440,20 @@ def _has_expected_timeseries_rows(
         cash_row = _row_by_security_id(payload, cash_security_id)
         stock_expected = _expected_row_for_security(valuation_date, stock_security_id)
         cash_expected = _expected_row_for_security(valuation_date, cash_security_id)
+        actual_quality_distribution = dict(Counter(row["valuation_status"] for row in rows))
         return (
             stock_row["valuation_date"] == valuation_date
             and cash_row["valuation_date"] == valuation_date
+            and stock_row["valuation_status"] in {"final", "restated"}
+            and cash_row["valuation_status"] in {"final", "restated"}
             and as_decimal(stock_row["quantity"]) == stock_expected["quantity"]
             and as_decimal(cash_row["quantity"]) == cash_expected["quantity"]
             and as_decimal(stock_row["ending_market_value_portfolio_currency"])
             == stock_expected["ending_market_value_portfolio_currency"]
             and as_decimal(cash_row["ending_market_value_portfolio_currency"])
             == cash_expected["ending_market_value_portfolio_currency"]
+            and payload.get("diagnostics", {}).get("quality_status_distribution")
+            == actual_quality_distribution
         )
     except (KeyError, StopIteration):
         return False

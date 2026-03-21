@@ -142,6 +142,58 @@ async def test_current_price_does_not_flag_instrument(
     mock_idempotency_repo.mark_event_processed.assert_awaited_once()
 
 
+async def test_future_dated_price_stages_deferred_reprocessing(
+    consumer: PriceEventConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: MarketPricePersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_reprocessing_repo = mock_dependencies["reprocessing_repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date - timedelta(
+        days=1
+    )
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_job_repo.upsert_job.assert_not_called()
+    mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
+        security_id=mock_event.security_id,
+        price_date=mock_event.price_date,
+        correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+    )
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+
+
+async def test_price_without_business_date_stages_deferred_reprocessing(
+    consumer: PriceEventConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: MarketPricePersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_reprocessing_repo = mock_dependencies["reprocessing_repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+
+    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_valuation_repo.get_latest_business_date.return_value = None
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_job_repo.upsert_job.assert_not_called()
+    mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
+        security_id=mock_event.security_id,
+        price_date=mock_event.price_date,
+        correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+    )
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+
+
 async def test_current_price_queues_immediate_jobs_for_open_positions(
     consumer: PriceEventConsumer,
     mock_kafka_message: MagicMock,
