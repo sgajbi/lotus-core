@@ -872,6 +872,10 @@ async def test_create_export_job_completed() -> None:
         )
     )
     assert response.status == "completed"
+    assert response.disposition == "created"
+    assert response.lifecycle_mode == "inline_job_execution"
+    assert response.result_available is True
+    assert response.result_endpoint.endswith("/aexp_1/result")
 
 
 @pytest.mark.asyncio
@@ -951,6 +955,8 @@ async def test_create_export_job_reuses_existing() -> None:
         )
     )
     assert response.job_id == "aexp_existing"
+    assert response.disposition == "reused_completed"
+    assert response.result_available is True
 
 
 @pytest.mark.asyncio
@@ -987,6 +993,8 @@ async def test_create_export_job_reuses_fresh_running_job() -> None:
     )
 
     assert response.job_id == "aexp_running"
+    assert response.disposition == "reused_inflight"
+    assert response.result_available is False
 
 
 @pytest.mark.asyncio
@@ -1061,6 +1069,7 @@ async def test_create_export_job_replaces_stale_running_job() -> None:
     assert existing.status == "failed"
     assert existing.error_message == "Stale analytics export job superseded by a new request."
     assert response.job_id == "aexp_new"
+    assert response.disposition == "created"
     service.export_repo.create_job.assert_awaited_once()
 
 
@@ -1103,6 +1112,8 @@ async def test_create_export_job_marks_failed_on_input_error() -> None:
         )
     )
     assert response.status == "failed"
+    assert response.disposition == "created"
+    assert response.result_available is False
 
 
 @pytest.mark.asyncio
@@ -1175,6 +1186,32 @@ async def test_get_export_result_json_error_branches() -> None:
     )
     with pytest.raises(AnalyticsInputError):
         await service.get_export_result_json("bad")
+
+
+@pytest.mark.asyncio
+async def test_get_export_job_status_lookup_contract() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        job_id="aexp_status",
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        status="running",
+        request_fingerprint="fp-status",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        started_at=datetime(2026, 3, 1, tzinfo=UTC),
+        completed_at=None,
+        result_payload=None,
+    )
+    service.export_repo = SimpleNamespace(get_job=AsyncMock(return_value=row))
+    response = await service.get_export_job("aexp_status")
+    assert response.disposition == "status_lookup"
+    assert response.lifecycle_mode == "inline_job_execution"
+    assert response.result_available is False
+    assert response.result_endpoint.endswith("/aexp_status/result")
 
 
 @pytest.mark.asyncio

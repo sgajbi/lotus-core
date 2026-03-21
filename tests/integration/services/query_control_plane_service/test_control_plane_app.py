@@ -932,6 +932,7 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     portfolio_diagnostics = components["PortfolioQualityDiagnostics"]
     diagnostics = components["QualityDiagnostics"]
     export_result_schema = components["AnalyticsExportJsonResultResponse"]
+    export_job_schema = components["AnalyticsExportJobResponse"]
 
     assert page_metadata["properties"]["next_page_token"]["description"] == (
         "Opaque continuation token for the next page, null when no additional pages remain."
@@ -954,6 +955,23 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert diagnostics["properties"]["cash_flows_included"]["default"] is False
     assert export_result_schema["properties"]["data"]["description"] == (
         "Serialized observations or rows from the selected dataset."
+    )
+    assert (
+        export_job_schema["properties"]["lifecycle_mode"]["default"] == "inline_job_execution"
+    )
+    assert (
+        export_job_schema["properties"]["disposition"]["description"].startswith(
+            "How this response was produced"
+        )
+    )
+    assert export_job_schema["properties"]["result_available"]["description"] == (
+        "True when a finalized result payload is available for retrieval."
+    )
+    assert export_result_schema["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic fingerprint for the request that produced this result."
+    )
+    assert export_result_schema["properties"]["result_row_count"]["description"] == (
+        "Row count included in this export result payload."
     )
 
 

@@ -205,9 +205,12 @@ async def get_portfolio_analytics_reference(
         "What: Create a durable export job for portfolio or position analytics "
         "timeseries datasets.\n"
         "How: Validates canonical request payload, computes deterministic fingerprint, "
-        "and persists lifecycle state.\n"
+        "persists lifecycle state, and reports explicit execution-mode and "
+        "result-availability metadata.\n"
         "When: Used for large horizon extractions that should be retrieved "
-        "asynchronously by downstream analytics."
+        "through the export job contract rather than direct paged polling.\n"
+        "Contract note: current lifecycle_mode is inline_job_execution, so jobs may "
+        "complete within the create request."
     ),
 )
 async def create_analytics_export_job(
@@ -233,7 +236,8 @@ async def create_analytics_export_job(
     description=(
         "What: Fetch lifecycle status for an analytics export job.\n"
         "How: Reads persisted job metadata and terminal status from canonical "
-        "query-service storage.\n"
+        "query-service storage, including result availability and deterministic "
+        "result retrieval path.\n"
         "When: Used by polling clients before attempting result retrieval."
     ),
 )
@@ -267,7 +271,8 @@ async def get_analytics_export_job(
     summary="Fetch analytics export job result",
     description=(
         "What: Retrieve finalized export payload for a completed analytics export job.\n"
-        "How: Returns JSON envelope or NDJSON stream with optional gzip encoding.\n"
+        "How: Returns JSON envelope or NDJSON stream with optional gzip encoding and "
+        "includes deterministic request/result provenance metadata.\n"
         "When: Used by lotus-performance batch pipelines after job completion."
     ),
 )

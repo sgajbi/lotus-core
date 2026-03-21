@@ -53,6 +53,8 @@ logger = logging.getLogger(__name__)
 
 
 class AnalyticsTimeseriesService:
+    _EXPORT_LIFECYCLE_MODE = "inline_job_execution"
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = AnalyticsTimeseriesRepository(db)
@@ -627,13 +629,23 @@ class AnalyticsTimeseriesService:
         )
 
     @staticmethod
-    def _to_export_response(row: object) -> AnalyticsExportJobResponse:
+    def _export_result_endpoint(job_id: str) -> str:
+        return f"/integration/exports/analytics-timeseries/jobs/{job_id}/result"
+
+    @classmethod
+    def _to_export_response(
+        cls, row: object, *, disposition: str = "status_lookup"
+    ) -> AnalyticsExportJobResponse:
         return AnalyticsExportJobResponse(
             job_id=row.job_id,
             dataset_type=row.dataset_type,
             portfolio_id=row.portfolio_id,
             status=row.status,
+            disposition=disposition,
+            lifecycle_mode=cls._EXPORT_LIFECYCLE_MODE,
             request_fingerprint=row.request_fingerprint,
+            result_available=row.status == "completed",
+            result_endpoint=cls._export_result_endpoint(row.job_id),
             result_format=row.result_format,
             compression=row.compression,
             result_row_count=row.result_row_count,
@@ -739,7 +751,8 @@ class AnalyticsTimeseriesService:
             request_fingerprint=request_fingerprint,
         )
         if reused:
-            return self._to_export_response(row)
+            disposition = "reused_completed" if row.status == "completed" else "reused_inflight"
+            return self._to_export_response(row, disposition=disposition)
 
         job_id = row.job_id
         await self._mark_export_job_running(job_id)
@@ -761,8 +774,11 @@ class AnalyticsTimeseriesService:
             result_payload = {
                 "job_id": job_id,
                 "dataset_type": request.dataset_type,
+                "request_fingerprint": request_fingerprint,
+                "lifecycle_mode": self._EXPORT_LIFECYCLE_MODE,
                 "generated_at": datetime.now(UTC).isoformat(),
                 "contract_version": "rfc_063_v1",
+                "result_row_count": len(data_rows),
                 "data": self._jsonable(data_rows),
             }
             result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
@@ -776,11 +792,11 @@ class AnalyticsTimeseriesService:
                 result_row_count=len(data_rows),
             )
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
-            return self._to_export_response(row)
+            return self._to_export_response(row, disposition="created")
         except AnalyticsInputError as exc:
             row = await self._mark_export_job_failed(job_id, error_message=str(exc))
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
-            return self._to_export_response(row)
+            return self._to_export_response(row, disposition="created")
         except Exception:
             logger.exception(
                 "Analytics export job %s failed unexpectedly for dataset %s",

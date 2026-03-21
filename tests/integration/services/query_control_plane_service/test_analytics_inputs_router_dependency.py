@@ -83,7 +83,11 @@ async def async_test_client():
             "dataset_type": "portfolio_timeseries",
             "portfolio_id": "DEMO_DPM_EUR_001",
             "status": "completed",
+            "disposition": "created",
+            "lifecycle_mode": "inline_job_execution",
             "request_fingerprint": "fp1",
+            "result_available": True,
+            "result_endpoint": "/integration/exports/analytics-timeseries/jobs/aexp_1/result",
             "result_format": "json",
             "compression": "none",
             "result_row_count": 1,
@@ -99,7 +103,11 @@ async def async_test_client():
             "dataset_type": "portfolio_timeseries",
             "portfolio_id": "DEMO_DPM_EUR_001",
             "status": "completed",
+            "disposition": "status_lookup",
+            "lifecycle_mode": "inline_job_execution",
             "request_fingerprint": "fp1",
+            "result_available": True,
+            "result_endpoint": "/integration/exports/analytics-timeseries/jobs/aexp_1/result",
             "result_format": "json",
             "compression": "none",
             "result_row_count": 1,
@@ -113,8 +121,11 @@ async def async_test_client():
         return_value={
             "job_id": "aexp_1",
             "dataset_type": "portfolio_timeseries",
+            "request_fingerprint": "fp1",
+            "lifecycle_mode": "inline_job_execution",
             "generated_at": datetime(2026, 3, 1, tzinfo=UTC),
             "contract_version": "rfc_063_v1",
+            "result_row_count": 1,
             "data": [],
         }
     )
@@ -178,6 +189,8 @@ async def test_create_analytics_export_job_success(async_test_client):
     )
     assert response.status_code == 200
     assert response.json()["job_id"] == "aexp_1"
+    assert response.json()["lifecycle_mode"] == "inline_job_execution"
+    assert response.json()["result_available"] is True
     mock_service.create_export_job.assert_awaited_once()
 
 
@@ -188,3 +201,4 @@ async def test_get_analytics_export_job_result_json_success(async_test_client):
     )
     assert response.status_code == 200
     assert response.json()["job_id"] == "aexp_1"
+    assert response.json()["result_row_count"] == 1

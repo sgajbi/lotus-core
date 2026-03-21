@@ -730,10 +730,36 @@ class AnalyticsExportJobResponse(BaseModel):
         description="Current export job lifecycle status.",
         examples=["completed"],
     )
+    disposition: Literal["created", "reused_completed", "reused_inflight", "status_lookup"] = Field(
+        ...,
+        description=(
+            "How this response was produced: a newly created job, a reused completed job, "
+            "a reused in-flight job, or a direct status lookup."
+        ),
+        examples=["created"],
+    )
+    lifecycle_mode: Literal["inline_job_execution"] = Field(
+        "inline_job_execution",
+        description=(
+            "Current execution model for analytics export jobs. "
+            "The service executes export processing inline within the create request path."
+        ),
+        examples=["inline_job_execution"],
+    )
     request_fingerprint: str = Field(
         ...,
         description="Deterministic fingerprint for the request payload.",
         examples=["4bb3f6477f1ed3e3f8a04c471e7f6516"],
+    )
+    result_available: bool = Field(
+        ...,
+        description="True when a finalized result payload is available for retrieval.",
+        examples=[True],
+    )
+    result_endpoint: str = Field(
+        ...,
+        description="Deterministic result retrieval path for this export job.",
+        examples=["/integration/exports/analytics-timeseries/jobs/aexp_7e8ad3e7bc6f4d3b97de66f1/result"],
     )
     result_format: Literal["json", "ndjson"] = Field(
         ...,
@@ -785,6 +811,16 @@ class AnalyticsExportJsonResultResponse(BaseModel):
         description="Dataset type included in this result payload.",
         examples=["portfolio_timeseries"],
     )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic fingerprint for the request that produced this result.",
+        examples=["4bb3f6477f1ed3e3f8a04c471e7f6516"],
+    )
+    lifecycle_mode: Literal["inline_job_execution"] = Field(
+        "inline_job_execution",
+        description="Execution model that produced this export result payload.",
+        examples=["inline_job_execution"],
+    )
     generated_at: datetime = Field(
         ...,
         description="UTC timestamp when this result was generated.",
@@ -794,6 +830,11 @@ class AnalyticsExportJsonResultResponse(BaseModel):
         ...,
         description="Contract version label included in payload lineage.",
         examples=["rfc_063_v1"],
+    )
+    result_row_count: int = Field(
+        ...,
+        description="Row count included in this export result payload.",
+        examples=[3650],
     )
     data: list[dict[str, object]] = Field(
         default_factory=list,

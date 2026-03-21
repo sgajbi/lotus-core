@@ -109,6 +109,38 @@ provide. The contract is now explicit about two separate truths:
 1. portfolio reference fields are current canonical portfolio state
 2. performance horizon metadata is bounded by the requested as-of date
 
+## Analytics-Export Job Contract Baseline
+The analytics export lifecycle endpoints are also now explicit about what kind of "job" they are.
+
+### Create/status contract
+1. Export job responses now declare:
+   - `disposition`
+   - `lifecycle_mode`
+   - `result_available`
+   - `result_endpoint`
+2. `lifecycle_mode` is explicitly `inline_job_execution` in the current implementation.
+3. `disposition` distinguishes:
+   - newly created job execution
+   - reused completed job
+   - reused in-flight job
+   - direct status lookup
+
+### Result contract
+1. Export result payloads now include:
+   - `request_fingerprint`
+   - `lifecycle_mode`
+   - `result_row_count`
+2. NDJSON and JSON retrieval remain deterministic views over the same finalized result payload.
+
+### Why this matters
+This avoids a common contract trap: exposing a job API that looks queue-backed while leaving
+consumers to infer whether work completed inline or not.
+
+The contract is now explicit about:
+1. how the current runtime executes export jobs
+2. whether a result is ready
+3. where that result is retrieved
+
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
