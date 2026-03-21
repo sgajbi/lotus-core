@@ -42,6 +42,8 @@ markers = [
     "asyncio: mark a test as being an asyncio test",
     "dependency: mark test dependency ordering/grouping",
     "integration_db: mark tests that require dockerized database infrastructure",
+    "db_direct: mark tests that exercise direct database-backed runtime without live worker reliance",
+    "live_worker: mark tests that require live worker/background service runtime semantics",
 ]
 filterwarnings = [
     "ignore:Please use `import python_multipart` instead.:PendingDeprecationWarning",

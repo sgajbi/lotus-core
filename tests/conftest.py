@@ -29,6 +29,7 @@ from tests.test_support.pipeline_quiescence import (
     wait_for_pipeline_quiescence,
 )
 from tests.test_support.runtime_env import build_test_runtime_env, infer_test_profile
+from tests.test_support.runtime_modes import detect_runtime_modes
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
@@ -99,6 +100,37 @@ def _test_services_for_scope(scope: str) -> list[str]:
     if scope in DB_ONLY_SCOPES:
         return list(DB_ONLY_SERVICES)
     return list(FULL_STACK_SERVICES)
+
+
+def pytest_collection_modifyitems(config, items):
+    runtime_modes = detect_runtime_modes(
+        (item.nodeid, (marker.name for marker in item.iter_markers())) for item in items
+    )
+
+    for item in items:
+        runtime_mode = next(
+            (
+                mode
+                for mode, nodeids in runtime_modes.items()
+                if item.nodeid in nodeids
+            ),
+            None,
+        )
+        if runtime_mode == "live_worker":
+            item.add_marker("live_worker")
+        elif runtime_mode == "db_direct":
+            item.add_marker("db_direct")
+
+    has_live_worker = "live_worker" in runtime_modes
+    has_db_direct = "db_direct" in runtime_modes
+    allow_mixed = _env_bool("LOTUS_TESTS_ALLOW_MIXED_RUNTIME_MODES", False)
+    if has_live_worker and has_db_direct and not allow_mixed:
+        raise pytest.UsageError(
+            "Mixed runtime modes detected in one pytest invocation: "
+            "db_direct integration tests and live_worker E2E tests must run separately. "
+            "Run them in separate commands or set LOTUS_TESTS_ALLOW_MIXED_RUNTIME_MODES=true "
+            "only for intentional harness debugging."
+        )
 
 
 # REFACTORED: Use subprocess directly for more control over Docker Compose
