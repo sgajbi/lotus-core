@@ -603,16 +603,21 @@ class AnalyticsTimeseriesService:
                 "request": request.model_dump(mode="json"),
             }
         )
+        performance_end_date = (
+            min(latest_date, request.as_of_date) if latest_date is not None else None
+        )
         return PortfolioAnalyticsReferenceResponse(
             portfolio_id=portfolio.portfolio_id,
+            resolved_as_of_date=request.as_of_date,
             portfolio_currency=portfolio.base_currency,
             portfolio_open_date=portfolio.open_date,
             portfolio_close_date=portfolio.close_date,
-            performance_end_date=latest_date,
+            performance_end_date=performance_end_date,
             client_id=portfolio.client_id,
             booking_center_code=portfolio.booking_center_code,
             portfolio_type=portfolio.portfolio_type,
             objective=portfolio.objective,
+            reference_state_policy="current_portfolio_reference_state",
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
                 generated_at=datetime.now(UTC),

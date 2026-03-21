@@ -112,6 +112,44 @@ async def test_router_error_mapping_for_reference_not_found() -> None:
 
 
 @pytest.mark.asyncio
+async def test_router_portfolio_reference_success() -> None:
+    service = MagicMock()
+    service.get_portfolio_reference = AsyncMock(
+        return_value={
+            "portfolio_id": "P1",
+            "resolved_as_of_date": "2025-12-31",
+            "portfolio_currency": "EUR",
+            "portfolio_open_date": "2020-01-01",
+            "portfolio_close_date": None,
+            "performance_end_date": "2025-12-31",
+            "client_id": "CIF_1",
+            "booking_center_code": "SGPB",
+            "portfolio_type": "advisory",
+            "objective": "Growth",
+            "reference_state_policy": "current_portfolio_reference_state",
+            "lineage": {
+                "generated_by": "integration.analytics_inputs",
+                "generated_at": "2026-03-01T12:00:00Z",
+                "request_fingerprint": "abc",
+                "data_version": "state_inputs_v1",
+            },
+            "contract_version": "rfc_063_v1",
+            "supported_grouping_dimensions": ["asset_class", "sector", "country"],
+        }
+    )
+    response = await get_portfolio_analytics_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(
+            as_of_date="2025-12-31",
+            consumer_system="lotus-performance",
+        ),
+        service=service,
+    )
+    assert response["resolved_as_of_date"] == "2025-12-31"
+    assert response["reference_state_policy"] == "current_portfolio_reference_state"
+
+
+@pytest.mark.asyncio
 async def test_router_error_mapping_invalid_request() -> None:
     service = MagicMock()
     service.get_portfolio_timeseries = AsyncMock(

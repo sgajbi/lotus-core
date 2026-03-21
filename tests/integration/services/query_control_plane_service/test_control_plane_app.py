@@ -77,6 +77,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/support/portfolios/{portfolio_id}/overview" in paths
     assert "/simulation-sessions/{session_id}" in paths
     assert "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries" in paths
+    assert "/integration/portfolios/{portfolio_id}/analytics/reference" in paths
 
 
 async def test_openapi_excludes_core_read_plane_endpoints(async_test_client):
@@ -262,6 +263,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         aggregation_correlation_id["description"]
         == "Optional durable aggregation correlation identifier filter."
     )
+
     analytics_export_job_id = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -694,6 +696,37 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "application/json"
     ]["example"]
     assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+
+
+async def test_openapi_describes_analytics_reference_contract(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+
+    reference_post = schema["paths"]["/integration/portfolios/{portfolio_id}/analytics/reference"][
+        "post"
+    ]
+    request_schema = schema["components"]["schemas"]["PortfolioAnalyticsReferenceRequest"]
+    response_schema = schema["components"]["schemas"]["PortfolioAnalyticsReferenceResponse"]
+
+    assert "current canonical portfolio reference fields" in reference_post["description"]
+    assert (
+        request_schema["properties"]["consumer_system"]["description"]
+        == "Consumer system identifier for lineage and governance context."
+    )
+    assert (
+        response_schema["properties"]["resolved_as_of_date"]["description"]
+        == "Effective as-of anchor applied to this reference contract."
+    )
+    assert (
+        response_schema["properties"]["reference_state_policy"]["default"]
+        == "current_portfolio_reference_state"
+    )
+    assert (
+        response_schema["properties"]["supported_grouping_dimensions"]["description"]
+        == "Canonical grouping dimensions supported by analytics input contracts."
+    )
 
     reconciliation_run_schema = components["ReconciliationRunListResponse"]
     reconciliation_run_record = components["ReconciliationRunRecord"]

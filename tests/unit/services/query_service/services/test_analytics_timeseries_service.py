@@ -387,7 +387,35 @@ async def test_get_portfolio_reference_success() -> None:
         request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-12-31"),
     )
     assert response.portfolio_id == "P1"
+    assert response.resolved_as_of_date == date(2025, 12, 31)
     assert response.performance_end_date == date(2025, 12, 31)
+    assert response.reference_state_policy == "current_portfolio_reference_state"
+    assert response.supported_grouping_dimensions == ["asset_class", "sector", "country"]
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+                client_id="CIF_1",
+                booking_center_code="SGPB",
+                portfolio_type="advisory",
+                objective="Growth",
+            )
+        ),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+    )
+    response = await service.get_portfolio_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-06-30"),
+    )
+    assert response.performance_end_date == date(2025, 6, 30)
 
 
 @pytest.mark.asyncio

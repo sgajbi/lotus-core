@@ -561,8 +561,16 @@ class PositionAnalyticsTimeseriesResponse(BaseModel):
 class PortfolioAnalyticsReferenceRequest(BaseModel):
     as_of_date: date = Field(
         ...,
-        description="Point-in-time date used to resolve effective-dated reference values.",
+        description=(
+            "Point-in-time anchor used for contract reproducibility and to bound returned "
+            "performance horizon metadata."
+        ),
         examples=["2025-12-31"],
+    )
+    consumer_system: str = Field(
+        "lotus-performance",
+        description="Consumer system identifier for lineage and governance context.",
+        examples=["lotus-performance"],
     )
 
     model_config = ConfigDict()
@@ -572,37 +580,66 @@ class PortfolioAnalyticsReferenceResponse(BaseModel):
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
+    resolved_as_of_date: date = Field(
+        ...,
+        description="Effective as-of anchor applied to this reference contract.",
+        examples=["2025-12-31"],
+    )
     portfolio_currency: str = Field(..., description="Portfolio base currency.", examples=["EUR"])
     portfolio_open_date: date = Field(
-        ..., description="Portfolio inception date.", examples=["2020-01-01"]
+        ...,
+        description=(
+            "Current canonical portfolio inception date from the active portfolio record."
+        ),
+        examples=["2020-01-01"],
     )
     portfolio_close_date: date | None = Field(
-        None, description="Portfolio close date when closed.", examples=["2026-12-31"]
+        None,
+        description="Current canonical portfolio close date when the portfolio is closed.",
+        examples=["2026-12-31"],
     )
     performance_end_date: date | None = Field(
         None,
-        description="Latest available valuation date for the portfolio.",
+        description=(
+            "Latest available portfolio valuation date, bounded by resolved_as_of_date."
+        ),
         examples=["2025-12-31"],
     )
     client_id: str = Field(
-        ..., description="Client identifier associated with the portfolio.", examples=["CIF_100234"]
+        ...,
+        description="Current canonical client identifier associated with the portfolio.",
+        examples=["CIF_100234"],
     )
     booking_center_code: str = Field(
-        ..., description="Booking center code for the portfolio.", examples=["SGPB"]
+        ...,
+        description="Current canonical booking center code for the portfolio.",
+        examples=["SGPB"],
     )
     portfolio_type: str = Field(
-        ..., description="Portfolio type descriptor.", examples=["discretionary"]
+        ...,
+        description="Current canonical portfolio type descriptor.",
+        examples=["discretionary"],
     )
     objective: str | None = Field(
-        None, description="Portfolio objective text, when defined.", examples=["Balanced growth"]
+        None,
+        description="Current canonical portfolio objective text, when defined.",
+        examples=["Balanced growth"],
+    )
+    reference_state_policy: Literal["current_portfolio_reference_state"] = Field(
+        "current_portfolio_reference_state",
+        description=(
+            "Explains that portfolio reference fields reflect the current canonical portfolio "
+            "record, not historical effective-dated snapshots."
+        ),
+        examples=["current_portfolio_reference_state"],
     )
     lineage: LineageMetadata = Field(..., description="Lineage metadata for reproducibility.")
     contract_version: str = Field(
         "rfc_063_v1", description="Contract version for this endpoint.", examples=["rfc_063_v1"]
     )
-    taxonomy_dimensions: list[str] = Field(
+    supported_grouping_dimensions: list[str] = Field(
         default_factory=lambda: ["asset_class", "sector", "country"],
-        description="Canonical dimensions supported for analytics grouping.",
+        description="Canonical grouping dimensions supported by analytics input contracts.",
     )
 
     model_config = ConfigDict()

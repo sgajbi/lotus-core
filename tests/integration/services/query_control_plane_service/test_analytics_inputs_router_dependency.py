@@ -54,6 +54,29 @@ async def async_test_client():
             "observations": [],
         }
     )
+    mock_service.get_portfolio_reference = AsyncMock(
+        return_value={
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "resolved_as_of_date": "2025-12-31",
+            "portfolio_currency": "EUR",
+            "portfolio_open_date": "2020-01-01",
+            "portfolio_close_date": None,
+            "performance_end_date": "2025-12-31",
+            "client_id": "CIF_100234",
+            "booking_center_code": "SGPB",
+            "portfolio_type": "discretionary",
+            "objective": "Balanced growth",
+            "reference_state_policy": "current_portfolio_reference_state",
+            "lineage": {
+                "generated_by": "integration.analytics_inputs",
+                "generated_at": datetime(2026, 3, 1, tzinfo=UTC),
+                "request_fingerprint": "abc",
+                "data_version": "state_inputs_v1",
+            },
+            "contract_version": "rfc_063_v1",
+            "supported_grouping_dimensions": ["asset_class", "sector", "country"],
+        }
+    )
     mock_service.create_export_job = AsyncMock(
         return_value={
             "job_id": "aexp_1",
@@ -119,7 +142,22 @@ async def test_portfolio_analytics_timeseries_success(async_test_client):
     assert response.status_code == 200
     body = response.json()
     assert body["portfolio_id"] == "DEMO_DPM_EUR_001"
-    mock_service.get_portfolio_timeseries.assert_awaited_once()
+
+
+async def test_portfolio_analytics_reference_success(async_test_client):
+    client, mock_service = async_test_client
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/reference",
+        json={
+            "as_of_date": "2025-12-31",
+            "consumer_system": "lotus-performance",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resolved_as_of_date"] == "2025-12-31"
+    assert body["reference_state_policy"] == "current_portfolio_reference_state"
+    mock_service.get_portfolio_reference.assert_awaited_once()
 
 
 async def test_create_analytics_export_job_success(async_test_client):

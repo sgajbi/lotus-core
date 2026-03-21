@@ -157,9 +157,12 @@ async def get_position_analytics_timeseries(
     description=(
         "What: Return portfolio-level reference metadata for analytics joins and "
         "lifecycle context.\n"
-        "How: Resolve canonical portfolio attributes with lineage metadata.\n"
+        "How: Resolve current canonical portfolio reference fields, bound "
+        "performance_end_date by the requested as_of_date, and include lineage metadata.\n"
         "When: Used alongside analytics timeseries endpoints to avoid repetitive "
-        "metadata payload duplication."
+        "metadata payload duplication.\n"
+        "Contract note: portfolio reference fields are current canonical portfolio state, "
+        "not historical effective-dated portfolio snapshots."
     ),
 )
 async def get_portfolio_analytics_reference(

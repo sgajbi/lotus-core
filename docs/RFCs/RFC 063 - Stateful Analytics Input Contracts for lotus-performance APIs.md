@@ -87,6 +87,28 @@ This endpoint feeds stateful TWR and MWR. The contract now states clearly:
 2. what business-calendar completeness means
 3. whether the consumer is looking at a fully covered or partially missing portfolio window
 
+## Analytics-Reference Contract Baseline
+`POST /integration/portfolios/{portfolio_id}/analytics/reference` is now treated as an explicit
+reference contract rather than a vague metadata helper.
+
+### Request contract
+1. `as_of_date` is required.
+2. `consumer_system` is part of the governed request context.
+
+### Response contract
+1. `resolved_as_of_date` is echoed explicitly.
+2. `performance_end_date` is bounded by `resolved_as_of_date`.
+3. `reference_state_policy` explicitly states that portfolio reference fields come from the
+   current canonical portfolio record.
+4. `supported_grouping_dimensions` declares the canonical analytics grouping dimensions without
+   overloading the payload as historical taxonomy state.
+
+### Why this matters
+This endpoint no longer implies historical effective-dated portfolio metadata it cannot actually
+provide. The contract is now explicit about two separate truths:
+1. portfolio reference fields are current canonical portfolio state
+2. performance horizon metadata is bounded by the requested as-of date
+
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
