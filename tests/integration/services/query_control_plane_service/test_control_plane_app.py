@@ -999,6 +999,12 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         if parameter["name"] == "portfolio_id"
     )
     assert portfolio_param["description"] == "Portfolio identifier for the snapshot request."
+    assert not any(
+        parameter["name"] == "consumer_system" for parameter in core_snapshot.get("parameters", [])
+    )
+    assert not any(
+        parameter["name"] == "tenant_id" for parameter in core_snapshot.get("parameters", [])
+    )
 
     blocked_example = core_snapshot["responses"]["403"]["content"]["application/json"]["example"]
     assert blocked_example["detail"] == "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
@@ -1013,6 +1019,8 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     enrichment_request = components["InstrumentEnrichmentBulkRequest"]
     core_snapshot_governance = components["CoreSnapshotGovernanceMetadata"]
     core_snapshot_freshness = components["CoreSnapshotFreshnessMetadata"]
+    core_snapshot_request = components["CoreSnapshotRequest"]
+    core_snapshot_response = components["CoreSnapshotResponse"]
     core_snapshot_sections = components["CoreSnapshotSections"]
 
     assert policy_response["properties"]["policy_provenance"]["description"] == (
@@ -1024,8 +1032,26 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert core_snapshot_governance["properties"]["requested_sections"]["examples"] == [
         ["positions_baseline", "positions_projected", "positions_delta"]
     ]
+    assert core_snapshot_request["properties"]["consumer_system"]["description"] == (
+        "Downstream consumer system requesting the core snapshot contract."
+    )
+    assert core_snapshot_request["properties"]["tenant_id"]["description"] == (
+        "Tenant identifier used for governance and policy resolution."
+    )
     assert core_snapshot_freshness["properties"]["snapshot_timestamp"]["description"] == (
         "UTC timestamp of the resolved baseline snapshot when one exists."
+    )
+    assert core_snapshot_freshness["properties"]["snapshot_epoch"]["description"] == (
+        "Resolved baseline epoch when snapshot-backed state was used."
+    )
+    assert core_snapshot_freshness["properties"]["fallback_reason"]["description"] == (
+        "Reason historical fallback was used instead of current snapshot-backed state."
+    )
+    assert core_snapshot_response["properties"]["contract_version"]["description"] == (
+        "Contract version for the core snapshot response."
+    )
+    assert core_snapshot_response["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic fingerprint of the full core snapshot request contract."
     )
     assert core_snapshot_sections["properties"]["positions_delta"]["description"] == (
         "Per-security baseline versus projected deltas."

@@ -142,7 +142,13 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.sections.instrument_enrichment[0].issuer_name is not None
     assert response.sections.instrument_enrichment[0].ultimate_parent_issuer_id is not None
     assert response.sections.instrument_enrichment[0].ultimate_parent_issuer_name is not None
+    assert response.contract_version == "rfc_081_v1"
+    assert response.request_fingerprint
     assert response.freshness.baseline_source == "position_state"
+    assert response.freshness.snapshot_epoch is None
+    assert response.freshness.fallback_reason is None
+    assert response.governance.consumer_system == "lotus-performance"
+    assert response.governance.tenant_id == "default"
     assert response.governance.policy_provenance.policy_version == "snapshot.policy.inline.default"
 
 
@@ -386,7 +392,9 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
         include_zero=True,
     )
     assert rows["SEC_BOND_US"]["market_value_base"] == Decimal("45")
-    assert source == "position_history"
+    assert source.baseline_source == "position_history"
+    assert source.freshness_status == "HISTORICAL_FALLBACK"
+    assert source.fallback_reason == "NO_CURRENT_POSITION_STATE_ROWS"
 
 
 async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dependencies):
@@ -564,3 +572,21 @@ async def test_static_helpers_cover_zero_total_and_delta_paths():
 async def test_get_core_snapshot_service_factory_returns_service():
     service = get_core_snapshot_service(db=AsyncMock())
     assert isinstance(service, CoreSnapshotService)
+
+
+async def test_core_snapshot_request_fingerprint_is_deterministic(mock_dependencies):
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        consumer_system="lotus-performance",
+        tenant_id="tenant_sg_pb",
+    )
+
+    first = await service.get_core_snapshot("PORT_001", request)
+    second = await service.get_core_snapshot("PORT_001", request)
+
+    assert first.request_fingerprint == second.request_fingerprint
+    assert first.governance.consumer_system == "lotus-performance"
+    assert first.governance.tenant_id == "tenant_sg_pb"

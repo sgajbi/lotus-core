@@ -147,10 +147,14 @@ async def get_effective_integration_policy(
             "content": {"application/json": {"example": CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE}},
         },
     },
-    summary="Generate a generic core snapshot",
+    summary="Fetch governed core snapshot contract",
     description=(
-        "Returns baseline or simulation snapshot sections for an integration consumer. "
-        "Supports positions baseline/projected/delta, portfolio totals, and instrument enrichment."
+        "What: Return a governed multi-section portfolio snapshot contract for downstream "
+        "integration consumers.\n"
+        "How: Applies tenant and consumer policy, resolves baseline or simulation state, "
+        "and returns reproducibility metadata including request fingerprint and freshness.\n"
+        "When: Used by downstream systems that need policy-aware positions, totals, "
+        "delta, or enrichment views without direct query-service coupling."
     ),
 )
 async def create_core_snapshot(
@@ -160,24 +164,14 @@ async def create_core_snapshot(
         description="Portfolio identifier for the snapshot request.",
         examples=["PORT-INT-001"],
     ),
-    consumer_system: str = Query(
-        "lotus-performance",
-        description="Downstream consumer system requesting the core snapshot.",
-        examples=["lotus-performance"],
-    ),
-    tenant_id: str = Query(
-        "default",
-        description="Tenant identifier used for policy resolution.",
-        examples=["tenant_sg_pb"],
-    ),
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> CoreSnapshotResponse:
     requested_sections = list(request.sections)
     requested_policy_sections = [section.value.upper() for section in requested_sections]
     policy = integration_service.get_effective_policy(
-        consumer_system=consumer_system,
-        tenant_id=tenant_id,
+        consumer_system=request.consumer_system,
+        tenant_id=request.tenant_id,
         include_sections=requested_policy_sections,
     )
     allowed_policy_sections = set(policy.allowed_sections)
