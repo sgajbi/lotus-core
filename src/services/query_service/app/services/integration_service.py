@@ -854,12 +854,27 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
+        request_fingerprint = self._request_fingerprint(
+            {
+                "coverage_key": "benchmark_coverage",
+                "benchmark_id": benchmark_id,
+                "window": {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                },
+            }
+        )
         coverage = await self._reference_repository.get_benchmark_coverage(
             benchmark_id=benchmark_id,
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(coverage, start_date, end_date)
+        return self._to_coverage_response(
+            coverage,
+            start_date,
+            end_date,
+            request_fingerprint=request_fingerprint,
+        )
 
     async def get_risk_free_coverage(
         self,
@@ -867,18 +882,40 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
+        request_fingerprint = self._request_fingerprint(
+            {
+                "coverage_key": "risk_free_coverage",
+                "currency": currency.upper(),
+                "window": {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                },
+            }
+        )
         coverage = await self._reference_repository.get_risk_free_coverage(
             currency=currency,
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(coverage, start_date, end_date)
+        return self._to_coverage_response(
+            coverage,
+            start_date,
+            end_date,
+            request_fingerprint=request_fingerprint,
+        )
 
     async def get_classification_taxonomy(
         self,
         as_of_date: date,
         taxonomy_scope: str | None = None,
     ) -> ClassificationTaxonomyResponse:
+        request_fingerprint = self._request_fingerprint(
+            {
+                "taxonomy_key": "classification_taxonomy",
+                "as_of_date": as_of_date.isoformat(),
+                "taxonomy_scope": taxonomy_scope,
+            }
+        )
         rows = await self._reference_repository.list_taxonomy(
             as_of_date=as_of_date,
             taxonomy_scope=taxonomy_scope,
@@ -898,6 +935,7 @@ class IntegrationService:
                 )
                 for row in rows
             ],
+            request_fingerprint=request_fingerprint,
         )
 
     @staticmethod
@@ -905,6 +943,7 @@ class IntegrationService:
         coverage: dict[str, Any],
         start_date: date,
         end_date: date,
+        request_fingerprint: str,
     ) -> CoverageResponse:
         expected_dates: set[date] = set()
         cursor = start_date
@@ -927,6 +966,7 @@ class IntegrationService:
 
         missing_dates = sorted(expected_dates - observed_dates)
         return CoverageResponse(
+            request_fingerprint=request_fingerprint,
             observed_start_date=observed_start,
             observed_end_date=observed_end,
             expected_start_date=start_date,

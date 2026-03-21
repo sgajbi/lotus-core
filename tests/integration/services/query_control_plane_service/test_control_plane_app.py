@@ -1241,8 +1241,14 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         == "Deterministic request fingerprint for the raw risk-free series scope."
     )
     assert coverage_response["properties"]["missing_dates_count"]["examples"] == [2]
+    assert coverage_response["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic request fingerprint for the coverage diagnostics scope."
+    )
     assert classification_taxonomy_response["properties"]["records"]["description"] == (
         "Classification taxonomy entries effective on the requested date."
+    )
+    assert classification_taxonomy_response["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic request fingerprint for the taxonomy response scope."
     )
     reference_page_metadata = components["ReferencePageMetadata"]
     assert reference_page_metadata["properties"]["returned_component_count"]["description"] == (

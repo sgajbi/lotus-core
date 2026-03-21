@@ -898,6 +898,11 @@ class CoverageRequest(BaseModel):
 
 
 class CoverageResponse(BaseModel):
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the coverage diagnostics scope.",
+        examples=["2cb014be96ad2cb65ce1833d9f2b88a2"],
+    )
     observed_start_date: date | None = Field(
         None,
         description="Observed first date in data window.",
@@ -998,6 +1003,11 @@ class ClassificationTaxonomyResponse(BaseModel):
     taxonomy_version: str = Field(
         "rfc_062_v1",
         description="Taxonomy contract version exposed by query service.",
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the taxonomy response scope.",
+        examples=["d87368035df24ff9a42cb6e586e17ac7"],
     )
 
     model_config = ConfigDict()

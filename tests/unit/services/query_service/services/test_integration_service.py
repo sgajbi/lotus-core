@@ -24,10 +24,12 @@ def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
         },
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 3),
+        request_fingerprint="fp-coverage-test",
     )
 
     assert response.missing_dates_count == 1
     assert response.missing_dates_sample == [date(2026, 1, 2)]
+    assert response.request_fingerprint == "fp-coverage-test"
 
 
 def test_canonical_consumer_system_mappings() -> None:
@@ -524,12 +526,15 @@ async def test_reference_contract_methods() -> None:
 
     coverage = await service.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
     assert coverage.total_points == 10
+    assert coverage.request_fingerprint
 
     rf_coverage = await service.get_risk_free_coverage("USD", date(2026, 1, 1), date(2026, 1, 3))
     assert rf_coverage.total_points == 10
+    assert rf_coverage.request_fingerprint
 
     taxonomy = await service.get_classification_taxonomy(as_of_date=date(2026, 1, 1))
     assert taxonomy.records[0].dimension_name == "sector"
+    assert taxonomy.request_fingerprint
 
 
 @pytest.mark.asyncio

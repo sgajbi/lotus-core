@@ -563,6 +563,7 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
     )
     mock_service.get_benchmark_coverage = AsyncMock(
         return_value={
+            "request_fingerprint": "fp-coverage-1",
             "observed_start_date": "2026-01-01",
             "observed_end_date": "2026-01-31",
             "expected_start_date": "2026-01-01",
@@ -589,6 +590,7 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
 
     assert definition_response["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert coverage_response["total_points"] == 31
+    assert coverage_response["request_fingerprint"] == "fp-coverage-1"
 
 
 @pytest.mark.asyncio
@@ -760,10 +762,16 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         }
     )
     mock_service.get_classification_taxonomy = AsyncMock(
-        return_value={"as_of_date": "2026-01-31", "records": [], "taxonomy_version": "rfc_062_v1"}
+        return_value={
+            "as_of_date": "2026-01-31",
+            "records": [],
+            "taxonomy_version": "rfc_062_v1",
+            "request_fingerprint": "fp-taxonomy-1",
+        }
     )
     mock_service.get_risk_free_coverage = AsyncMock(
         return_value={
+            "request_fingerprint": "fp-risk-free-coverage-1",
             "observed_start_date": None,
             "observed_end_date": None,
             "expected_start_date": "2026-01-01",
@@ -865,6 +873,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert taxonomy_response["taxonomy_version"] == "rfc_062_v1"
+    assert taxonomy_response["request_fingerprint"] == "fp-taxonomy-1"
     mock_service.get_classification_taxonomy.assert_awaited_once_with(
         as_of_date=ClassificationTaxonomyRequest(as_of_date="2026-01-31").as_of_date,
         taxonomy_scope=None,
@@ -876,6 +885,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert risk_free_coverage_response["total_points"] == 0
+    assert risk_free_coverage_response["request_fingerprint"] == "fp-risk-free-coverage-1"
     mock_service.get_risk_free_coverage.assert_awaited_once_with(
         currency="USD",
         start_date=request_window.start_date,
