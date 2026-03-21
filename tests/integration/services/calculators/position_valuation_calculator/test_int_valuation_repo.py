@@ -7,6 +7,7 @@ import pytest
 import pytest_asyncio
 from portfolio_common import valuation_repository_base as valuation_repository_base_module
 from portfolio_common.database_models import (
+    BusinessDate,
     DailyPositionSnapshot,
     MarketPrice,
     Portfolio,
@@ -822,6 +823,116 @@ async def test_get_first_open_dates_for_keys(
     assert first_open_dates[("P1", "S2", 0)] == date(2025, 2, 10)
     assert first_open_dates[("P2", "S1", 1)] == date(2025, 6, 6)
     assert ("P99", "S99", 0) not in first_open_dates
+
+
+async def test_find_contiguous_snapshot_dates_respects_first_open_dates(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = ValuationRepository(async_db_session)
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P-CONTIG",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="f",
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add(
+        Transaction(
+            transaction_id="TX-CONTIG-1",
+            portfolio_id="P-CONTIG",
+            instrument_id="I-CONTIG",
+            security_id="S-CONTIG",
+            transaction_date=date(2025, 8, 10),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add_all(
+        [
+            PositionState(
+                portfolio_id="P-CONTIG",
+                security_id="S-CONTIG",
+                epoch=0,
+                watermark_date=date(1970, 1, 1),
+                status="CURRENT",
+            ),
+            PositionHistory(
+                portfolio_id="P-CONTIG",
+                security_id="S-CONTIG",
+                transaction_id="TX-CONTIG-1",
+                position_date=date(2025, 8, 10),
+                quantity=Decimal("10"),
+                cost_basis=Decimal("100"),
+                cost_basis_local=Decimal("100"),
+                epoch=0,
+            ),
+            BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 10)),
+            BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 11)),
+            DailyPositionSnapshot(
+                portfolio_id="P-CONTIG",
+                security_id="S-CONTIG",
+                date=date(2025, 8, 10),
+                epoch=0,
+                quantity=Decimal("10"),
+                cost_basis=Decimal("100"),
+                cost_basis_local=Decimal("100"),
+                market_price=Decimal("10"),
+                market_value=Decimal("100"),
+                market_value_local=Decimal("100"),
+                unrealized_gain_loss=Decimal("0"),
+                unrealized_gain_loss_local=Decimal("0"),
+                valuation_status="VALUED_CURRENT",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P-CONTIG",
+                security_id="S-CONTIG",
+                date=date(2025, 8, 11),
+                epoch=0,
+                quantity=Decimal("10"),
+                cost_basis=Decimal("100"),
+                cost_basis_local=Decimal("100"),
+                market_price=Decimal("10"),
+                market_value=Decimal("100"),
+                market_value_local=Decimal("100"),
+                unrealized_gain_loss=Decimal("0"),
+                unrealized_gain_loss_local=Decimal("0"),
+                valuation_status="VALUED_CURRENT",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    states = [
+        PositionState(
+            portfolio_id="P-CONTIG",
+            security_id="S-CONTIG",
+            epoch=0,
+            watermark_date=date(1970, 1, 1),
+            status="CURRENT",
+        )
+    ]
+
+    contiguous_dates = await repo.find_contiguous_snapshot_dates(
+        states,
+        {("P-CONTIG", "S-CONTIG", 0): date(2025, 8, 10)},
+    )
+
+    assert contiguous_dates == {("P-CONTIG", "S-CONTIG"): date(2025, 8, 11)}
 
 
 async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(

@@ -2,7 +2,19 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, cast, func, select, text, tuple_, update
+from sqlalchemy import (
+    Integer,
+    String,
+    and_,
+    cast,
+    column,
+    func,
+    select,
+    text,
+    tuple_,
+    update,
+    values,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -169,12 +181,39 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="find_contiguous_snapshot_dates")
     async def find_contiguous_snapshot_dates(
-        self, states: List[PositionState]
+        self,
+        states: List[PositionState],
+        first_open_dates: Optional[Dict[Tuple[str, str, int], date]] = None,
     ) -> Dict[Tuple[str, str], date]:
         if not states:
             return {}
 
-        keys_tuple = tuple((s.portfolio_id, s.security_id) for s in states)
+        keys_tuple = tuple((s.portfolio_id, s.security_id, s.epoch) for s in states)
+        first_open_dates = first_open_dates or {}
+
+        first_open_dates_table = (
+            values(
+                column("portfolio_id", String),
+                column("security_id", String),
+                column("epoch", Integer),
+                column("first_open_date", Date),
+                name="first_open_dates",
+            )
+            .data(
+                [
+                    (
+                        portfolio_id,
+                        security_id,
+                        epoch,
+                        first_open_date,
+                    )
+                    for (portfolio_id, security_id, epoch), first_open_date in (
+                        first_open_dates.items()
+                    )
+                ]
+            )
+            .alias("first_open_dates")
+        )
 
         s = aliased(PositionState)
         dps = aliased(DailyPositionSnapshot)
@@ -184,17 +223,28 @@ class ValuationRepositoryBase:
             .scalar_subquery()
         )
 
+        expected_start_date = cast(
+            func.greatest(
+                s.watermark_date + timedelta(days=1),
+                func.coalesce(
+                    first_open_dates_table.c.first_open_date,
+                    s.watermark_date + timedelta(days=1),
+                ),
+            ),
+            Date,
+        )
+
         date_series_subq = (
             select(
                 func.generate_series(
-                    s.watermark_date + timedelta(days=1),
+                    expected_start_date,
                     max_business_date_subq,
                     timedelta(days=1),
                 )
                 .cast(Date)
                 .label("expected_date")
             )
-            .correlate(s)
+            .correlate(s, first_open_dates_table)
             .subquery("date_series")
         )
 
@@ -237,8 +287,14 @@ class ValuationRepositoryBase:
                 ).label("contiguous_date"),
             )
             .select_from(s)
+            .outerjoin(
+                first_open_dates_table,
+                (first_open_dates_table.c.portfolio_id == s.portfolio_id)
+                & (first_open_dates_table.c.security_id == s.security_id)
+                & (first_open_dates_table.c.epoch == s.epoch),
+            )
             .where(
-                tuple_(s.portfolio_id, s.security_id).in_(keys_tuple),
+                tuple_(s.portfolio_id, s.security_id, s.epoch).in_(keys_tuple),
                 latest_snapshot_subq.isnot(None),
             )
         )

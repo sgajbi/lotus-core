@@ -146,6 +146,22 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "e2e-all": "e2e",
 }
 
+SUITE_RUNTIME_MODE: dict[str, str] = {
+    "unit": "unit",
+    "unit-db": "db_direct",
+    "integration-lite": "db_direct",
+    "integration-all": "db_direct",
+    "ops-contract": "db_direct",
+    "transaction-buy-contract": "db_direct",
+    "transaction-sell-contract": "db_direct",
+    "transaction-dividend-contract": "db_direct",
+    "transaction-interest-contract": "db_direct",
+    "transaction-fx-contract": "db_direct",
+    "transaction-portfolio-flow-bundle-contract": "db_direct",
+    "e2e-smoke": "live_worker",
+    "e2e-all": "live_worker",
+}
+
 
 def get_suite(name: str) -> list[str]:
     try:
@@ -188,6 +204,7 @@ def run_suite(
         env=env,
         preserve_existing=True,
     )
+    env["LOTUS_TEST_RUNTIME_MODE"] = SUITE_RUNTIME_MODE.get(name, "unit")
     if coverage_file:
         env["COVERAGE_FILE"] = coverage_file
 

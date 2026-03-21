@@ -99,6 +99,9 @@ class PriceEventConsumer(BaseConsumer):
                         is_backdated = (
                             latest_business_date and event.price_date < latest_business_date
                         )
+                        needs_deferred_reprocessing = (
+                            latest_business_date is None or event.price_date > latest_business_date
+                        )
                         if is_backdated:
                             logger.warning(
                                 "Back-dated price event detected. "
@@ -106,6 +109,21 @@ class PriceEventConsumer(BaseConsumer):
                                 extra={
                                     "security_id": event.security_id,
                                     "price_date": event.price_date,
+                                },
+                            )
+                            await reprocessing_repo.upsert_state(
+                                security_id=event.security_id,
+                                price_date=event.price_date,
+                                correlation_id=event_correlation_id,
+                            )
+                        elif needs_deferred_reprocessing:
+                            logger.info(
+                                "Price event is ahead of current business-date horizon. "
+                                "Staging durable reprocessing trigger.",
+                                extra={
+                                    "security_id": event.security_id,
+                                    "price_date": event.price_date,
+                                    "latest_business_date": latest_business_date,
                                 },
                             )
                             await reprocessing_repo.upsert_state(

@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.test_manifest import SUITE_PYTEST_ARGS, SUITES, get_suite, validate_suite_paths
+from scripts.test_manifest import (
+    SUITE_PYTEST_ARGS,
+    SUITE_RUNTIME_MODE,
+    SUITES,
+    get_suite,
+    validate_suite_paths,
+)
 
 
 def test_integration_lite_suite_includes_lookup_contract_router() -> None:
@@ -47,6 +53,11 @@ def test_fx_contract_suite_includes_fx_contract_surfaces() -> None:
 
 def test_e2e_all_suite_tracks_full_end_to_end_tree() -> None:
     assert get_suite("e2e-all") == ["tests/e2e"]
+
+
+def test_manifest_runtime_modes_keep_db_direct_and_live_worker_explicit() -> None:
+    assert SUITE_RUNTIME_MODE["integration-all"] == "db_direct"
+    assert SUITE_RUNTIME_MODE["e2e-all"] == "live_worker"
 
 
 def test_manifest_paths_exist_for_all_suites() -> None:
