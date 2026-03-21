@@ -135,6 +135,8 @@ class ValuationScheduler:
         terminal_reprocessing_states = await repo.get_terminal_reprocessing_states(
             latest_business_date, self._batch_size
         )
+        lagging_keys = [(s.portfolio_id, s.security_id, s.epoch) for s in lagging_states]
+        first_open_dates = await repo.get_first_open_dates_for_keys(lagging_keys)
 
         reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING") + len(
             terminal_reprocessing_states
@@ -185,7 +187,9 @@ class ValuationScheduler:
         if not lagging_states:
             return
 
-        advancable_dates = await repo.find_contiguous_snapshot_dates(lagging_states)
+        advancable_dates = await repo.find_contiguous_snapshot_dates(
+            lagging_states, first_open_dates
+        )
 
         updates_to_commit: List[Dict[str, Any]] = []
         for state in lagging_states:
@@ -238,6 +242,7 @@ class ValuationScheduler:
         """
         repo = ValuationRepository(db)
         job_repo = ValuationJobRepository(db)
+        position_state_repo = PositionStateRepository(db)
 
         latest_business_date = await repo.get_latest_business_date()
 
@@ -262,6 +267,38 @@ class ValuationScheduler:
         keys_to_check = [(s.portfolio_id, s.security_id, s.epoch) for s in states_to_backfill]
 
         first_open_dates = await repo.get_first_open_dates_for_keys(keys_to_check)
+        keys_without_history = [
+            state
+            for state in states_to_backfill
+            if (state.portfolio_id, state.security_id, state.epoch) not in first_open_dates
+        ]
+
+        if keys_without_history:
+            normalized_updates = [
+                {
+                    "portfolio_id": state.portfolio_id,
+                    "security_id": state.security_id,
+                    "expected_epoch": state.epoch,
+                    "watermark_date": latest_business_date,
+                    "status": "CURRENT",
+                }
+                for state in keys_without_history
+            ]
+            normalized_count = await position_state_repo.bulk_update_states(normalized_updates)
+            if normalized_count != len(normalized_updates):
+                logger.warning(
+                    "ValuationScheduler normalized fewer no-history states than prepared updates.",
+                    extra={
+                        "prepared_count": len(normalized_updates),
+                        "updated_count": normalized_count,
+                        "stale_skipped_count": len(normalized_updates) - normalized_count,
+                    },
+                )
+            elif normalized_count:
+                logger.info(
+                    "ValuationScheduler normalized no-history states to current watermark.",
+                    extra={"normalized_count": normalized_count},
+                )
 
         for state in states_to_backfill:
             gap_days = (latest_business_date - state.watermark_date).days
@@ -276,8 +313,17 @@ class ValuationScheduler:
             first_open_date = first_open_dates.get(key)
 
             if not first_open_date:
-                logger.warning(
-                    f"No position history found for key {key}. Skipping backfill job creation."
+                logger.info(
+                    (
+                        "No current-epoch position history found; "
+                        "normalized state to current watermark."
+                    ),
+                    extra={
+                        "portfolio_id": state.portfolio_id,
+                        "security_id": state.security_id,
+                        "epoch": state.epoch,
+                        "latest_business_date": str(latest_business_date),
+                    },
                 )
                 continue
 

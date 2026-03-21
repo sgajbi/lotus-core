@@ -125,6 +125,7 @@ async def test_scheduler_skips_jobs_for_keys_with_no_position_history(
 ):
     mock_repo = mock_dependencies["repo"]
     mock_job_repo = mock_dependencies["job_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
 
     latest_business_date = date(2025, 8, 12)
     states_to_backfill = [
@@ -143,6 +144,17 @@ async def test_scheduler_skips_jobs_for_keys_with_no_position_history(
     await scheduler._create_backfill_jobs(AsyncMock())
 
     mock_job_repo.upsert_job.assert_not_called()
+    mock_state_repo.bulk_update_states.assert_awaited_once_with(
+        [
+            {
+                "portfolio_id": "P1",
+                "security_id": "S1",
+                "expected_epoch": 1,
+                "watermark_date": latest_business_date,
+                "status": "CURRENT",
+            }
+        ]
+    )
 
 
 async def test_scheduler_advances_watermarks(
@@ -184,11 +196,24 @@ async def test_scheduler_advances_watermarks(
     mock_repo.get_latest_business_date.return_value = latest_business_date
     mock_repo.get_lagging_states.return_value = lagging_states
     mock_repo.get_terminal_reprocessing_states.return_value = []
+    mock_repo.get_first_open_dates_for_keys.return_value = {
+        ("P1", "S1", 1): date(2025, 8, 11),
+        ("P2", "S2", 2): date(2025, 8, 11),
+        ("P3", "S3", 1): date(2025, 8, 11),
+    }
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
     mock_state_repo.bulk_update_states.return_value = 2
 
     await scheduler._advance_watermarks(AsyncMock())
 
+    mock_repo.find_contiguous_snapshot_dates.assert_awaited_once_with(
+        lagging_states,
+        {
+            ("P1", "S1", 1): date(2025, 8, 11),
+            ("P2", "S2", 2): date(2025, 8, 11),
+            ("P3", "S3", 1): date(2025, 8, 11),
+        },
+    )
     mock_state_repo.bulk_update_states.assert_awaited_once()
     updates_arg = mock_state_repo.bulk_update_states.call_args[0][0]
     assert len(updates_arg) == 2
@@ -229,6 +254,10 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     mock_repo.get_latest_business_date.return_value = latest_business_date
     mock_repo.get_lagging_states.return_value = lagging_states
     mock_repo.get_terminal_reprocessing_states.return_value = []
+    mock_repo.get_first_open_dates_for_keys.return_value = {
+        ("P1", "S1", 1): date(2025, 8, 11),
+        ("P2", "S2", 2): date(2025, 8, 11),
+    }
     mock_repo.find_contiguous_snapshot_dates.return_value = advancable_dates
     mock_state_repo.bulk_update_states.return_value = 1
 
@@ -248,6 +277,111 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
     mock_observe_stale_skips.assert_called_once_with("watermark_advance", 1)
+
+
+async def test_scheduler_advances_from_first_open_date_for_sentinel_watermarks(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    latest_business_date = date(2025, 8, 15)
+
+    lagging_states = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(1970, 1, 1),
+            epoch=1,
+            status="CURRENT",
+        ),
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_lagging_states.return_value = lagging_states
+    mock_repo.get_terminal_reprocessing_states.return_value = []
+    mock_repo.get_first_open_dates_for_keys.return_value = {
+        ("P1", "S1", 1): date(2025, 8, 10),
+    }
+    mock_repo.find_contiguous_snapshot_dates.return_value = {
+        ("P1", "S1"): latest_business_date,
+    }
+    mock_state_repo.bulk_update_states.return_value = 1
+
+    await scheduler._advance_watermarks(AsyncMock())
+
+    mock_repo.find_contiguous_snapshot_dates.assert_awaited_once_with(
+        lagging_states,
+        {("P1", "S1", 1): date(2025, 8, 10)},
+    )
+    mock_state_repo.bulk_update_states.assert_awaited_once_with(
+        [
+            {
+                "portfolio_id": "P1",
+                "security_id": "S1",
+                "expected_epoch": 1,
+                "watermark_date": latest_business_date,
+                "status": "CURRENT",
+            }
+        ]
+    )
+
+
+async def test_scheduler_normalizes_zombies_and_still_creates_backfill_for_live_keys(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+
+    latest_business_date = date(2025, 8, 12)
+    states_to_backfill = [
+        PositionState(
+            portfolio_id="ZOMBIE",
+            security_id="NOHIST",
+            watermark_date=date(1970, 1, 1),
+            epoch=0,
+            status="CURRENT",
+        ),
+        PositionState(
+            portfolio_id="LIVE",
+            security_id="OPENPOS",
+            watermark_date=date(1970, 1, 1),
+            epoch=0,
+            status="CURRENT",
+        ),
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_states_needing_backfill.return_value = states_to_backfill
+    mock_repo.get_first_open_dates_for_keys.return_value = {
+        ("LIVE", "OPENPOS", 0): date(2025, 8, 10),
+    }
+    mock_state_repo.bulk_update_states.return_value = 1
+
+    await scheduler._create_backfill_jobs(AsyncMock())
+
+    mock_state_repo.bulk_update_states.assert_awaited_once_with(
+        [
+            {
+                "portfolio_id": "ZOMBIE",
+                "security_id": "NOHIST",
+                "expected_epoch": 0,
+                "watermark_date": latest_business_date,
+                "status": "CURRENT",
+            }
+        ]
+    )
+    assert mock_job_repo.upsert_job.call_count == 3
+    scheduled_dates = [
+        call.kwargs["valuation_date"] for call in mock_job_repo.upsert_job.call_args_list
+    ]
+    assert scheduled_dates == [
+        date(2025, 8, 10),
+        date(2025, 8, 11),
+        date(2025, 8, 12),
+    ]
 
 
 async def test_scheduler_updates_queue_metrics(
