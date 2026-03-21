@@ -62,6 +62,31 @@ These changes close three important gaps:
 2. downstream consumers no longer need implicit knowledge to know whether cash-flow semantics are present
 3. pagination is auditable and replay-safe
 
+## Portfolio-Timeseries Contract Baseline
+The portfolio companion endpoint now has a stronger contract baseline as well.
+
+### Request contract
+1. Exactly one of `window` or `period` must be supplied.
+2. `reporting_currency` determines the value and cash-flow currency of returned observations.
+3. Paging is deterministic and snapshot-pinned.
+
+### Response contract
+1. `PortfolioTimeseriesObservation.beginning_market_value` and `ending_market_value` are always expressed in the effective `reporting_currency`.
+2. `PortfolioTimeseriesObservation.cash_flows` are canonical portfolio-level performance flows in that same reporting currency.
+3. Each observation includes `cash_flow_currency` so consumers do not need to infer flow-currency semantics.
+4. Portfolio diagnostics are endpoint-specific and include:
+   - `expected_business_dates_count`
+   - `returned_observation_dates_count`
+   - `missing_dates_count`
+   - `stale_points_count`
+   - `cash_flows_included`
+
+### Why this matters
+This endpoint feeds stateful TWR and MWR. The contract now states clearly:
+1. what currency the totals are in
+2. what business-calendar completeness means
+3. whether the consumer is looking at a fully covered or partially missing portfolio window
+
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |

@@ -143,6 +143,44 @@ class QualityDiagnostics(BaseModel):
     model_config = ConfigDict()
 
 
+class PortfolioQualityDiagnostics(BaseModel):
+    quality_status_distribution: dict[str, int] = Field(
+        default_factory=dict,
+        description="Distribution of valuation quality states observed in the returned page.",
+        examples=[{"final": 245, "restated": 3}],
+    )
+    missing_dates_count: int = Field(
+        0,
+        description=(
+            "Count of expected business-calendar dates in the resolved window that do not "
+            "have a portfolio observation in the pinned snapshot epoch."
+        ),
+        examples=[0],
+    )
+    stale_points_count: int = Field(
+        0,
+        description="Count of returned observations whose valuation state is not final.",
+        examples=[1],
+    )
+    expected_business_dates_count: int = Field(
+        0,
+        description="Number of expected business-calendar dates in the resolved window.",
+        examples=[22],
+    )
+    returned_observation_dates_count: int = Field(
+        0,
+        description="Number of portfolio valuation dates present in the pinned snapshot epoch.",
+        examples=[22],
+    )
+    cash_flows_included: bool = Field(
+        True,
+        description="Whether canonical portfolio cash_flows are present on returned observations.",
+        examples=[True],
+    )
+
+    model_config = ConfigDict()
+
+
 class CashFlowObservation(BaseModel):
     amount: Decimal = Field(
         ...,
@@ -239,6 +277,14 @@ class PortfolioTimeseriesObservation(BaseModel):
         default_factory=list,
         description="Canonical cash flow events for the valuation_date.",
     )
+    cash_flow_currency: str = Field(
+        ...,
+        description=(
+            "Currency code applied to the observation cash_flows amounts; matches the "
+            "effective reporting_currency."
+        ),
+        examples=["USD"],
+    )
 
     model_config = ConfigDict()
 
@@ -282,7 +328,7 @@ class PortfolioAnalyticsTimeseriesResponse(BaseModel):
         examples=["strict"],
     )
     lineage: LineageMetadata = Field(..., description="Lineage metadata for reproducibility.")
-    diagnostics: QualityDiagnostics = Field(
+    diagnostics: PortfolioQualityDiagnostics = Field(
         ..., description="Quality and completeness diagnostics."
     )
     page: PageMetadata = Field(..., description="Paging metadata for incremental retrieval.")

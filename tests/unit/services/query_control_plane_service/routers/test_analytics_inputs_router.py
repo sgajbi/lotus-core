@@ -52,7 +52,8 @@ async def test_router_portfolio_timeseries_success() -> None:
                 "quality_status_distribution": {"final": 1},
                 "missing_dates_count": 0,
                 "stale_points_count": 0,
-                "requested_dimensions": [],
+                "expected_business_dates_count": 1,
+                "returned_observation_dates_count": 1,
                 "cash_flows_included": True,
             },
             "page": {

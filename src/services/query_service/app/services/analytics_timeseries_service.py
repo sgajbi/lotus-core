@@ -31,6 +31,7 @@ from ..dtos.analytics_input_dto import (
     PortfolioAnalyticsReferenceResponse,
     PortfolioAnalyticsTimeseriesRequest,
     PortfolioAnalyticsTimeseriesResponse,
+    PortfolioQualityDiagnostics,
     PortfolioTimeseriesObservation,
     PositionAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesResponse,
@@ -256,6 +257,16 @@ class AnalyticsTimeseriesService:
             cursor_date=cursor_date,
             snapshot_epoch=snapshot_epoch,
         )
+        expected_business_dates = await self.repo.list_business_dates(
+            start_date=resolved_window.start_date,
+            end_date=resolved_window.end_date,
+        )
+        observed_dates = await self.repo.list_portfolio_observation_dates(
+            portfolio_id=portfolio_id,
+            start_date=resolved_window.start_date,
+            end_date=resolved_window.end_date,
+            snapshot_epoch=snapshot_epoch,
+        )
 
         has_more = len(rows) > request.page.page_size
         rows_page = rows[: request.page.page_size]
@@ -290,6 +301,7 @@ class AnalyticsTimeseriesService:
                         )
                         for flow in self._cash_flows_from_portfolio_row(row)
                     ],
+                    cash_flow_currency=reporting_currency,
                 )
             )
 
@@ -304,6 +316,10 @@ class AnalyticsTimeseriesService:
             )
 
         latest_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
+        missing_dates = sorted(set(expected_business_dates) - set(observed_dates))
+        stale_points_count = sum(
+            count for status_name, count in quality_distribution.items() if status_name != "final"
+        )
         fingerprint = self._request_fingerprint(
             {
                 "endpoint": "portfolio-timeseries",
@@ -326,11 +342,12 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
-            diagnostics=QualityDiagnostics(
+            diagnostics=PortfolioQualityDiagnostics(
                 quality_status_distribution=quality_distribution,
-                missing_dates_count=0,
-                stale_points_count=0,
-                requested_dimensions=[],
+                missing_dates_count=len(missing_dates),
+                stale_points_count=stale_points_count,
+                expected_business_dates_count=len(expected_business_dates),
+                returned_observation_dates_count=len(observed_dates),
                 cash_flows_included=True,
             ),
             page=PageMetadata(

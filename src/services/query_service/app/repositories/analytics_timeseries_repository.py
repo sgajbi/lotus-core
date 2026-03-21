@@ -4,7 +4,9 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
+    BusinessDate,
     FxRate,
     Instrument,
     Portfolio,
@@ -30,6 +32,58 @@ class AnalyticsTimeseriesRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_business_dates(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> list[date]:
+        stmt = (
+            select(BusinessDate.date)
+            .where(
+                BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+                BusinessDate.date >= start_date,
+                BusinessDate.date <= end_date,
+            )
+            .order_by(BusinessDate.date.asc())
+        )
+        result = await self.db.execute(stmt)
+        return [row.date for row in result.all()]
+
+    async def list_portfolio_observation_dates(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        snapshot_epoch: int | None = None,
+    ) -> list[date]:
+        predicates = [
+            PortfolioTimeseries.portfolio_id == portfolio_id,
+            PortfolioTimeseries.date >= start_date,
+            PortfolioTimeseries.date <= end_date,
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(PortfolioTimeseries.epoch <= snapshot_epoch)
+        ranked = (
+            select(
+                PortfolioTimeseries.date.label("valuation_date"),
+                func.row_number()
+                .over(
+                    partition_by=PortfolioTimeseries.date,
+                    order_by=(PortfolioTimeseries.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .where(*predicates)
+            .subquery()
+        )
+        stmt = select(ranked.c.valuation_date).where(ranked.c.rn == 1).order_by(
+            ranked.c.valuation_date.asc()
+        )
+        result = await self.db.execute(stmt)
+        return [row.valuation_date for row in result.all()]
 
     async def list_portfolio_timeseries_rows(
         self,

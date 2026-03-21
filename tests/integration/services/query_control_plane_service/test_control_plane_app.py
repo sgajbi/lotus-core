@@ -893,8 +893,10 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     components = schema["components"]["schemas"]
     page_metadata = components["PageMetadata"]
+    portfolio_observation = components["PortfolioTimeseriesObservation"]
     position_request = components["PositionAnalyticsTimeseriesRequest"]
     position_row = components["PositionTimeseriesRow"]
+    portfolio_diagnostics = components["PortfolioQualityDiagnostics"]
     diagnostics = components["QualityDiagnostics"]
     export_result_schema = components["AnalyticsExportJsonResultResponse"]
 
@@ -904,10 +906,18 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert page_metadata["properties"]["sort_key"]["description"] == (
         "Stable ordering applied to rows for deterministic paging."
     )
+    assert portfolio_observation["properties"]["cash_flow_currency"]["description"] == (
+        "Currency code applied to the observation cash_flows amounts; matches the "
+        "effective reporting_currency."
+    )
     assert position_request["properties"]["include_cash_flows"]["default"] is True
     assert position_row["properties"]["cash_flow_currency"]["description"] == (
         "Currency code applied to the row cash_flows amounts; normally matches position_currency."
     )
+    assert portfolio_diagnostics["properties"]["expected_business_dates_count"]["description"] == (
+        "Number of expected business-calendar dates in the resolved window."
+    )
+    assert portfolio_diagnostics["properties"]["cash_flows_included"]["default"] is True
     assert diagnostics["properties"]["cash_flows_included"]["default"] is False
     assert export_result_schema["properties"]["data"]["description"] == (
         "Serialized observations or rows from the selected dataset."

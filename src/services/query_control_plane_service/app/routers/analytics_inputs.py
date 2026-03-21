@@ -75,7 +75,8 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
         "What: Return canonical portfolio valuation and cash-flow timeseries required by "
         "lotus-performance.\n"
         "How: Resolve effective window, apply deterministic paging, and include "
-        "lineage/quality diagnostics.\n"
+        "lineage/quality diagnostics. Returned cash_flows are canonical portfolio-level "
+        "events expressed in the effective reporting currency.\n"
         "When: Used for stateful TWR and MWR input acquisition without direct database coupling."
     ),
 )
