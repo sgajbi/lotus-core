@@ -706,7 +706,13 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
                 "native_component_series_with_identity_benchmark_to_target_fx_context"
             ),
             "request_fingerprint": "fp1",
-            "page": {"page_size": 250, "sort_key": "index_id:asc", "next_page_token": None},
+            "page": {
+                "page_size": 250,
+                "sort_key": "index_id:asc",
+                "returned_component_count": 0,
+                "request_scope_fingerprint": "fp1",
+                "next_page_token": None,
+            },
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
@@ -778,6 +784,8 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     assert benchmark_market_response["benchmark_id"] == "B1"
     assert benchmark_market_response["benchmark_currency"] == "USD"
     assert benchmark_market_response["page"]["page_size"] == 250
+    assert benchmark_market_response["page"]["returned_component_count"] == 0
+    assert benchmark_market_response["page"]["request_scope_fingerprint"] == "fp1"
     mock_service.get_benchmark_market_series.assert_awaited_once()
 
     benchmark_composition_response = await fetch_benchmark_composition_window(

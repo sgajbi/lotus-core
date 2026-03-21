@@ -466,6 +466,7 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
+        requested_fields = set(request.series_fields)
         definition = await self._reference_repository.get_benchmark_definition(
             benchmark_id, request.as_of_date
         )
@@ -522,7 +523,7 @@ class IntegrationService:
         if request.target_currency:
             fx_context_source_currency = benchmark_currency
             fx_context_target_currency = request.target_currency
-            if benchmark_currency != request.target_currency:
+            if benchmark_currency != request.target_currency and "fx_rate" in requested_fields:
                 fx_rates = await self._reference_repository.get_fx_rates(
                     from_currency=benchmark_currency,
                     to_currency=request.target_currency,
@@ -537,10 +538,12 @@ class IntegrationService:
                     normalization_status = (
                         "native_component_series_with_missing_benchmark_to_target_fx_context"
                     )
-            else:
+            elif benchmark_currency == request.target_currency:
                 normalization_status = (
                     "native_component_series_with_identity_benchmark_to_target_fx_context"
                 )
+            else:
+                normalization_status = "native_component_series_without_fx_context_request"
 
         prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
         returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
@@ -586,17 +589,27 @@ class IntegrationService:
                                 and benchmark_return_row.series_currency
                             )
                         ),
-                        index_price=self._as_decimal(price_row.index_price) if price_row else None,
+                        index_price=(
+                            self._as_decimal(price_row.index_price)
+                            if price_row and "index_price" in requested_fields
+                            else None
+                        ),
                         index_return=(
-                            self._as_decimal(return_row.index_return) if return_row else None
+                            self._as_decimal(return_row.index_return)
+                            if return_row and "index_return" in requested_fields
+                            else None
                         ),
                         benchmark_return=(
                             self._as_decimal(benchmark_return_row.benchmark_return)
-                            if benchmark_return_row
+                            if benchmark_return_row and "benchmark_return" in requested_fields
                             else None
                         ),
-                        component_weight=component_weight,
-                        fx_rate=fx_rates.get(current_date),
+                        component_weight=(
+                            component_weight if "component_weight" in requested_fields else None
+                        ),
+                        fx_rate=(
+                            fx_rates.get(current_date) if "fx_rate" in requested_fields else None
+                        ),
                         quality_status=quality_status,
                     )
                 )
@@ -646,6 +659,8 @@ class IntegrationService:
             page=ReferencePageMetadata(
                 page_size=page_size,
                 sort_key="index_id:asc",
+                returned_component_count=len(component_series),
+                request_scope_fingerprint=request_scope_fingerprint,
                 next_page_token=next_page_token,
             ),
             lineage={

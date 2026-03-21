@@ -454,8 +454,8 @@ async def fetch_index_catalog(
     summary="Fetch benchmark market series inputs",
     description=(
         "What: Return benchmark market series inputs required by lotus-performance.\n"
-        "How: Resolves components and returns aligned raw series with quality and "
-        "lineage metadata.\n"
+        "How: Resolves components and returns aligned raw series honoring requested "
+        "series_fields, deterministic paging, and benchmark-to-target FX context semantics.\n"
         "When: Used for benchmark analytics and replay-safe portfolio attribution calculations."
     ),
 )

@@ -1220,12 +1220,22 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_market_series_request["properties"]["page"]["description"] == (
         "Optional deterministic paging controls for large benchmark component universes."
     )
+    assert benchmark_market_series_request["properties"]["frequency"]["description"] == (
+        "Requested output frequency label. Currently only daily is supported."
+    )
     assert risk_free_series_response["properties"]["lineage"]["examples"] == [
         {"contract_version": "rfc_062_v1", "source_system": "lotus-core"}
     ]
     assert coverage_response["properties"]["missing_dates_count"]["examples"] == [2]
     assert classification_taxonomy_response["properties"]["records"]["description"] == (
         "Classification taxonomy entries effective on the requested date."
+    )
+    reference_page_metadata = components["ReferencePageMetadata"]
+    assert reference_page_metadata["properties"]["returned_component_count"]["description"] == (
+        "Number of component series records returned in the current page."
+    )
+    assert reference_page_metadata["properties"]["request_scope_fingerprint"]["description"] == (
+        "Deterministic fingerprint of the request scope bound to this page sequence."
     )
 
 
