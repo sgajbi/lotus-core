@@ -556,7 +556,7 @@ async def test_process_message_skips_non_cash_fx_contract_lifecycle_components(
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
-async def test_process_message_dividend_external_mode_skips_auto_cashflow_creation(
+async def test_process_message_dividend_external_mode_still_creates_product_cashflow(
     cashflow_consumer: CashflowCalculatorConsumer,
     mock_kafka_message: MagicMock,
     mock_dependencies: dict,
@@ -586,6 +586,30 @@ async def test_process_message_dividend_external_mode_skips_auto_cashflow_creati
     mock_kafka_message.value.return_value = event.model_dump_json().encode("utf-8")
 
     mock_idempotency_repo.is_event_processed.return_value = False
+    mock_rules_repo.get_all_rules.return_value = [
+        CashflowRule(
+            transaction_type="DIVIDEND",
+            classification="INCOME",
+            timing="EOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    ]
+    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
+        id=21,
+        transaction_id=event.transaction_id,
+        portfolio_id=event.portfolio_id,
+        security_id=event.security_id,
+        cashflow_date=date(2025, 8, 1),
+        amount=Decimal("1000"),
+        currency="USD",
+        classification="INCOME",
+        timing="EOD",
+        calculation_type="NET",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        epoch=1,
+    )
 
     with patch(
         "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
@@ -596,9 +620,9 @@ async def test_process_message_dividend_external_mode_skips_auto_cashflow_creati
 
         await cashflow_consumer.process_message(mock_kafka_message)
 
-    mock_rules_repo.get_all_rules.assert_not_awaited()
-    mock_cashflow_repo.create_cashflow.assert_not_called()
-    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_rules_repo.get_all_rules.assert_awaited_once()
+    mock_cashflow_repo.create_cashflow.assert_called_once()
+    mock_outbox_repo.create_outbox_event.assert_called_once()
     mock_idempotency_repo.mark_event_processed.assert_awaited_once()
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
@@ -652,7 +676,7 @@ async def test_process_message_dividend_external_mode_without_link_sends_to_dlq(
     assert isinstance(dlq_error_arg, LinkedCashLegError)
 
 
-async def test_process_message_interest_external_mode_skips_auto_cashflow_creation(
+async def test_process_message_interest_external_mode_still_creates_product_cashflow(
     cashflow_consumer: CashflowCalculatorConsumer,
     mock_kafka_message: MagicMock,
     mock_dependencies: dict,
@@ -682,6 +706,30 @@ async def test_process_message_interest_external_mode_skips_auto_cashflow_creati
     mock_kafka_message.value.return_value = event.model_dump_json().encode("utf-8")
 
     mock_idempotency_repo.is_event_processed.return_value = False
+    mock_rules_repo.get_all_rules.return_value = [
+        CashflowRule(
+            transaction_type="INTEREST",
+            classification="INCOME",
+            timing="EOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    ]
+    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
+        id=22,
+        transaction_id=event.transaction_id,
+        portfolio_id=event.portfolio_id,
+        security_id=event.security_id,
+        cashflow_date=date(2025, 8, 1),
+        amount=Decimal("1000"),
+        currency="USD",
+        classification="INCOME",
+        timing="EOD",
+        calculation_type="NET",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        epoch=1,
+    )
 
     with patch(
         "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
@@ -692,9 +740,9 @@ async def test_process_message_interest_external_mode_skips_auto_cashflow_creati
 
         await cashflow_consumer.process_message(mock_kafka_message)
 
-    mock_rules_repo.get_all_rules.assert_not_awaited()
-    mock_cashflow_repo.create_cashflow.assert_not_called()
-    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_rules_repo.get_all_rules.assert_awaited_once()
+    mock_cashflow_repo.create_cashflow.assert_called_once()
+    mock_outbox_repo.create_outbox_event.assert_called_once()
     mock_idempotency_repo.mark_event_processed.assert_awaited_once()
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
@@ -748,7 +796,7 @@ async def test_process_message_interest_external_mode_without_link_sends_to_dlq(
     assert isinstance(dlq_error_arg, LinkedCashLegError)
 
 
-async def test_process_message_buy_with_linked_cash_leg_skips_product_cashflow(
+async def test_process_message_buy_with_linked_cash_leg_still_creates_product_cashflow(
     cashflow_consumer: CashflowCalculatorConsumer,
     mock_kafka_message: MagicMock,
     mock_dependencies: dict,
@@ -778,6 +826,30 @@ async def test_process_message_buy_with_linked_cash_leg_skips_product_cashflow(
     mock_kafka_message.value.return_value = event.model_dump_json().encode("utf-8")
 
     mock_idempotency_repo.is_event_processed.return_value = False
+    mock_rules_repo.get_all_rules.return_value = [
+        CashflowRule(
+            transaction_type="BUY",
+            classification="INVESTMENT_OUTFLOW",
+            timing="BOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    ]
+    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
+        id=23,
+        transaction_id=event.transaction_id,
+        portfolio_id=event.portfolio_id,
+        security_id=event.security_id,
+        cashflow_date=date(2025, 8, 1),
+        amount=Decimal("-1005"),
+        currency="USD",
+        classification="INVESTMENT_OUTFLOW",
+        timing="BOD",
+        calculation_type="NET",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        epoch=1,
+    )
 
     with patch(
         "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
@@ -788,9 +860,9 @@ async def test_process_message_buy_with_linked_cash_leg_skips_product_cashflow(
 
         await cashflow_consumer.process_message(mock_kafka_message)
 
-    mock_rules_repo.get_all_rules.assert_not_awaited()
-    mock_cashflow_repo.create_cashflow.assert_not_called()
-    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_rules_repo.get_all_rules.assert_awaited_once()
+    mock_cashflow_repo.create_cashflow.assert_called_once()
+    mock_outbox_repo.create_outbox_event.assert_called_once()
     mock_idempotency_repo.mark_event_processed.assert_awaited_once()
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 

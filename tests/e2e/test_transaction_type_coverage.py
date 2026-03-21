@@ -428,3 +428,73 @@ def test_dual_leg_upstream_settlement_cashflow_authority(
     assert tx_by_id[cash_txn_id]["originating_transaction_id"] == buy_txn_id
     assert tx_by_id[buy_txn_id]["cash_entry_mode"] == "UPSTREAM_PROVIDED"
     assert tx_by_id[cash_txn_id]["transaction_type"] == "ADJUSTMENT"
+
+
+def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
+    setup_dual_leg_settlement_scenario, e2e_api_client: E2EApiClient
+):
+    portfolio_id = setup_dual_leg_settlement_scenario["portfolio_id"]
+
+    e2e_api_client.ingest(
+        "/ingest/business-dates",
+        {"business_dates": [{"business_date": "2026-03-02"}]},
+    )
+    e2e_api_client.ingest(
+        "/ingest/market-prices",
+        {
+            "market_prices": [
+                {
+                    "security_id": "SEC_DUAL",
+                    "price_date": "2026-03-02",
+                    "price": "100",
+                    "currency": "USD",
+                },
+                {
+                    "security_id": "CASH_USD_DUAL",
+                    "price_date": "2026-03-02",
+                    "price": "1",
+                    "currency": "USD",
+                },
+            ]
+        },
+    )
+
+    payload = {
+        "as_of_date": "2026-03-02",
+        "window": {"start_date": "2026-03-02", "end_date": "2026-03-02"},
+        "consumer_system": "lotus-performance",
+        "frequency": "daily",
+        "dimensions": [],
+        "include_cash_flows": True,
+        "filters": {},
+        "page": {"page_size": 50},
+    }
+
+    response_payload = e2e_api_client.poll_for_post_query_data(
+        f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+        payload,
+        lambda data: len(data.get("rows", [])) >= 2
+        and {
+            row.get("security_id")
+            for row in data.get("rows", [])
+            if row.get("valuation_date") == "2026-03-02"
+        }
+        >= {"SEC_DUAL", "CASH_USD_DUAL"},
+        timeout=240,
+        fail_message=(
+            "Dual-leg position-timeseries rows were not available for acquisition-day validation."
+        ),
+    )
+
+    row_by_security = {row["security_id"]: row for row in response_payload["rows"]}
+    stock_row = row_by_security["SEC_DUAL"]
+    cash_row = row_by_security["CASH_USD_DUAL"]
+
+    stock_flow_total = sum(Decimal(str(flow["amount"])) for flow in stock_row["cash_flows"])
+    cash_flow_total = sum(Decimal(str(flow["amount"])) for flow in cash_row["cash_flows"])
+
+    assert Decimal(str(stock_row["beginning_market_value_position_currency"])) == Decimal("0")
+    assert Decimal(str(stock_row["ending_market_value_position_currency"])) == Decimal("1000")
+    assert stock_flow_total == Decimal("1000")
+    assert cash_flow_total == Decimal("-1000")
+    assert stock_flow_total + cash_flow_total == Decimal("0")

@@ -89,3 +89,42 @@ def test_logic_with_portfolio_and_position_flows(current_snapshot, previous_day_
     assert new_record.bod_cashflow_portfolio == Decimal("0")
     assert new_record.eod_cashflow_position == Decimal("-50")
     assert new_record.eod_cashflow_portfolio == Decimal("-50")
+
+
+def test_logic_normalizes_product_leg_position_flow_signs_for_attribution(
+    current_snapshot, previous_day_snapshot
+):
+    cashflows = [
+        Cashflow(
+            amount=Decimal("-1000"),
+            classification="INVESTMENT_OUTFLOW",
+            timing="BOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+        Cashflow(
+            amount=Decimal("250"),
+            classification="INCOME",
+            timing="EOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+        Cashflow(
+            amount=Decimal("-1000"),
+            classification="TRANSFER",
+            timing="EOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+    ]
+
+    new_record = PositionTimeseriesLogic.calculate_daily_record(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_day_snapshot,
+        cashflows=cashflows,
+        epoch=0,
+    )
+
+    assert new_record.bod_cashflow_position == Decimal("1000")
+    # income is a position credit on the product leg; cash settlement remains transfer-signed
+    assert new_record.eod_cashflow_position == Decimal("-1250")
