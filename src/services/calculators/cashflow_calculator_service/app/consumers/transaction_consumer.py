@@ -97,7 +97,6 @@ class LinkedCashLegError(ValueError):
 
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
-LINKED_CASHFLOW_SKIP_TRANSACTION_TYPES = {"BUY", "SELL", "DIVIDEND", "INTEREST"}
 NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 
 
@@ -257,31 +256,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
                                 "UPSTREAM_PROVIDED product leg requires "
                                 "external_cash_transaction_id."
                             )
-                        if (
-                            event_transaction_type in LINKED_CASHFLOW_SKIP_TRANSACTION_TYPES
-                            and has_linked_cash_leg
-                        ):
-                            logger.info(
-                                "Skipping product-leg cashflow creation because "
-                                "linked ADJUSTMENT cash leg is authoritative.",
-                                extra={
-                                    "transaction_id": event.transaction_id,
-                                    "transaction_type": event_transaction_type,
-                                    "external_cash_transaction_id": (
-                                        event.external_cash_transaction_id
-                                    ),
-                                    "economic_event_id": event.economic_event_id,
-                                    "linked_transaction_group_id": (
-                                        event.linked_transaction_group_id
-                                    ),
-                                },
-                            )
-                            await idempotency_repo.mark_event_processed(
-                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                            )
-                            await db.commit()
-                            return
-
                         if event_transaction_type in NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES:
                             logger.info(
                                 "Skipping cashflow creation for non-cash FX contract lifecycle "

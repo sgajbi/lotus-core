@@ -16,6 +16,18 @@ class PositionTimeseriesLogic:
     """
 
     @staticmethod
+    def _normalize_position_flow_amount(cf: Cashflow) -> Decimal:
+        """
+        Cashflows are stored using actual cash-movement direction for cash ledgers.
+        Position-timeseries needs product-leg flows from the position perspective so
+        linked product and cash legs net to zero across positions.
+        """
+        amount = Decimal(cf.amount)
+        if cf.classification in {"INVESTMENT_OUTFLOW", "INVESTMENT_INFLOW", "INCOME"}:
+            return -amount
+        return amount
+
+    @staticmethod
     def calculate_daily_record(
         current_snapshot: DailyPositionSnapshot,
         previous_snapshot: DailyPositionSnapshot | None,
@@ -42,10 +54,13 @@ class PositionTimeseriesLogic:
 
         for cf in cashflows:
             if cf.is_position_flow:
+                normalized_position_amount = (
+                    PositionTimeseriesLogic._normalize_position_flow_amount(cf)
+                )
                 if cf.timing == "BOD":
-                    bod_cf_pos += cf.amount
+                    bod_cf_pos += normalized_position_amount
                 else:  # EOD
-                    eod_cf_pos += cf.amount
+                    eod_cf_pos += normalized_position_amount
 
             if cf.is_portfolio_flow:
                 if cf.timing == "BOD":
