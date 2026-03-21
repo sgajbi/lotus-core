@@ -122,12 +122,37 @@ async def test_create_core_snapshot_router_function() -> None:
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
         sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        consumer_system="lotus-performance",
+        tenant_id="default",
     )
     mock_service.get_core_snapshot.return_value = {
         "portfolio_id": "PORT_001",
         "as_of_date": "2026-02-27",
         "snapshot_mode": "BASELINE",
         "generated_at": "2026-02-27T00:00:00Z",
+        "contract_version": "rfc_081_v1",
+        "request_fingerprint": "fp-core-001",
+        "freshness": {
+            "freshness_status": "CURRENT_SNAPSHOT",
+            "baseline_source": "position_state",
+            "snapshot_timestamp": None,
+            "snapshot_epoch": None,
+            "fallback_reason": None,
+        },
+        "governance": {
+            "consumer_system": "lotus-performance",
+            "tenant_id": "default",
+            "requested_sections": ["positions_baseline"],
+            "applied_sections": ["positions_baseline"],
+            "dropped_sections": [],
+            "policy_provenance": {
+                "policy_version": "tenant-default-v1",
+                "policy_source": "default",
+                "matched_rule_id": "default",
+                "strict_mode": False,
+            },
+            "warnings": [],
+        },
         "valuation_context": {
             "portfolio_currency": "USD",
             "reporting_currency": "USD",
@@ -146,6 +171,11 @@ async def test_create_core_snapshot_router_function() -> None:
 
     mock_service.get_core_snapshot.assert_called_once()
     assert response["portfolio_id"] == "PORT_001"
+    mock_integration_service.get_effective_policy.assert_called_once_with(
+        consumer_system="lotus-performance",
+        tenant_id="default",
+        include_sections=["POSITIONS_BASELINE"],
+    )
 
 
 @pytest.mark.asyncio
@@ -169,6 +199,8 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
         sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        consumer_system="lotus-performance",
+        tenant_id="default",
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotNotFoundError("not found")
 
@@ -204,6 +236,8 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
         sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        consumer_system="lotus-performance",
+        tenant_id="default",
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotBadRequestError("bad")
 
@@ -240,6 +274,8 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
         snapshot_mode=CoreSnapshotMode.SIMULATION,
         sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
         simulation={"session_id": "SIM_1"},
+        consumer_system="lotus-performance",
+        tenant_id="default",
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotConflictError("conflict")
 
@@ -276,6 +312,8 @@ async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
         snapshot_mode=CoreSnapshotMode.SIMULATION,
         sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
         simulation={"session_id": "SIM_1"},
+        consumer_system="lotus-performance",
+        tenant_id="default",
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotUnavailableSectionError("missing")
 
@@ -311,6 +349,8 @@ async def test_create_core_snapshot_maps_policy_block_to_403() -> None:
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
         sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        consumer_system="lotus-performance",
+        tenant_id="default",
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -332,7 +372,15 @@ async def test_create_core_snapshot_filters_sections_in_non_strict_mode() -> Non
         "as_of_date": "2026-02-27",
         "snapshot_mode": "BASELINE",
         "generated_at": "2026-02-27T00:00:00Z",
-        "freshness": {"freshness_status": "CURRENT_SNAPSHOT", "baseline_source": "position_state"},
+        "contract_version": "rfc_081_v1",
+        "request_fingerprint": "fp-core-002",
+        "freshness": {
+            "freshness_status": "CURRENT_SNAPSHOT",
+            "baseline_source": "position_state",
+            "snapshot_timestamp": None,
+            "snapshot_epoch": None,
+            "fallback_reason": None,
+        },
         "governance": {
             "consumer_system": "lotus-performance",
             "tenant_id": "default",
@@ -375,6 +423,8 @@ async def test_create_core_snapshot_filters_sections_in_non_strict_mode() -> Non
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
         sections=[CoreSnapshotSection.POSITIONS_BASELINE, CoreSnapshotSection.PORTFOLIO_TOTALS],
+        consumer_system="lotus-performance",
+        tenant_id="default",
     )
 
     await create_core_snapshot(
@@ -513,6 +563,7 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
     )
     mock_service.get_benchmark_coverage = AsyncMock(
         return_value={
+            "request_fingerprint": "fp-coverage-1",
             "observed_start_date": "2026-01-01",
             "observed_end_date": "2026-01-31",
             "expected_start_date": "2026-01-01",
@@ -539,6 +590,7 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
 
     assert definition_response["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert coverage_response["total_points"] == 31
+    assert coverage_response["request_fingerprint"] == "fp-coverage-1"
 
 
 @pytest.mark.asyncio
@@ -656,7 +708,13 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
                 "native_component_series_with_identity_benchmark_to_target_fx_context"
             ),
             "request_fingerprint": "fp1",
-            "page": {"page_size": 250, "sort_key": "index_id:asc", "next_page_token": None},
+            "page": {
+                "page_size": 250,
+                "sort_key": "index_id:asc",
+                "returned_component_count": 0,
+                "request_scope_fingerprint": "fp1",
+                "next_page_token": None,
+            },
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
@@ -672,8 +730,10 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service.get_index_return_series = AsyncMock(
         return_value={
             "index_id": "IDX1",
+            "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-index-return-1",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -681,8 +741,10 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service.get_benchmark_return_series = AsyncMock(
         return_value={
             "benchmark_id": "B1",
+            "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-benchmark-return-1",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -690,18 +752,26 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service.get_risk_free_series = AsyncMock(
         return_value={
             "currency": "USD",
+            "as_of_date": "2026-01-31",
             "series_mode": "annualized_rate_series",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-risk-free-1",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
     mock_service.get_classification_taxonomy = AsyncMock(
-        return_value={"as_of_date": "2026-01-31", "records": [], "taxonomy_version": "rfc_062_v1"}
+        return_value={
+            "as_of_date": "2026-01-31",
+            "records": [],
+            "taxonomy_version": "rfc_062_v1",
+            "request_fingerprint": "fp-taxonomy-1",
+        }
     )
     mock_service.get_risk_free_coverage = AsyncMock(
         return_value={
+            "request_fingerprint": "fp-risk-free-coverage-1",
             "observed_start_date": None,
             "observed_end_date": None,
             "expected_start_date": "2026-01-01",
@@ -728,6 +798,8 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     assert benchmark_market_response["benchmark_id"] == "B1"
     assert benchmark_market_response["benchmark_currency"] == "USD"
     assert benchmark_market_response["page"]["page_size"] == 250
+    assert benchmark_market_response["page"]["returned_component_count"] == 0
+    assert benchmark_market_response["page"]["request_scope_fingerprint"] == "fp1"
     mock_service.get_benchmark_market_series.assert_awaited_once()
 
     benchmark_composition_response = await fetch_benchmark_composition_window(
@@ -761,6 +833,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert index_return_response["index_id"] == "IDX1"
+    assert index_return_response["request_fingerprint"] == "fp-index-return-1"
     mock_service.get_index_return_series.assert_awaited_once_with(
         index_id="IDX1",
         request=IndexSeriesRequest(
@@ -778,6 +851,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert benchmark_return_response["benchmark_id"] == "B1"
+    assert benchmark_return_response["request_fingerprint"] == "fp-benchmark-return-1"
     mock_service.get_benchmark_return_series.assert_awaited_once()
 
     risk_free_response = await fetch_risk_free_series(
@@ -791,6 +865,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert risk_free_response["currency"] == "USD"
+    assert risk_free_response["request_fingerprint"] == "fp-risk-free-1"
     mock_service.get_risk_free_series.assert_awaited_once()
 
     taxonomy_response = await fetch_classification_taxonomy(
@@ -798,6 +873,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert taxonomy_response["taxonomy_version"] == "rfc_062_v1"
+    assert taxonomy_response["request_fingerprint"] == "fp-taxonomy-1"
     mock_service.get_classification_taxonomy.assert_awaited_once_with(
         as_of_date=ClassificationTaxonomyRequest(as_of_date="2026-01-31").as_of_date,
         taxonomy_scope=None,
@@ -809,6 +885,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert risk_free_coverage_response["total_points"] == 0
+    assert risk_free_coverage_response["request_fingerprint"] == "fp-risk-free-coverage-1"
     mock_service.get_risk_free_coverage.assert_awaited_once_with(
         currency="USD",
         start_date=request_window.start_date,

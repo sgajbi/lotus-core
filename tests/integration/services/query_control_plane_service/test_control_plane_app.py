@@ -77,6 +77,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/support/portfolios/{portfolio_id}/overview" in paths
     assert "/simulation-sessions/{session_id}" in paths
     assert "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries" in paths
+    assert "/integration/portfolios/{portfolio_id}/analytics/reference" in paths
 
 
 async def test_openapi_excludes_core_read_plane_endpoints(async_test_client):
@@ -262,6 +263,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         aggregation_correlation_id["description"]
         == "Optional durable aggregation correlation identifier filter."
     )
+
     analytics_export_job_id = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -695,6 +697,37 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     ]["example"]
     assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
 
+
+async def test_openapi_describes_analytics_reference_contract(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+
+    reference_post = schema["paths"]["/integration/portfolios/{portfolio_id}/analytics/reference"][
+        "post"
+    ]
+    request_schema = schema["components"]["schemas"]["PortfolioAnalyticsReferenceRequest"]
+    response_schema = schema["components"]["schemas"]["PortfolioAnalyticsReferenceResponse"]
+
+    assert "current canonical portfolio reference fields" in reference_post["description"]
+    assert (
+        request_schema["properties"]["consumer_system"]["description"]
+        == "Consumer system identifier for lineage and governance context."
+    )
+    assert (
+        response_schema["properties"]["resolved_as_of_date"]["description"]
+        == "Effective as-of anchor applied to this reference contract."
+    )
+    assert (
+        response_schema["properties"]["reference_state_policy"]["default"]
+        == "current_portfolio_reference_state"
+    )
+    assert (
+        response_schema["properties"]["supported_grouping_dimensions"]["description"]
+        == "Canonical grouping dimensions supported by analytics input contracts."
+    )
+
     reconciliation_run_schema = components["ReconciliationRunListResponse"]
     reconciliation_run_record = components["ReconciliationRunRecord"]
     reconciliation_finding_schema = components["ReconciliationFindingListResponse"]
@@ -881,7 +914,7 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     )
 
     invalid_request = portfolio_inputs["responses"]["400"]["content"]["application/json"]["example"]
-    assert invalid_request["detail"] == "Either window or period must be provided."
+    assert invalid_request["detail"] == "Exactly one of window or period must be provided."
 
     job_id_param = next(
         parameter for parameter in export_result["parameters"] if parameter["name"] == "job_id"
@@ -893,13 +926,52 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     components = schema["components"]["schemas"]
     page_metadata = components["PageMetadata"]
+    portfolio_observation = components["PortfolioTimeseriesObservation"]
+    position_request = components["PositionAnalyticsTimeseriesRequest"]
+    position_row = components["PositionTimeseriesRow"]
+    portfolio_diagnostics = components["PortfolioQualityDiagnostics"]
+    diagnostics = components["QualityDiagnostics"]
     export_result_schema = components["AnalyticsExportJsonResultResponse"]
+    export_job_schema = components["AnalyticsExportJobResponse"]
 
     assert page_metadata["properties"]["next_page_token"]["description"] == (
         "Opaque continuation token for the next page, null when no additional pages remain."
     )
+    assert page_metadata["properties"]["sort_key"]["description"] == (
+        "Stable ordering applied to rows for deterministic paging."
+    )
+    assert portfolio_observation["properties"]["cash_flow_currency"]["description"] == (
+        "Currency code applied to the observation cash_flows amounts; matches the "
+        "effective reporting_currency."
+    )
+    assert position_request["properties"]["include_cash_flows"]["default"] is True
+    assert position_row["properties"]["cash_flow_currency"]["description"] == (
+        "Currency code applied to the row cash_flows amounts; normally matches position_currency."
+    )
+    assert portfolio_diagnostics["properties"]["expected_business_dates_count"]["description"] == (
+        "Number of expected business-calendar dates in the resolved window."
+    )
+    assert portfolio_diagnostics["properties"]["cash_flows_included"]["default"] is True
+    assert diagnostics["properties"]["cash_flows_included"]["default"] is False
     assert export_result_schema["properties"]["data"]["description"] == (
         "Serialized observations or rows from the selected dataset."
+    )
+    assert (
+        export_job_schema["properties"]["lifecycle_mode"]["default"] == "inline_job_execution"
+    )
+    assert (
+        export_job_schema["properties"]["disposition"]["description"].startswith(
+            "How this response was produced"
+        )
+    )
+    assert export_job_schema["properties"]["result_available"]["description"] == (
+        "True when a finalized result payload is available for retrieval."
+    )
+    assert export_result_schema["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic fingerprint for the request that produced this result."
+    )
+    assert export_result_schema["properties"]["result_row_count"]["description"] == (
+        "Row count included in this export result payload."
     )
 
 
@@ -927,6 +999,12 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         if parameter["name"] == "portfolio_id"
     )
     assert portfolio_param["description"] == "Portfolio identifier for the snapshot request."
+    assert not any(
+        parameter["name"] == "consumer_system" for parameter in core_snapshot.get("parameters", [])
+    )
+    assert not any(
+        parameter["name"] == "tenant_id" for parameter in core_snapshot.get("parameters", [])
+    )
 
     blocked_example = core_snapshot["responses"]["403"]["content"]["application/json"]["example"]
     assert blocked_example["detail"] == "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
@@ -941,6 +1019,8 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     enrichment_request = components["InstrumentEnrichmentBulkRequest"]
     core_snapshot_governance = components["CoreSnapshotGovernanceMetadata"]
     core_snapshot_freshness = components["CoreSnapshotFreshnessMetadata"]
+    core_snapshot_request = components["CoreSnapshotRequest"]
+    core_snapshot_response = components["CoreSnapshotResponse"]
     core_snapshot_sections = components["CoreSnapshotSections"]
 
     assert policy_response["properties"]["policy_provenance"]["description"] == (
@@ -952,8 +1032,26 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert core_snapshot_governance["properties"]["requested_sections"]["examples"] == [
         ["positions_baseline", "positions_projected", "positions_delta"]
     ]
+    assert core_snapshot_request["properties"]["consumer_system"]["description"] == (
+        "Downstream consumer system requesting the core snapshot contract."
+    )
+    assert core_snapshot_request["properties"]["tenant_id"]["description"] == (
+        "Tenant identifier used for governance and policy resolution."
+    )
     assert core_snapshot_freshness["properties"]["snapshot_timestamp"]["description"] == (
         "UTC timestamp of the resolved baseline snapshot when one exists."
+    )
+    assert core_snapshot_freshness["properties"]["snapshot_epoch"]["description"] == (
+        "Resolved baseline epoch when snapshot-backed state was used."
+    )
+    assert core_snapshot_freshness["properties"]["fallback_reason"]["description"] == (
+        "Reason historical fallback was used instead of current snapshot-backed state."
+    )
+    assert core_snapshot_response["properties"]["contract_version"]["description"] == (
+        "Contract version for the core snapshot response."
+    )
+    assert core_snapshot_response["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic fingerprint of the full core snapshot request contract."
     )
     assert core_snapshot_sections["properties"]["positions_delta"]["description"] == (
         "Per-security baseline versus projected deltas."
@@ -1122,12 +1220,42 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_market_series_request["properties"]["page"]["description"] == (
         "Optional deterministic paging controls for large benchmark component universes."
     )
+    assert benchmark_market_series_request["properties"]["frequency"]["description"] == (
+        "Requested output frequency label. Currently only daily is supported."
+    )
     assert risk_free_series_response["properties"]["lineage"]["examples"] == [
         {"contract_version": "rfc_062_v1", "source_system": "lotus-core"}
     ]
+    assert (
+        components["IndexReturnSeriesResponse"]["properties"]["request_fingerprint"]["description"]
+        == "Deterministic request fingerprint for the raw index return series scope."
+    )
+    assert (
+        components["BenchmarkReturnSeriesResponse"]["properties"]["request_fingerprint"][
+            "description"
+        ]
+        == "Deterministic request fingerprint for the raw benchmark return series scope."
+    )
+    assert (
+        risk_free_series_response["properties"]["request_fingerprint"]["description"]
+        == "Deterministic request fingerprint for the raw risk-free series scope."
+    )
     assert coverage_response["properties"]["missing_dates_count"]["examples"] == [2]
+    assert coverage_response["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic request fingerprint for the coverage diagnostics scope."
+    )
     assert classification_taxonomy_response["properties"]["records"]["description"] == (
         "Classification taxonomy entries effective on the requested date."
+    )
+    assert classification_taxonomy_response["properties"]["request_fingerprint"]["description"] == (
+        "Deterministic request fingerprint for the taxonomy response scope."
+    )
+    reference_page_metadata = components["ReferencePageMetadata"]
+    assert reference_page_metadata["properties"]["returned_component_count"]["description"] == (
+        "Number of component series records returned in the current page."
+    )
+    assert reference_page_metadata["properties"]["request_scope_fingerprint"]["description"] == (
+        "Deterministic fingerprint of the request scope bound to this page sequence."
     )
 
 

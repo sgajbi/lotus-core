@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class IntegrationWindow(BaseModel):
@@ -448,9 +448,9 @@ class SeriesRequest(BaseModel):
         ...,
         description="Date window for series extraction.",
     )
-    frequency: str = Field(
+    frequency: Literal["daily"] = Field(
         ...,
-        description="Requested output frequency label.",
+        description="Requested output frequency label. Currently only daily is supported.",
         examples=["daily"],
     )
 
@@ -484,6 +484,16 @@ class ReferencePageMetadata(BaseModel):
         ...,
         description="Deterministic ordering applied to the paged component series.",
         examples=["index_id:asc"],
+    )
+    returned_component_count: int = Field(
+        ...,
+        description="Number of component series records returned in the current page.",
+        examples=[250],
+    )
+    request_scope_fingerprint: str = Field(
+        ...,
+        description="Deterministic fingerprint of the request scope bound to this page sequence.",
+        examples=["a6b8f6456a6d89cfcc1ce572f2cfcedb"],
     )
     next_page_token: str | None = Field(
         None,
@@ -520,6 +530,30 @@ class BenchmarkMarketSeriesRequest(SeriesRequest):
     )
 
     model_config = ConfigDict()
+
+    @model_validator(mode="after")
+    def validate_series_fields(self):
+        supported_fields = {
+            "index_price",
+            "index_return",
+            "benchmark_return",
+            "component_weight",
+            "fx_rate",
+        }
+        requested_fields = [
+            field.strip() for field in self.series_fields if field and field.strip()
+        ]
+        if not requested_fields:
+            raise ValueError("series_fields must contain at least one supported value.")
+        invalid = sorted({field for field in requested_fields if field not in supported_fields})
+        if invalid:
+            raise ValueError(
+                "Unsupported series_fields requested: " + ", ".join(invalid)
+            )
+        if "fx_rate" in requested_fields and not self.target_currency:
+            raise ValueError("target_currency is required when series_fields includes fx_rate.")
+        self.series_fields = requested_fields
+        return self
 
 
 class SeriesPoint(BaseModel):
@@ -751,8 +785,18 @@ class IndexPriceSeriesResponse(BaseModel):
 
 class IndexReturnSeriesResponse(BaseModel):
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for deterministic contract resolution.",
+        examples=["2026-01-31"],
+    )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the raw index return series scope.",
+        examples=["9ccdb0a1df40f0690241a5b52e9f1c1d"],
+    )
     points: list[IndexReturnSeriesPoint] = Field(
         default_factory=list, description="Index return points."
     )
@@ -769,8 +813,18 @@ class BenchmarkReturnSeriesResponse(BaseModel):
     benchmark_id: str = Field(
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for deterministic contract resolution.",
+        examples=["2026-01-31"],
+    )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the raw benchmark return series scope.",
+        examples=["f4ea7426d13c0b95bbfd8d7d9dfb29af"],
+    )
     points: list[BenchmarkReturnSeriesPoint] = Field(
         default_factory=list,
         description="Raw benchmark return points from upstream provider.",
@@ -808,6 +862,11 @@ class RiskFreeSeriesPoint(BaseModel):
 
 class RiskFreeSeriesResponse(BaseModel):
     currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for deterministic contract resolution.",
+        examples=["2026-01-31"],
+    )
     series_mode: Literal["annualized_rate_series", "return_series"] = Field(
         ...,
         description="Series mode returned by the endpoint.",
@@ -815,6 +874,11 @@ class RiskFreeSeriesResponse(BaseModel):
     )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the raw risk-free series scope.",
+        examples=["6dfc8591d95a53060efd94ddca9a266e"],
+    )
     points: list[RiskFreeSeriesPoint] = Field(
         default_factory=list, description="Risk-free series points."
     )
@@ -834,6 +898,11 @@ class CoverageRequest(BaseModel):
 
 
 class CoverageResponse(BaseModel):
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the coverage diagnostics scope.",
+        examples=["2cb014be96ad2cb65ce1833d9f2b88a2"],
+    )
     observed_start_date: date | None = Field(
         None,
         description="Observed first date in data window.",
@@ -934,6 +1003,11 @@ class ClassificationTaxonomyResponse(BaseModel):
     taxonomy_version: str = Field(
         "rfc_062_v1",
         description="Taxonomy contract version exposed by query service.",
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the taxonomy response scope.",
+        examples=["d87368035df24ff9a42cb6e586e17ac7"],
     )
 
     model_config = ConfigDict()

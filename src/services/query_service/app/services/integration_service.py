@@ -86,6 +86,28 @@ class IntegrationService:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
 
+    @staticmethod
+    def _series_request_fingerprint(
+        series_key: str,
+        identifier_key: str,
+        identifier_value: str,
+        request: Any,
+        extras: dict[str, Any] | None = None,
+    ) -> str:
+        payload: dict[str, Any] = {
+            "series_key": series_key,
+            identifier_key: identifier_value,
+            "as_of_date": request.as_of_date.isoformat(),
+            "window": {
+                "start_date": request.window.start_date.isoformat(),
+                "end_date": request.window.end_date.isoformat(),
+            },
+            "frequency": request.frequency,
+        }
+        if extras:
+            payload.update(extras)
+        return IntegrationService._request_fingerprint(payload)
+
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         signature = hmac.new(
@@ -466,6 +488,7 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
+        requested_fields = set(request.series_fields)
         definition = await self._reference_repository.get_benchmark_definition(
             benchmark_id, request.as_of_date
         )
@@ -522,7 +545,7 @@ class IntegrationService:
         if request.target_currency:
             fx_context_source_currency = benchmark_currency
             fx_context_target_currency = request.target_currency
-            if benchmark_currency != request.target_currency:
+            if benchmark_currency != request.target_currency and "fx_rate" in requested_fields:
                 fx_rates = await self._reference_repository.get_fx_rates(
                     from_currency=benchmark_currency,
                     to_currency=request.target_currency,
@@ -537,10 +560,12 @@ class IntegrationService:
                     normalization_status = (
                         "native_component_series_with_missing_benchmark_to_target_fx_context"
                     )
-            else:
+            elif benchmark_currency == request.target_currency:
                 normalization_status = (
                     "native_component_series_with_identity_benchmark_to_target_fx_context"
                 )
+            else:
+                normalization_status = "native_component_series_without_fx_context_request"
 
         prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
         returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
@@ -586,17 +611,27 @@ class IntegrationService:
                                 and benchmark_return_row.series_currency
                             )
                         ),
-                        index_price=self._as_decimal(price_row.index_price) if price_row else None,
+                        index_price=(
+                            self._as_decimal(price_row.index_price)
+                            if price_row and "index_price" in requested_fields
+                            else None
+                        ),
                         index_return=(
-                            self._as_decimal(return_row.index_return) if return_row else None
+                            self._as_decimal(return_row.index_return)
+                            if return_row and "index_return" in requested_fields
+                            else None
                         ),
                         benchmark_return=(
                             self._as_decimal(benchmark_return_row.benchmark_return)
-                            if benchmark_return_row
+                            if benchmark_return_row and "benchmark_return" in requested_fields
                             else None
                         ),
-                        component_weight=component_weight,
-                        fx_rate=fx_rates.get(current_date),
+                        component_weight=(
+                            component_weight if "component_weight" in requested_fields else None
+                        ),
+                        fx_rate=(
+                            fx_rates.get(current_date) if "fx_rate" in requested_fields else None
+                        ),
                         quality_status=quality_status,
                     )
                 )
@@ -646,6 +681,8 @@ class IntegrationService:
             page=ReferencePageMetadata(
                 page_size=page_size,
                 sort_key="index_id:asc",
+                returned_component_count=len(component_series),
+                request_scope_fingerprint=request_scope_fingerprint,
                 next_page_token=next_page_token,
             ),
             lineage={
@@ -690,6 +727,12 @@ class IntegrationService:
     async def get_index_return_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexReturnSeriesResponse:
+        request_fingerprint = self._series_request_fingerprint(
+            series_key="index_return_series",
+            identifier_key="index_id",
+            identifier_value=index_id,
+            request=request,
+        )
         rows = await self._reference_repository.list_index_return_series(
             index_id=index_id,
             start_date=request.window.start_date,
@@ -697,11 +740,13 @@ class IntegrationService:
         )
         return IndexReturnSeriesResponse(
             index_id=index_id,
+            as_of_date=request.as_of_date,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
+            request_fingerprint=request_fingerprint,
             points=[
                 IndexReturnSeriesPoint(
                     series_date=row.series_date,
@@ -723,6 +768,12 @@ class IntegrationService:
     async def get_benchmark_return_series(
         self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
     ) -> BenchmarkReturnSeriesResponse:
+        request_fingerprint = self._series_request_fingerprint(
+            series_key="benchmark_return_series",
+            identifier_key="benchmark_id",
+            identifier_value=benchmark_id,
+            request=request,
+        )
         rows = await self._reference_repository.list_benchmark_return_points(
             benchmark_id=benchmark_id,
             start_date=request.window.start_date,
@@ -730,11 +781,13 @@ class IntegrationService:
         )
         return BenchmarkReturnSeriesResponse(
             benchmark_id=benchmark_id,
+            as_of_date=request.as_of_date,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
+            request_fingerprint=request_fingerprint,
             points=[
                 {
                     "series_date": row.series_date,
@@ -754,6 +807,13 @@ class IntegrationService:
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
+        request_fingerprint = self._series_request_fingerprint(
+            series_key="risk_free_series",
+            identifier_key="currency",
+            identifier_value=request.currency.upper(),
+            request=request,
+            extras={"series_mode": request.series_mode},
+        )
         rows = await self._reference_repository.list_risk_free_series(
             currency=request.currency,
             start_date=request.window.start_date,
@@ -761,12 +821,14 @@ class IntegrationService:
         )
         return RiskFreeSeriesResponse(
             currency=request.currency.upper(),
+            as_of_date=request.as_of_date,
             series_mode=request.series_mode,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
+            request_fingerprint=request_fingerprint,
             points=[
                 RiskFreeSeriesPoint(
                     series_date=row.series_date,
@@ -792,12 +854,27 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
+        request_fingerprint = self._request_fingerprint(
+            {
+                "coverage_key": "benchmark_coverage",
+                "benchmark_id": benchmark_id,
+                "window": {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                },
+            }
+        )
         coverage = await self._reference_repository.get_benchmark_coverage(
             benchmark_id=benchmark_id,
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(coverage, start_date, end_date)
+        return self._to_coverage_response(
+            coverage,
+            start_date,
+            end_date,
+            request_fingerprint=request_fingerprint,
+        )
 
     async def get_risk_free_coverage(
         self,
@@ -805,18 +882,40 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
+        request_fingerprint = self._request_fingerprint(
+            {
+                "coverage_key": "risk_free_coverage",
+                "currency": currency.upper(),
+                "window": {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                },
+            }
+        )
         coverage = await self._reference_repository.get_risk_free_coverage(
             currency=currency,
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(coverage, start_date, end_date)
+        return self._to_coverage_response(
+            coverage,
+            start_date,
+            end_date,
+            request_fingerprint=request_fingerprint,
+        )
 
     async def get_classification_taxonomy(
         self,
         as_of_date: date,
         taxonomy_scope: str | None = None,
     ) -> ClassificationTaxonomyResponse:
+        request_fingerprint = self._request_fingerprint(
+            {
+                "taxonomy_key": "classification_taxonomy",
+                "as_of_date": as_of_date.isoformat(),
+                "taxonomy_scope": taxonomy_scope,
+            }
+        )
         rows = await self._reference_repository.list_taxonomy(
             as_of_date=as_of_date,
             taxonomy_scope=taxonomy_scope,
@@ -836,6 +935,7 @@ class IntegrationService:
                 )
                 for row in rows
             ],
+            request_fingerprint=request_fingerprint,
         )
 
     @staticmethod
@@ -843,6 +943,7 @@ class IntegrationService:
         coverage: dict[str, Any],
         start_date: date,
         end_date: date,
+        request_fingerprint: str,
     ) -> CoverageResponse:
         expected_dates: set[date] = set()
         cursor = start_date
@@ -865,6 +966,7 @@ class IntegrationService:
 
         missing_dates = sorted(expected_dates - observed_dates)
         return CoverageResponse(
+            request_fingerprint=request_fingerprint,
             observed_start_date=observed_start,
             observed_end_date=observed_end,
             expected_start_date=start_date,

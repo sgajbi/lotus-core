@@ -82,6 +82,16 @@ class CoreSnapshotRequest(BaseModel):
         ),
         examples=["USD"],
     )
+    consumer_system: str = Field(
+        "lotus-performance",
+        description="Downstream consumer system requesting the core snapshot contract.",
+        examples=["lotus-performance"],
+    )
+    tenant_id: str = Field(
+        "default",
+        description="Tenant identifier used for governance and policy resolution.",
+        examples=["tenant_sg_pb"],
+    )
     sections: list[CoreSnapshotSection] = Field(
         ...,
         description="Requested snapshot sections to include in the response payload.",
@@ -231,6 +241,16 @@ class CoreSnapshotFreshnessMetadata(BaseModel):
         None,
         description="UTC timestamp of the resolved baseline snapshot when one exists.",
         examples=["2026-02-27T10:30:00Z"],
+    )
+    snapshot_epoch: Optional[int] = Field(
+        None,
+        description="Resolved baseline epoch when snapshot-backed state was used.",
+        examples=[7],
+    )
+    fallback_reason: Optional[str] = Field(
+        None,
+        description="Reason historical fallback was used instead of current snapshot-backed state.",
+        examples=["NO_CURRENT_POSITION_STATE_ROWS"],
     )
 
 
@@ -472,6 +492,16 @@ class CoreSnapshotResponse(BaseModel):
         ...,
         description="UTC timestamp when lotus-core generated the snapshot response.",
         examples=["2026-02-27T10:30:00Z"],
+    )
+    contract_version: str = Field(
+        "rfc_081_v1",
+        description="Contract version for the core snapshot response.",
+        examples=["rfc_081_v1"],
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic fingerprint of the full core snapshot request contract.",
+        examples=["9f8a6325b52fcb11b0a5e7c44a4e8d86"],
     )
     freshness: CoreSnapshotFreshnessMetadata = Field(
         ...,

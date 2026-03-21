@@ -24,10 +24,12 @@ def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
         },
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 3),
+        request_fingerprint="fp-coverage-test",
     )
 
     assert response.missing_dates_count == 1
     assert response.missing_dates_sample == [date(2026, 1, 2)]
+    assert response.request_fingerprint == "fp-coverage-test"
 
 
 def test_canonical_consumer_system_mappings() -> None:
@@ -472,6 +474,8 @@ async def test_reference_contract_methods() -> None:
     assert market_series.request_fingerprint
     assert market_series.page.page_size == 250
     assert market_series.page.sort_key == "index_id:asc"
+    assert market_series.page.returned_component_count == 1
+    assert market_series.page.request_scope_fingerprint == market_series.request_fingerprint
     assert market_series.page.next_page_token is None
 
     index_price = await service.get_index_price_series(
@@ -486,23 +490,30 @@ async def test_reference_contract_methods() -> None:
     index_return = await service.get_index_return_series(
         index_id="IDX1",
         request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
             window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
             frequency="daily",
         ),
     )
     assert index_return.points
+    assert index_return.as_of_date == date(2026, 1, 1)
+    assert index_return.request_fingerprint
 
     benchmark_return = await service.get_benchmark_return_series(
         benchmark_id="B1",
         request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
             window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
             frequency="daily",
         ),
     )
     assert benchmark_return.points
+    assert benchmark_return.as_of_date == date(2026, 1, 1)
+    assert benchmark_return.request_fingerprint
 
     risk_free = await service.get_risk_free_series(
         request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
             currency="USD",
             series_mode="annualized_rate_series",
             window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
@@ -510,15 +521,20 @@ async def test_reference_contract_methods() -> None:
         ),
     )
     assert risk_free.points
+    assert risk_free.as_of_date == date(2026, 1, 1)
+    assert risk_free.request_fingerprint
 
     coverage = await service.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
     assert coverage.total_points == 10
+    assert coverage.request_fingerprint
 
     rf_coverage = await service.get_risk_free_coverage("USD", date(2026, 1, 1), date(2026, 1, 3))
     assert rf_coverage.total_points == 10
+    assert rf_coverage.request_fingerprint
 
     taxonomy = await service.get_classification_taxonomy(as_of_date=date(2026, 1, 1))
     assert taxonomy.records[0].dimension_name == "sector"
+    assert taxonomy.request_fingerprint
 
 
 @pytest.mark.asyncio
@@ -611,7 +627,7 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
             window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
             frequency="daily",
             target_currency="USD",
-            series_fields=["index_price"],
+            series_fields=["index_price", "fx_rate"],
         ),
     )
     service._reference_repository.get_fx_rates.assert_awaited_once()
@@ -629,7 +645,7 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
     assert benchmark_market_series.target_currency == "USD"
     assert (
         benchmark_market_series.normalization_status
-        == "native_component_series_with_missing_benchmark_to_target_fx_context"
+        == "native_component_series_without_fx_context_request"
     )
     assert benchmark_market_series.fx_context_source_currency == "EUR"
     assert benchmark_market_series.fx_context_target_currency == "USD"
@@ -718,6 +734,7 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
         ),
     )
     assert [row.index_id for row in first_page.component_series] == ["IDX1", "IDX2"]
+    assert first_page.page.returned_component_count == 2
     assert first_page.page.next_page_token is not None
 
     second_page = await service.get_benchmark_market_series(
@@ -732,6 +749,7 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
         ),
     )
     assert [row.index_id for row in second_page.component_series] == ["IDX3"]
+    assert second_page.page.returned_component_count == 1
     assert second_page.page.next_page_token is None
 
 
@@ -931,3 +949,73 @@ async def test_benchmark_market_series_honors_window_rebalances() -> None:
     ]
     assert [point.component_weight for point in idx_b_points] == [Decimal("0.40"), None]
     assert [point.component_weight for point in idx_c_points] == [None, Decimal("0.45")]
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_honors_requested_series_fields() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    composition_weight=Decimal("0.60"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
+            ]
+        ),
+        list_index_price_points=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    series_date=date(2026, 1, 1),
+                    index_price=Decimal("100"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+            ]
+        ),
+        list_index_return_points=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    series_date=date(2026, 1, 1),
+                    index_return=Decimal("0.01"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+            ]
+        ),
+        list_benchmark_return_points=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    series_date=date(2026, 1, 1),
+                    benchmark_return=Decimal("0.02"),
+                    series_currency="USD",
+                    quality_status="accepted",
+                ),
+            ]
+        ),
+        get_fx_rates=AsyncMock(return_value={date(2026, 1, 1): Decimal("1.10")}),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)),
+            frequency="daily",
+            target_currency="EUR",
+            series_fields=["benchmark_return", "component_weight"],
+            page=SimpleNamespace(page_size=10, page_token=None),
+        ),
+    )
+
+    point = response.component_series[0].points[0]
+    assert point.index_price is None
+    assert point.index_return is None
+    assert point.benchmark_return == Decimal("0.02")
+    assert point.component_weight == Decimal("0.60")
+    assert point.fx_rate is None

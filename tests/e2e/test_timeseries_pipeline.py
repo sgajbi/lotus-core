@@ -11,33 +11,50 @@ EXPECTED_TIMESERIES_ROWS = {
         "SEC_EUR_STOCK": {
             "position_currency": "EUR",
             "quantity": Decimal("100"),
-            "ending_market_value_portfolio_currency": Decimal("5200"),
+            "position_to_portfolio_fx_rate": Decimal("1.1"),
+            "ending_market_value_portfolio_currency": Decimal("5720"),
             "valuation_status": "final",
         },
         "CASH_": {
             "position_currency": "USD",
             "quantity": Decimal("0"),
+            "position_to_portfolio_fx_rate": Decimal("1"),
             "ending_market_value_portfolio_currency": Decimal("0"),
             "valuation_status": "restated",
         },
-        "total_ending_market_value_portfolio_currency": Decimal("5200"),
+        "total_ending_market_value_portfolio_currency": Decimal("5720"),
         "quality_status_distribution": {"final": 1, "restated": 1},
     },
     "2025-08-29": {
         "SEC_EUR_STOCK": {
             "position_currency": "EUR",
             "quantity": Decimal("100"),
-            "ending_market_value_portfolio_currency": Decimal("5500"),
+            "position_to_portfolio_fx_rate": Decimal("1.2"),
+            "ending_market_value_portfolio_currency": Decimal("6600"),
             "valuation_status": "final",
         },
         "CASH_": {
             "position_currency": "USD",
             "quantity": Decimal("-25"),
+            "position_to_portfolio_fx_rate": Decimal("1"),
             "ending_market_value_portfolio_currency": Decimal("-25"),
             "valuation_status": "restated",
         },
-        "total_ending_market_value_portfolio_currency": Decimal("5475"),
+        "total_ending_market_value_portfolio_currency": Decimal("6575"),
         "quality_status_distribution": {"final": 1, "restated": 1},
+    },
+}
+
+EXPECTED_PORTFOLIO_TIMESERIES = {
+    "2025-08-28": {
+        "beginning_market_value": Decimal("0"),
+        "ending_market_value": Decimal("5720"),
+        "valuation_status": "restated",
+    },
+    "2025-08-29": {
+        "beginning_market_value": Decimal("5720"),
+        "ending_market_value": Decimal("6575"),
+        "valuation_status": "restated",
     },
 }
 
@@ -253,6 +270,19 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
                 f"{valuation_date}."
             ),
         )
+        e2e_api_client.poll_for_post_query_data(
+            f"/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
+            _portfolio_timeseries_request(valuation_date),
+            lambda data: _has_expected_portfolio_timeseries(
+                data,
+                valuation_date=valuation_date,
+            ),
+            timeout=180,
+            fail_message=(
+                "Pipeline did not produce analytics portfolio-timeseries rows for "
+                f"{valuation_date}."
+            ),
+        )
     return {
         "portfolio_id": portfolio_id,
         "stock_security_id": stock_security_id,
@@ -271,6 +301,29 @@ def _position_timeseries_request(day: str) -> dict:
         "filters": {},
         "page": {"page_size": 200},
     }
+
+
+def _portfolio_timeseries_request(day: str) -> dict:
+    return {
+        "as_of_date": day,
+        "window": {"start_date": day, "end_date": day},
+        "consumer_system": "lotus-performance",
+        "frequency": "daily",
+        "page": {"page_size": 200},
+    }
+
+
+def _has_expected_portfolio_timeseries(payload: dict, *, valuation_date: str) -> bool:
+    observations = payload.get("observations", [])
+    if len(observations) != 1:
+        return False
+    observation = observations[0]
+    expected = EXPECTED_PORTFOLIO_TIMESERIES[valuation_date]
+    return (
+        observation.get("valuation_date") == valuation_date
+        and as_decimal(observation["beginning_market_value"]) == expected["beginning_market_value"]
+        and as_decimal(observation["ending_market_value"]) == expected["ending_market_value"]
+    )
 
 
 def _sum_portfolio_currency(rows: list[dict]) -> Decimal:
@@ -330,11 +383,16 @@ def _assert_timeseries_payload(
     assert payload["calendar_id"] == "business_date_calendar"
     assert payload["missing_observation_policy"] == "strict"
     assert payload["resolved_window"] == {"start_date": valuation_date, "end_date": valuation_date}
-    assert payload["page"] == {"next_page_token": None}
+    assert payload["page"]["next_page_token"] is None
+    assert payload["page"]["sort_key"] == "valuation_date:asc,security_id:asc"
+    assert payload["page"]["returned_row_count"] == 2
+    assert payload["page"]["snapshot_epoch"] >= 0
 
     diagnostics = payload["diagnostics"]
     assert diagnostics["missing_dates_count"] == 0
     assert diagnostics["stale_points_count"] == 0
+    assert diagnostics["requested_dimensions"] == []
+    assert diagnostics["cash_flows_included"] is True
     assert diagnostics["quality_status_distribution"] == expected_for_day[
         "quality_status_distribution"
     ]
@@ -348,11 +406,21 @@ def _assert_timeseries_payload(
         expected = _expected_row_for_security(valuation_date, security_id)
         assert row["valuation_date"] == valuation_date
         assert row["position_currency"] == expected["position_currency"]
+        assert row["cash_flow_currency"] == expected["position_currency"]
         assert row["dimensions"] == {}
         assert row["valuation_status"] == expected["valuation_status"]
+        assert (
+            as_decimal(row["position_to_portfolio_fx_rate"])
+            == expected["position_to_portfolio_fx_rate"]
+        )
+        assert as_decimal(row["portfolio_to_reporting_fx_rate"]) == Decimal("1")
         assert as_decimal(row["quantity"]) == expected["quantity"]
         assert (
             as_decimal(row["ending_market_value_portfolio_currency"])
+            == expected["ending_market_value_portfolio_currency"]
+        )
+        assert (
+            as_decimal(row["ending_market_value_reporting_currency"])
             == expected["ending_market_value_portfolio_currency"]
         )
 
@@ -454,3 +522,48 @@ def test_analytics_input_position_timeseries_contract_day_2_returns_expected_row
         stock_security_id=setup_timeseries_data["stock_security_id"],
         cash_security_id=setup_timeseries_data["cash_security_id"],
     )
+
+
+def test_portfolio_timeseries_contract_returns_expected_rows(
+    setup_timeseries_data, e2e_api_client: E2EApiClient
+):
+    portfolio_id = setup_timeseries_data["portfolio_id"]
+    for day in ("2025-08-28", "2025-08-29"):
+        response = e2e_api_client.post_query(
+            f"/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
+            _portfolio_timeseries_request(day),
+        )
+        payload = response.json()
+        expected = EXPECTED_PORTFOLIO_TIMESERIES[day]
+
+        assert payload["portfolio_id"] == portfolio_id
+        assert payload["portfolio_currency"] == "USD"
+        assert payload["reporting_currency"] == "USD"
+        assert payload["resolved_window"] == {"start_date": day, "end_date": day}
+        assert payload["page"]["sort_key"] == "valuation_date:asc"
+        assert payload["page"]["returned_row_count"] == 1
+        assert payload["diagnostics"]["cash_flows_included"] is True
+        assert payload["diagnostics"]["expected_business_dates_count"] == 1
+        assert payload["diagnostics"]["returned_observation_dates_count"] == 1
+
+        assert len(payload["observations"]) == 1
+        observation = payload["observations"][0]
+        assert observation["valuation_date"] == day
+        assert (
+            as_decimal(observation["beginning_market_value"])
+            == expected["beginning_market_value"]
+        )
+        assert as_decimal(observation["ending_market_value"]) == expected["ending_market_value"]
+        assert observation["valuation_status"] == expected["valuation_status"]
+        assert observation["cash_flow_currency"] == "USD"
+        assert isinstance(observation["cash_flows"], list)
+        for actual_flow in observation["cash_flows"]:
+            assert actual_flow["timing"] in {"bod", "eod"}
+            assert actual_flow["cash_flow_type"] in {
+                "external_flow",
+                "fee",
+                "tax",
+                "transfer",
+                "income",
+                "other",
+            }

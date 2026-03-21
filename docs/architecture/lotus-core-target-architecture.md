@@ -45,6 +45,22 @@ Dependency direction:
 2. Direct downstream DB coupling is out of contract.
 3. Operational diagnostics should be provided by support/lineage APIs.
 
+## Query Read / Control-Plane Split
+
+`lotus-core` intentionally keeps:
+
+1. `query_service` as the canonical read engine
+2. `query_control_plane_service` as the curated external contract and support façade
+
+The placement rule for new endpoints is documented in:
+
+- `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
+
+That note is normative for deciding whether a new API belongs in:
+
+1. direct read-plane ownership
+2. control-plane contract ownership
+
 ## Ingestion Modes
 
 `lotus-core` supports multi-modal ingestion:

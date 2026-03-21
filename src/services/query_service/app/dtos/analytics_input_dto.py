@@ -19,6 +19,12 @@ class AnalyticsWindow(BaseModel):
         examples=["2025-12-31"],
     )
 
+    @model_validator(mode="after")
+    def validate_date_order(self) -> "AnalyticsWindow":
+        if self.start_date > self.end_date:
+            raise ValueError("window.start_date must be before or equal to window.end_date.")
+        return self
+
     model_config = ConfigDict()
 
 
@@ -65,6 +71,34 @@ class LineageMetadata(BaseModel):
 
 
 class PageMetadata(BaseModel):
+    page_size: int = Field(
+        ...,
+        description="Maximum number of rows requested for this response page.",
+        examples=[500],
+    )
+    returned_row_count: int = Field(
+        ...,
+        description="Number of rows actually returned in this response page.",
+        examples=[248],
+    )
+    sort_key: str = Field(
+        ...,
+        description="Stable ordering applied to rows for deterministic paging.",
+        examples=["valuation_date:asc,security_id:asc"],
+    )
+    request_scope_fingerprint: str = Field(
+        ...,
+        description="Deterministic scope fingerprint used to validate continuation tokens.",
+        examples=["4fcad301df7d144f1d3d0570fb0d3e4a"],
+    )
+    snapshot_epoch: int = Field(
+        ...,
+        description=(
+            "Snapshot epoch pinned for the paged traversal to keep pages internally "
+            "consistent."
+        ),
+        examples=[7],
+    )
     next_page_token: str | None = Field(
         None,
         description=(
@@ -91,6 +125,57 @@ class QualityDiagnostics(BaseModel):
         0,
         description="Count of stale points detected based on staleness policy.",
         examples=[1],
+    )
+    requested_dimensions: list[str] = Field(
+        default_factory=list,
+        description="Requested row-level dimensions projected into the returned dataset.",
+        examples=[["asset_class", "sector"]],
+    )
+    cash_flows_included: bool = Field(
+        False,
+        description=(
+            "Whether the response rows include canonical per-position cash_flow "
+            "observations."
+        ),
+        examples=[True],
+    )
+
+    model_config = ConfigDict()
+
+
+class PortfolioQualityDiagnostics(BaseModel):
+    quality_status_distribution: dict[str, int] = Field(
+        default_factory=dict,
+        description="Distribution of valuation quality states observed in the returned page.",
+        examples=[{"final": 245, "restated": 3}],
+    )
+    missing_dates_count: int = Field(
+        0,
+        description=(
+            "Count of expected business-calendar dates in the resolved window that do not "
+            "have a portfolio observation in the pinned snapshot epoch."
+        ),
+        examples=[0],
+    )
+    stale_points_count: int = Field(
+        0,
+        description="Count of returned observations whose valuation state is not final.",
+        examples=[1],
+    )
+    expected_business_dates_count: int = Field(
+        0,
+        description="Number of expected business-calendar dates in the resolved window.",
+        examples=[22],
+    )
+    returned_observation_dates_count: int = Field(
+        0,
+        description="Number of portfolio valuation dates present in the pinned snapshot epoch.",
+        examples=[22],
+    )
+    cash_flows_included: bool = Field(
+        True,
+        description="Whether canonical portfolio cash_flows are present on returned observations.",
+        examples=[True],
     )
 
     model_config = ConfigDict()
@@ -159,7 +244,9 @@ class PortfolioAnalyticsTimeseriesRequest(BaseModel):
     @model_validator(mode="after")
     def validate_window_or_period(self) -> "PortfolioAnalyticsTimeseriesRequest":
         if self.window is None and self.period is None:
-            raise ValueError("Either window or period must be provided.")
+            raise ValueError("Exactly one of window or period must be provided.")
+        if self.window is not None and self.period is not None:
+            raise ValueError("Exactly one of window or period must be provided.")
         return self
 
     model_config = ConfigDict()
@@ -189,6 +276,14 @@ class PortfolioTimeseriesObservation(BaseModel):
     cash_flows: list[CashFlowObservation] = Field(
         default_factory=list,
         description="Canonical cash flow events for the valuation_date.",
+    )
+    cash_flow_currency: str = Field(
+        ...,
+        description=(
+            "Currency code applied to the observation cash_flows amounts; matches the "
+            "effective reporting_currency."
+        ),
+        examples=["USD"],
     )
 
     model_config = ConfigDict()
@@ -233,7 +328,7 @@ class PortfolioAnalyticsTimeseriesResponse(BaseModel):
         examples=["strict"],
     )
     lineage: LineageMetadata = Field(..., description="Lineage metadata for reproducibility.")
-    diagnostics: QualityDiagnostics = Field(
+    diagnostics: PortfolioQualityDiagnostics = Field(
         ..., description="Quality and completeness diagnostics."
     )
     page: PageMetadata = Field(..., description="Paging metadata for incremental retrieval.")
@@ -311,9 +406,13 @@ class PositionAnalyticsTimeseriesRequest(BaseModel):
         examples=[["asset_class", "sector"]],
     )
     include_cash_flows: bool = Field(
-        False,
-        description="Whether to include per-position canonical cash_flows in each row.",
-        examples=[False],
+        True,
+        description=(
+            "Whether to include canonical per-position cash_flows in each row. "
+            "Defaults to true because acquisition-day and flow-aware analytics are "
+            "unsafe without it."
+        ),
+        examples=[True],
     )
     consumer_system: str = Field(
         "lotus-performance",
@@ -330,7 +429,9 @@ class PositionAnalyticsTimeseriesRequest(BaseModel):
     @model_validator(mode="after")
     def validate_window_or_period(self) -> "PositionAnalyticsTimeseriesRequest":
         if self.window is None and self.period is None:
-            raise ValueError("Either window or period must be provided.")
+            raise ValueError("Exactly one of window or period must be provided.")
+        if self.window is not None and self.period is not None:
+            raise ValueError("Exactly one of window or period must be provided.")
         return self
 
     model_config = ConfigDict()
@@ -351,10 +452,35 @@ class PositionTimeseriesRow(BaseModel):
         description="Native/local currency code of the position when available.",
         examples=["EUR"],
     )
+    cash_flow_currency: str | None = Field(
+        None,
+        description=(
+            "Currency code applied to the row cash_flows amounts; normally matches "
+            "position_currency."
+        ),
+        examples=["EUR"],
+    )
     dimensions: dict[str, str | None] = Field(
         default_factory=dict,
         description="Selected dimension values for the row.",
         examples=[{"asset_class": "Equity", "sector": "Technology"}],
+    )
+    position_to_portfolio_fx_rate: Decimal = Field(
+        ...,
+        description=(
+            "FX rate used to convert position-currency values into portfolio_currency "
+            "for this row. Equals 1 when the position currency already matches the "
+            "portfolio currency."
+        ),
+        examples=["1.0850000000"],
+    )
+    portfolio_to_reporting_fx_rate: Decimal = Field(
+        ...,
+        description=(
+            "FX rate used to convert portfolio-currency values into reporting_currency "
+            "for this row. Equals 1 when reporting_currency matches portfolio_currency."
+        ),
+        examples=["1.0000000000"],
     )
     beginning_market_value_position_currency: Decimal = Field(
         ..., description="Beginning value in position currency.", examples=["125000.1200000000"]
@@ -368,14 +494,14 @@ class PositionTimeseriesRow(BaseModel):
     ending_market_value_portfolio_currency: Decimal = Field(
         ..., description="Ending value in portfolio currency.", examples=["103200.5600000000"]
     )
-    beginning_market_value_reporting_currency: Decimal | None = Field(
-        None,
-        description="Beginning value converted to reporting currency.",
+    beginning_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Beginning value converted to the effective reporting_currency.",
         examples=["111500.4500000000"],
     )
-    ending_market_value_reporting_currency: Decimal | None = Field(
-        None,
-        description="Ending value converted to reporting currency.",
+    ending_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Ending value converted to the effective reporting_currency.",
         examples=["112350.9800000000"],
     )
     valuation_status: Literal["final", "provisional", "restated"] = Field(
@@ -435,8 +561,16 @@ class PositionAnalyticsTimeseriesResponse(BaseModel):
 class PortfolioAnalyticsReferenceRequest(BaseModel):
     as_of_date: date = Field(
         ...,
-        description="Point-in-time date used to resolve effective-dated reference values.",
+        description=(
+            "Point-in-time anchor used for contract reproducibility and to bound returned "
+            "performance horizon metadata."
+        ),
         examples=["2025-12-31"],
+    )
+    consumer_system: str = Field(
+        "lotus-performance",
+        description="Consumer system identifier for lineage and governance context.",
+        examples=["lotus-performance"],
     )
 
     model_config = ConfigDict()
@@ -446,37 +580,66 @@ class PortfolioAnalyticsReferenceResponse(BaseModel):
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
+    resolved_as_of_date: date = Field(
+        ...,
+        description="Effective as-of anchor applied to this reference contract.",
+        examples=["2025-12-31"],
+    )
     portfolio_currency: str = Field(..., description="Portfolio base currency.", examples=["EUR"])
     portfolio_open_date: date = Field(
-        ..., description="Portfolio inception date.", examples=["2020-01-01"]
+        ...,
+        description=(
+            "Current canonical portfolio inception date from the active portfolio record."
+        ),
+        examples=["2020-01-01"],
     )
     portfolio_close_date: date | None = Field(
-        None, description="Portfolio close date when closed.", examples=["2026-12-31"]
+        None,
+        description="Current canonical portfolio close date when the portfolio is closed.",
+        examples=["2026-12-31"],
     )
     performance_end_date: date | None = Field(
         None,
-        description="Latest available valuation date for the portfolio.",
+        description=(
+            "Latest available portfolio valuation date, bounded by resolved_as_of_date."
+        ),
         examples=["2025-12-31"],
     )
     client_id: str = Field(
-        ..., description="Client identifier associated with the portfolio.", examples=["CIF_100234"]
+        ...,
+        description="Current canonical client identifier associated with the portfolio.",
+        examples=["CIF_100234"],
     )
     booking_center_code: str = Field(
-        ..., description="Booking center code for the portfolio.", examples=["SGPB"]
+        ...,
+        description="Current canonical booking center code for the portfolio.",
+        examples=["SGPB"],
     )
     portfolio_type: str = Field(
-        ..., description="Portfolio type descriptor.", examples=["discretionary"]
+        ...,
+        description="Current canonical portfolio type descriptor.",
+        examples=["discretionary"],
     )
     objective: str | None = Field(
-        None, description="Portfolio objective text, when defined.", examples=["Balanced growth"]
+        None,
+        description="Current canonical portfolio objective text, when defined.",
+        examples=["Balanced growth"],
+    )
+    reference_state_policy: Literal["current_portfolio_reference_state"] = Field(
+        "current_portfolio_reference_state",
+        description=(
+            "Explains that portfolio reference fields reflect the current canonical portfolio "
+            "record, not historical effective-dated snapshots."
+        ),
+        examples=["current_portfolio_reference_state"],
     )
     lineage: LineageMetadata = Field(..., description="Lineage metadata for reproducibility.")
     contract_version: str = Field(
         "rfc_063_v1", description="Contract version for this endpoint.", examples=["rfc_063_v1"]
     )
-    taxonomy_dimensions: list[str] = Field(
+    supported_grouping_dimensions: list[str] = Field(
         default_factory=lambda: ["asset_class", "sector", "country"],
-        description="Canonical dimensions supported for analytics grouping.",
+        description="Canonical grouping dimensions supported by analytics input contracts.",
     )
 
     model_config = ConfigDict()
@@ -567,10 +730,36 @@ class AnalyticsExportJobResponse(BaseModel):
         description="Current export job lifecycle status.",
         examples=["completed"],
     )
+    disposition: Literal["created", "reused_completed", "reused_inflight", "status_lookup"] = Field(
+        ...,
+        description=(
+            "How this response was produced: a newly created job, a reused completed job, "
+            "a reused in-flight job, or a direct status lookup."
+        ),
+        examples=["created"],
+    )
+    lifecycle_mode: Literal["inline_job_execution"] = Field(
+        "inline_job_execution",
+        description=(
+            "Current execution model for analytics export jobs. "
+            "The service executes export processing inline within the create request path."
+        ),
+        examples=["inline_job_execution"],
+    )
     request_fingerprint: str = Field(
         ...,
         description="Deterministic fingerprint for the request payload.",
         examples=["4bb3f6477f1ed3e3f8a04c471e7f6516"],
+    )
+    result_available: bool = Field(
+        ...,
+        description="True when a finalized result payload is available for retrieval.",
+        examples=[True],
+    )
+    result_endpoint: str = Field(
+        ...,
+        description="Deterministic result retrieval path for this export job.",
+        examples=["/integration/exports/analytics-timeseries/jobs/aexp_7e8ad3e7bc6f4d3b97de66f1/result"],
     )
     result_format: Literal["json", "ndjson"] = Field(
         ...,
@@ -622,6 +811,16 @@ class AnalyticsExportJsonResultResponse(BaseModel):
         description="Dataset type included in this result payload.",
         examples=["portfolio_timeseries"],
     )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic fingerprint for the request that produced this result.",
+        examples=["4bb3f6477f1ed3e3f8a04c471e7f6516"],
+    )
+    lifecycle_mode: Literal["inline_job_execution"] = Field(
+        "inline_job_execution",
+        description="Execution model that produced this export result payload.",
+        examples=["inline_job_execution"],
+    )
     generated_at: datetime = Field(
         ...,
         description="UTC timestamp when this result was generated.",
@@ -631,6 +830,11 @@ class AnalyticsExportJsonResultResponse(BaseModel):
         ...,
         description="Contract version label included in payload lineage.",
         examples=["rfc_063_v1"],
+    )
+    result_row_count: int = Field(
+        ...,
+        description="Row count included in this export result payload.",
+        examples=[3650],
     )
     data: list[dict[str, object]] = Field(
         default_factory=list,

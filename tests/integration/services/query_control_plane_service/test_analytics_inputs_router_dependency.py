@@ -39,9 +39,42 @@ async def async_test_client():
                 "quality_status_distribution": {"final": 1},
                 "missing_dates_count": 0,
                 "stale_points_count": 0,
+                "expected_business_dates_count": 1,
+                "returned_observation_dates_count": 1,
+                "cash_flows_included": True,
             },
-            "page": {"next_page_token": None},
+            "page": {
+                "page_size": 100,
+                "returned_row_count": 0,
+                "sort_key": "valuation_date:asc",
+                "request_scope_fingerprint": "scope-abc",
+                "snapshot_epoch": 0,
+                "next_page_token": None,
+            },
             "observations": [],
+        }
+    )
+    mock_service.get_portfolio_reference = AsyncMock(
+        return_value={
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "resolved_as_of_date": "2025-12-31",
+            "portfolio_currency": "EUR",
+            "portfolio_open_date": "2020-01-01",
+            "portfolio_close_date": None,
+            "performance_end_date": "2025-12-31",
+            "client_id": "CIF_100234",
+            "booking_center_code": "SGPB",
+            "portfolio_type": "discretionary",
+            "objective": "Balanced growth",
+            "reference_state_policy": "current_portfolio_reference_state",
+            "lineage": {
+                "generated_by": "integration.analytics_inputs",
+                "generated_at": datetime(2026, 3, 1, tzinfo=UTC),
+                "request_fingerprint": "abc",
+                "data_version": "state_inputs_v1",
+            },
+            "contract_version": "rfc_063_v1",
+            "supported_grouping_dimensions": ["asset_class", "sector", "country"],
         }
     )
     mock_service.create_export_job = AsyncMock(
@@ -50,7 +83,11 @@ async def async_test_client():
             "dataset_type": "portfolio_timeseries",
             "portfolio_id": "DEMO_DPM_EUR_001",
             "status": "completed",
+            "disposition": "created",
+            "lifecycle_mode": "inline_job_execution",
             "request_fingerprint": "fp1",
+            "result_available": True,
+            "result_endpoint": "/integration/exports/analytics-timeseries/jobs/aexp_1/result",
             "result_format": "json",
             "compression": "none",
             "result_row_count": 1,
@@ -66,7 +103,11 @@ async def async_test_client():
             "dataset_type": "portfolio_timeseries",
             "portfolio_id": "DEMO_DPM_EUR_001",
             "status": "completed",
+            "disposition": "status_lookup",
+            "lifecycle_mode": "inline_job_execution",
             "request_fingerprint": "fp1",
+            "result_available": True,
+            "result_endpoint": "/integration/exports/analytics-timeseries/jobs/aexp_1/result",
             "result_format": "json",
             "compression": "none",
             "result_row_count": 1,
@@ -80,8 +121,11 @@ async def async_test_client():
         return_value={
             "job_id": "aexp_1",
             "dataset_type": "portfolio_timeseries",
+            "request_fingerprint": "fp1",
+            "lifecycle_mode": "inline_job_execution",
             "generated_at": datetime(2026, 3, 1, tzinfo=UTC),
             "contract_version": "rfc_063_v1",
+            "result_row_count": 1,
             "data": [],
         }
     )
@@ -109,7 +153,22 @@ async def test_portfolio_analytics_timeseries_success(async_test_client):
     assert response.status_code == 200
     body = response.json()
     assert body["portfolio_id"] == "DEMO_DPM_EUR_001"
-    mock_service.get_portfolio_timeseries.assert_awaited_once()
+
+
+async def test_portfolio_analytics_reference_success(async_test_client):
+    client, mock_service = async_test_client
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/reference",
+        json={
+            "as_of_date": "2025-12-31",
+            "consumer_system": "lotus-performance",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resolved_as_of_date"] == "2025-12-31"
+    assert body["reference_state_policy"] == "current_portfolio_reference_state"
+    mock_service.get_portfolio_reference.assert_awaited_once()
 
 
 async def test_create_analytics_export_job_success(async_test_client):
@@ -130,6 +189,8 @@ async def test_create_analytics_export_job_success(async_test_client):
     )
     assert response.status_code == 200
     assert response.json()["job_id"] == "aexp_1"
+    assert response.json()["lifecycle_mode"] == "inline_job_execution"
+    assert response.json()["result_available"] is True
     mock_service.create_export_job.assert_awaited_once()
 
 
@@ -140,3 +201,4 @@ async def test_get_analytics_export_job_result_json_success(async_test_client):
     )
     assert response.status_code == 200
     assert response.json()["job_id"] == "aexp_1"
+    assert response.json()["result_row_count"] == 1

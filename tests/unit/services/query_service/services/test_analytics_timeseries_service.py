@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.analytics_input_dto import (
@@ -59,6 +60,9 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
         ),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        get_portfolio_snapshot_epoch=AsyncMock(return_value=0),
+        list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
     )
 
     response = await service.get_portfolio_timeseries(
@@ -73,6 +77,60 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
     assert response.portfolio_id == "DEMO_DPM_EUR_001"
     assert response.observations[0].beginning_market_value == Decimal("100")
     assert len(response.observations[0].cash_flows) == 3
+    assert response.observations[0].cash_flow_currency == "EUR"
+    assert response.diagnostics.expected_business_dates_count == 1
+    assert response.diagnostics.returned_observation_dates_count == 1
+    assert response.diagnostics.cash_flows_included is True
+    assert response.page.sort_key == "valuation_date:asc"
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_reporting_currency(
+) -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2025, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_portfolio_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    valuation_date=date(2025, 1, 2),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("110"),
+                    bod_cashflow=Decimal("5"),
+                    eod_cashflow=Decimal("0"),
+                    fees=Decimal("0"),
+                    epoch=1,
+                )
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 2): Decimal("1.5")}),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
+        get_portfolio_snapshot_epoch=AsyncMock(return_value=1),
+        list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
+        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 2)]),
+    )
+
+    response = await service.get_portfolio_timeseries(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsTimeseriesRequest(
+            as_of_date="2025-01-02",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
+            reporting_currency="USD",
+        ),
+    )
+
+    assert response.observations[0].beginning_market_value == Decimal("150.0")
+    assert response.observations[0].cash_flows[0].amount == Decimal("7.5")
+    assert response.observations[0].cash_flow_currency == "USD"
+    assert response.diagnostics.missing_dates_count == 1
+    assert response.diagnostics.stale_points_count == 1
 
 
 @pytest.mark.asyncio
@@ -126,7 +184,7 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
             ]
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=7),
-        get_fx_rates_map=AsyncMock(return_value={}),
+        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
     )
 
     response = await service.get_position_timeseries(
@@ -140,6 +198,9 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
 
     assert len(response.rows) == 1
     assert response.rows[0].position_currency == "USD"
+    assert response.page.page_size == 1
+    assert response.page.returned_row_count == 1
+    assert response.page.sort_key == "valuation_date:asc,security_id:asc"
     assert response.page.next_page_token is not None
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
@@ -264,7 +325,7 @@ async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_
         ),
         list_position_timeseries_rows=list_rows,
         get_position_snapshot_epoch=AsyncMock(side_effect=[7, 99]),
-        get_fx_rates_map=AsyncMock(return_value={}),
+        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
     )
 
     first_page = await service.get_position_timeseries(
@@ -326,7 +387,35 @@ async def test_get_portfolio_reference_success() -> None:
         request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-12-31"),
     )
     assert response.portfolio_id == "P1"
+    assert response.resolved_as_of_date == date(2025, 12, 31)
     assert response.performance_end_date == date(2025, 12, 31)
+    assert response.reference_state_policy == "current_portfolio_reference_state"
+    assert response.supported_grouping_dimensions == ["asset_class", "sector", "country"]
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+                client_id="CIF_1",
+                booking_center_code="SGPB",
+                portfolio_type="advisory",
+                objective="Growth",
+            )
+        ),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+    )
+    response = await service.get_portfolio_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-06-30"),
+    )
+    assert response.performance_end_date == date(2025, 6, 30)
 
 
 @pytest.mark.asyncio
@@ -356,6 +445,9 @@ async def test_get_portfolio_timeseries_period_resolution_and_missing_fx() -> No
         ),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        get_portfolio_snapshot_epoch=AsyncMock(return_value=0),
+        list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
     )
     with pytest.raises(AnalyticsInputError) as exc_info:
         await service.get_portfolio_timeseries(
@@ -420,6 +512,10 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     )
     assert response.rows[0].valuation_status == "restated"
     assert len(response.rows[0].cash_flows) == 3
+    assert response.diagnostics.cash_flows_included is True
+    assert response.diagnostics.requested_dimensions == ["asset_class", "sector", "country"]
+    assert response.rows[0].cash_flow_currency == "USD"
+    assert response.rows[0].portfolio_to_reporting_fx_rate == Decimal("1.2")
 
 
 @pytest.mark.asyncio
@@ -477,7 +573,12 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
             ]
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
-        get_fx_rates_map=AsyncMock(return_value={}),
+        get_fx_rates_map=AsyncMock(
+            side_effect=[
+                {date(2025, 8, 28): Decimal("1.10")},
+                {date(2025, 8, 29): Decimal("1.12")},
+            ]
+        ),
     )
 
     day_1 = await service.get_position_timeseries(
@@ -500,8 +601,10 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
     assert len(day_1.rows) == 1
     assert day_1.rows[0].security_id == "SEC_EUR_STOCK"
     assert day_1.rows[0].position_currency == "EUR"
+    assert day_1.rows[0].position_to_portfolio_fx_rate == Decimal("1.10")
     assert day_1.rows[0].quantity == Decimal("100")
-    assert day_1.rows[0].ending_market_value_portfolio_currency == Decimal("5720")
+    assert day_1.rows[0].ending_market_value_portfolio_currency == Decimal("6292.00")
+    assert day_1.rows[0].ending_market_value_reporting_currency == Decimal("6292.00")
 
     assert len(day_2.rows) == 1
     assert day_2.rows[0].security_id == "SEC_EUR_STOCK"
@@ -510,6 +613,118 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
         day_2.rows[0].ending_market_value_portfolio_currency
         > day_1.rows[0].ending_market_value_portfolio_currency
     )
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_converts_position_values_to_portfolio_and_reporting_currency(
+) -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EUR",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                    bod_cashflow_position=Decimal("1"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("2"),
+                    epoch=0,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="DE",
+                    position_currency="EUR",
+                )
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=3),
+        get_fx_rates_map=AsyncMock(
+            side_effect=[
+                {date(2025, 1, 1): Decimal("1.30")},
+                {date(2025, 1, 1): Decimal("1.10")},
+            ]
+        ),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-12-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            reporting_currency="SGD",
+            include_cash_flows=True,
+        ),
+    )
+
+    row = response.rows[0]
+    assert row.beginning_market_value_position_currency == Decimal("10")
+    assert row.beginning_market_value_portfolio_currency == Decimal("11.00")
+    assert row.ending_market_value_portfolio_currency == Decimal("12.10")
+    assert row.beginning_market_value_reporting_currency == Decimal("14.3000")
+    assert row.ending_market_value_reporting_currency == Decimal("15.7300")
+    assert row.position_to_portfolio_fx_rate == Decimal("1.10")
+    assert row.portfolio_to_reporting_fx_rate == Decimal("1.30")
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_missing_position_to_portfolio_fx_rate() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EUR",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("2"),
+                    epoch=0,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="DE",
+                    position_currency="EUR",
+                )
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=1),
+        get_fx_rates_map=AsyncMock(side_effect=[{}, {}]),
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service.get_position_timeseries(
+            portfolio_id="P1",
+            request=PositionAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+                reporting_currency="SGD",
+            ),
+        )
+    assert exc_info.value.code == "INSUFFICIENT_DATA"
 
 
 def test_decode_page_token_invalid_signature() -> None:
@@ -522,15 +737,8 @@ def test_decode_page_token_invalid_signature() -> None:
 
 
 def test_resolve_window_invalid_order() -> None:
-    service = make_service()
-    with pytest.raises(AnalyticsInputError) as exc_info:
-        service._resolve_window(  # pylint: disable=protected-access
-            as_of_date=date(2025, 1, 31),
-            window=AnalyticsWindow(start_date="2025-02-01", end_date="2025-01-31"),
-            period=None,
-            inception_date=date(2020, 1, 1),
-        )
-    assert exc_info.value.code == "INVALID_REQUEST"
+    with pytest.raises(ValidationError):
+        AnalyticsWindow(start_date="2025-02-01", end_date="2025-01-31")
 
 
 def test_resolve_window_unsupported_period() -> None:
@@ -664,6 +872,10 @@ async def test_create_export_job_completed() -> None:
         )
     )
     assert response.status == "completed"
+    assert response.disposition == "created"
+    assert response.lifecycle_mode == "inline_job_execution"
+    assert response.result_available is True
+    assert response.result_endpoint.endswith("/aexp_1/result")
 
 
 @pytest.mark.asyncio
@@ -743,6 +955,8 @@ async def test_create_export_job_reuses_existing() -> None:
         )
     )
     assert response.job_id == "aexp_existing"
+    assert response.disposition == "reused_completed"
+    assert response.result_available is True
 
 
 @pytest.mark.asyncio
@@ -779,6 +993,8 @@ async def test_create_export_job_reuses_fresh_running_job() -> None:
     )
 
     assert response.job_id == "aexp_running"
+    assert response.disposition == "reused_inflight"
+    assert response.result_available is False
 
 
 @pytest.mark.asyncio
@@ -853,6 +1069,7 @@ async def test_create_export_job_replaces_stale_running_job() -> None:
     assert existing.status == "failed"
     assert existing.error_message == "Stale analytics export job superseded by a new request."
     assert response.job_id == "aexp_new"
+    assert response.disposition == "created"
     service.export_repo.create_job.assert_awaited_once()
 
 
@@ -895,6 +1112,8 @@ async def test_create_export_job_marks_failed_on_input_error() -> None:
         )
     )
     assert response.status == "failed"
+    assert response.disposition == "created"
+    assert response.result_available is False
 
 
 @pytest.mark.asyncio
@@ -967,6 +1186,32 @@ async def test_get_export_result_json_error_branches() -> None:
     )
     with pytest.raises(AnalyticsInputError):
         await service.get_export_result_json("bad")
+
+
+@pytest.mark.asyncio
+async def test_get_export_job_status_lookup_contract() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        job_id="aexp_status",
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        status="running",
+        request_fingerprint="fp-status",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        started_at=datetime(2026, 3, 1, tzinfo=UTC),
+        completed_at=None,
+        result_payload=None,
+    )
+    service.export_repo = SimpleNamespace(get_job=AsyncMock(return_value=row))
+    response = await service.get_export_job("aexp_status")
+    assert response.disposition == "status_lookup"
+    assert response.lifecycle_mode == "inline_job_execution"
+    assert response.result_available is False
+    assert response.result_endpoint.endswith("/aexp_status/result")
 
 
 @pytest.mark.asyncio

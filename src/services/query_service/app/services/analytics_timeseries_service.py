@@ -31,6 +31,7 @@ from ..dtos.analytics_input_dto import (
     PortfolioAnalyticsReferenceResponse,
     PortfolioAnalyticsTimeseriesRequest,
     PortfolioAnalyticsTimeseriesResponse,
+    PortfolioQualityDiagnostics,
     PortfolioTimeseriesObservation,
     PositionAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesResponse,
@@ -52,6 +53,8 @@ logger = logging.getLogger(__name__)
 
 
 class AnalyticsTimeseriesService:
+    _EXPORT_LIFECYCLE_MODE = "inline_job_execution"
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = AnalyticsTimeseriesRepository(db)
@@ -152,6 +155,27 @@ class AnalyticsTimeseriesService:
             end_date=end_date,
         )
 
+    async def _get_position_to_portfolio_rate_maps(
+        self,
+        *,
+        position_currencies: set[str],
+        portfolio_currency: str,
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, dict[date, Decimal]]:
+        rates: dict[str, dict[date, Decimal]] = {}
+        for position_currency in sorted(position_currencies):
+            if not position_currency or position_currency == portfolio_currency:
+                rates[position_currency] = {}
+                continue
+            rates[position_currency] = await self.repo.get_fx_rates_map(
+                from_currency=position_currency,
+                to_currency=portfolio_currency,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        return rates
+
     @staticmethod
     def _quality_status_from_epoch(epoch: int) -> str:
         if epoch > 0:
@@ -235,6 +259,16 @@ class AnalyticsTimeseriesService:
             cursor_date=cursor_date,
             snapshot_epoch=snapshot_epoch,
         )
+        expected_business_dates = await self.repo.list_business_dates(
+            start_date=resolved_window.start_date,
+            end_date=resolved_window.end_date,
+        )
+        observed_dates = await self.repo.list_portfolio_observation_dates(
+            portfolio_id=portfolio_id,
+            start_date=resolved_window.start_date,
+            end_date=resolved_window.end_date,
+            snapshot_epoch=snapshot_epoch,
+        )
 
         has_more = len(rows) > request.page.page_size
         rows_page = rows[: request.page.page_size]
@@ -269,6 +303,7 @@ class AnalyticsTimeseriesService:
                         )
                         for flow in self._cash_flows_from_portfolio_row(row)
                     ],
+                    cash_flow_currency=reporting_currency,
                 )
             )
 
@@ -283,6 +318,10 @@ class AnalyticsTimeseriesService:
             )
 
         latest_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
+        missing_dates = sorted(set(expected_business_dates) - set(observed_dates))
+        stale_points_count = sum(
+            count for status_name, count in quality_distribution.items() if status_name != "final"
+        )
         fingerprint = self._request_fingerprint(
             {
                 "endpoint": "portfolio-timeseries",
@@ -305,12 +344,22 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
-            diagnostics=QualityDiagnostics(
+            diagnostics=PortfolioQualityDiagnostics(
                 quality_status_distribution=quality_distribution,
-                missing_dates_count=0,
-                stale_points_count=0,
+                missing_dates_count=len(missing_dates),
+                stale_points_count=stale_points_count,
+                expected_business_dates_count=len(expected_business_dates),
+                returned_observation_dates_count=len(observed_dates),
+                cash_flows_included=True,
             ),
-            page=PageMetadata(next_page_token=next_page_token),
+            page=PageMetadata(
+                page_size=request.page.page_size,
+                returned_row_count=len(observations),
+                sort_key="valuation_date:asc",
+                request_scope_fingerprint=request_scope_fingerprint,
+                snapshot_epoch=snapshot_epoch,
+                next_page_token=next_page_token,
+            ),
             observations=observations,
         )
 
@@ -390,6 +439,12 @@ class AnalyticsTimeseriesService:
             dimension_filters=dimension_filters,
             snapshot_epoch=snapshot_epoch,
         )
+        position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
+            position_currencies={str(row.position_currency or "") for row in rows},
+            portfolio_currency=portfolio.base_currency,
+            start_date=resolved_window.start_date,
+            end_date=resolved_window.end_date,
+        )
 
         has_more = len(rows) > request.page.page_size
         rows_page = rows[: request.page.page_size]
@@ -399,7 +454,19 @@ class AnalyticsTimeseriesService:
         for row in rows_page:
             quality = self._quality_status_from_epoch(int(row.epoch))
             quality_distribution[quality] = quality_distribution.get(quality, 0) + 1
-            conversion_rate: Decimal | None = None
+            position_currency = row.position_currency or portfolio.base_currency
+            position_to_portfolio_rate = Decimal("1")
+            if position_currency != portfolio.base_currency:
+                rate_map = position_to_portfolio_rates.get(position_currency, {})
+                if row.valuation_date not in rate_map:
+                    raise AnalyticsInputError(
+                        "INSUFFICIENT_DATA",
+                        "Missing FX rate for "
+                        f"{position_currency}/{portfolio.base_currency} on {row.valuation_date}.",
+                    )
+                position_to_portfolio_rate = rate_map[row.valuation_date]
+
+            portfolio_to_reporting_rate = Decimal("1")
             if reporting_currency != portfolio.base_currency:
                 if row.valuation_date not in fx_rates:
                     raise AnalyticsInputError(
@@ -407,7 +474,16 @@ class AnalyticsTimeseriesService:
                         "Missing FX rate for "
                         f"{portfolio.base_currency}/{reporting_currency} on {row.valuation_date}.",
                     )
-                conversion_rate = fx_rates[row.valuation_date]
+                portfolio_to_reporting_rate = fx_rates[row.valuation_date]
+
+            beginning_market_value_position = Decimal(row.bod_market_value)
+            ending_market_value_position = Decimal(row.eod_market_value)
+            beginning_market_value_portfolio = (
+                beginning_market_value_position * position_to_portfolio_rate
+            )
+            ending_market_value_portfolio = (
+                ending_market_value_position * position_to_portfolio_rate
+            )
 
             position_id = f"{portfolio_id}:{row.security_id}"
             dimensions = {dim: getattr(row, dim, None) for dim in request.dimensions}
@@ -438,29 +514,28 @@ class AnalyticsTimeseriesService:
                     )
 
             response_rows.append(
-                PositionTimeseriesRow(
-                    position_id=position_id,
-                    security_id=row.security_id,
-                    valuation_date=row.valuation_date,
-                    position_currency=row.position_currency,
-                    dimensions=dimensions,
-                    beginning_market_value_position_currency=Decimal(row.bod_market_value),
-                    ending_market_value_position_currency=Decimal(row.eod_market_value),
-                    beginning_market_value_portfolio_currency=Decimal(row.bod_market_value),
-                    ending_market_value_portfolio_currency=Decimal(row.eod_market_value),
-                    beginning_market_value_reporting_currency=(
-                        Decimal(row.bod_market_value) * conversion_rate
-                        if conversion_rate is not None
-                        else None
-                    ),
-                    ending_market_value_reporting_currency=(
-                        Decimal(row.eod_market_value) * conversion_rate
-                        if conversion_rate is not None
-                        else None
-                    ),
-                    valuation_status=quality,
-                    quantity=Decimal(row.quantity),
-                    cash_flows=cash_flows,
+                    PositionTimeseriesRow(
+                        position_id=position_id,
+                        security_id=row.security_id,
+                        valuation_date=row.valuation_date,
+                        position_currency=row.position_currency,
+                        cash_flow_currency=position_currency,
+                        position_to_portfolio_fx_rate=position_to_portfolio_rate,
+                        portfolio_to_reporting_fx_rate=portfolio_to_reporting_rate,
+                        dimensions=dimensions,
+                        beginning_market_value_position_currency=beginning_market_value_position,
+                        ending_market_value_position_currency=ending_market_value_position,
+                        beginning_market_value_portfolio_currency=beginning_market_value_portfolio,
+                        ending_market_value_portfolio_currency=ending_market_value_portfolio,
+                        beginning_market_value_reporting_currency=(
+                            beginning_market_value_portfolio * portfolio_to_reporting_rate
+                        ),
+                        ending_market_value_reporting_currency=(
+                            ending_market_value_portfolio * portfolio_to_reporting_rate
+                        ),
+                        valuation_status=quality,
+                        quantity=Decimal(row.quantity),
+                        cash_flows=cash_flows,
                 )
             )
 
@@ -499,8 +574,17 @@ class AnalyticsTimeseriesService:
                 quality_status_distribution=quality_distribution,
                 missing_dates_count=0,
                 stale_points_count=0,
+                requested_dimensions=list(request.dimensions),
+                cash_flows_included=request.include_cash_flows,
             ),
-            page=PageMetadata(next_page_token=next_page_token),
+            page=PageMetadata(
+                page_size=request.page.page_size,
+                returned_row_count=len(response_rows),
+                sort_key="valuation_date:asc,security_id:asc",
+                request_scope_fingerprint=request_scope_fingerprint,
+                snapshot_epoch=snapshot_epoch,
+                next_page_token=next_page_token,
+            ),
             rows=response_rows,
         )
 
@@ -521,16 +605,21 @@ class AnalyticsTimeseriesService:
                 "request": request.model_dump(mode="json"),
             }
         )
+        performance_end_date = (
+            min(latest_date, request.as_of_date) if latest_date is not None else None
+        )
         return PortfolioAnalyticsReferenceResponse(
             portfolio_id=portfolio.portfolio_id,
+            resolved_as_of_date=request.as_of_date,
             portfolio_currency=portfolio.base_currency,
             portfolio_open_date=portfolio.open_date,
             portfolio_close_date=portfolio.close_date,
-            performance_end_date=latest_date,
+            performance_end_date=performance_end_date,
             client_id=portfolio.client_id,
             booking_center_code=portfolio.booking_center_code,
             portfolio_type=portfolio.portfolio_type,
             objective=portfolio.objective,
+            reference_state_policy="current_portfolio_reference_state",
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
                 generated_at=datetime.now(UTC),
@@ -540,13 +629,23 @@ class AnalyticsTimeseriesService:
         )
 
     @staticmethod
-    def _to_export_response(row: object) -> AnalyticsExportJobResponse:
+    def _export_result_endpoint(job_id: str) -> str:
+        return f"/integration/exports/analytics-timeseries/jobs/{job_id}/result"
+
+    @classmethod
+    def _to_export_response(
+        cls, row: object, *, disposition: str = "status_lookup"
+    ) -> AnalyticsExportJobResponse:
         return AnalyticsExportJobResponse(
             job_id=row.job_id,
             dataset_type=row.dataset_type,
             portfolio_id=row.portfolio_id,
             status=row.status,
+            disposition=disposition,
+            lifecycle_mode=cls._EXPORT_LIFECYCLE_MODE,
             request_fingerprint=row.request_fingerprint,
+            result_available=row.status == "completed",
+            result_endpoint=cls._export_result_endpoint(row.job_id),
             result_format=row.result_format,
             compression=row.compression,
             result_row_count=row.result_row_count,
@@ -652,7 +751,8 @@ class AnalyticsTimeseriesService:
             request_fingerprint=request_fingerprint,
         )
         if reused:
-            return self._to_export_response(row)
+            disposition = "reused_completed" if row.status == "completed" else "reused_inflight"
+            return self._to_export_response(row, disposition=disposition)
 
         job_id = row.job_id
         await self._mark_export_job_running(job_id)
@@ -674,8 +774,11 @@ class AnalyticsTimeseriesService:
             result_payload = {
                 "job_id": job_id,
                 "dataset_type": request.dataset_type,
+                "request_fingerprint": request_fingerprint,
+                "lifecycle_mode": self._EXPORT_LIFECYCLE_MODE,
                 "generated_at": datetime.now(UTC).isoformat(),
                 "contract_version": "rfc_063_v1",
+                "result_row_count": len(data_rows),
                 "data": self._jsonable(data_rows),
             }
             result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
@@ -689,11 +792,11 @@ class AnalyticsTimeseriesService:
                 result_row_count=len(data_rows),
             )
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
-            return self._to_export_response(row)
+            return self._to_export_response(row, disposition="created")
         except AnalyticsInputError as exc:
             row = await self._mark_export_job_failed(job_id, error_message=str(exc))
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
-            return self._to_export_response(row)
+            return self._to_export_response(row, disposition="created")
         except Exception:
             logger.exception(
                 "Analytics export job %s failed unexpectedly for dataset %s",

@@ -26,7 +26,7 @@ from src.services.query_service.app.services.analytics_timeseries_service import
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
 PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE = {"detail": "Portfolio not found."}
-ANALYTICS_INVALID_REQUEST_EXAMPLE = {"detail": "Either window or period must be provided."}
+ANALYTICS_INVALID_REQUEST_EXAMPLE = {"detail": "Exactly one of window or period must be provided."}
 ANALYTICS_INSUFFICIENT_DATA_EXAMPLE = {"detail": "Missing FX rate for EUR/USD on 2025-01-31."}
 ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE = {"detail": "Analytics export job JOB-AN-0001 not found."}
 ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = {
@@ -75,7 +75,8 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
         "What: Return canonical portfolio valuation and cash-flow timeseries required by "
         "lotus-performance.\n"
         "How: Resolve effective window, apply deterministic paging, and include "
-        "lineage/quality diagnostics.\n"
+        "lineage/quality diagnostics. Returned cash_flows are canonical portfolio-level "
+        "events expressed in the effective reporting currency.\n"
         "When: Used for stateful TWR and MWR input acquisition without direct database coupling."
     ),
 )
@@ -119,7 +120,8 @@ async def get_portfolio_analytics_timeseries(
         "What: Return canonical position-level valuation timeseries required by "
         "contribution and attribution analytics.\n"
         "How: Apply deterministic paging and optional dimension/filter selectors while "
-        "keeping enrichment separate.\n"
+        "keeping enrichment separate. Cash-flow rows are included by default because "
+        "acquisition-day analytics are unsafe without them.\n"
         "When: Used by lotus-performance analytics pipelines for large-window "
         "position input retrieval."
     ),
@@ -155,9 +157,12 @@ async def get_position_analytics_timeseries(
     description=(
         "What: Return portfolio-level reference metadata for analytics joins and "
         "lifecycle context.\n"
-        "How: Resolve canonical portfolio attributes with lineage metadata.\n"
+        "How: Resolve current canonical portfolio reference fields, bound "
+        "performance_end_date by the requested as_of_date, and include lineage metadata.\n"
         "When: Used alongside analytics timeseries endpoints to avoid repetitive "
-        "metadata payload duplication."
+        "metadata payload duplication.\n"
+        "Contract note: portfolio reference fields are current canonical portfolio state, "
+        "not historical effective-dated portfolio snapshots."
     ),
 )
 async def get_portfolio_analytics_reference(
@@ -200,9 +205,12 @@ async def get_portfolio_analytics_reference(
         "What: Create a durable export job for portfolio or position analytics "
         "timeseries datasets.\n"
         "How: Validates canonical request payload, computes deterministic fingerprint, "
-        "and persists lifecycle state.\n"
+        "persists lifecycle state, and reports explicit execution-mode and "
+        "result-availability metadata.\n"
         "When: Used for large horizon extractions that should be retrieved "
-        "asynchronously by downstream analytics."
+        "through the export job contract rather than direct paged polling.\n"
+        "Contract note: current lifecycle_mode is inline_job_execution, so jobs may "
+        "complete within the create request."
     ),
 )
 async def create_analytics_export_job(
@@ -228,7 +236,8 @@ async def create_analytics_export_job(
     description=(
         "What: Fetch lifecycle status for an analytics export job.\n"
         "How: Reads persisted job metadata and terminal status from canonical "
-        "query-service storage.\n"
+        "query-service storage, including result availability and deterministic "
+        "result retrieval path.\n"
         "When: Used by polling clients before attempting result retrieval."
     ),
 )
@@ -262,7 +271,8 @@ async def get_analytics_export_job(
     summary="Fetch analytics export job result",
     description=(
         "What: Retrieve finalized export payload for a completed analytics export job.\n"
-        "How: Returns JSON envelope or NDJSON stream with optional gzip encoding.\n"
+        "How: Returns JSON envelope or NDJSON stream with optional gzip encoding and "
+        "includes deterministic request/result provenance metadata.\n"
         "When: Used by lotus-performance batch pipelines after job completion."
     ),
 )

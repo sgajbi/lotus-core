@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from hashlib import md5
 from typing import Any
 
 from fastapi import Depends
@@ -75,6 +77,12 @@ class CoreSnapshotService:
         self.fx_repo = FxRateRepository(db)
         self.instrument_repo = InstrumentRepository(db)
 
+    @staticmethod
+    def _request_fingerprint(payload: dict[str, Any]) -> str:
+        return md5(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
     async def get_core_snapshot(
         self,
         portfolio_id: str,
@@ -92,7 +100,7 @@ class CoreSnapshotService:
             as_of_date=request.as_of_date,
         )
 
-        baseline_positions, baseline_source = await self._resolve_baseline_positions(
+        baseline_positions, freshness_meta = await self._resolve_baseline_positions(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             reporting_fx=reporting_fx,
@@ -222,27 +230,46 @@ class CoreSnapshotService:
             strict_mode=governance.strict_mode if governance is not None else False,
         )
         warnings = governance.warnings if governance is not None else []
+        request_fingerprint = self._request_fingerprint(
+            {
+                "portfolio_id": portfolio_id,
+                "request": request.model_dump(mode="json"),
+                "governance": {
+                    "consumer_system": (
+                        governance.consumer_system
+                        if governance is not None
+                        else request.consumer_system
+                    ),
+                    "tenant_id": (
+                        governance.tenant_id if governance is not None else request.tenant_id
+                    ),
+                    "requested_sections": [section.value for section in requested_sections],
+                    "applied_sections": [section.value for section in applied_sections],
+                    "dropped_sections": [section.value for section in dropped_sections],
+                    "policy_version": policy_provenance.policy_version,
+                    "policy_source": policy_provenance.policy_source,
+                    "matched_rule_id": policy_provenance.matched_rule_id,
+                    "strict_mode": policy_provenance.strict_mode,
+                    "warnings": warnings,
+                },
+            }
+        )
 
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             snapshot_mode=request.snapshot_mode,
             generated_at=datetime.now(UTC),
-            freshness=CoreSnapshotFreshnessMetadata(
-                freshness_status=(
-                    "CURRENT_SNAPSHOT"
-                    if baseline_source == "position_state"
-                    else "HISTORICAL_FALLBACK"
-                ),
-                baseline_source=baseline_source,
-            ),
+            contract_version="rfc_081_v1",
+            request_fingerprint=request_fingerprint,
+            freshness=freshness_meta,
             governance=CoreSnapshotGovernanceMetadata(
                 consumer_system=(
                     governance.consumer_system
                     if governance is not None
-                    else "unknown"
+                    else request.consumer_system
                 ),
-                tenant_id=governance.tenant_id if governance is not None else "default",
+                tenant_id=governance.tenant_id if governance is not None else request.tenant_id,
                 requested_sections=requested_sections,
                 applied_sections=applied_sections,
                 dropped_sections=dropped_sections,
@@ -266,7 +293,7 @@ class CoreSnapshotService:
         reporting_fx: Decimal,
         include_cash: bool,
         include_zero: bool,
-    ) -> tuple[dict[str, dict[str, Any]], str]:
+    ) -> tuple[dict[str, dict[str, Any]], CoreSnapshotFreshnessMetadata]:
         rows = await self.position_repo.get_latest_positions_by_portfolio_as_of_date(
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
@@ -336,7 +363,14 @@ class CoreSnapshotService:
         total_base = self._total_market_value_baseline(baseline)
         self._assign_baseline_weights(baseline, total_base)
         source = "position_state" if use_snapshot else "position_history"
-        return dict(sorted(baseline.items(), key=lambda item: item[0])), source
+        freshness = CoreSnapshotFreshnessMetadata(
+            freshness_status=("CURRENT_SNAPSHOT" if use_snapshot else "HISTORICAL_FALLBACK"),
+            baseline_source=source,
+            snapshot_timestamp=None,
+            snapshot_epoch=None,
+            fallback_reason=(None if use_snapshot else "NO_CURRENT_POSITION_STATE_ROWS"),
+        )
+        return dict(sorted(baseline.items(), key=lambda item: item[0])), freshness
 
     async def _resolve_projected_positions(
         self,
