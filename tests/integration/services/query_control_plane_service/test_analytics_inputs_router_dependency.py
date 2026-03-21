@@ -39,8 +39,17 @@ async def async_test_client():
                 "quality_status_distribution": {"final": 1},
                 "missing_dates_count": 0,
                 "stale_points_count": 0,
+                "requested_dimensions": [],
+                "cash_flows_included": True,
             },
-            "page": {"next_page_token": None},
+            "page": {
+                "page_size": 100,
+                "returned_row_count": 0,
+                "sort_key": "valuation_date:asc",
+                "request_scope_fingerprint": "scope-abc",
+                "snapshot_epoch": 0,
+                "next_page_token": None,
+            },
             "observations": [],
         }
     )

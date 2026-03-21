@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.analytics_input_dto import (
@@ -126,7 +127,7 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
             ]
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=7),
-        get_fx_rates_map=AsyncMock(return_value={}),
+        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
     )
 
     response = await service.get_position_timeseries(
@@ -140,6 +141,9 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
 
     assert len(response.rows) == 1
     assert response.rows[0].position_currency == "USD"
+    assert response.page.page_size == 1
+    assert response.page.returned_row_count == 1
+    assert response.page.sort_key == "valuation_date:asc,security_id:asc"
     assert response.page.next_page_token is not None
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
@@ -264,7 +268,7 @@ async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_
         ),
         list_position_timeseries_rows=list_rows,
         get_position_snapshot_epoch=AsyncMock(side_effect=[7, 99]),
-        get_fx_rates_map=AsyncMock(return_value={}),
+        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
     )
 
     first_page = await service.get_position_timeseries(
@@ -420,6 +424,10 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     )
     assert response.rows[0].valuation_status == "restated"
     assert len(response.rows[0].cash_flows) == 3
+    assert response.diagnostics.cash_flows_included is True
+    assert response.diagnostics.requested_dimensions == ["asset_class", "sector", "country"]
+    assert response.rows[0].cash_flow_currency == "USD"
+    assert response.rows[0].portfolio_to_reporting_fx_rate == Decimal("1.2")
 
 
 @pytest.mark.asyncio
@@ -477,7 +485,12 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
             ]
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
-        get_fx_rates_map=AsyncMock(return_value={}),
+        get_fx_rates_map=AsyncMock(
+            side_effect=[
+                {date(2025, 8, 28): Decimal("1.10")},
+                {date(2025, 8, 29): Decimal("1.12")},
+            ]
+        ),
     )
 
     day_1 = await service.get_position_timeseries(
@@ -500,8 +513,10 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
     assert len(day_1.rows) == 1
     assert day_1.rows[0].security_id == "SEC_EUR_STOCK"
     assert day_1.rows[0].position_currency == "EUR"
+    assert day_1.rows[0].position_to_portfolio_fx_rate == Decimal("1.10")
     assert day_1.rows[0].quantity == Decimal("100")
-    assert day_1.rows[0].ending_market_value_portfolio_currency == Decimal("5720")
+    assert day_1.rows[0].ending_market_value_portfolio_currency == Decimal("6292.00")
+    assert day_1.rows[0].ending_market_value_reporting_currency == Decimal("6292.00")
 
     assert len(day_2.rows) == 1
     assert day_2.rows[0].security_id == "SEC_EUR_STOCK"
@@ -510,6 +525,118 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
         day_2.rows[0].ending_market_value_portfolio_currency
         > day_1.rows[0].ending_market_value_portfolio_currency
     )
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_converts_position_values_to_portfolio_and_reporting_currency(
+) -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EUR",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                    bod_cashflow_position=Decimal("1"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("2"),
+                    epoch=0,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="DE",
+                    position_currency="EUR",
+                )
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=3),
+        get_fx_rates_map=AsyncMock(
+            side_effect=[
+                {date(2025, 1, 1): Decimal("1.30")},
+                {date(2025, 1, 1): Decimal("1.10")},
+            ]
+        ),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-12-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            reporting_currency="SGD",
+            include_cash_flows=True,
+        ),
+    )
+
+    row = response.rows[0]
+    assert row.beginning_market_value_position_currency == Decimal("10")
+    assert row.beginning_market_value_portfolio_currency == Decimal("11.00")
+    assert row.ending_market_value_portfolio_currency == Decimal("12.10")
+    assert row.beginning_market_value_reporting_currency == Decimal("14.3000")
+    assert row.ending_market_value_reporting_currency == Decimal("15.7300")
+    assert row.position_to_portfolio_fx_rate == Decimal("1.10")
+    assert row.portfolio_to_reporting_fx_rate == Decimal("1.30")
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_missing_position_to_portfolio_fx_rate() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EUR",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("2"),
+                    epoch=0,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="DE",
+                    position_currency="EUR",
+                )
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=1),
+        get_fx_rates_map=AsyncMock(side_effect=[{}, {}]),
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service.get_position_timeseries(
+            portfolio_id="P1",
+            request=PositionAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+                reporting_currency="SGD",
+            ),
+        )
+    assert exc_info.value.code == "INSUFFICIENT_DATA"
 
 
 def test_decode_page_token_invalid_signature() -> None:
@@ -522,15 +649,8 @@ def test_decode_page_token_invalid_signature() -> None:
 
 
 def test_resolve_window_invalid_order() -> None:
-    service = make_service()
-    with pytest.raises(AnalyticsInputError) as exc_info:
-        service._resolve_window(  # pylint: disable=protected-access
-            as_of_date=date(2025, 1, 31),
-            window=AnalyticsWindow(start_date="2025-02-01", end_date="2025-01-31"),
-            period=None,
-            inception_date=date(2020, 1, 1),
-        )
-    assert exc_info.value.code == "INVALID_REQUEST"
+    with pytest.raises(ValidationError):
+        AnalyticsWindow(start_date="2025-02-01", end_date="2025-01-31")
 
 
 def test_resolve_window_unsupported_period() -> None:

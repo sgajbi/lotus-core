@@ -881,7 +881,7 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     )
 
     invalid_request = portfolio_inputs["responses"]["400"]["content"]["application/json"]["example"]
-    assert invalid_request["detail"] == "Either window or period must be provided."
+    assert invalid_request["detail"] == "Exactly one of window or period must be provided."
 
     job_id_param = next(
         parameter for parameter in export_result["parameters"] if parameter["name"] == "job_id"
@@ -893,11 +893,22 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     components = schema["components"]["schemas"]
     page_metadata = components["PageMetadata"]
+    position_request = components["PositionAnalyticsTimeseriesRequest"]
+    position_row = components["PositionTimeseriesRow"]
+    diagnostics = components["QualityDiagnostics"]
     export_result_schema = components["AnalyticsExportJsonResultResponse"]
 
     assert page_metadata["properties"]["next_page_token"]["description"] == (
         "Opaque continuation token for the next page, null when no additional pages remain."
     )
+    assert page_metadata["properties"]["sort_key"]["description"] == (
+        "Stable ordering applied to rows for deterministic paging."
+    )
+    assert position_request["properties"]["include_cash_flows"]["default"] is True
+    assert position_row["properties"]["cash_flow_currency"]["description"] == (
+        "Currency code applied to the row cash_flows amounts; normally matches position_currency."
+    )
+    assert diagnostics["properties"]["cash_flows_included"]["default"] is False
     assert export_result_schema["properties"]["data"]["description"] == (
         "Serialized observations or rows from the selected dataset."
     )

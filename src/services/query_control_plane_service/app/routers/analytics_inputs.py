@@ -26,7 +26,7 @@ from src.services.query_service.app.services.analytics_timeseries_service import
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
 PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE = {"detail": "Portfolio not found."}
-ANALYTICS_INVALID_REQUEST_EXAMPLE = {"detail": "Either window or period must be provided."}
+ANALYTICS_INVALID_REQUEST_EXAMPLE = {"detail": "Exactly one of window or period must be provided."}
 ANALYTICS_INSUFFICIENT_DATA_EXAMPLE = {"detail": "Missing FX rate for EUR/USD on 2025-01-31."}
 ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE = {"detail": "Analytics export job JOB-AN-0001 not found."}
 ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = {
@@ -119,7 +119,8 @@ async def get_portfolio_analytics_timeseries(
         "What: Return canonical position-level valuation timeseries required by "
         "contribution and attribution analytics.\n"
         "How: Apply deterministic paging and optional dimension/filter selectors while "
-        "keeping enrichment separate.\n"
+        "keeping enrichment separate. Cash-flow rows are included by default because "
+        "acquisition-day analytics are unsafe without them.\n"
         "When: Used by lotus-performance analytics pipelines for large-window "
         "position input retrieval."
     ),

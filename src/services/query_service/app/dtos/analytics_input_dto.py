@@ -19,6 +19,12 @@ class AnalyticsWindow(BaseModel):
         examples=["2025-12-31"],
     )
 
+    @model_validator(mode="after")
+    def validate_date_order(self) -> "AnalyticsWindow":
+        if self.start_date > self.end_date:
+            raise ValueError("window.start_date must be before or equal to window.end_date.")
+        return self
+
     model_config = ConfigDict()
 
 
@@ -65,6 +71,34 @@ class LineageMetadata(BaseModel):
 
 
 class PageMetadata(BaseModel):
+    page_size: int = Field(
+        ...,
+        description="Maximum number of rows requested for this response page.",
+        examples=[500],
+    )
+    returned_row_count: int = Field(
+        ...,
+        description="Number of rows actually returned in this response page.",
+        examples=[248],
+    )
+    sort_key: str = Field(
+        ...,
+        description="Stable ordering applied to rows for deterministic paging.",
+        examples=["valuation_date:asc,security_id:asc"],
+    )
+    request_scope_fingerprint: str = Field(
+        ...,
+        description="Deterministic scope fingerprint used to validate continuation tokens.",
+        examples=["4fcad301df7d144f1d3d0570fb0d3e4a"],
+    )
+    snapshot_epoch: int = Field(
+        ...,
+        description=(
+            "Snapshot epoch pinned for the paged traversal to keep pages internally "
+            "consistent."
+        ),
+        examples=[7],
+    )
     next_page_token: str | None = Field(
         None,
         description=(
@@ -91,6 +125,19 @@ class QualityDiagnostics(BaseModel):
         0,
         description="Count of stale points detected based on staleness policy.",
         examples=[1],
+    )
+    requested_dimensions: list[str] = Field(
+        default_factory=list,
+        description="Requested row-level dimensions projected into the returned dataset.",
+        examples=[["asset_class", "sector"]],
+    )
+    cash_flows_included: bool = Field(
+        False,
+        description=(
+            "Whether the response rows include canonical per-position cash_flow "
+            "observations."
+        ),
+        examples=[True],
     )
 
     model_config = ConfigDict()
@@ -159,7 +206,9 @@ class PortfolioAnalyticsTimeseriesRequest(BaseModel):
     @model_validator(mode="after")
     def validate_window_or_period(self) -> "PortfolioAnalyticsTimeseriesRequest":
         if self.window is None and self.period is None:
-            raise ValueError("Either window or period must be provided.")
+            raise ValueError("Exactly one of window or period must be provided.")
+        if self.window is not None and self.period is not None:
+            raise ValueError("Exactly one of window or period must be provided.")
         return self
 
     model_config = ConfigDict()
@@ -311,9 +360,13 @@ class PositionAnalyticsTimeseriesRequest(BaseModel):
         examples=[["asset_class", "sector"]],
     )
     include_cash_flows: bool = Field(
-        False,
-        description="Whether to include per-position canonical cash_flows in each row.",
-        examples=[False],
+        True,
+        description=(
+            "Whether to include canonical per-position cash_flows in each row. "
+            "Defaults to true because acquisition-day and flow-aware analytics are "
+            "unsafe without it."
+        ),
+        examples=[True],
     )
     consumer_system: str = Field(
         "lotus-performance",
@@ -330,7 +383,9 @@ class PositionAnalyticsTimeseriesRequest(BaseModel):
     @model_validator(mode="after")
     def validate_window_or_period(self) -> "PositionAnalyticsTimeseriesRequest":
         if self.window is None and self.period is None:
-            raise ValueError("Either window or period must be provided.")
+            raise ValueError("Exactly one of window or period must be provided.")
+        if self.window is not None and self.period is not None:
+            raise ValueError("Exactly one of window or period must be provided.")
         return self
 
     model_config = ConfigDict()
@@ -351,10 +406,35 @@ class PositionTimeseriesRow(BaseModel):
         description="Native/local currency code of the position when available.",
         examples=["EUR"],
     )
+    cash_flow_currency: str | None = Field(
+        None,
+        description=(
+            "Currency code applied to the row cash_flows amounts; normally matches "
+            "position_currency."
+        ),
+        examples=["EUR"],
+    )
     dimensions: dict[str, str | None] = Field(
         default_factory=dict,
         description="Selected dimension values for the row.",
         examples=[{"asset_class": "Equity", "sector": "Technology"}],
+    )
+    position_to_portfolio_fx_rate: Decimal = Field(
+        ...,
+        description=(
+            "FX rate used to convert position-currency values into portfolio_currency "
+            "for this row. Equals 1 when the position currency already matches the "
+            "portfolio currency."
+        ),
+        examples=["1.0850000000"],
+    )
+    portfolio_to_reporting_fx_rate: Decimal = Field(
+        ...,
+        description=(
+            "FX rate used to convert portfolio-currency values into reporting_currency "
+            "for this row. Equals 1 when reporting_currency matches portfolio_currency."
+        ),
+        examples=["1.0000000000"],
     )
     beginning_market_value_position_currency: Decimal = Field(
         ..., description="Beginning value in position currency.", examples=["125000.1200000000"]
@@ -368,14 +448,14 @@ class PositionTimeseriesRow(BaseModel):
     ending_market_value_portfolio_currency: Decimal = Field(
         ..., description="Ending value in portfolio currency.", examples=["103200.5600000000"]
     )
-    beginning_market_value_reporting_currency: Decimal | None = Field(
-        None,
-        description="Beginning value converted to reporting currency.",
+    beginning_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Beginning value converted to the effective reporting_currency.",
         examples=["111500.4500000000"],
     )
-    ending_market_value_reporting_currency: Decimal | None = Field(
-        None,
-        description="Ending value converted to reporting currency.",
+    ending_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Ending value converted to the effective reporting_currency.",
         examples=["112350.9800000000"],
     )
     valuation_status: Literal["final", "provisional", "restated"] = Field(

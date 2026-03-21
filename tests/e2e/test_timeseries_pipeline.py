@@ -11,32 +11,36 @@ EXPECTED_TIMESERIES_ROWS = {
         "SEC_EUR_STOCK": {
             "position_currency": "EUR",
             "quantity": Decimal("100"),
-            "ending_market_value_portfolio_currency": Decimal("5200"),
+            "position_to_portfolio_fx_rate": Decimal("1.1"),
+            "ending_market_value_portfolio_currency": Decimal("5720"),
             "valuation_status": "final",
         },
         "CASH_": {
             "position_currency": "USD",
             "quantity": Decimal("0"),
+            "position_to_portfolio_fx_rate": Decimal("1"),
             "ending_market_value_portfolio_currency": Decimal("0"),
             "valuation_status": "restated",
         },
-        "total_ending_market_value_portfolio_currency": Decimal("5200"),
+        "total_ending_market_value_portfolio_currency": Decimal("5720"),
         "quality_status_distribution": {"final": 1, "restated": 1},
     },
     "2025-08-29": {
         "SEC_EUR_STOCK": {
             "position_currency": "EUR",
             "quantity": Decimal("100"),
-            "ending_market_value_portfolio_currency": Decimal("5500"),
+            "position_to_portfolio_fx_rate": Decimal("1.2"),
+            "ending_market_value_portfolio_currency": Decimal("6600"),
             "valuation_status": "final",
         },
         "CASH_": {
             "position_currency": "USD",
             "quantity": Decimal("-25"),
+            "position_to_portfolio_fx_rate": Decimal("1"),
             "ending_market_value_portfolio_currency": Decimal("-25"),
             "valuation_status": "restated",
         },
-        "total_ending_market_value_portfolio_currency": Decimal("5475"),
+        "total_ending_market_value_portfolio_currency": Decimal("6575"),
         "quality_status_distribution": {"final": 1, "restated": 1},
     },
 }
@@ -330,11 +334,16 @@ def _assert_timeseries_payload(
     assert payload["calendar_id"] == "business_date_calendar"
     assert payload["missing_observation_policy"] == "strict"
     assert payload["resolved_window"] == {"start_date": valuation_date, "end_date": valuation_date}
-    assert payload["page"] == {"next_page_token": None}
+    assert payload["page"]["next_page_token"] is None
+    assert payload["page"]["sort_key"] == "valuation_date:asc,security_id:asc"
+    assert payload["page"]["returned_row_count"] == 2
+    assert payload["page"]["snapshot_epoch"] >= 0
 
     diagnostics = payload["diagnostics"]
     assert diagnostics["missing_dates_count"] == 0
     assert diagnostics["stale_points_count"] == 0
+    assert diagnostics["requested_dimensions"] == []
+    assert diagnostics["cash_flows_included"] is True
     assert diagnostics["quality_status_distribution"] == expected_for_day[
         "quality_status_distribution"
     ]
@@ -348,11 +357,21 @@ def _assert_timeseries_payload(
         expected = _expected_row_for_security(valuation_date, security_id)
         assert row["valuation_date"] == valuation_date
         assert row["position_currency"] == expected["position_currency"]
+        assert row["cash_flow_currency"] == expected["position_currency"]
         assert row["dimensions"] == {}
         assert row["valuation_status"] == expected["valuation_status"]
+        assert (
+            as_decimal(row["position_to_portfolio_fx_rate"])
+            == expected["position_to_portfolio_fx_rate"]
+        )
+        assert as_decimal(row["portfolio_to_reporting_fx_rate"]) == Decimal("1")
         assert as_decimal(row["quantity"]) == expected["quantity"]
         assert (
             as_decimal(row["ending_market_value_portfolio_currency"])
+            == expected["ending_market_value_portfolio_currency"]
+        )
+        assert (
+            as_decimal(row["ending_market_value_reporting_currency"])
             == expected["ending_market_value_portfolio_currency"]
         )
 

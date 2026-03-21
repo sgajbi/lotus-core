@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
+    AnalyticsWindow,
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
 )
@@ -18,6 +19,24 @@ def test_portfolio_timeseries_request_requires_window_or_period() -> None:
 def test_position_timeseries_request_requires_window_or_period() -> None:
     with pytest.raises(ValidationError):
         PositionAnalyticsTimeseriesRequest(as_of_date="2025-12-31")
+
+
+def test_portfolio_timeseries_request_rejects_both_window_and_period() -> None:
+    with pytest.raises(ValidationError):
+        PortfolioAnalyticsTimeseriesRequest(
+            as_of_date="2025-12-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            period="one_month",
+        )
+
+
+def test_position_timeseries_request_rejects_both_window_and_period() -> None:
+    with pytest.raises(ValidationError):
+        PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-12-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            period="one_month",
+        )
 
 
 def test_export_request_requires_portfolio_payload_for_portfolio_dataset() -> None:
