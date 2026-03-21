@@ -488,23 +488,30 @@ async def test_reference_contract_methods() -> None:
     index_return = await service.get_index_return_series(
         index_id="IDX1",
         request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
             window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
             frequency="daily",
         ),
     )
     assert index_return.points
+    assert index_return.as_of_date == date(2026, 1, 1)
+    assert index_return.request_fingerprint
 
     benchmark_return = await service.get_benchmark_return_series(
         benchmark_id="B1",
         request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
             window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
             frequency="daily",
         ),
     )
     assert benchmark_return.points
+    assert benchmark_return.as_of_date == date(2026, 1, 1)
+    assert benchmark_return.request_fingerprint
 
     risk_free = await service.get_risk_free_series(
         request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
             currency="USD",
             series_mode="annualized_rate_series",
             window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
@@ -512,6 +519,8 @@ async def test_reference_contract_methods() -> None:
         ),
     )
     assert risk_free.points
+    assert risk_free.as_of_date == date(2026, 1, 1)
+    assert risk_free.request_fingerprint
 
     coverage = await service.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
     assert coverage.total_points == 10

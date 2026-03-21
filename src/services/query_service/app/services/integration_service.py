@@ -86,6 +86,28 @@ class IntegrationService:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
 
+    @staticmethod
+    def _series_request_fingerprint(
+        series_key: str,
+        identifier_key: str,
+        identifier_value: str,
+        request: Any,
+        extras: dict[str, Any] | None = None,
+    ) -> str:
+        payload: dict[str, Any] = {
+            "series_key": series_key,
+            identifier_key: identifier_value,
+            "as_of_date": request.as_of_date.isoformat(),
+            "window": {
+                "start_date": request.window.start_date.isoformat(),
+                "end_date": request.window.end_date.isoformat(),
+            },
+            "frequency": request.frequency,
+        }
+        if extras:
+            payload.update(extras)
+        return IntegrationService._request_fingerprint(payload)
+
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         signature = hmac.new(
@@ -705,6 +727,12 @@ class IntegrationService:
     async def get_index_return_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexReturnSeriesResponse:
+        request_fingerprint = self._series_request_fingerprint(
+            series_key="index_return_series",
+            identifier_key="index_id",
+            identifier_value=index_id,
+            request=request,
+        )
         rows = await self._reference_repository.list_index_return_series(
             index_id=index_id,
             start_date=request.window.start_date,
@@ -712,11 +740,13 @@ class IntegrationService:
         )
         return IndexReturnSeriesResponse(
             index_id=index_id,
+            as_of_date=request.as_of_date,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
+            request_fingerprint=request_fingerprint,
             points=[
                 IndexReturnSeriesPoint(
                     series_date=row.series_date,
@@ -738,6 +768,12 @@ class IntegrationService:
     async def get_benchmark_return_series(
         self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
     ) -> BenchmarkReturnSeriesResponse:
+        request_fingerprint = self._series_request_fingerprint(
+            series_key="benchmark_return_series",
+            identifier_key="benchmark_id",
+            identifier_value=benchmark_id,
+            request=request,
+        )
         rows = await self._reference_repository.list_benchmark_return_points(
             benchmark_id=benchmark_id,
             start_date=request.window.start_date,
@@ -745,11 +781,13 @@ class IntegrationService:
         )
         return BenchmarkReturnSeriesResponse(
             benchmark_id=benchmark_id,
+            as_of_date=request.as_of_date,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
+            request_fingerprint=request_fingerprint,
             points=[
                 {
                     "series_date": row.series_date,
@@ -769,6 +807,13 @@ class IntegrationService:
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
+        request_fingerprint = self._series_request_fingerprint(
+            series_key="risk_free_series",
+            identifier_key="currency",
+            identifier_value=request.currency.upper(),
+            request=request,
+            extras={"series_mode": request.series_mode},
+        )
         rows = await self._reference_repository.list_risk_free_series(
             currency=request.currency,
             start_date=request.window.start_date,
@@ -776,12 +821,14 @@ class IntegrationService:
         )
         return RiskFreeSeriesResponse(
             currency=request.currency.upper(),
+            as_of_date=request.as_of_date,
             series_mode=request.series_mode,
             resolved_window=IntegrationWindow(
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
+            request_fingerprint=request_fingerprint,
             points=[
                 RiskFreeSeriesPoint(
                     series_date=row.series_date,

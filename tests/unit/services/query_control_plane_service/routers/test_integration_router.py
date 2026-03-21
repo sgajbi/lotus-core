@@ -728,8 +728,10 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service.get_index_return_series = AsyncMock(
         return_value={
             "index_id": "IDX1",
+            "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-index-return-1",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -737,8 +739,10 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service.get_benchmark_return_series = AsyncMock(
         return_value={
             "benchmark_id": "B1",
+            "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-benchmark-return-1",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -746,9 +750,11 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service.get_risk_free_series = AsyncMock(
         return_value={
             "currency": "USD",
+            "as_of_date": "2026-01-31",
             "series_mode": "annualized_rate_series",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-risk-free-1",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -819,6 +825,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert index_return_response["index_id"] == "IDX1"
+    assert index_return_response["request_fingerprint"] == "fp-index-return-1"
     mock_service.get_index_return_series.assert_awaited_once_with(
         index_id="IDX1",
         request=IndexSeriesRequest(
@@ -836,6 +843,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert benchmark_return_response["benchmark_id"] == "B1"
+    assert benchmark_return_response["request_fingerprint"] == "fp-benchmark-return-1"
     mock_service.get_benchmark_return_series.assert_awaited_once()
 
     risk_free_response = await fetch_risk_free_series(
@@ -849,6 +857,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         integration_service=mock_service,
     )
     assert risk_free_response["currency"] == "USD"
+    assert risk_free_response["request_fingerprint"] == "fp-risk-free-1"
     mock_service.get_risk_free_series.assert_awaited_once()
 
     taxonomy_response = await fetch_classification_taxonomy(

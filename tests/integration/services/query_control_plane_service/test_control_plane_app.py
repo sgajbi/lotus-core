@@ -1226,6 +1226,20 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert risk_free_series_response["properties"]["lineage"]["examples"] == [
         {"contract_version": "rfc_062_v1", "source_system": "lotus-core"}
     ]
+    assert (
+        components["IndexReturnSeriesResponse"]["properties"]["request_fingerprint"]["description"]
+        == "Deterministic request fingerprint for the raw index return series scope."
+    )
+    assert (
+        components["BenchmarkReturnSeriesResponse"]["properties"]["request_fingerprint"][
+            "description"
+        ]
+        == "Deterministic request fingerprint for the raw benchmark return series scope."
+    )
+    assert (
+        risk_free_series_response["properties"]["request_fingerprint"]["description"]
+        == "Deterministic request fingerprint for the raw risk-free series scope."
+    )
     assert coverage_response["properties"]["missing_dates_count"]["examples"] == [2]
     assert classification_taxonomy_response["properties"]["records"]["description"] == (
         "Classification taxonomy entries effective on the requested date."

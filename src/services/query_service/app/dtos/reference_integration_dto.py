@@ -785,8 +785,18 @@ class IndexPriceSeriesResponse(BaseModel):
 
 class IndexReturnSeriesResponse(BaseModel):
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for deterministic contract resolution.",
+        examples=["2026-01-31"],
+    )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the raw index return series scope.",
+        examples=["9ccdb0a1df40f0690241a5b52e9f1c1d"],
+    )
     points: list[IndexReturnSeriesPoint] = Field(
         default_factory=list, description="Index return points."
     )
@@ -803,8 +813,18 @@ class BenchmarkReturnSeriesResponse(BaseModel):
     benchmark_id: str = Field(
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for deterministic contract resolution.",
+        examples=["2026-01-31"],
+    )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the raw benchmark return series scope.",
+        examples=["f4ea7426d13c0b95bbfd8d7d9dfb29af"],
+    )
     points: list[BenchmarkReturnSeriesPoint] = Field(
         default_factory=list,
         description="Raw benchmark return points from upstream provider.",
@@ -842,6 +862,11 @@ class RiskFreeSeriesPoint(BaseModel):
 
 class RiskFreeSeriesResponse(BaseModel):
     currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    as_of_date: date = Field(
+        ...,
+        description="As-of date used for deterministic contract resolution.",
+        examples=["2026-01-31"],
+    )
     series_mode: Literal["annualized_rate_series", "return_series"] = Field(
         ...,
         description="Series mode returned by the endpoint.",
@@ -849,6 +874,11 @@ class RiskFreeSeriesResponse(BaseModel):
     )
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic request fingerprint for the raw risk-free series scope.",
+        examples=["6dfc8591d95a53060efd94ddca9a266e"],
+    )
     points: list[RiskFreeSeriesPoint] = Field(
         default_factory=list, description="Risk-free series points."
     )
