@@ -1,11 +1,11 @@
 # tests/unit/services/timeseries-generator-service/core/test_portfolio_timeseries_logic.py
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.database_models import (
-    DailyPositionSnapshot,
     Instrument,
     Portfolio,
     PositionTimeseries,
@@ -50,23 +50,36 @@ async def test_portfolio_logic_aggregates_correctly_with_epoch(
 
     position_ts_list = [
         PositionTimeseries(
-            security_id="CASH_USD", bod_cashflow_portfolio=Decimal(-25), date=test_date
-        )
-    ]
-
-    # Simulate latest-per-security snapshots. Mixed epochs are valid when only
-    # part of the portfolio has been reprocessed.
-    latest_snapshots_for_day = [
-        DailyPositionSnapshot(security_id="SEC_AAPL", market_value=Decimal("10000"), epoch=2),
-        DailyPositionSnapshot(security_id="CASH_USD", market_value=Decimal("50000"), epoch=2),
-        DailyPositionSnapshot(security_id="SEC_IBM", market_value=Decimal("7000"), epoch=1),
+            security_id="SEC_AAPL",
+            bod_market_value=Decimal("10000"),
+            eod_market_value=Decimal("10000"),
+            bod_cashflow_portfolio=Decimal(0),
+            eod_cashflow_portfolio=Decimal(0),
+            date=test_date,
+        ),
+        PositionTimeseries(
+            security_id="CASH_USD",
+            bod_market_value=Decimal("50000"),
+            eod_market_value=Decimal("50000"),
+            bod_cashflow_portfolio=Decimal(-25),
+            eod_cashflow_portfolio=Decimal(0),
+            date=test_date,
+        ),
+        PositionTimeseries(
+            security_id="SEC_IBM",
+            bod_market_value=Decimal("7000"),
+            eod_market_value=Decimal("7000"),
+            bod_cashflow_portfolio=Decimal(0),
+            eod_cashflow_portfolio=Decimal(0),
+            date=test_date,
+        ),
     ]
 
     mock_repo.get_instruments_by_ids.return_value = [
-        Instrument(security_id="CASH_USD", currency="USD")
+        Instrument(security_id="SEC_AAPL", currency="USD"),
+        Instrument(security_id="CASH_USD", currency="USD"),
+        Instrument(security_id="SEC_IBM", currency="USD"),
     ]
-    mock_repo.get_last_portfolio_timeseries_before.return_value = None
-    mock_repo.get_latest_snapshots_for_date.return_value = latest_snapshots_for_day
 
     # ACT
     result = await PortfolioTimeseriesLogic.calculate_daily_record(
@@ -79,7 +92,8 @@ async def test_portfolio_logic_aggregates_correctly_with_epoch(
 
     # ASSERT
     assert result.epoch == target_epoch
-    assert result.eod_market_value == Decimal("67000")  # 10000 + 50000 + 7000
+    assert result.bod_market_value == Decimal("67000")
+    assert result.eod_market_value == Decimal("67000")
 
 
 async def test_portfolio_logic_raises_error_if_fx_rate_is_missing(
@@ -152,3 +166,48 @@ async def test_portfolio_logic_handles_non_string_currency(
             position_timeseries_list=position_ts_list,
             repo=mock_repo,
         )
+
+
+async def test_portfolio_logic_uses_position_timeseries_for_bod_and_eod_reconciliation(
+    mock_repo: AsyncMock, sample_portfolio: Portfolio
+):
+    test_date = date(2025, 8, 8)
+    position_ts_list = [
+        PositionTimeseries(
+            security_id="SEC_AAPL",
+            date=test_date,
+            bod_market_value=Decimal("10000"),
+            eod_market_value=Decimal("12000"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+        ),
+        PositionTimeseries(
+            security_id="CASH_USD",
+            date=test_date,
+            bod_market_value=Decimal("5000"),
+            eod_market_value=Decimal("3000"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+        ),
+    ]
+
+    mock_repo.get_instruments_by_ids.return_value = [
+        Instrument(security_id="SEC_AAPL", currency="USD"),
+        Instrument(security_id="CASH_USD", currency="USD"),
+    ]
+    mock_repo.get_last_portfolio_timeseries_before.return_value = SimpleNamespace(
+        eod_market_value=Decimal("9000")
+    )
+
+    result = await PortfolioTimeseriesLogic.calculate_daily_record(
+        portfolio=sample_portfolio,
+        a_date=test_date,
+        epoch=2,
+        position_timeseries_list=position_ts_list,
+        repo=mock_repo,
+    )
+
+    assert result.bod_market_value == Decimal("15000")
+    assert result.eod_market_value == Decimal("15000")
+    mock_repo.get_last_portfolio_timeseries_before.assert_not_awaited()
+    mock_repo.get_latest_snapshots_for_date.assert_not_awaited()
