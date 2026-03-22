@@ -7,6 +7,7 @@ from typing import Any
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
+    Cashflow,
     FxRate,
     Instrument,
     Portfolio,
@@ -20,6 +21,48 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class AnalyticsTimeseriesRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _latest_cashflow_rows_stmt(*, predicates: list[object], include_security_id: bool):
+        partition_by = [
+            Cashflow.transaction_id,
+            Cashflow.cashflow_date,
+            Cashflow.classification,
+            Cashflow.timing,
+            Cashflow.is_position_flow,
+            Cashflow.is_portfolio_flow,
+        ]
+        if include_security_id:
+            partition_by.append(Cashflow.security_id)
+
+        selected_columns = [
+            Cashflow.transaction_id.label("transaction_id"),
+            Cashflow.cashflow_date.label("valuation_date"),
+            Cashflow.amount.label("amount"),
+            Cashflow.currency.label("currency"),
+            Cashflow.classification.label("classification"),
+            Cashflow.timing.label("timing"),
+            Cashflow.is_position_flow.label("is_position_flow"),
+            Cashflow.is_portfolio_flow.label("is_portfolio_flow"),
+            Cashflow.epoch.label("epoch"),
+            func.row_number()
+            .over(
+                partition_by=tuple(partition_by),
+                order_by=(Cashflow.epoch.desc(),),
+            )
+            .label("rn"),
+        ]
+        if include_security_id:
+            selected_columns.insert(1, Cashflow.security_id.label("security_id"))
+
+        ranked = select(*selected_columns).where(*predicates).subquery()
+
+        ordering = [ranked.c.valuation_date.asc()]
+        if include_security_id:
+            ordering.append(ranked.c.security_id.asc())
+        ordering.extend([ranked.c.timing.asc(), ranked.c.transaction_id.asc()])
+
+        return select(ranked).where(ranked.c.rn == 1).order_by(*ordering)
 
     async def get_portfolio(self, portfolio_id: str) -> Portfolio | None:
         stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
@@ -215,6 +258,102 @@ class AnalyticsTimeseriesRepository:
         stmt = stmt.order_by(ranked.c.valuation_date.asc(), ranked.c.security_id.asc()).limit(
             page_size + 1
         )
+        result = await self.db.execute(stmt)
+        return result.all()
+
+    async def list_position_timeseries_rows_unpaged(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        snapshot_epoch: int | None = None,
+    ) -> list[Any]:
+        predicates = [
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.date >= start_date,
+            PositionTimeseries.date <= end_date,
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
+
+        ranked = (
+            select(
+                PositionTimeseries.security_id.label("security_id"),
+                PositionTimeseries.date.label("valuation_date"),
+                PositionTimeseries.bod_market_value.label("bod_market_value"),
+                PositionTimeseries.eod_market_value.label("eod_market_value"),
+                PositionTimeseries.bod_cashflow_position.label("bod_cashflow_position"),
+                PositionTimeseries.eod_cashflow_position.label("eod_cashflow_position"),
+                PositionTimeseries.bod_cashflow_portfolio.label("bod_cashflow_portfolio"),
+                PositionTimeseries.eod_cashflow_portfolio.label("eod_cashflow_portfolio"),
+                PositionTimeseries.fees.label("fees"),
+                PositionTimeseries.quantity.label("quantity"),
+                PositionTimeseries.epoch.label("epoch"),
+                Instrument.currency.label("position_currency"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionTimeseries.date, PositionTimeseries.security_id),
+                    order_by=(PositionTimeseries.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .where(*predicates)
+            .subquery()
+        )
+
+        stmt = (
+            select(ranked)
+            .where(ranked.c.rn == 1)
+            .order_by(ranked.c.valuation_date.asc(), ranked.c.security_id.asc())
+        )
+        result = await self.db.execute(stmt)
+        return result.all()
+
+    async def list_position_cashflow_rows(
+        self,
+        *,
+        portfolio_id: str,
+        security_ids: list[str],
+        valuation_dates: list[date],
+        snapshot_epoch: int | None = None,
+    ) -> list[Any]:
+        if not security_ids or not valuation_dates:
+            return []
+
+        predicates = [
+            Cashflow.portfolio_id == portfolio_id,
+            Cashflow.security_id.in_(security_ids),
+            Cashflow.cashflow_date.in_(valuation_dates),
+            Cashflow.is_position_flow.is_(True),
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(Cashflow.epoch <= snapshot_epoch)
+
+        stmt = self._latest_cashflow_rows_stmt(predicates=predicates, include_security_id=True)
+        result = await self.db.execute(stmt)
+        return result.all()
+
+    async def list_portfolio_cashflow_rows(
+        self,
+        *,
+        portfolio_id: str,
+        valuation_dates: list[date],
+        snapshot_epoch: int | None = None,
+    ) -> list[Any]:
+        if not valuation_dates:
+            return []
+
+        predicates = [
+            Cashflow.portfolio_id == portfolio_id,
+            Cashflow.cashflow_date.in_(valuation_dates),
+            Cashflow.is_portfolio_flow.is_(True),
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(Cashflow.epoch <= snapshot_epoch)
+
+        stmt = self._latest_cashflow_rows_stmt(predicates=predicates, include_security_id=False)
         result = await self.db.execute(stmt)
         return result.all()
 

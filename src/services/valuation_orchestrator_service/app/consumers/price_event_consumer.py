@@ -72,6 +72,7 @@ class PriceEventConsumer(BaseConsumer):
                         latest_business_date = await valuation_repo.get_latest_business_date()
                         event_correlation_id = correlation_id
 
+                        open_position_keys = []
                         if latest_business_date and event.price_date <= latest_business_date:
                             open_position_keys = (
                                 await valuation_repo.find_open_position_keys_for_security_on_date(
@@ -102,6 +103,11 @@ class PriceEventConsumer(BaseConsumer):
                         needs_deferred_reprocessing = (
                             latest_business_date is None or event.price_date > latest_business_date
                         )
+                        needs_readiness_reprocessing = (
+                            latest_business_date is not None
+                            and event.price_date <= latest_business_date
+                            and not open_position_keys
+                        )
                         if is_backdated:
                             logger.warning(
                                 "Back-dated price event detected. "
@@ -109,6 +115,21 @@ class PriceEventConsumer(BaseConsumer):
                                 extra={
                                     "security_id": event.security_id,
                                     "price_date": event.price_date,
+                                },
+                            )
+                            await reprocessing_repo.upsert_state(
+                                security_id=event.security_id,
+                                price_date=event.price_date,
+                                correlation_id=event_correlation_id,
+                            )
+                        elif needs_readiness_reprocessing:
+                            logger.info(
+                                "No open position keys were ready for in-horizon market price. "
+                                "Staging durable reprocessing trigger to close the readiness race.",
+                                extra={
+                                    "security_id": event.security_id,
+                                    "price_date": event.price_date,
+                                    "latest_business_date": latest_business_date,
                                 },
                             )
                             await reprocessing_repo.upsert_state(

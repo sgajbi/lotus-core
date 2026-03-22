@@ -948,6 +948,17 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert position_row["properties"]["cash_flow_currency"]["description"] == (
         "Currency code applied to the row cash_flows amounts; normally matches position_currency."
     )
+    cash_flow_observation = components["CashFlowObservation"]
+    assert cash_flow_observation["properties"]["cash_flow_type"]["description"] == (
+        "Canonical analytics cash flow type for downstream performance treatment."
+    )
+    assert cash_flow_observation["properties"]["flow_scope"]["description"] == (
+        "High-level provenance scope that distinguishes external, internal, and operational flows."
+    )
+    assert cash_flow_observation["properties"]["source_classification"]["description"] == (
+        "Underlying canonical cashflow classification that produced this "
+        "analytics flow observation."
+    )
     assert portfolio_diagnostics["properties"]["expected_business_dates_count"]["description"] == (
         "Number of expected business-calendar dates in the resolved window."
     )

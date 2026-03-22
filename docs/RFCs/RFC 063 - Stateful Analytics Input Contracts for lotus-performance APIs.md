@@ -45,14 +45,20 @@ This RFC now treats `POST /integration/portfolios/{portfolio_id}/analytics/posit
    - `position_to_portfolio_fx_rate`
    - `portfolio_to_reporting_fx_rate`
    - `cash_flow_currency`
-5. Paging metadata is explicit and self-describing:
+5. Each returned cash-flow observation now carries explicit provenance:
+   - `cash_flow_type`
+   - `flow_scope`
+   - `source_classification`
+6. Position cash-flow observations are sourced from canonical `cashflows` records for the
+   returned page rather than inferred only from flattened position-timeseries totals.
+7. Paging metadata is explicit and self-describing:
    - `page_size`
    - `returned_row_count`
    - `sort_key`
    - `request_scope_fingerprint`
    - `snapshot_epoch`
    - `next_page_token`
-6. Diagnostics explicitly declare:
+8. Diagnostics explicitly declare:
    - requested dimensions
    - whether cash flows were included
 
@@ -60,7 +66,8 @@ This RFC now treats `POST /integration/portfolios/{portfolio_id}/analytics/posit
 These changes close three important gaps:
 1. non-base positions no longer masquerade as portfolio-currency values
 2. downstream consumers no longer need implicit knowledge to know whether cash-flow semantics are present
-3. pagination is auditable and replay-safe
+3. internal trade settlement legs are distinguishable from true external funding
+4. pagination is auditable and replay-safe
 
 ## Portfolio-Timeseries Contract Baseline
 The portfolio companion endpoint now has a stronger contract baseline as well.
@@ -74,7 +81,11 @@ The portfolio companion endpoint now has a stronger contract baseline as well.
 1. `PortfolioTimeseriesObservation.beginning_market_value` and `ending_market_value` are always expressed in the effective `reporting_currency`.
 2. `PortfolioTimeseriesObservation.cash_flows` are canonical portfolio-level performance flows in that same reporting currency.
 3. Each observation includes `cash_flow_currency` so consumers do not need to infer flow-currency semantics.
-4. Portfolio diagnostics are endpoint-specific and include:
+4. Each cash-flow observation includes explicit provenance:
+   - `cash_flow_type`
+   - `flow_scope`
+   - `source_classification`
+5. Portfolio diagnostics are endpoint-specific and include:
    - `expected_business_dates_count`
    - `returned_observation_dates_count`
    - `missing_dates_count`

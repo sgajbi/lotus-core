@@ -76,7 +76,7 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
         "lotus-performance.\n"
         "How: Resolve effective window, apply deterministic paging, and include "
         "lineage/quality diagnostics. Returned cash_flows are canonical portfolio-level "
-        "events expressed in the effective reporting currency.\n"
+        "events expressed in the effective reporting currency with explicit flow provenance.\n"
         "When: Used for stateful TWR and MWR input acquisition without direct database coupling."
     ),
 )
@@ -121,7 +121,8 @@ async def get_portfolio_analytics_timeseries(
         "contribution and attribution analytics.\n"
         "How: Apply deterministic paging and optional dimension/filter selectors while "
         "keeping enrichment separate. Cash-flow rows are included by default because "
-        "acquisition-day analytics are unsafe without them.\n"
+        "acquisition-day analytics are unsafe without them, and they carry explicit "
+        "internal versus external provenance.\n"
         "When: Used by lotus-performance analytics pipelines for large-window "
         "position input retrieval."
     ),
