@@ -47,29 +47,27 @@ EXPECTED_PORTFOLIO_TIMESERIES = {
         "valuation_status": "restated",
     },
     "2025-08-29": {
-        "beginning_market_value": Decimal("5720"),
+        "beginning_market_value": Decimal("6240"),
         "ending_market_value": Decimal("6575"),
         "valuation_status": "restated",
     },
 }
 
 
-@pytest.fixture(scope="module")
-def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
-    """
-    Seed a deterministic 2-day scenario used by analytics input timeseries contracts.
-    """
-    suffix = uuid.uuid4().hex[:8].upper()
-    portfolio_id = f"E2E_TS_{suffix}"
-    stock_security_id = f"SEC_EUR_STOCK_{suffix}"
-    cash_security_id = f"CASH_{suffix}"
-    stock_isin = f"EU{suffix}"
-    cash_isin = f"USD_CASH_{suffix}"
-    deposit_tx_id = f"TS_DEP_{suffix}"
-    buy_tx_id = f"TS_BUY_{suffix}"
-    settle_tx_id = f"TS_CASH_SETTLE_BUY_{suffix}"
-    fee_tx_id = f"TS_FEE_{suffix}"
-
+def _seed_two_day_timeseries_scenario(
+    e2e_api_client: E2EApiClient,
+    *,
+    portfolio_id: str,
+    stock_security_id: str,
+    cash_security_id: str,
+    stock_isin: str,
+    cash_isin: str,
+    deposit_tx_id: str,
+    buy_tx_id: str,
+    settle_tx_id: str,
+    fee_tx_id: str,
+    prices_before_transactions: bool = False,
+) -> None:
     e2e_api_client.ingest(
         "/ingest/portfolios",
         {
@@ -133,106 +131,124 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
         {"business_dates": [{"business_date": "2025-08-28"}, {"business_date": "2025-08-29"}]},
     )
 
-    # Day 1
-    e2e_api_client.ingest(
-        "/ingest/transactions",
+    day_1_transactions = [
         {
-            "transactions": [
-                {
-                    "transaction_id": deposit_tx_id,
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
-                    "transaction_date": "2025-08-28T00:00:00Z",
-                    "transaction_type": "DEPOSIT",
-                    "quantity": 5500,
-                    "price": 1,
-                    "gross_transaction_amount": 5500,
-                    "trade_currency": "USD",
-                    "currency": "USD",
-                },
-                {
-                    "transaction_id": buy_tx_id,
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": stock_security_id,
-                    "security_id": stock_security_id,
-                    "transaction_date": "2025-08-28T00:00:00Z",
-                    "transaction_type": "BUY",
-                    "quantity": 100,
-                    "price": 50,
-                    "gross_transaction_amount": 5000,
-                    "trade_currency": "EUR",
-                    "currency": "EUR",
-                },
-                {
-                    "transaction_id": settle_tx_id,
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
-                    "transaction_date": "2025-08-28T00:00:00Z",
-                    "transaction_type": "SELL",
-                    "quantity": 5500,
-                    "price": 1,
-                    "gross_transaction_amount": 5500,
-                    "trade_currency": "USD",
-                    "currency": "USD",
-                },
-            ]
+            "transaction_id": deposit_tx_id,
+            "portfolio_id": portfolio_id,
+            "instrument_id": cash_security_id,
+            "security_id": cash_security_id,
+            "transaction_date": "2025-08-28T00:00:00Z",
+            "transaction_type": "DEPOSIT",
+            "quantity": 5500,
+            "price": 1,
+            "gross_transaction_amount": 5500,
+            "trade_currency": "USD",
+            "currency": "USD",
         },
-    )
-    e2e_api_client.ingest(
-        "/ingest/market-prices",
         {
-            "market_prices": [
-                {
-                    "security_id": stock_security_id,
-                    "price_date": "2025-08-28",
-                    "price": 52,
-                    "currency": "EUR",
-                }
-            ]
+            "transaction_id": buy_tx_id,
+            "portfolio_id": portfolio_id,
+            "instrument_id": stock_security_id,
+            "security_id": stock_security_id,
+            "transaction_date": "2025-08-28T00:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": 100,
+            "price": 50,
+            "gross_transaction_amount": 5000,
+            "trade_currency": "EUR",
+            "currency": "EUR",
         },
-    )
+        {
+            "transaction_id": settle_tx_id,
+            "portfolio_id": portfolio_id,
+            "instrument_id": cash_security_id,
+            "security_id": cash_security_id,
+            "transaction_date": "2025-08-28T00:00:00Z",
+            "transaction_type": "SELL",
+            "quantity": 5500,
+            "price": 1,
+            "gross_transaction_amount": 5500,
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
+    ]
+    day_2_transactions = [
+        {
+            "transaction_id": fee_tx_id,
+            "portfolio_id": portfolio_id,
+            "instrument_id": cash_security_id,
+            "security_id": cash_security_id,
+            "transaction_date": "2025-08-29T00:00:00Z",
+            "transaction_type": "FEE",
+            "quantity": 1,
+            "price": 25,
+            "gross_transaction_amount": 25,
+            "trade_currency": "USD",
+            "currency": "USD",
+        }
+    ]
+    market_prices = [
+        {
+            "security_id": stock_security_id,
+            "price_date": "2025-08-28",
+            "price": 52,
+            "currency": "EUR",
+        },
+        {
+            "security_id": stock_security_id,
+            "price_date": "2025-08-29",
+            "price": 55,
+            "currency": "EUR",
+        },
+        {
+            "security_id": cash_security_id,
+            "price_date": "2025-08-29",
+            "price": 1,
+            "currency": "USD",
+        },
+    ]
 
-    # Day 2
-    e2e_api_client.ingest(
-        "/ingest/transactions",
-        {
-            "transactions": [
-                {
-                    "transaction_id": fee_tx_id,
-                    "portfolio_id": portfolio_id,
-                    "instrument_id": cash_security_id,
-                    "security_id": cash_security_id,
-                    "transaction_date": "2025-08-29T00:00:00Z",
-                    "transaction_type": "FEE",
-                    "quantity": 1,
-                    "price": 25,
-                    "gross_transaction_amount": 25,
-                    "trade_currency": "USD",
-                    "currency": "USD",
-                }
-            ]
-        },
-    )
-    e2e_api_client.ingest(
-        "/ingest/market-prices",
-        {
-            "market_prices": [
-                {
-                    "security_id": stock_security_id,
-                    "price_date": "2025-08-29",
-                    "price": 55,
-                    "currency": "EUR",
-                },
-                {
-                    "security_id": cash_security_id,
-                    "price_date": "2025-08-29",
-                    "price": 1,
-                    "currency": "USD",
-                },
-            ]
-        },
+    if prices_before_transactions:
+        e2e_api_client.ingest("/ingest/market-prices", {"market_prices": market_prices})
+        e2e_api_client.ingest(
+            "/ingest/transactions",
+            {"transactions": [*day_1_transactions, *day_2_transactions]},
+        )
+        return
+
+    e2e_api_client.ingest("/ingest/transactions", {"transactions": day_1_transactions})
+    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": [market_prices[0]]})
+    e2e_api_client.ingest("/ingest/transactions", {"transactions": day_2_transactions})
+    e2e_api_client.ingest("/ingest/market-prices", {"market_prices": market_prices[1:]})
+
+
+@pytest.fixture(scope="module")
+def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
+    """
+    Seed a deterministic 2-day scenario used by analytics input timeseries contracts.
+    """
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_TS_{suffix}"
+    stock_security_id = f"SEC_EUR_STOCK_{suffix}"
+    cash_security_id = f"CASH_{suffix}"
+    stock_isin = f"EU{suffix}"
+    cash_isin = f"USD_CASH_{suffix}"
+    deposit_tx_id = f"TS_DEP_{suffix}"
+    buy_tx_id = f"TS_BUY_{suffix}"
+    settle_tx_id = f"TS_CASH_SETTLE_BUY_{suffix}"
+    fee_tx_id = f"TS_FEE_{suffix}"
+
+    _seed_two_day_timeseries_scenario(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        stock_security_id=stock_security_id,
+        cash_security_id=cash_security_id,
+        stock_isin=stock_isin,
+        cash_isin=cash_isin,
+        deposit_tx_id=deposit_tx_id,
+        buy_tx_id=buy_tx_id,
+        settle_tx_id=settle_tx_id,
+        fee_tx_id=fee_tx_id,
     )
 
     # Wait until the actual stock and cash positions have converged after day-2 processing.
@@ -562,9 +578,297 @@ def test_portfolio_timeseries_contract_returns_expected_rows(
             assert actual_flow["timing"] in {"bod", "eod"}
             assert actual_flow["cash_flow_type"] in {
                 "external_flow",
-                "fee",
-                "tax",
+                "internal_trade_flow",
+                "expense",
                 "transfer",
                 "income",
                 "other",
             }
+            assert actual_flow["flow_scope"] in {"external", "internal", "operational"}
+            assert isinstance(actual_flow["source_classification"], str)
+
+
+def test_position_timeseries_contract_exposes_explicit_flow_provenance_for_trade_day(
+    setup_timeseries_data, e2e_api_client: E2EApiClient
+):
+    portfolio_id = setup_timeseries_data["portfolio_id"]
+    response = e2e_api_client.post_query(
+        f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+        _position_timeseries_request("2025-08-28"),
+    )
+    payload = response.json()
+    stock_row = _row_by_security_id(payload, setup_timeseries_data["stock_security_id"])
+    cash_row = _row_by_security_id(payload, setup_timeseries_data["cash_security_id"])
+
+    assert [(flow["cash_flow_type"], flow["flow_scope"]) for flow in stock_row["cash_flows"]] == [
+        ("internal_trade_flow", "internal")
+    ]
+    assert [(flow["cash_flow_type"], flow["flow_scope"]) for flow in cash_row["cash_flows"]] == [
+        ("external_flow", "external"),
+        ("internal_trade_flow", "internal"),
+    ]
+
+
+def _sum_external_flows_payload(cash_flows: list[dict]) -> Decimal:
+    return sum(
+        (
+            as_decimal(flow["amount"])
+            for flow in cash_flows
+            if flow.get("cash_flow_type") == "external_flow"
+        ),
+        start=Decimal("0"),
+    )
+
+
+def test_cash_only_staged_external_flows_are_not_doubled(
+    clean_db, e2e_api_client: E2EApiClient
+):
+    # This scenario advances the global business-date horizon into 2026, so it
+    # must run against a freshly truncated database rather than the module-shared
+    # 2025 two-day fixture above.
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_CASH_STAGE_{suffix}"
+    cash_security_id = f"CASH_USD_{suffix}"
+
+    e2e_api_client.ingest(
+        "/ingest/portfolios",
+        {
+            "portfolios": [
+                {
+                    "portfolio_id": portfolio_id,
+                    "base_currency": "USD",
+                    "open_date": "2026-03-01",
+                    "risk_exposure": "Low",
+                    "investment_time_horizon": "Short",
+                    "portfolio_type": "Advisory",
+                    "booking_center_code": "SG",
+                    "client_id": "TS_CIF",
+                    "status": "Active",
+                }
+            ]
+        },
+    )
+    e2e_api_client.ingest(
+        "/ingest/instruments",
+        {
+            "instruments": [
+                {
+                    "security_id": cash_security_id,
+                    "name": "US Dollar",
+                    "isin": f"USD_CASH_{suffix}",
+                    "currency": "USD",
+                    "product_type": "Cash",
+                }
+            ]
+        },
+    )
+    e2e_api_client.ingest(
+        "/ingest/business-dates",
+        {
+            "business_dates": [
+                {"business_date": "2026-03-16"},
+                {"business_date": "2026-03-17"},
+                {"business_date": "2026-03-18"},
+                {"business_date": "2026-03-19"},
+                {"business_date": "2026-03-20"},
+            ]
+        },
+    )
+    e2e_api_client.ingest(
+        "/ingest/transactions",
+        {
+            "transactions": [
+                {
+                    "transaction_id": f"DEP_1_{suffix}",
+                    "portfolio_id": portfolio_id,
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
+                    "transaction_date": "2026-03-16T00:00:00Z",
+                    "transaction_type": "DEPOSIT",
+                    "quantity": 10000,
+                    "price": 1,
+                    "gross_transaction_amount": 10000,
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                },
+                {
+                    "transaction_id": f"DEP_2_{suffix}",
+                    "portfolio_id": portfolio_id,
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
+                    "transaction_date": "2026-03-18T00:00:00Z",
+                    "transaction_type": "DEPOSIT",
+                    "quantity": 5000,
+                    "price": 1,
+                    "gross_transaction_amount": 5000,
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                },
+                {
+                    "transaction_id": f"WD_1_{suffix}",
+                    "portfolio_id": portfolio_id,
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
+                    "transaction_date": "2026-03-19T00:00:00Z",
+                    "transaction_type": "WITHDRAWAL",
+                    "quantity": 2000,
+                    "price": 1,
+                    "gross_transaction_amount": 2000,
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                },
+            ]
+        },
+    )
+    e2e_api_client.ingest(
+        "/ingest/market-prices",
+        {
+            "market_prices": [
+                {
+                    "security_id": cash_security_id,
+                    "price_date": "2026-03-16",
+                    "price": 1,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": cash_security_id,
+                    "price_date": "2026-03-17",
+                    "price": 1,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": cash_security_id,
+                    "price_date": "2026-03-18",
+                    "price": 1,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": cash_security_id,
+                    "price_date": "2026-03-19",
+                    "price": 1,
+                    "currency": "USD",
+                },
+                {
+                    "security_id": cash_security_id,
+                    "price_date": "2026-03-20",
+                    "price": 1,
+                    "currency": "USD",
+                },
+            ]
+        },
+    )
+
+    request = {
+        "as_of_date": "2026-03-20",
+        "window": {"start_date": "2026-03-16", "end_date": "2026-03-20"},
+        "consumer_system": "lotus-performance",
+        "frequency": "daily",
+        "include_cash_flows": True,
+        "page": {"page_size": 200},
+    }
+
+    portfolio_payload = e2e_api_client.poll_for_post_query_data(
+        f"/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
+        {
+            "as_of_date": "2026-03-20",
+            "window": {"start_date": "2026-03-16", "end_date": "2026-03-20"},
+            "consumer_system": "lotus-performance",
+            "frequency": "daily",
+            "page": {"page_size": 200},
+        },
+        lambda data: data.get("performance_end_date") == "2026-03-20"
+        and len(data.get("observations", [])) == 5,
+        timeout=240,
+        fail_message="Portfolio cash-only staged-flow timeseries did not mature.",
+    )
+    position_payload = e2e_api_client.poll_for_post_query_data(
+        f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+        request,
+        lambda data: len(data.get("rows", [])) == 5,
+        timeout=240,
+        fail_message="Position cash-only staged-flow timeseries did not mature.",
+    )
+
+    expected_flows = {
+        "2026-03-16": Decimal("10000"),
+        "2026-03-18": Decimal("5000"),
+        "2026-03-19": Decimal("-2000"),
+    }
+    portfolio_external = {
+        observation["valuation_date"]: _sum_external_flows_payload(observation["cash_flows"])
+        for observation in portfolio_payload["observations"]
+        if observation["cash_flows"]
+    }
+    assert portfolio_external == expected_flows
+
+    position_external = {
+        row["valuation_date"]: _sum_external_flows_payload(row["cash_flows"])
+        for row in position_payload["rows"]
+    }
+    assert position_external == {
+        "2026-03-16": Decimal("10000"),
+        "2026-03-17": Decimal("0"),
+        "2026-03-18": Decimal("5000"),
+        "2026-03-19": Decimal("-2000"),
+        "2026-03-20": Decimal("0"),
+    }
+
+
+def test_price_before_position_history_still_converges_to_full_day_2_timeseries(
+    clean_db, e2e_api_client: E2EApiClient
+):
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_TS_RACE_{suffix}"
+    stock_security_id = f"SEC_EUR_STOCK_{suffix}"
+    cash_security_id = f"CASH_{suffix}"
+
+    _seed_two_day_timeseries_scenario(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        stock_security_id=stock_security_id,
+        cash_security_id=cash_security_id,
+        stock_isin=f"EU{suffix}",
+        cash_isin=f"USD_CASH_{suffix}",
+        deposit_tx_id=f"TS_DEP_{suffix}",
+        buy_tx_id=f"TS_BUY_{suffix}",
+        settle_tx_id=f"TS_CASH_SETTLE_BUY_{suffix}",
+        fee_tx_id=f"TS_FEE_{suffix}",
+        prices_before_transactions=True,
+    )
+
+    e2e_api_client.poll_for_data(
+        f"/portfolios/{portfolio_id}/positions",
+        lambda data: _has_expected_positions(
+            data,
+            stock_security_id=stock_security_id,
+            cash_security_id=cash_security_id,
+        ),
+        timeout=240,
+        fail_message=(
+            "Price-before-position-history scenario did not converge to the expected stock and "
+            "cash positions."
+        ),
+    )
+    race_payload = e2e_api_client.poll_for_post_query_data(
+        f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+        _position_timeseries_request("2025-08-29"),
+        lambda data: _has_expected_timeseries_rows(
+            data,
+            valuation_date="2025-08-29",
+            stock_security_id=stock_security_id,
+            cash_security_id=cash_security_id,
+        ),
+        timeout=240,
+        fail_message=(
+            "Price-before-position-history scenario did not converge to a complete day-2 "
+            "position-timeseries payload."
+        ),
+    )
+
+    _assert_timeseries_payload(
+        race_payload,
+        valuation_date="2025-08-29",
+        portfolio_id=portfolio_id,
+        stock_security_id=stock_security_id,
+        cash_security_id=cash_security_id,
+    )

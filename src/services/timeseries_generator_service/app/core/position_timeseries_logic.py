@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import List
 
+from portfolio_common.analytics_cashflow_semantics import normalize_position_flow_amount
 from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
@@ -14,18 +15,6 @@ class PositionTimeseriesLogic:
     """
     A stateless calculator for generating a single daily position time series record.
     """
-
-    @staticmethod
-    def _normalize_position_flow_amount(cf: Cashflow) -> Decimal:
-        """
-        Cashflows are stored using actual cash-movement direction for cash ledgers.
-        Position-timeseries needs product-leg flows from the position perspective so
-        linked product and cash legs net to zero across positions.
-        """
-        amount = Decimal(cf.amount)
-        if cf.classification in {"INVESTMENT_OUTFLOW", "INVESTMENT_INFLOW", "INCOME"}:
-            return -amount
-        return amount
 
     @staticmethod
     def calculate_daily_record(
@@ -54,8 +43,9 @@ class PositionTimeseriesLogic:
 
         for cf in cashflows:
             if cf.is_position_flow:
-                normalized_position_amount = (
-                    PositionTimeseriesLogic._normalize_position_flow_amount(cf)
+                normalized_position_amount = normalize_position_flow_amount(
+                    amount=Decimal(cf.amount),
+                    classification=str(cf.classification),
                 )
                 if cf.timing == "BOD":
                     bod_cf_pos += normalized_position_amount

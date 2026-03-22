@@ -29,6 +29,7 @@ The `ValuationScheduler` is a powerful background process that orchestrates all 
 ### Scheduler's Main Loop
 
 1.  **Process Instrument Triggers:** The scheduler first checks the `instrument_reprocessing_state` table. If it finds triggers from back-dated price events, it fans out by finding all affected portfolios and resetting their watermarks in the `position_state` table.
+    * **Readiness-race closure:** If an in-horizon market price arrives before the affected portfolio-security key is visible as an open position, the price consumer still stages a durable instrument reprocessing trigger instead of dropping the event. This guarantees the scheduler revisits the security after transaction processing and prevents quiet-day carry-forward gaps in downstream position-timeseries and portfolio-timeseries outputs.
 2.  **Reset Stale Jobs:** It runs a recovery query to find any jobs that have been in a `PROCESSING` state for too long (default > 15 minutes). These jobs are reset to `PENDING`, allowing them to be picked up again by a consumer. This makes the system resilient to worker crashes.
 3.  **Create Backfill Jobs:** The scheduler queries the `position_state` table for all keys where the `watermark_date` is older than the latest system `business_date`. For each of these "lagging" keys, it creates the necessary `valuation.job.requested` jobs to fill the gap.
     * **Position-Aware Scheduling:** This process is intelligent; it will not create a job for a date that is before the position's first known transaction date, preventing unnecessary work.

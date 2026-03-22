@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 SERVICE_NAME = "price-event-reprocessing-trigger"
 
 
+def _price_event_correlation_id(event_data: dict) -> str:
+    return (
+        "PRICE_EVENT_"
+        f"{event_data.get('security_id', 'unknown')}_"
+        f"{event_data.get('price_date', 'unknown')}"
+    )
+
+
 class PriceEventConsumer(BaseConsumer):
     """
     Consumes market price events. If a price is back-dated, it flags the
@@ -44,11 +52,7 @@ class PriceEventConsumer(BaseConsumer):
 
         try:
             event_data = json.loads(value)
-            price_event_correlation_id = (
-                "PRICE_EVENT_"
-                f"{event_data.get('security_id', 'unknown')}_"
-                f"{event_data.get('price_date', 'unknown')}"
-            )
+            price_event_correlation_id = _price_event_correlation_id(event_data)
             with self._message_correlation_context(
                 msg, fallback_correlation_id=price_event_correlation_id
             ) as correlation_id:
@@ -72,65 +76,21 @@ class PriceEventConsumer(BaseConsumer):
                         latest_business_date = await valuation_repo.get_latest_business_date()
                         event_correlation_id = correlation_id
 
-                        if latest_business_date and event.price_date <= latest_business_date:
-                            open_position_keys = (
-                                await valuation_repo.find_open_position_keys_for_security_on_date(
-                                    event.security_id, event.price_date
-                                )
-                            )
-                            for portfolio_id, security_id, epoch in open_position_keys:
-                                await ValuationJobRepository(db).upsert_job(
-                                    portfolio_id=portfolio_id,
-                                    security_id=security_id,
-                                    valuation_date=event.price_date,
-                                    epoch=epoch,
-                                    correlation_id=event_correlation_id,
-                                )
-                            if open_position_keys:
-                                logger.info(
-                                    "Queued immediate valuation jobs for market price event.",
-                                    extra={
-                                        "security_id": event.security_id,
-                                        "price_date": event.price_date,
-                                        "job_count": len(open_position_keys),
-                                    },
-                                )
+                        open_position_keys = await self._queue_immediate_valuation_jobs(
+                            valuation_repo=valuation_repo,
+                            job_repo=ValuationJobRepository(db),
+                            event=event,
+                            latest_business_date=latest_business_date,
+                            correlation_id=event_correlation_id,
+                        )
 
-                        is_backdated = (
-                            latest_business_date and event.price_date < latest_business_date
+                        await self._stage_reprocessing_if_needed(
+                            reprocessing_repo=reprocessing_repo,
+                            event=event,
+                            latest_business_date=latest_business_date,
+                            open_position_keys=open_position_keys,
+                            correlation_id=event_correlation_id,
                         )
-                        needs_deferred_reprocessing = (
-                            latest_business_date is None or event.price_date > latest_business_date
-                        )
-                        if is_backdated:
-                            logger.warning(
-                                "Back-dated price event detected. "
-                                "Flagging instrument for reprocessing.",
-                                extra={
-                                    "security_id": event.security_id,
-                                    "price_date": event.price_date,
-                                },
-                            )
-                            await reprocessing_repo.upsert_state(
-                                security_id=event.security_id,
-                                price_date=event.price_date,
-                                correlation_id=event_correlation_id,
-                            )
-                        elif needs_deferred_reprocessing:
-                            logger.info(
-                                "Price event is ahead of current business-date horizon. "
-                                "Staging durable reprocessing trigger.",
-                                extra={
-                                    "security_id": event.security_id,
-                                    "price_date": event.price_date,
-                                    "latest_business_date": latest_business_date,
-                                },
-                            )
-                            await reprocessing_repo.upsert_state(
-                                security_id=event.security_id,
-                                price_date=event.price_date,
-                                correlation_id=event_correlation_id,
-                            )
 
                         await idempotency_repo.mark_event_processed(
                             event_id, "N/A", SERVICE_NAME, event_correlation_id
@@ -154,3 +114,108 @@ class PriceEventConsumer(BaseConsumer):
                 exc_info=True,
             )
             await self._send_to_dlq_async(msg, e)
+
+    async def _queue_immediate_valuation_jobs(
+        self,
+        *,
+        valuation_repo: ValuationRepository,
+        job_repo: ValuationJobRepository,
+        event: MarketPricePersistedEvent,
+        latest_business_date,
+        correlation_id: str,
+    ) -> list[tuple[str, str, int]]:
+        if latest_business_date is None or event.price_date > latest_business_date:
+            return []
+
+        open_position_keys = await valuation_repo.find_open_position_keys_for_security_on_date(
+            event.security_id, event.price_date
+        )
+        for portfolio_id, security_id, epoch in open_position_keys:
+            await job_repo.upsert_job(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                valuation_date=event.price_date,
+                epoch=epoch,
+                correlation_id=correlation_id,
+            )
+        if open_position_keys:
+            logger.info(
+                "Queued immediate valuation jobs for market price event.",
+                extra={
+                    "security_id": event.security_id,
+                    "price_date": event.price_date,
+                    "job_count": len(open_position_keys),
+                },
+            )
+        return open_position_keys
+
+    async def _stage_reprocessing_if_needed(
+        self,
+        *,
+        reprocessing_repo: InstrumentReprocessingStateRepository,
+        event: MarketPricePersistedEvent,
+        latest_business_date,
+        open_position_keys: list[tuple[str, str, int]],
+        correlation_id: str,
+    ) -> None:
+        if latest_business_date is not None and event.price_date < latest_business_date:
+            logger.warning(
+                "Back-dated price event detected. Flagging instrument for reprocessing.",
+                extra={
+                    "security_id": event.security_id,
+                    "price_date": event.price_date,
+                },
+            )
+            await self._upsert_reprocessing_state(
+                reprocessing_repo=reprocessing_repo,
+                event=event,
+                correlation_id=correlation_id,
+            )
+            return
+
+        if latest_business_date is not None and event.price_date <= latest_business_date:
+            if open_position_keys:
+                return
+            logger.info(
+                "No open position keys were ready for in-horizon market price. "
+                "Staging durable reprocessing trigger to close the readiness race.",
+                extra={
+                    "security_id": event.security_id,
+                    "price_date": event.price_date,
+                    "latest_business_date": latest_business_date,
+                },
+            )
+            await self._upsert_reprocessing_state(
+                reprocessing_repo=reprocessing_repo,
+                event=event,
+                correlation_id=correlation_id,
+            )
+            return
+
+        logger.info(
+            "Price event is ahead of current business-date horizon. "
+            "Staging durable reprocessing trigger.",
+            extra={
+                "security_id": event.security_id,
+                "price_date": event.price_date,
+                "latest_business_date": latest_business_date,
+            },
+        )
+        await self._upsert_reprocessing_state(
+            reprocessing_repo=reprocessing_repo,
+            event=event,
+            correlation_id=correlation_id,
+        )
+
+    async def _upsert_reprocessing_state(
+        self,
+        *,
+        reprocessing_repo: InstrumentReprocessingStateRepository,
+        event: MarketPricePersistedEvent,
+        correlation_id: str,
+    ) -> None:
+        await reprocessing_repo.upsert_state(
+            security_id=event.security_id,
+            price_date=event.price_date,
+            correlation_id=correlation_id,
+        )

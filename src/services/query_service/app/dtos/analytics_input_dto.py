@@ -192,10 +192,33 @@ class CashFlowObservation(BaseModel):
         description="Cash flow timing relative to valuation boundaries.",
         examples=["eod"],
     )
-    cash_flow_type: Literal["external_flow", "fee", "tax", "transfer", "income", "other"] = Field(
+    cash_flow_type: Literal[
+        "external_flow",
+        "internal_trade_flow",
+        "income",
+        "expense",
+        "transfer",
+        "other",
+    ] = Field(
         ...,
-        description="Canonical cash flow type for performance analytics treatment.",
-        examples=["external_flow"],
+        description="Canonical analytics cash flow type for downstream performance treatment.",
+        examples=["internal_trade_flow"],
+    )
+    flow_scope: Literal["external", "internal", "operational"] = Field(
+        ...,
+        description=(
+            "High-level provenance scope that distinguishes external, internal, "
+            "and operational flows."
+        ),
+        examples=["internal"],
+    )
+    source_classification: str = Field(
+        ...,
+        description=(
+            "Underlying canonical cashflow classification that produced this "
+            "analytics flow observation."
+        ),
+        examples=["INVESTMENT_OUTFLOW"],
     )
 
     model_config = ConfigDict()

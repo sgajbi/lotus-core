@@ -498,3 +498,9 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
     assert stock_flow_total == Decimal("1000")
     assert cash_flow_total == Decimal("-1000")
     assert stock_flow_total + cash_flow_total == Decimal("0")
+    assert [(flow["cash_flow_type"], flow["flow_scope"]) for flow in stock_row["cash_flows"]] == [
+        ("internal_trade_flow", "internal")
+    ]
+    assert [(flow["cash_flow_type"], flow["flow_scope"]) for flow in cash_row["cash_flows"]] == [
+        ("internal_trade_flow", "internal")
+    ]
