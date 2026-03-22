@@ -46,16 +46,10 @@ class PortfolioTimeseriesLogic:
 
         portfolio_currency = portfolio.base_currency
 
-        # 1. Determine Beginning of Day Market Value
-        previous_portfolio_ts = await repo.get_last_portfolio_timeseries_before(
-            portfolio.portfolio_id, a_date
-        )
-        if previous_portfolio_ts:
-            total_bod_mv = previous_portfolio_ts.eod_market_value
-        else:
-            total_bod_mv = Decimal(0)
-
-        # 2. Aggregate Portfolio-Level Cashflows and Fees from Position Timeseries
+        # 1. Aggregate market values and portfolio-level cashflows directly from the
+        # same position-timeseries rows. This keeps portfolio BOD/EOD aligned with
+        # the summed position-timeseries contract instead of relying on a separate
+        # previous-portfolio carry-forward path.
         security_ids = [pt.security_id for pt in position_timeseries_list]
         instruments_list = await repo.get_instruments_by_ids(security_ids)
         instruments = {inst.security_id: inst for inst in instruments_list}
@@ -87,21 +81,15 @@ class PortfolioTimeseriesLogic:
                     raise FxRateNotFoundError(error_msg)
                 rate = fx_rate.rate
 
+            total_bod_mv += (pos_ts.bod_market_value or Decimal(0)) * rate
             total_bod_cf += (pos_ts.bod_cashflow_portfolio or Decimal(0)) * rate
+            total_eod_mv += (pos_ts.eod_market_value or Decimal(0)) * rate
             total_eod_cf += (pos_ts.eod_cashflow_portfolio or Decimal(0)) * rate
 
             if (pos_ts.bod_cashflow_portfolio or Decimal(0)) < 0:
                 total_fees += abs(pos_ts.bod_cashflow_portfolio * rate)
             if (pos_ts.eod_cashflow_portfolio or Decimal(0)) < 0:
                 total_fees += abs(pos_ts.eod_cashflow_portfolio * rate)
-
-        # 3. Calculate end-of-day market value from the latest definitive
-        # snapshot for each security on the day.
-        latest_snapshots_for_day = await repo.get_latest_snapshots_for_date(
-            portfolio.portfolio_id, a_date
-        )
-        for snapshot in latest_snapshots_for_day:
-            total_eod_mv += snapshot.market_value or Decimal(0)
 
         return PortfolioTimeseries(
             portfolio_id=portfolio.portfolio_id,
