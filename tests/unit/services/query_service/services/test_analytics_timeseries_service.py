@@ -293,6 +293,259 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
 
 
 @pytest.mark.asyncio
+async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_next_page_token(
+) -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=4),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_USD",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("110"),
+                    epoch=0,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_EUR",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("50"),
+                    eod_market_value=Decimal("60"),
+                    epoch=1,
+                    position_currency="EUR",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_USD",
+                    valuation_date=date(2025, 1, 2),
+                    bod_market_value=Decimal("110"),
+                    eod_market_value=Decimal("120"),
+                    epoch=0,
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    valuation_date=date(2025, 1, 1),
+                    amount=Decimal("5"),
+                    classification="CASHFLOW_IN",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=True,
+                )
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(
+            side_effect=[
+                {date(2025, 1, 1): Decimal("1.2")},
+                {date(2025, 1, 1): Decimal("1.5")},
+            ]
+        ),
+    )
+
+    observations, quality_distribution, observed_dates, snapshot_epoch, next_page_token = (
+        await service._portfolio_observation_rows(  # pylint: disable=protected-access
+            portfolio_id="P1",
+            portfolio_currency="USD",
+            reporting_currency="SGD",
+            resolved_window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
+            page_size=1,
+            cursor_date=None,
+            request_scope_fingerprint="scope-1",
+        )
+    )
+
+    assert snapshot_epoch == 4
+    assert observed_dates == [date(2025, 1, 1), date(2025, 1, 2)]
+    assert quality_distribution == {"restated": 1}
+    assert observations[0].beginning_market_value == Decimal("240.0")
+    assert observations[0].ending_market_value == Decimal("273.0")
+    assert observations[0].cash_flows[0].amount == Decimal("7.5")
+    assert observations[0].valuation_status == "restated"
+    assert next_page_token is not None
+    token_payload = service._decode_page_token(next_page_token)  # pylint: disable=protected-access
+    assert token_payload["valuation_date"] == "2025-01-01"
+    assert token_payload["snapshot_epoch"] == 4
+
+
+@pytest.mark.asyncio
+async def test_portfolio_observation_rows_raises_when_position_fx_missing() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=1),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EUR",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                    epoch=0,
+                    position_currency="EUR",
+                )
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        get_fx_rates_map=AsyncMock(side_effect=[{}, {}]),
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service._portfolio_observation_rows(  # pylint: disable=protected-access
+            portfolio_id="P1",
+            portfolio_currency="USD",
+            reporting_currency="USD",
+            resolved_window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-01"),
+            page_size=10,
+            cursor_date=None,
+            request_scope_fingerprint="scope-1",
+        )
+
+    assert exc_info.value.code == "INSUFFICIENT_DATA"
+
+
+def test_portfolio_cash_flows_for_dates_requires_reporting_fx_when_needed() -> None:
+    service = make_service()
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        service._portfolio_cash_flows_for_dates(  # pylint: disable=protected-access
+            [
+                SimpleNamespace(
+                    valuation_date=date(2025, 1, 1),
+                    amount=Decimal("5"),
+                    classification="CASHFLOW_IN",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=True,
+                )
+            ],
+            reporting_currency="USD",
+            portfolio_currency="EUR",
+            fx_rates={},
+        )
+
+    assert exc_info.value.code == "INSUFFICIENT_DATA"
+
+
+def test_position_cash_flows_for_keys_preserves_non_position_amounts() -> None:
+    service = make_service()
+    result = service._position_cash_flows_for_keys(  # pylint: disable=protected-access
+        [
+            SimpleNamespace(
+                security_id="SEC_A",
+                valuation_date=date(2025, 1, 1),
+                amount=Decimal("5"),
+                classification="TRANSFER",
+                timing="BOD",
+                is_position_flow=False,
+                is_portfolio_flow=True,
+            )
+        ]
+    )
+
+    assert result[("SEC_A", date(2025, 1, 1))][0].amount == Decimal("5")
+    assert result[("SEC_A", date(2025, 1, 1))][0].cash_flow_type == "transfer"
+
+
+def test_resolve_window_supports_long_periods_and_clamps_to_inception() -> None:
+    service = make_service()
+
+    assert service._resolve_window(  # pylint: disable=protected-access
+        as_of_date=date(2025, 12, 31),
+        window=None,
+        period="three_years",
+        inception_date=date(2025, 1, 1),
+    ) == AnalyticsWindow(start_date="2025-01-01", end_date="2025-12-31")
+    assert service._resolve_window(  # pylint: disable=protected-access
+        as_of_date=date(2025, 12, 31),
+        window=None,
+        period="five_years",
+        inception_date=date(2020, 1, 1),
+    ) == AnalyticsWindow(start_date="2021-01-01", end_date="2025-12-31")
+    assert service._resolve_window(  # pylint: disable=protected-access
+        as_of_date=date(2025, 12, 31),
+        window=None,
+        period="inception",
+        inception_date=date(2020, 1, 1),
+    ) == AnalyticsWindow(start_date="2020-01-01", end_date="2025-12-31")
+
+
+def test_resolve_window_rejects_inverted_window_and_supports_ytd() -> None:
+    service = make_service()
+
+    assert service._resolve_window(  # pylint: disable=protected-access
+        as_of_date=date(2025, 12, 31),
+        window=None,
+        period="ytd",
+        inception_date=date(2020, 1, 1),
+    ) == AnalyticsWindow(start_date="2025-01-01", end_date="2025-12-31")
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        service._resolve_window(  # pylint: disable=protected-access
+            as_of_date=date(2025, 1, 10),
+            window=AnalyticsWindow(start_date="2025-01-11", end_date="2025-01-12"),
+            period=None,
+            inception_date=date(2020, 1, 1),
+        )
+
+    assert exc_info.value.code == "INVALID_REQUEST"
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_timeseries_fallback_path_defaults_snapshot_epoch_and_pages() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
+        list_portfolio_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("110"),
+                    epoch=0,
+                ),
+                SimpleNamespace(
+                    valuation_date=date(2025, 1, 2),
+                    bod_market_value=Decimal("110"),
+                    eod_market_value=Decimal("120"),
+                    epoch=0,
+                ),
+            ]
+        ),
+        list_portfolio_observation_dates=AsyncMock(
+            return_value=[date(2025, 1, 1), date(2025, 1, 2)]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
+    )
+
+    response = await service.get_portfolio_timeseries(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsTimeseriesRequest(
+            as_of_date="2025-01-02",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
+            page=PageRequest(page_size=1),
+            reporting_currency="USD",
+        ),
+    )
+
+    assert len(response.observations) == 1
+    assert response.page.snapshot_epoch == 0
+    assert response.page.next_page_token is not None
+    token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
+    assert token_payload["snapshot_epoch"] == 0
+
+
+@pytest.mark.asyncio
 async def test_get_position_timeseries_paging_token_generation() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
@@ -364,6 +617,42 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
     assert "scope_fingerprint" in token_payload
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_rejects_scope_mismatch() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                close_date=None,
+            )
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+    token = service._encode_page_token(  # pylint: disable=protected-access
+        {
+            "valuation_date": "2025-01-01",
+            "security_id": "SEC_A",
+            "snapshot_epoch": 7,
+            "scope_fingerprint": "wrong",
+        }
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service.get_position_timeseries(
+            portfolio_id="P1",
+            request=PositionAnalyticsTimeseriesRequest(
+                as_of_date="2025-01-31",
+                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+                page=PageRequest(page_size=10, page_token=token),
+            ),
+        )
+
+    assert exc_info.value.code == "INVALID_REQUEST"
 
 
 @pytest.mark.asyncio
@@ -1617,6 +1906,70 @@ async def test_get_export_result_json_error_branches() -> None:
     )
     with pytest.raises(AnalyticsInputError):
         await service.get_export_result_json("bad")
+
+
+@pytest.mark.asyncio
+async def test_get_export_result_json_success_and_export_job_state_helpers() -> None:
+    service = make_service()
+    completed_row = SimpleNamespace(
+        job_id="aexp_ok",
+        status="completed",
+        result_payload={
+            "job_id": "aexp_ok",
+            "dataset_type": "portfolio_timeseries",
+            "request_fingerprint": "fp-ok",
+            "lifecycle_mode": "inline_job_execution",
+            "generated_at": "2026-03-01T00:00:00+00:00",
+            "contract_version": "rfc_063_v1",
+            "result_row_count": 1,
+            "data": [{"valuation_date": "2025-01-01"}],
+        },
+    )
+    running_row = SimpleNamespace(job_id="aexp_ok", status="accepted", result_payload={})
+    service.export_repo = SimpleNamespace(
+        get_job=AsyncMock(side_effect=[completed_row, running_row, running_row, running_row]),
+        mark_running=AsyncMock(),
+        mark_completed=AsyncMock(),
+        mark_failed=AsyncMock(),
+    )
+
+    response = await service.get_export_result_json("aexp_ok")
+    assert response.job_id == "aexp_ok"
+    assert response.result_row_count == 1
+
+    assert await service._mark_export_job_running("aexp_ok") is running_row  # pylint: disable=protected-access
+    assert await service._mark_export_job_completed(  # pylint: disable=protected-access
+        "aexp_ok",
+        result_payload=completed_row.result_payload,
+        result_row_count=1,
+    ) is running_row
+    assert await service._mark_export_job_failed(  # pylint: disable=protected-access
+        "aexp_ok",
+        error_message="boom",
+    ) is running_row
+    service.export_repo.mark_running.assert_awaited_once_with(running_row)
+    service.export_repo.mark_completed.assert_awaited_once()
+    service.export_repo.mark_failed.assert_awaited_once_with(running_row, error_message="boom")
+
+
+@pytest.mark.asyncio
+async def test_export_job_state_helpers_raise_when_job_missing() -> None:
+    service = make_service()
+    service.export_repo = SimpleNamespace(get_job=AsyncMock(return_value=None))
+
+    with pytest.raises(AnalyticsInputError):
+        await service._mark_export_job_running("missing")  # pylint: disable=protected-access
+    with pytest.raises(AnalyticsInputError):
+        await service._mark_export_job_completed(  # pylint: disable=protected-access
+            "missing",
+            result_payload={},
+            result_row_count=0,
+        )
+    with pytest.raises(AnalyticsInputError):
+        await service._mark_export_job_failed(  # pylint: disable=protected-access
+            "missing",
+            error_message="boom",
+        )
 
 
 @pytest.mark.asyncio
