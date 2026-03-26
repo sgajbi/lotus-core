@@ -17,6 +17,23 @@ def test_build_demo_bundle_contains_multi_product_coverage():
     assert {"DEPOSIT", "BUY", "SELL", "DIVIDEND", "FEE"}.issubset(tx_types)
 
 
+def test_build_demo_bundle_contains_benchmark_seed_data():
+    bundle = demo_data_pack.build_demo_bundle()
+
+    assert bundle["benchmark_verification"]["benchmark_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID
+    assert bundle["benchmark_verification"]["portfolio_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID
+    assert len(bundle["benchmark_assignments"]) == 1
+    assert len(bundle["benchmark_definitions"]) == 1
+    assert len(bundle["benchmark_compositions"]) == 2
+    assert len(bundle["indices"]) == 2
+    assert len(bundle["index_price_series"]) > len(bundle["business_dates"]) * 2
+    assert len(bundle["index_return_series"]) > len(bundle["business_dates"]) * 2
+    assert len(bundle["benchmark_return_series"]) > len(bundle["business_dates"])
+    assert {
+        composition["composition_weight"] for composition in bundle["benchmark_compositions"]
+    } == {"0.6000000000", "0.4000000000"}
+
+
 def test_expectations_cover_five_portfolios_with_terminal_holdings():
     expected_ids = {
         "DEMO_ADV_USD_001",
