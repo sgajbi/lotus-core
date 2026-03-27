@@ -155,6 +155,57 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
 
 
+async def test_openapi_includes_reporting_contracts(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+
+    assert "/reporting/assets-under-management/query" in paths
+    assert "/reporting/asset-allocation/query" in paths
+    assert "/reporting/cash-balances/query" in paths
+
+
+async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    paths = schema["paths"]
+    components = schema["components"]["schemas"]
+
+    aum_query = paths["/reporting/assets-under-management/query"]["post"]
+    allocation_query = paths["/reporting/asset-allocation/query"]["post"]
+    cash_query = paths["/reporting/cash-balances/query"]["post"]
+    portfolios_query = paths["/portfolios/"]["get"]
+
+    assert "single portfolio, an explicit portfolio list, or a business unit" in aum_query[
+        "description"
+    ]
+    assert "classification dimensions" in allocation_query["description"]
+    assert "portfolio currency and reporting currency" in cash_query["description"]
+
+    portfolio_ids = next(
+        parameter
+        for parameter in portfolios_query["parameters"]
+        if parameter["name"] == "portfolio_ids"
+    )
+    assert portfolio_ids["description"] == "Filter by an explicit portfolio identifier list."
+
+    aum_request = components["AssetsUnderManagementQueryRequest"]
+    cash_response = components["CashBalancesResponse"]
+    transaction_record = components["TransactionRecord"]
+
+    assert aum_request["properties"]["reporting_currency"]["description"].startswith(
+        "Optional reporting currency."
+    )
+    assert cash_response["properties"]["totals"]["description"] == "Portfolio-level cash totals."
+    assert transaction_record["properties"]["trade_fee"]["description"] == (
+        "Primary trade fee recorded directly on the transaction."
+    )
+    assert transaction_record["properties"]["costs"]["description"] == (
+        "Detailed transaction costs associated with the transaction."
+    )
+
+
 async def test_openapi_describes_transaction_filters_and_not_found_examples(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
@@ -182,6 +233,13 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         if parameter["name"] == "fx_contract_id"
     )
     assert fx_contract_id["description"] == "Filter by FX contract identifier."
+
+    instrument_id = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "instrument_id"
+    )
+    assert instrument_id["description"] == "Filter by a specific instrument identifier."
 
     not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"

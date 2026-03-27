@@ -122,9 +122,8 @@ async def test_get_transactions_with_all_filters(
 
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "transactions.security_id = 'S1'" in compiled_query
-    # FIX: Assert for the correct SQL function `date()`
-    assert "date(transactions.transaction_date) >= '2025-01-01'" in compiled_query
-    assert "date(transactions.transaction_date) <= '2025-01-31'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
 
 
 async def test_get_transactions_with_fx_filters(
@@ -167,7 +166,25 @@ async def test_get_transactions_with_as_of_date_filter(
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "date(transactions.transaction_date) <= '2025-01-15'" in compiled_query
+    assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
+
+
+async def test_get_transactions_applies_instrument_filter_and_eager_loads_related_rows(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    await repository.get_transactions(
+        portfolio_id="P1",
+        skip=0,
+        limit=25,
+        instrument_id="INST-AAPL-USD",
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "transactions.instrument_id = 'INST-AAPL-USD'" in compiled_query
+    assert "LEFT OUTER JOIN cashflows" in compiled_query
+    assert "LEFT OUTER JOIN transaction_costs" in compiled_query
 
 
 async def test_get_transactions_count(
@@ -239,8 +256,8 @@ async def test_get_transactions_count_with_date_filters(
     assert count == 2
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "date(transactions.transaction_date) >= '2025-01-01'" in compiled_query
-    assert "date(transactions.transaction_date) <= '2025-01-31'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
 
 
 async def test_get_transactions_count_with_as_of_date(
@@ -258,7 +275,25 @@ async def test_get_transactions_count_with_as_of_date(
     assert count == 3
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "date(transactions.transaction_date) <= '2025-01-15'" in compiled_query
+    assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
+
+
+async def test_get_transactions_count_applies_instrument_filter(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalar.return_value = 6
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    count = await repository.get_transactions_count(
+        portfolio_id="P1",
+        instrument_id="INST-AAPL-USD",
+    )
+
+    assert count == 6
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.instrument_id = 'INST-AAPL-USD'" in compiled_query
 
 
 async def test_get_latest_business_date(

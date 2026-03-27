@@ -19,9 +19,11 @@ It defines the active, enforceable governance model for query-service contracts:
 ## Governed Contract Families
 1. Integration contracts (`/integration/*`)
 2. Analytics input contracts (`/integration/portfolios/{portfolio_id}/analytics/*`)
-3. Simulation contracts (`/simulations/*`)
-4. Support and lineage operations (`/operations/*`)
-5. Lookup/catalog contracts (`/lookup/*`)
+3. Foundational read models (`/portfolios/*`, `/prices/*`, `/fx-rates/*`, `/instruments/*`)
+4. Wealth reporting contracts (`/reporting/*`)
+5. Simulation contracts (`/simulations/*`)
+6. Support and lineage operations (`/operations/*`)
+7. Lookup/catalog contracts (`/lookup/*`)
 
 ## Governance Rules
 1. No legacy review/performance/risk/reporting endpoints in lotus-core query-service.
@@ -29,6 +31,7 @@ It defines the active, enforceable governance model for query-service contracts:
 3. No response aliasing that diverges from canonical DTO field names.
 4. OpenAPI quality gate must pass for every contract change.
 5. API vocabulary inventory validation must pass for every contract change.
+6. Performance-sensitive query contracts must use bounded scope semantics and documented filtering rules.
 
 ## Required CI Controls
 1. `scripts/openapi_quality_gate.py`
@@ -46,3 +49,4 @@ It defines the active, enforceable governance model for query-service contracts:
 1. Any contract change that violates OpenAPI quality or vocabulary governance fails CI.
 2. Legacy contract families remain absent from active query-service OpenAPI.
 3. Active endpoint families remain documented and test-covered.
+4. Active interactive query contracts describe their scope, currency, and performance semantics explicitly.

@@ -93,6 +93,18 @@ async def test_get_portfolios_with_all_filters(
     assert "portfolios.booking_center_code = 'SG'" in compiled_query
 
 
+async def test_get_portfolios_with_portfolio_ids_filter(
+    repository: PortfolioRepository, mock_db_session: AsyncMock
+):
+    await repository.get_portfolios(portfolio_ids=["P1", "P2"])
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "portfolios.portfolio_id IN ('P1', 'P2')" in compiled_query
+    assert "ORDER BY portfolios.portfolio_id ASC" in compiled_query
+
+
 async def test_get_by_id_returns_first_match(
     repository: PortfolioRepository, mock_db_session: AsyncMock
 ):

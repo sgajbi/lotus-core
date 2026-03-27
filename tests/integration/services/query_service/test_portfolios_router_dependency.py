@@ -43,6 +43,7 @@ async def test_get_portfolios_success(async_test_client):
                 "is_leverage_allowed": False,
                 "advisor_id": "ADV-1",
                 "status": "ACTIVE",
+                "cost_basis_method": "FIFO",
             }
         ]
     }
@@ -51,6 +52,7 @@ async def test_get_portfolios_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolios"][0]["portfolio_id"] == "P1"
+    assert response.json()["portfolios"][0]["cost_basis_method"] == "FIFO"
     assert "X-Correlation-ID" in response.headers
 
 
@@ -80,6 +82,7 @@ async def test_get_portfolio_by_id_success(async_test_client):
         "is_leverage_allowed": False,
         "advisor_id": "ADV-2",
         "status": "ACTIVE",
+        "cost_basis_method": "FIFO",
     }
 
     response = await client.get("/portfolios/P2")
@@ -104,3 +107,21 @@ async def test_get_portfolio_service_dependency_factory():
     service = get_portfolio_service(db)
 
     assert isinstance(service, PortfolioService)
+
+
+async def test_get_portfolios_forwards_portfolio_ids(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolios.return_value = {"portfolios": []}
+
+    response = await client.get(
+        "/portfolios/",
+        params=[("portfolio_ids", "P1"), ("portfolio_ids", "P2")],
+    )
+
+    assert response.status_code == 200
+    mock_service.get_portfolios.assert_awaited_once_with(
+        portfolio_id=None,
+        portfolio_ids=["P1", "P2"],
+        client_id=None,
+        booking_center_code=None,
+    )
