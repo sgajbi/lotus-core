@@ -561,6 +561,8 @@ services:
     networks:
       - app_network
 
+  # App-local observability overlay for isolated lotus-core development.
+  # Canonical shared Prometheus ownership lives in lotus-platform/platform-stack.
   prometheus:
     image: prom/prometheus:v2.47.2
     ports:
@@ -586,6 +588,8 @@ services:
       - timeseries_generator_service
       - portfolio_aggregation_service
 
+  # App-local Grafana overlay for isolated lotus-core development.
+  # Canonical shared Grafana provisioning lives in lotus-platform/platform-stack.
   grafana:
     image: grafana/grafana:10.1.5
     ports:
