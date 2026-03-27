@@ -20,6 +20,7 @@ from .routers import (
     portfolios,
     positions,
     prices,
+    reporting,
     sell_state,
     transactions,
 )
@@ -44,7 +45,7 @@ app = FastAPI(
     description=(
         "Lotus Core Query API for portfolio and position data access. "
         "Provides Lotus-standard, API-first read models for portfolios, positions, "
-        "transactions, prices, instruments, and lookup workflows."
+        "transactions, PB/WM reporting, prices, instruments, and lookup workflows."
     ),
     version="0.2.0",
     contact={"name": "Lotus Platform Engineering"},
@@ -73,4 +74,5 @@ include_routers(
     prices.router,
     fx_rates.router,
     lookups.router,
+    reporting.router,
 )

@@ -23,12 +23,16 @@ def mock_transaction_repo() -> AsyncMock:
         Transaction(
             transaction_id="T1",
             transaction_date=datetime(2025, 1, 10),
+            settlement_date=datetime(2025, 1, 12),
             transaction_type="BUY",
             instrument_id="I1",
             security_id="S1",
             quantity=Decimal(10),
             price=Decimal(100),
             gross_transaction_amount=Decimal(1000),
+            gross_cost=Decimal(1000),
+            trade_fee=Decimal("12.5"),
+            trade_currency="USD",
             currency="USD",
             cash_entry_mode="AUTO_GENERATE",
         ),
@@ -73,6 +77,7 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
             "limit": 10,
             "sort_by": "price",
             "sort_order": "asc",
+            "instrument_id": "I1",
             "security_id": "S1",
             "transaction_type": "FX_FORWARD",
             "component_type": "FX_CONTRACT_OPEN",
@@ -91,6 +96,7 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         # ASSERT
         mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
             portfolio_id=params["portfolio_id"],
+            instrument_id=params["instrument_id"],
             security_id=params["security_id"],
             transaction_type=params["transaction_type"],
             component_type=params["component_type"],
@@ -113,6 +119,8 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.limit == 10
         assert len(response_dto.transactions) == 2
         assert response_dto.transactions[0].transaction_id == "T1"
+        assert response_dto.transactions[0].trade_fee == Decimal("12.5")
+        assert response_dto.transactions[0].trade_currency == "USD"
         assert response_dto.transactions[0].cash_entry_mode == "AUTO_GENERATE"
         assert response_dto.transactions[1].cash_entry_mode == "UPSTREAM_PROVIDED"
         assert response_dto.transactions[1].external_cash_transaction_id == "CASH-ENTRY-2026-0002"
@@ -208,6 +216,7 @@ async def test_get_transactions_include_projected_skips_business_date_default(
         mock_transaction_repo.get_latest_business_date.assert_not_awaited()
         mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
             portfolio_id="P1",
+            instrument_id=None,
             security_id=None,
             transaction_type=None,
             component_type=None,

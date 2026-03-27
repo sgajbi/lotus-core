@@ -8,6 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from .cashflow_dto import CashflowRecord
 
 
+class TransactionCostRecord(BaseModel):
+    fee_type: str = Field(..., description="Fee type or cost category.", examples=["BROKERAGE"])
+    amount: Decimal = Field(..., description="Fee amount.", examples=[12.5])
+    currency: str = Field(..., description="Fee currency.", examples=["USD"])
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TransactionRecord(BaseModel):
     """
     Represents a single, detailed transaction record for API responses.
@@ -19,6 +27,11 @@ class TransactionRecord(BaseModel):
     transaction_date: datetime = Field(
         ..., description="Transaction booking timestamp.", examples=["2026-03-01T09:30:00Z"]
     )
+    settlement_date: Optional[datetime] = Field(
+        None,
+        description="Transaction settlement timestamp when known.",
+        examples=["2026-03-03T00:00:00Z"],
+    )
     transaction_type: str = Field(..., description="Transaction type.", examples=["BUY"])
     instrument_id: str = Field(..., description="Instrument identifier.", examples=["AAPL"])
     security_id: str = Field(..., description="Security identifier.", examples=["US0378331005"])
@@ -26,6 +39,21 @@ class TransactionRecord(BaseModel):
     price: Decimal = Field(..., description="Execution price per unit.", examples=[185.42])
     gross_transaction_amount: Decimal = Field(
         ..., description="Gross transaction amount before fees.", examples=[18542.0]
+    )
+    gross_cost: Optional[Decimal] = Field(
+        None,
+        description="Gross cost impact before fees and adjustments.",
+        examples=[18542.0],
+    )
+    trade_fee: Optional[Decimal] = Field(
+        None,
+        description="Primary trade fee recorded directly on the transaction.",
+        examples=[12.5],
+    )
+    trade_currency: Optional[str] = Field(
+        None,
+        description="Trade or execution currency when distinct from book currency.",
+        examples=["USD"],
     )
     currency: str = Field(..., description="Book currency code.", examples=["USD"])
 
@@ -384,6 +412,10 @@ class TransactionRecord(BaseModel):
         None,
         description="Synthetic flow origin descriptor for audit and lineage.",
         examples=["UPSTREAM_PROVIDED"],
+    )
+    costs: list[TransactionCostRecord] = Field(
+        default_factory=list,
+        description="Detailed transaction costs associated with the transaction.",
     )
     cashflow: Optional[CashflowRecord] = Field(
         None, description="Linked cashflow details when available."

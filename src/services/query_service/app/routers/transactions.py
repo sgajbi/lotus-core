@@ -26,8 +26,9 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-TXN-00
     },
     summary="Get Transactions for a Portfolio",
     description=(
-        "Returns transactions for a portfolio with filters, pagination, and sorting. "
-        "Designed for transaction ledgers, audit timelines, and investigative support."
+        "Returns transactions for a portfolio with date-window filters, optional instrument "
+        "filtering, pagination, and sorting. Designed for transaction ledgers, audit timelines, "
+        "and investigative support."
     ),
 )
 async def get_transactions(
@@ -35,6 +36,11 @@ async def get_transactions(
         ...,
         description="Portfolio identifier.",
         examples=["PORT-TXN-001"],
+    ),
+    instrument_id: Optional[str] = Query(
+        None,
+        description="Filter by a specific instrument identifier.",
+        examples=["INST-AAPL-USD"],
     ),
     security_id: Optional[str] = Query(
         None,
@@ -110,6 +116,7 @@ async def get_transactions(
     try:
         return await service.get_transactions(
             portfolio_id=portfolio_id,
+            instrument_id=instrument_id,
             security_id=security_id,
             transaction_type=transaction_type,
             component_type=component_type,
