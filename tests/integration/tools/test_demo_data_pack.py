@@ -22,16 +22,24 @@ def test_build_demo_bundle_contains_benchmark_seed_data():
 
     assert bundle["benchmark_verification"]["benchmark_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID
     assert bundle["benchmark_verification"]["portfolio_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID
+    assert bundle["benchmark_verification"]["catalog_benchmark_ids"] == [
+        demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID,
+        demo_data_pack.SECONDARY_DEMO_BENCHMARK_ID,
+    ]
     assert len(bundle["benchmark_assignments"]) == 1
-    assert len(bundle["benchmark_definitions"]) == 1
-    assert len(bundle["benchmark_compositions"]) == 2
+    assert len(bundle["benchmark_definitions"]) == 2
+    assert len(bundle["benchmark_compositions"]) == 4
     assert len(bundle["indices"]) == 2
     assert len(bundle["index_price_series"]) > len(bundle["business_dates"]) * 2
     assert len(bundle["index_return_series"]) > len(bundle["business_dates"]) * 2
-    assert len(bundle["benchmark_return_series"]) > len(bundle["business_dates"])
+    assert len(bundle["benchmark_return_series"]) > len(bundle["business_dates"]) * 2
+    assert {definition["benchmark_id"] for definition in bundle["benchmark_definitions"]} == {
+        demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID,
+        demo_data_pack.SECONDARY_DEMO_BENCHMARK_ID,
+    }
     assert {
         composition["composition_weight"] for composition in bundle["benchmark_compositions"]
-    } == {"0.6000000000", "0.4000000000"}
+    } == {"0.6000000000", "0.4000000000", "0.8000000000", "0.2000000000"}
 
 
 def test_expectations_cover_five_portfolios_with_terminal_holdings():
