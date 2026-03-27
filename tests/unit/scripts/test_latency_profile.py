@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from scripts.latency_profile import (
     _enforce_gate,
+    _extract_runtime_as_of_date,
     _percentile_ms,
     _pick_identifier_from_payload,
     _raise_if_compose_service_failed,
@@ -57,6 +58,19 @@ def test_pick_identifier_from_payload_nested() -> None:
     assert _pick_identifier_from_payload(payload, ("portfolio_id",)) == "PORT_001"
 
 
+def test_extract_runtime_as_of_date_prefers_business_date() -> None:
+    assert (
+        _extract_runtime_as_of_date(
+            {
+                "business_date": "2025-08-30",
+                "latest_booked_position_snapshot_date": "2025-08-29",
+            },
+            fallback_date="2026-03-01",
+        )
+        == "2025-08-30"
+    )
+
+
 def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
     session = MagicMock()
     lookup_response = MagicMock()
@@ -66,9 +80,12 @@ def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
     not_ready_response.status_code = 404
     ready_response = MagicMock()
     ready_response.status_code = 200
+    ready_response.json.return_value = {"business_date": "2025-08-30"}
     benchmark_response = MagicMock()
     benchmark_response.status_code = 200
     benchmark_response.json.return_value = {"benchmarks": [{"benchmark_id": "BMK_ABC"}]}
+    analytics_ready_response = MagicMock()
+    analytics_ready_response.status_code = 200
 
     def get_side_effect(url: str, timeout: int = 10):  # noqa: ARG001
         if "/lookups/portfolios" in url:
@@ -80,19 +97,25 @@ def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
         return not_ready_response
 
     session.get.side_effect = get_side_effect
-    session.post.return_value = benchmark_response
+    session.post.side_effect = lambda url, json=None, timeout=15: (  # noqa: ARG005
+        benchmark_response
+        if "/integration/benchmarks/catalog" in url
+        else analytics_ready_response
+    )
 
-    portfolio_id, benchmark_id = _resolve_runtime_ids(
+    runtime_context = _resolve_runtime_ids(
         session,
         query_base_url="http://localhost:8201",
         query_control_plane_base_url="http://localhost:8202",
         portfolio_id="DEMO_DPM_EUR_001",
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+        as_of_date="2026-03-01",
         timeout_seconds=5,
     )
 
-    assert portfolio_id == "PORT_123"
-    assert benchmark_id == "BMK_ABC"
+    assert runtime_context.portfolio_id == "PORT_123"
+    assert runtime_context.benchmark_id == "BMK_ABC"
+    assert runtime_context.as_of_date == "2025-08-30"
 
 
 def test_resolve_runtime_ids_accepts_default_portfolio_when_ready(monkeypatch) -> None:
@@ -102,9 +125,12 @@ def test_resolve_runtime_ids_accepts_default_portfolio_when_ready(monkeypatch) -
     lookup_response.json.return_value = {"items": [{"portfolio_id": "DEMO_DPM_EUR_001"}]}
     ready_response = MagicMock()
     ready_response.status_code = 200
+    ready_response.json.return_value = {"latest_booked_position_snapshot_date": "2025-08-29"}
     benchmark_response = MagicMock()
     benchmark_response.status_code = 200
     benchmark_response.json.return_value = {"benchmarks": [{"benchmark_id": "BMK_ABC"}]}
+    analytics_ready_response = MagicMock()
+    analytics_ready_response.status_code = 200
 
     def get_side_effect(url: str, timeout: int = 10):  # noqa: ARG001
         if "/lookups/portfolios" in url:
@@ -114,20 +140,26 @@ def test_resolve_runtime_ids_accepts_default_portfolio_when_ready(monkeypatch) -
         return ready_response
 
     session.get.side_effect = get_side_effect
-    session.post.return_value = benchmark_response
+    session.post.side_effect = lambda url, json=None, timeout=15: (  # noqa: ARG005
+        benchmark_response
+        if "/integration/benchmarks/catalog" in url
+        else analytics_ready_response
+    )
     monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
 
-    portfolio_id, benchmark_id = _resolve_runtime_ids(
+    runtime_context = _resolve_runtime_ids(
         session,
         query_base_url="http://localhost:8201",
         query_control_plane_base_url="http://localhost:8202",
         portfolio_id="DEMO_DPM_EUR_001",
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+        as_of_date="2026-03-01",
         timeout_seconds=5,
     )
 
-    assert portfolio_id == "DEMO_DPM_EUR_001"
-    assert benchmark_id == "BMK_ABC"
+    assert runtime_context.portfolio_id == "DEMO_DPM_EUR_001"
+    assert runtime_context.benchmark_id == "BMK_ABC"
+    assert runtime_context.as_of_date == "2025-08-29"
 
 
 def test_resolve_runtime_ids_raises_when_no_portfolio_becomes_ready(monkeypatch) -> None:
@@ -157,6 +189,7 @@ def test_resolve_runtime_ids_raises_when_no_portfolio_becomes_ready(monkeypatch)
             query_control_plane_base_url="http://localhost:8202",
             portfolio_id="DEMO_DPM_EUR_001",
             benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+            as_of_date="2026-03-01",
             timeout_seconds=5,
         )
     except RuntimeError as exc:

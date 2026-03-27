@@ -36,6 +36,13 @@ class EndpointCase:
     timeout_seconds: float = 30.0
 
 
+@dataclass(frozen=True)
+class RuntimeContext:
+    portfolio_id: str
+    benchmark_id: str
+    as_of_date: str
+
+
 def _percentile_ms(samples: list[float], percentile: int) -> float:
     if not samples:
         return 0.0
@@ -133,6 +140,22 @@ def _pick_identifier_from_payload(payload: Any, keys: tuple[str, ...]) -> str | 
     return None
 
 
+def _extract_runtime_as_of_date(overview_payload: Any, fallback_date: str) -> str:
+    if not isinstance(overview_payload, dict):
+        return fallback_date
+    for key in (
+        "business_date",
+        "latest_booked_position_snapshot_date",
+        "latest_position_snapshot_date",
+        "latest_booked_transaction_date",
+        "latest_transaction_date",
+    ):
+        value = overview_payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return fallback_date
+
+
 def _resolve_runtime_ids(
     session: requests.Session,
     *,
@@ -140,23 +163,47 @@ def _resolve_runtime_ids(
     query_control_plane_base_url: str,
     portfolio_id: str,
     benchmark_id: str,
+    as_of_date: str,
     timeout_seconds: int,
     progress_check: Callable[[], None] | None = None,
-) -> tuple[str, str]:
+) -> RuntimeContext:
     resolved_portfolio_id: str | None = None
     resolved_benchmark_id = benchmark_id
+    resolved_as_of_date = as_of_date
 
-    def _portfolio_ready(candidate_id: str) -> bool:
-        get_urls = [
-            f"{query_base_url}/portfolios/{candidate_id}/positions",
-            f"{query_base_url}/portfolios/{candidate_id}/transactions?limit=1",
-            f"{query_control_plane_base_url}/support/portfolios/{candidate_id}/overview",
-        ]
+    def _portfolio_ready(candidate_id: str) -> tuple[bool, str]:
+        try:
+            positions_response = session.get(
+                f"{query_base_url}/portfolios/{candidate_id}/positions",
+                timeout=10,
+            )
+            transactions_response = session.get(
+                f"{query_base_url}/portfolios/{candidate_id}/transactions?limit=1",
+                timeout=10,
+            )
+            overview_response = session.get(
+                f"{query_control_plane_base_url}/support/portfolios/{candidate_id}/overview",
+                timeout=10,
+            )
+        except requests.RequestException:
+            return False, as_of_date
+
+        if not (
+            200 <= positions_response.status_code < 300
+            and 200 <= transactions_response.status_code < 300
+            and 200 <= overview_response.status_code < 300
+        ):
+            return False, as_of_date
+
+        candidate_as_of_date = _extract_runtime_as_of_date(
+            overview_response.json(),
+            fallback_date=as_of_date,
+        )
         post_checks = [
             (
                 f"{query_control_plane_base_url}/integration/portfolios/{candidate_id}/analytics/portfolio-timeseries",
                 {
-                    "as_of_date": "2026-03-01",
+                    "as_of_date": candidate_as_of_date,
                     "period": "three_months",
                     "frequency": "daily",
                     "consumer_system": "lotus-performance",
@@ -166,7 +213,7 @@ def _resolve_runtime_ids(
             (
                 f"{query_control_plane_base_url}/integration/portfolios/{candidate_id}/analytics/position-timeseries",
                 {
-                    "as_of_date": "2026-03-01",
+                    "as_of_date": candidate_as_of_date,
                     "period": "three_months",
                     "frequency": "daily",
                     "consumer_system": "lotus-performance",
@@ -174,21 +221,14 @@ def _resolve_runtime_ids(
                 },
             ),
         ]
-        for url in get_urls:
-            try:
-                response = session.get(url, timeout=10)
-            except requests.RequestException:
-                return False
-            if not (200 <= response.status_code < 300):
-                return False
         for url, payload in post_checks:
             try:
                 response = session.post(url, json=payload, timeout=15)
             except requests.RequestException:
-                return False
+                return False, candidate_as_of_date
             if not (200 <= response.status_code < 300):
-                return False
-        return True
+                return False, candidate_as_of_date
+        return True, candidate_as_of_date
 
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
@@ -224,8 +264,10 @@ def _resolve_runtime_ids(
             pass
 
         for candidate_id in candidate_ids:
-            if _portfolio_ready(candidate_id):
+            portfolio_ready, candidate_as_of_date = _portfolio_ready(candidate_id)
+            if portfolio_ready:
                 resolved_portfolio_id = candidate_id
+                resolved_as_of_date = candidate_as_of_date
                 break
         if resolved_portfolio_id is not None:
             break
@@ -245,7 +287,7 @@ def _resolve_runtime_ids(
     try:
         response = session.post(
             f"{query_control_plane_base_url}/integration/benchmarks/catalog",
-            json={"as_of_date": "2026-03-01"},
+            json={"as_of_date": resolved_as_of_date},
             timeout=15,
         )
         if response.status_code == 200:
@@ -259,7 +301,11 @@ def _resolve_runtime_ids(
     except requests.RequestException:
         pass
 
-    return resolved_portfolio_id, resolved_benchmark_id
+    return RuntimeContext(
+        portfolio_id=resolved_portfolio_id,
+        benchmark_id=resolved_benchmark_id,
+        as_of_date=resolved_as_of_date,
+    )
 
 
 def _cases(
@@ -269,6 +315,7 @@ def _cases(
     query_control_plane_base_url: str,
     portfolio_id: str,
     benchmark_id: str,
+    as_of_date: str,
     include_protected_ops: bool,
 ) -> list[EndpointCase]:
     baseline = [
@@ -306,14 +353,14 @@ def _cases(
             "benchmark_catalog",
             "POST",
             f"{query_control_plane_base_url}/integration/benchmarks/catalog",
-            {"as_of_date": "2026-03-01"},
+            {"as_of_date": as_of_date},
             320,
         ),
         EndpointCase(
             "index_catalog",
             "POST",
             f"{query_control_plane_base_url}/integration/indices/catalog",
-            {"as_of_date": "2026-03-01"},
+            {"as_of_date": as_of_date},
             320,
         ),
         EndpointCase(
@@ -321,8 +368,8 @@ def _cases(
             "POST",
             f"{query_control_plane_base_url}/integration/benchmarks/{benchmark_id}/market-series",
             {
-                "as_of_date": "2026-03-01",
-                "window": {"start_date": "2025-12-01", "end_date": "2026-03-01"},
+                "as_of_date": as_of_date,
+                "window": {"start_date": as_of_date, "end_date": as_of_date},
                 "frequency": "daily",
                 "include_components": True,
                 "series_fields": [
@@ -340,7 +387,7 @@ def _cases(
             "POST",
             f"{query_control_plane_base_url}/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
             {
-                "as_of_date": "2026-03-01",
+                "as_of_date": as_of_date,
                 "period": "one_year",
                 "frequency": "daily",
                 "consumer_system": "lotus-performance",
@@ -354,7 +401,7 @@ def _cases(
             "POST",
             f"{query_control_plane_base_url}/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
             {
-                "as_of_date": "2026-03-01",
+                "as_of_date": as_of_date,
                 "period": "three_months",
                 "frequency": "daily",
                 "consumer_system": "lotus-performance",
@@ -400,6 +447,7 @@ def run_profile(
     query_control_plane_base_url: str,
     portfolio_id: str,
     benchmark_id: str,
+    as_of_date: str,
     include_protected_ops: bool,
     warmup_runs: int,
     measured_runs: int,
@@ -414,6 +462,7 @@ def run_profile(
         query_control_plane_base_url,
         portfolio_id,
         benchmark_id,
+        as_of_date,
         include_protected_ops,
     ):
         for _ in range(warmup_runs):
@@ -541,6 +590,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--portfolio-id", default="DEMO_DPM_EUR_001")
     parser.add_argument("--benchmark-id", default="BMK_GLOBAL_BALANCED_60_40")
+    parser.add_argument("--as-of-date", default="2026-03-01")
     parser.add_argument("--warmup-runs", type=int, default=5)
     parser.add_argument("--measured-runs", type=int, default=30)
     parser.add_argument("--ready-timeout-seconds", type=int, default=180)
@@ -572,12 +622,13 @@ def main() -> int:
     )
 
     session = requests.Session()
-    resolved_portfolio_id, resolved_benchmark_id = _resolve_runtime_ids(
+    runtime_context = _resolve_runtime_ids(
         session,
         query_base_url=args.query_base_url,
         query_control_plane_base_url=args.query_control_plane_base_url,
         portfolio_id=args.portfolio_id,
         benchmark_id=args.benchmark_id,
+        as_of_date=args.as_of_date,
         timeout_seconds=args.ready_timeout_seconds,
         progress_check=(
             None
@@ -591,8 +642,9 @@ def main() -> int:
         event_replay_base_url=args.event_replay_base_url,
         query_base_url=args.query_base_url,
         query_control_plane_base_url=args.query_control_plane_base_url,
-        portfolio_id=resolved_portfolio_id,
-        benchmark_id=resolved_benchmark_id,
+        portfolio_id=runtime_context.portfolio_id,
+        benchmark_id=runtime_context.benchmark_id,
+        as_of_date=runtime_context.as_of_date,
         include_protected_ops=args.include_protected_ops,
         warmup_runs=args.warmup_runs,
         measured_runs=args.measured_runs,
