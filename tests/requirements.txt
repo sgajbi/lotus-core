@@ -11,7 +11,7 @@ openpyxl==3.1.5
 pytest-asyncio
 
 # HTTP client for testing APIs
-requests==2.32.4
+requests==2.33.0
 httpx==0.28.1
 
 # Database drivers (sync and async)
