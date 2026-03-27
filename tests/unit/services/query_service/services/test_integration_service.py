@@ -673,8 +673,16 @@ async def test_benchmark_composition_window_rejects_currency_changes_within_wind
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         list_benchmark_definitions_overlapping_window=AsyncMock(
             return_value=[
-                SimpleNamespace(benchmark_currency="USD"),
-                SimpleNamespace(benchmark_currency="EUR"),
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    benchmark_currency="USD",
+                    effective_from=date(2026, 1, 1),
+                ),
+                SimpleNamespace(
+                    benchmark_id="B2",
+                    benchmark_currency="EUR",
+                    effective_from=date(2026, 1, 2),
+                ),
             ]
         ),
         list_benchmark_components_overlapping_window=AsyncMock(return_value=[]),
@@ -687,6 +695,160 @@ async def test_benchmark_composition_window_rejects_currency_changes_within_wind
                 window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 31))
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_catalog_collapses_superseded_effective_rows() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_benchmark_definitions=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    benchmark_name="Benchmark New",
+                    benchmark_type="composite",
+                    benchmark_currency="USD",
+                    return_convention="total_return_index",
+                    benchmark_status="active",
+                    benchmark_family="family",
+                    benchmark_provider="provider",
+                    rebalance_frequency="monthly",
+                    classification_set_id="set1",
+                    classification_labels={"asset_class": "multi_asset"},
+                    effective_from=date(2025, 3, 27),
+                    effective_to=None,
+                    quality_status="accepted",
+                    source_timestamp=None,
+                    source_vendor="vendor",
+                    source_record_id="src-new",
+                ),
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    benchmark_name="Benchmark Old",
+                    benchmark_type="composite",
+                    benchmark_currency="USD",
+                    return_convention="total_return_index",
+                    benchmark_status="active",
+                    benchmark_family="family",
+                    benchmark_provider="provider",
+                    rebalance_frequency="monthly",
+                    classification_set_id="set1",
+                    classification_labels={"asset_class": "multi_asset"},
+                    effective_from=date(2023, 3, 28),
+                    effective_to=None,
+                    quality_status="accepted",
+                    source_timestamp=None,
+                    source_vendor="vendor",
+                    source_record_id="src-old",
+                ),
+            ]
+        ),
+        list_benchmark_components_for_benchmarks=AsyncMock(
+            return_value={
+                "B1": [
+                    SimpleNamespace(
+                        index_id="IDX_BOND",
+                        composition_weight=Decimal("0.4"),
+                        composition_effective_from=date(2023, 3, 28),
+                        composition_effective_to=None,
+                        rebalance_event_id="old",
+                    ),
+                    SimpleNamespace(
+                        index_id="IDX_BOND",
+                        composition_weight=Decimal("0.4"),
+                        composition_effective_from=date(2025, 3, 27),
+                        composition_effective_to=None,
+                        rebalance_event_id="new",
+                    ),
+                    SimpleNamespace(
+                        index_id="IDX_EQ",
+                        composition_weight=Decimal("0.6"),
+                        composition_effective_from=date(2025, 3, 27),
+                        composition_effective_to=None,
+                        rebalance_event_id="new",
+                    ),
+                ]
+            }
+        ),
+    )
+
+    response = await service.list_benchmark_catalog(date(2026, 3, 27), None, None, None)
+
+    assert len(response.records) == 1
+    assert response.records[0].benchmark_name == "Benchmark New"
+    assert [component.index_id for component in response.records[0].components] == [
+        "IDX_BOND",
+        "IDX_EQ",
+    ]
+    assert response.records[0].components[0].composition_effective_from == date(2025, 3, 27)
+
+
+@pytest.mark.asyncio
+async def test_benchmark_composition_window_collapses_superseded_component_rows() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_benchmark_definitions_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    benchmark_currency="USD",
+                    effective_from=date(2025, 3, 27),
+                    effective_to=None,
+                ),
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    benchmark_currency="USD",
+                    effective_from=date(2023, 3, 28),
+                    effective_to=None,
+                ),
+            ]
+        ),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_BOND",
+                    composition_weight=Decimal("0.4"),
+                    composition_effective_from=date(2023, 3, 28),
+                    composition_effective_to=None,
+                    rebalance_event_id="old",
+                ),
+                SimpleNamespace(
+                    index_id="IDX_BOND",
+                    composition_weight=Decimal("0.4"),
+                    composition_effective_from=date(2025, 3, 27),
+                    composition_effective_to=None,
+                    rebalance_event_id="new",
+                ),
+                SimpleNamespace(
+                    index_id="IDX_EQ",
+                    composition_weight=Decimal("0.6"),
+                    composition_effective_from=date(2023, 3, 28),
+                    composition_effective_to=None,
+                    rebalance_event_id="old",
+                ),
+                SimpleNamespace(
+                    index_id="IDX_EQ",
+                    composition_weight=Decimal("0.6"),
+                    composition_effective_from=date(2025, 3, 27),
+                    composition_effective_to=None,
+                    rebalance_event_id="new",
+                ),
+            ]
+        ),
+    )
+
+    response = await service.get_benchmark_composition_window(
+        "B1",
+        SimpleNamespace(
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 3, 27))
+        ),
+    )
+
+    assert response is not None
+    assert [
+        (segment.index_id, segment.composition_effective_from)
+        for segment in response.segments
+    ] == [("IDX_BOND", date(2025, 3, 27)), ("IDX_EQ", date(2025, 3, 27))]
 
 
 @pytest.mark.asyncio

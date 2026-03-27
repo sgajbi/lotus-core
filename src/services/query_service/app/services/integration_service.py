@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,6 +86,79 @@ class IntegrationService:
     def _request_fingerprint(payload: dict[str, Any]) -> str:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
+
+    @staticmethod
+    def _latest_effective_records(
+        rows: list[Any],
+        *,
+        key_fields: tuple[str, ...],
+        effective_from_field: str,
+    ) -> list[Any]:
+        latest_by_key: dict[tuple[Any, ...], Any] = {}
+        for row in sorted(
+            rows,
+            key=lambda item: tuple(
+                [
+                    *[getattr(item, field) for field in key_fields],
+                    getattr(item, effective_from_field),
+                ]
+            ),
+            reverse=True,
+        ):
+            record_key = tuple(getattr(row, field) for field in key_fields)
+            latest_by_key.setdefault(record_key, row)
+        return sorted(
+            latest_by_key.values(),
+            key=lambda item: tuple(getattr(item, field) for field in key_fields),
+        )
+
+    @staticmethod
+    def _resolve_component_window_rows(
+        rows: list[Any],
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> list[Any]:
+        rows_by_index: dict[str, list[Any]] = {}
+        for row in rows:
+            rows_by_index.setdefault(row.index_id, []).append(row)
+
+        resolved_rows: list[Any] = []
+        for index_id, index_rows in rows_by_index.items():
+            sorted_rows = sorted(
+                index_rows,
+                key=lambda item: item.composition_effective_from,
+            )
+            for position, row in enumerate(sorted_rows):
+                next_start = (
+                    sorted_rows[position + 1].composition_effective_from
+                    if position + 1 < len(sorted_rows)
+                    else None
+                )
+                resolved_end = row.composition_effective_to
+                if next_start is not None:
+                    inferred_end = next_start - timedelta(days=1)
+                    if resolved_end is None or resolved_end >= next_start:
+                        resolved_end = inferred_end
+                    else:
+                        resolved_end = min(resolved_end, inferred_end)
+                if row.composition_effective_from > end_date:
+                    continue
+                if resolved_end is not None and resolved_end < start_date:
+                    continue
+                resolved_rows.append(
+                    SimpleNamespace(
+                        index_id=index_id,
+                        composition_weight=row.composition_weight,
+                        composition_effective_from=row.composition_effective_from,
+                        composition_effective_to=resolved_end,
+                        rebalance_event_id=getattr(row, "rebalance_event_id", None),
+                    )
+                )
+        return sorted(
+            resolved_rows,
+            key=lambda item: (item.composition_effective_from, item.index_id),
+        )
 
     @staticmethod
     def _series_request_fingerprint(
@@ -306,9 +380,13 @@ class IntegrationService:
         row = await self._reference_repository.get_benchmark_definition(benchmark_id, as_of_date)
         if row is None:
             return None
-        components = await self._reference_repository.list_benchmark_components(
-            benchmark_id,
-            as_of_date,
+        components = self._latest_effective_records(
+            await self._reference_repository.list_benchmark_components(
+                benchmark_id,
+                as_of_date,
+            ),
+            key_fields=("index_id",),
+            effective_from_field="composition_effective_from",
         )
         return BenchmarkDefinitionResponse(
             benchmark_id=row.benchmark_id,
@@ -346,10 +424,14 @@ class IntegrationService:
         request: BenchmarkCompositionWindowRequest,
     ) -> BenchmarkCompositionWindowResponse | None:
         definitions = (
-            await self._reference_repository.list_benchmark_definitions_overlapping_window(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
+            self._latest_effective_records(
+                await self._reference_repository.list_benchmark_definitions_overlapping_window(
+                    benchmark_id=benchmark_id,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                ),
+                key_fields=("benchmark_id",),
+                effective_from_field="effective_from",
             )
         )
         if not definitions:
@@ -361,8 +443,12 @@ class IntegrationService:
                 "Benchmark definition currency changed within requested composition window."
             )
 
-        components = await self._reference_repository.list_benchmark_components_overlapping_window(
-            benchmark_id=benchmark_id,
+        components = self._resolve_component_window_rows(
+            await self._reference_repository.list_benchmark_components_overlapping_window(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            ),
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
@@ -398,11 +484,15 @@ class IntegrationService:
         benchmark_currency: str | None,
         benchmark_status: str | None,
     ) -> BenchmarkCatalogResponse:
-        rows = await self._reference_repository.list_benchmark_definitions(
-            as_of_date=as_of_date,
-            benchmark_type=benchmark_type,
-            benchmark_currency=benchmark_currency,
-            benchmark_status=benchmark_status,
+        rows = self._latest_effective_records(
+            await self._reference_repository.list_benchmark_definitions(
+                as_of_date=as_of_date,
+                benchmark_type=benchmark_type,
+                benchmark_currency=benchmark_currency,
+                benchmark_status=benchmark_status,
+            ),
+            key_fields=("benchmark_id",),
+            effective_from_field="effective_from",
         )
         components_by_benchmark = (
             await self._reference_repository.list_benchmark_components_for_benchmarks(
@@ -412,7 +502,11 @@ class IntegrationService:
         )
         records: list[BenchmarkDefinitionResponse] = []
         for row in rows:
-            components = components_by_benchmark.get(row.benchmark_id, [])
+            components = self._latest_effective_records(
+                components_by_benchmark.get(row.benchmark_id, []),
+                key_fields=("index_id",),
+                effective_from_field="composition_effective_from",
+            )
             records.append(
                 BenchmarkDefinitionResponse(
                     benchmark_id=row.benchmark_id,
@@ -495,8 +589,12 @@ class IntegrationService:
         benchmark_currency = (
             definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
         )
-        components = await self._reference_repository.list_benchmark_components_overlapping_window(
-            benchmark_id=benchmark_id,
+        components = self._resolve_component_window_rows(
+            await self._reference_repository.list_benchmark_components_overlapping_window(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            ),
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
