@@ -180,6 +180,83 @@ Behavior:
 Cash account identity is resolved from the latest known settlement-cash mapping when available.
 If no explicit account mapping is available, the API falls back to the cash instrument identity.
 
+### Income Summary
+
+- `POST /reporting/income-summary/query`
+
+Inputs:
+
+- scope:
+  - `portfolio_id`
+  - `portfolio_ids`
+  - `booking_center_code`
+- `window.start_date`
+- `window.end_date`
+- optional `reporting_currency`
+- optional `income_types`
+
+Behavior:
+
+- returns two views for every response:
+  - requested window
+  - year to date through `window.end_date`
+- preserves portfolio-currency values for per-portfolio rows
+- translates every result into the effective reporting currency
+- summarizes canonical Lotus income types:
+  - `DIVIDEND`
+  - `INTEREST`
+  - `CASH_IN_LIEU`
+
+Income totals expose:
+
+- gross income
+- withholding tax
+- other deductions
+- net income
+- transaction count
+
+### Activity Summary
+
+- `POST /reporting/activity-summary/query`
+
+Inputs:
+
+- scope:
+  - `portfolio_id`
+  - `portfolio_ids`
+  - `booking_center_code`
+- `window.start_date`
+- `window.end_date`
+- optional `reporting_currency`
+
+Behavior:
+
+- returns two views for every response:
+  - requested window
+  - year to date through `window.end_date`
+- activity is intentionally modeled as portfolio-level flow buckets, not general ledger volume
+- current buckets are:
+  - `INFLOWS`
+  - `OUTFLOWS`
+  - `FEES`
+  - `TAXES`
+
+Bucket semantics:
+
+- `INFLOWS`:
+  - deposit and transfer-in cash activity
+- `OUTFLOWS`:
+  - withdrawal and transfer-out cash activity
+- `FEES`:
+  - fee transactions
+- `TAXES`:
+  - explicit tax transactions plus withholding-tax deductions captured on income records
+
+All bucket values are returned in:
+
+- portfolio currency for per-portfolio rows
+- reporting currency for all results
+
 ## Performance Model
 
 These APIs are designed around bounded, index-friendly reads rather than open-ended scans.
@@ -220,6 +297,13 @@ This makes the APIs suitable for:
 
 If very large BU exports are required later, that should be modeled as an asynchronous export
 contract rather than overloading the interactive query APIs.
+
+The income-summary and activity-summary APIs follow the same principle:
+
+- bounded transaction-date windows
+- SQL-side aggregation grouped by scope and currency
+- request-scoped FX conversion caching
+- composite indexes on `(portfolio_id, transaction_type, transaction_date)` for hot-path filters
 
 ## Design Principles
 

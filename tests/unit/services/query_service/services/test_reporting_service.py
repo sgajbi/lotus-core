@@ -7,12 +7,19 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reporting_dto import (
+    ActivitySummaryQueryRequest,
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
     CashBalancesQueryRequest,
+    IncomeSummaryQueryRequest,
     ReportingScope,
+    ReportingWindow,
 )
-from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
+from src.services.query_service.app.repositories.reporting_repository import (
+    ActivitySummaryAggregateRow,
+    IncomeSummaryAggregateRow,
+    ReportingSnapshotRow,
+)
 from src.services.query_service.app.services.reporting_service import ReportingService
 
 pytestmark = pytest.mark.asyncio
@@ -77,8 +84,9 @@ def _snapshot(
     )
 
 
-async def test_get_assets_under_management_defaults_to_portfolio_currency_for_single_scope(
-) -> None:
+async def test_get_assets_under_management_defaults_to_portfolio_currency_for_single_scope() -> (
+    None
+):
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
     repo.get_latest_business_date.return_value = date(2026, 3, 27)
@@ -147,13 +155,9 @@ async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversi
 
     assert response.reporting_currency == "SGD"
     assert response.total_market_value_reporting_currency == Decimal("210")
-    asset_class_view = next(
-        view for view in response.views if view.dimension == "asset_class"
-    )
+    asset_class_view = next(view for view in response.views if view.dimension == "asset_class")
     equity_bucket = next(
-        bucket
-        for bucket in asset_class_view.buckets
-        if bucket.dimension_value == "EQUITY"
+        bucket for bucket in asset_class_view.buckets if bucket.dimension_value == "EQUITY"
     )
     bond_bucket = next(
         bucket for bucket in asset_class_view.buckets if bucket.dimension_value == "BOND"
@@ -216,3 +220,125 @@ async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
         service = ReportingService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_cash_balances(CashBalancesQueryRequest(portfolio_id="P404"))
+
+
+async def test_get_income_summary_returns_requested_window_and_ytd_amounts() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_income_summary_rows.return_value = [
+        IncomeSummaryAggregateRow(
+            portfolio_id="P1",
+            booking_center_code="SGPB",
+            client_id="CIF-1",
+            portfolio_currency="USD",
+            source_currency="USD",
+            income_type="DIVIDEND",
+            requested_transaction_count=1,
+            ytd_transaction_count=2,
+            requested_gross_amount=Decimal("50"),
+            ytd_gross_amount=Decimal("80"),
+            requested_withholding_tax=Decimal("0"),
+            ytd_withholding_tax=Decimal("0"),
+            requested_other_deductions=Decimal("0"),
+            ytd_other_deductions=Decimal("0"),
+            requested_net_amount=Decimal("50"),
+            ytd_net_amount=Decimal("80"),
+        ),
+        IncomeSummaryAggregateRow(
+            portfolio_id="P1",
+            booking_center_code="SGPB",
+            client_id="CIF-1",
+            portfolio_currency="USD",
+            source_currency="USD",
+            income_type="INTEREST",
+            requested_transaction_count=1,
+            ytd_transaction_count=1,
+            requested_gross_amount=Decimal("30"),
+            ytd_gross_amount=Decimal("30"),
+            requested_withholding_tax=Decimal("3"),
+            ytd_withholding_tax=Decimal("3"),
+            requested_other_deductions=Decimal("1"),
+            ytd_other_deductions=Decimal("1"),
+            requested_net_amount=Decimal("26"),
+            ytd_net_amount=Decimal("26"),
+        ),
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_income_summary(
+            IncomeSummaryQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                window=ReportingWindow(start_date=date(2026, 3, 1), end_date=date(2026, 3, 27)),
+            )
+        )
+
+    assert response.reporting_currency == "USD"
+    assert response.totals.requested_window.gross_amount_portfolio_currency == Decimal("80")
+    assert response.totals.requested_window.net_amount_reporting_currency == Decimal("76")
+    assert response.totals.year_to_date.gross_amount_reporting_currency == Decimal("110")
+    interest_bucket = next(
+        bucket for bucket in response.portfolios[0].income_types if bucket.income_type == "INTEREST"
+    )
+    assert interest_bucket.requested_window.withholding_tax_reporting_currency == Decimal("3")
+
+
+async def test_get_activity_summary_returns_flow_buckets_with_reporting_conversion() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_activity_summary_rows.return_value = [
+        ActivitySummaryAggregateRow(
+            portfolio_id="P1",
+            booking_center_code="SGPB",
+            client_id="CIF-1",
+            portfolio_currency="USD",
+            source_currency="USD",
+            bucket="INFLOWS",
+            requested_transaction_count=1,
+            ytd_transaction_count=2,
+            requested_amount=Decimal("1000"),
+            ytd_amount=Decimal("1500"),
+        ),
+        ActivitySummaryAggregateRow(
+            portfolio_id="P1",
+            booking_center_code="SGPB",
+            client_id="CIF-1",
+            portfolio_currency="USD",
+            source_currency="USD",
+            bucket="FEES",
+            requested_transaction_count=1,
+            ytd_transaction_count=1,
+            requested_amount=Decimal("25"),
+            ytd_amount=Decimal("25"),
+        ),
+    ]
+    repo.get_latest_fx_rate.side_effect = lambda **kwargs: Decimal("1.2")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_activity_summary(
+            ActivitySummaryQueryRequest(
+                scope=ReportingScope(portfolio_ids=["P1"]),
+                reporting_currency="SGD",
+                window=ReportingWindow(start_date=date(2026, 3, 1), end_date=date(2026, 3, 27)),
+            )
+        )
+
+    inflows_bucket = next(
+        bucket for bucket in response.totals.buckets if bucket.bucket == "INFLOWS"
+    )
+    fees_bucket = next(bucket for bucket in response.totals.buckets if bucket.bucket == "FEES")
+    taxes_bucket = next(bucket for bucket in response.totals.buckets if bucket.bucket == "TAXES")
+
+    assert inflows_bucket.requested_window.amount_reporting_currency == Decimal("1200.0")
+    assert inflows_bucket.year_to_date.amount_reporting_currency == Decimal("1800.0")
+    assert fees_bucket.requested_window.amount_reporting_currency == Decimal("30.0")
+    assert taxes_bucket.requested_window.amount_reporting_currency == Decimal("0")
