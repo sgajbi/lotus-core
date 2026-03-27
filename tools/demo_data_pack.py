@@ -5,13 +5,18 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from urllib import error, parse, request
 
 LOGGER = logging.getLogger("demo_data_pack")
+
+DEFAULT_DEMO_BENCHMARK_ID = "BMK_GLOBAL_BALANCED_60_40"
+DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,15 @@ def _business_dates(start: date, end: date) -> list[str]:
     return dates
 
 
+def _calendar_dates(start: date, end: date) -> list[str]:
+    dates: list[str] = []
+    current = start
+    while current <= end:
+        dates.append(current.isoformat())
+        current += timedelta(days=1)
+    return dates
+
+
 def _tx(
     tx_id: str,
     portfolio_id: str,
@@ -96,6 +110,242 @@ def _tx(
         "gross_transaction_amount": gross,
         "trade_currency": ccy,
         "currency": ccy,
+    }
+
+
+def _iso_utc_timestamp(day: date, hour: int = 21) -> str:
+    return (
+        datetime(day.year, day.month, day.day, hour=hour, tzinfo=UTC)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _build_index_series(
+    *,
+    dates: list[str],
+    index_id: str,
+    series_id_prefix: str,
+    start_level: float,
+    drift: float,
+    primary_amplitude: float,
+    primary_cycle: float,
+    secondary_amplitude: float,
+    secondary_cycle: float,
+    currency: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[Decimal]]:
+    index_prices: list[dict[str, Any]] = []
+    index_returns: list[dict[str, Any]] = []
+    daily_returns: list[Decimal] = []
+    current_level = start_level
+
+    for index, current_date in enumerate(dates):
+        if index == 0:
+            daily_return = 0.0
+        else:
+            daily_return = (
+                drift
+                + primary_amplitude * math.sin(index / primary_cycle)
+                + secondary_amplitude * math.cos(index / secondary_cycle)
+            )
+        daily_return_decimal = Decimal(f"{daily_return:.10f}")
+        current_level *= 1 + daily_return
+        daily_returns.append(daily_return_decimal)
+        source_timestamp = _iso_utc_timestamp(date.fromisoformat(current_date))
+        index_prices.append(
+            {
+                "series_id": f"{series_id_prefix}_price",
+                "index_id": index_id,
+                "series_date": current_date,
+                "index_price": f"{current_level:.10f}",
+                "series_currency": currency,
+                "value_convention": "close_price",
+                "source_timestamp": source_timestamp,
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": f"{series_id_prefix}_price_{current_date}",
+                "quality_status": "accepted",
+            }
+        )
+        index_returns.append(
+            {
+                "series_id": f"{series_id_prefix}_return",
+                "index_id": index_id,
+                "series_date": current_date,
+                "index_return": f"{daily_return_decimal:.10f}",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": currency,
+                "source_timestamp": source_timestamp,
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": f"{series_id_prefix}_return_{current_date}",
+                "quality_status": "accepted",
+            }
+        )
+
+    return index_prices, index_returns, daily_returns
+
+
+def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> dict[str, Any]:
+    effective_from = start_date.isoformat()
+    latest_date = dates[-1]
+    series_dates = _calendar_dates(start_date - timedelta(days=1), date.fromisoformat(latest_date))
+
+    equity_prices, equity_returns, equity_daily_returns = _build_index_series(
+        dates=series_dates,
+        index_id="IDX_GLOBAL_EQUITY_TR",
+        series_id_prefix="idx_global_equity_tr",
+        start_level=100.0,
+        drift=0.00058,
+        primary_amplitude=0.00135,
+        primary_cycle=14.0,
+        secondary_amplitude=-0.00042,
+        secondary_cycle=7.5,
+        currency="USD",
+    )
+    bond_prices, bond_returns, bond_daily_returns = _build_index_series(
+        dates=series_dates,
+        index_id="IDX_GLOBAL_BOND_TR",
+        series_id_prefix="idx_global_bond_tr",
+        start_level=100.0,
+        drift=0.00016,
+        primary_amplitude=0.00028,
+        primary_cycle=16.0,
+        secondary_amplitude=-0.00011,
+        secondary_cycle=9.0,
+        currency="USD",
+    )
+
+    benchmark_return_series: list[dict[str, Any]] = []
+    for current_date, equity_return, bond_return in zip(
+        series_dates, equity_daily_returns, bond_daily_returns, strict=True
+    ):
+        benchmark_return = (equity_return * Decimal("0.6")) + (
+            bond_return * Decimal("0.4")
+        )
+        benchmark_return_series.append(
+            {
+                "series_id": "bmk_global_balanced_60_40_return",
+                "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
+                "series_date": current_date,
+                "benchmark_return": f"{benchmark_return:.10f}",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": "USD",
+                "source_timestamp": _iso_utc_timestamp(date.fromisoformat(current_date)),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": f"bmk_global_balanced_60_40_return_{current_date}",
+                "quality_status": "accepted",
+            }
+        )
+
+    return {
+        "benchmark_assignments": [
+            {
+                "portfolio_id": DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID,
+                "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
+                "effective_from": effective_from,
+                "assignment_source": "lotus_core_demo_pack",
+                "assignment_status": "active",
+                "policy_pack_id": "demo_balanced_policy_v1",
+                "source_system": "LOTUS_CORE_DEMO_DATA_PACK",
+                "assignment_recorded_at": _iso_utc_timestamp(start_date, hour=8),
+                "assignment_version": 1,
+            }
+        ],
+        "benchmark_definitions": [
+            {
+                "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
+                "benchmark_name": "Global Balanced 60/40",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "benchmark_status": "active",
+                "benchmark_family": "multi_asset_strategic",
+                "benchmark_provider": "LOTUS_DEMO",
+                "rebalance_frequency": "monthly",
+                "classification_set_id": "wm_global_taxonomy_v1",
+                "classification_labels": {
+                    "asset_class": "multi_asset",
+                    "strategy": "balanced",
+                    "region": "global",
+                },
+                "effective_from": effective_from,
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "bmk_global_balanced_60_40_definition",
+            }
+        ],
+        "benchmark_compositions": [
+            {
+                "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "composition_effective_from": effective_from,
+                "composition_weight": "0.6000000000",
+                "rebalance_event_id": "bmk_global_balanced_60_40_initial",
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "bmk_global_balanced_60_40_equity",
+                "quality_status": "accepted",
+            },
+            {
+                "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
+                "index_id": "IDX_GLOBAL_BOND_TR",
+                "composition_effective_from": effective_from,
+                "composition_weight": "0.4000000000",
+                "rebalance_event_id": "bmk_global_balanced_60_40_initial",
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "bmk_global_balanced_60_40_bond",
+                "quality_status": "accepted",
+            },
+        ],
+        "indices": [
+            {
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "index_name": "Global Equity Total Return",
+                "index_currency": "USD",
+                "index_type": "equity_index",
+                "index_status": "active",
+                "index_provider": "LOTUS_DEMO",
+                "index_market": "global_equity",
+                "classification_set_id": "wm_global_taxonomy_v1",
+                "classification_labels": {
+                    "asset_class": "equity",
+                    "region": "global",
+                },
+                "effective_from": effective_from,
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "idx_global_equity_tr_definition",
+            },
+            {
+                "index_id": "IDX_GLOBAL_BOND_TR",
+                "index_name": "Global Bond Total Return",
+                "index_currency": "USD",
+                "index_type": "bond_index",
+                "index_status": "active",
+                "index_provider": "LOTUS_DEMO",
+                "index_market": "global_bond",
+                "classification_set_id": "wm_global_taxonomy_v1",
+                "classification_labels": {
+                    "asset_class": "fixed_income",
+                    "region": "global",
+                },
+                "effective_from": effective_from,
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "idx_global_bond_tr_definition",
+            },
+        ],
+        "index_price_series": [*equity_prices, *bond_prices],
+        "index_return_series": [*equity_returns, *bond_returns],
+        "benchmark_return_series": benchmark_return_series,
+        "benchmark_verification": {
+            "portfolio_id": DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID,
+            "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
+            "start_date": effective_from,
+            "end_date": latest_date,
+        },
     }
 
 
@@ -275,6 +525,7 @@ def build_demo_bundle() -> dict[str, Any]:
         for idx, d in enumerate(dates):
             rate = round(start_rate + ((end_rate - start_rate) * idx / (len(dates) - 1)), 6)
             fx_rates.append({"from_currency": from_ccy, "to_currency": to_ccy, "rate_date": d, "rate": rate})
+    benchmark_reference = _build_benchmark_reference_data(dates=dates, start_date=start_date)
     return {
         "source_system": "LOTUS_CORE_DEMO_DATA_PACK",
         "mode": "UPSERT",
@@ -285,7 +536,36 @@ def build_demo_bundle() -> dict[str, Any]:
         "market_prices": market_prices,
         "fx_rates": fx_rates,
         "as_of_date": as_of,
+        **benchmark_reference,
     }
+
+
+def _build_portfolio_bundle_payload(bundle: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source_system": bundle["source_system"],
+        "mode": bundle["mode"],
+        "business_dates": bundle["business_dates"],
+        "portfolios": bundle["portfolios"],
+        "instruments": bundle["instruments"],
+        "transactions": bundle["transactions"],
+        "market_prices": bundle["market_prices"],
+        "fx_rates": bundle["fx_rates"],
+        "as_of_date": bundle["as_of_date"],
+    }
+
+
+def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
+    reference_payloads = (
+        ("/ingest/indices", {"indices": bundle["indices"]}),
+        ("/ingest/index-price-series", {"index_price_series": bundle["index_price_series"]}),
+        ("/ingest/index-return-series", {"index_return_series": bundle["index_return_series"]}),
+        ("/ingest/benchmark-definitions", {"benchmark_definitions": bundle["benchmark_definitions"]}),
+        ("/ingest/benchmark-compositions", {"benchmark_compositions": bundle["benchmark_compositions"]}),
+        ("/ingest/benchmark-return-series", {"benchmark_return_series": bundle["benchmark_return_series"]}),
+        ("/ingest/benchmark-assignments", {"benchmark_assignments": bundle["benchmark_assignments"]}),
+    )
+    for endpoint, payload in reference_payloads:
+        _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
 
 
 def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) -> tuple[int, Any]:
@@ -381,10 +661,69 @@ def _verify_portfolio(
     raise TimeoutError(f"Timed out verifying portfolio outputs for {expected.portfolio_id}.")
 
 
+def _verify_benchmark_reference(
+    query_control_plane_base_url: str,
+    *,
+    portfolio_id: str,
+    benchmark_id: str,
+    start_date: str,
+    end_date: str,
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> dict[str, Any]:
+    deadline = time.time() + wait_seconds
+    while time.time() < deadline:
+        try:
+            _, catalog_payload = _request_json(
+                "POST",
+                f"{query_control_plane_base_url}/integration/benchmarks/catalog",
+                payload={"as_of_date": end_date},
+            )
+            _, assignment_payload = _request_json(
+                "POST",
+                f"{query_control_plane_base_url}/integration/portfolios/{portfolio_id}/benchmark-assignment",
+                payload={"as_of_date": end_date},
+            )
+            _, composition_payload = _request_json(
+                "POST",
+                f"{query_control_plane_base_url}/integration/benchmarks/{benchmark_id}/composition-window",
+                payload={"window": {"start_date": start_date, "end_date": end_date}},
+            )
+        except RuntimeError:
+            time.sleep(poll_interval_seconds)
+            continue
+
+        records = catalog_payload.get("records") if isinstance(catalog_payload, dict) else None
+        segments = (
+            composition_payload.get("segments")
+            if isinstance(composition_payload, dict)
+            else None
+        )
+        if (
+            isinstance(records, list)
+            and any(record.get("benchmark_id") == benchmark_id for record in records)
+            and isinstance(assignment_payload, dict)
+            and assignment_payload.get("benchmark_id") == benchmark_id
+            and isinstance(segments, list)
+            and segments
+        ):
+            return {
+                "portfolio_id": portfolio_id,
+                "benchmark_id": benchmark_id,
+                "catalog_records": len(records),
+                "composition_segments": len(segments),
+            }
+        time.sleep(poll_interval_seconds)
+    raise TimeoutError(
+        f"Timed out verifying benchmark reference data for {portfolio_id} -> {benchmark_id}."
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="lotus-core demo data pack bootstrap")
     parser.add_argument("--ingestion-base-url", default="http://localhost:8200")
     parser.add_argument("--query-base-url", default="http://localhost:8201")
+    parser.add_argument("--query-control-plane-base-url", default="http://localhost:8202")
     parser.add_argument("--wait-seconds", type=int, default=300)
     parser.add_argument("--poll-interval-seconds", type=int, default=3)
     parser.add_argument("--verify-only", action="store_true")
@@ -399,14 +738,20 @@ def main() -> int:
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
     ingestion_base_url = args.ingestion_base_url.rstrip("/")
     query_base_url = args.query_base_url.rstrip("/")
+    query_control_plane_base_url = args.query_control_plane_base_url.rstrip("/")
     if args.verify_only and args.ingest_only:
         raise ValueError("Cannot use --verify-only with --ingest-only")
     _wait_ready(f"{ingestion_base_url}/health/ready", args.wait_seconds, args.poll_interval_seconds)
     _wait_ready(f"{query_base_url}/health/ready", args.wait_seconds, args.poll_interval_seconds)
+    _wait_ready(
+        f"{query_control_plane_base_url}/health/ready",
+        args.wait_seconds,
+        args.poll_interval_seconds,
+    )
     demo_bundle = build_demo_bundle()
     if not args.verify_only:
         if args.force_ingest or not _all_demo_portfolios_exist(query_base_url):
-            payload = demo_bundle
+            payload = _build_portfolio_bundle_payload(demo_bundle)
             LOGGER.info(
                 "Ingesting demo pack: portfolios=%d instruments=%d transactions=%d market_prices=%d fx_rates=%d",
                 len(payload["portfolios"]),
@@ -418,6 +763,12 @@ def main() -> int:
             _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
         else:
             LOGGER.info("Demo portfolios already present. Skipping ingestion.")
+        _ingest_demo_reference_data(ingestion_base_url, demo_bundle)
+        LOGGER.info(
+            "Ingested benchmark reference seed: benchmark=%s assigned_portfolio=%s",
+            demo_bundle["benchmark_verification"]["benchmark_id"],
+            demo_bundle["benchmark_verification"]["portfolio_id"],
+        )
     if not args.ingest_only:
         verification_results: list[dict[str, Any]] = []
         for expected in DEMO_EXPECTATIONS:
@@ -436,6 +787,22 @@ def main() -> int:
                 result["transactions"],
                 result["validated_holdings"],
             )
+        benchmark_result = _verify_benchmark_reference(
+            query_control_plane_base_url,
+            portfolio_id=demo_bundle["benchmark_verification"]["portfolio_id"],
+            benchmark_id=demo_bundle["benchmark_verification"]["benchmark_id"],
+            start_date=demo_bundle["benchmark_verification"]["start_date"],
+            end_date=demo_bundle["benchmark_verification"]["end_date"],
+            wait_seconds=args.wait_seconds,
+            poll_interval_seconds=args.poll_interval_seconds,
+        )
+        LOGGER.info(
+            "Verified benchmark seed %s for %s (catalog_records=%d composition_segments=%d)",
+            benchmark_result["benchmark_id"],
+            benchmark_result["portfolio_id"],
+            benchmark_result["catalog_records"],
+            benchmark_result["composition_segments"],
+        )
         if len(verification_results) != len(DEMO_EXPECTATIONS):
             raise RuntimeError("Demo verification failed: not all demo portfolios were verified.")
     LOGGER.info("Demo data pack workflow completed.")
