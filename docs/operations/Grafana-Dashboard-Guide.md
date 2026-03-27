@@ -154,6 +154,8 @@ This dashboard expects:
 
 ## Related Files
 
+- Platform-owned Grafana provisioning:
+  - [dashboard.yml](C:/Users/Sandeep/projects/lotus-platform/platform-stack/grafana/provisioning/dashboards/dashboard.yml)
 - Dashboard JSON:
   - [portfolio_analytics.json](C:/Users/Sandeep/projects/lotus-core/grafana/dashboards/portfolio_analytics.json)
 - Dashboard provisioning:
