@@ -96,6 +96,12 @@ Canonical shared infrastructure ownership now lives in `lotus-platform`:
 Use the local `lotus-core` compose stack when you specifically want an app-local or isolated-dev
 environment for `lotus-core`.
 
+Machine-readable compose contract:
+
+- project name: `lotus-core-app-local`
+- stack classification: `app-local`
+- canonical shared infra owner: `lotus-platform/platform-stack`
+
 1.  **Start App-Local Stack**:
     This command starts the local `lotus-core` app stack, including app-local Kafka, Zookeeper,
     PostgreSQL, Prometheus, `grafana`, all `lotus-core` services, and an automated one-shot demo

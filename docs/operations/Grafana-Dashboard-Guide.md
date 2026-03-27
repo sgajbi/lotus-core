@@ -162,3 +162,5 @@ This dashboard expects:
   - [dashboard.yml](C:/Users/Sandeep/projects/lotus-core/grafana/provisioning/dashboards/dashboard.yml)
 - App-local Docker topology:
   - [docker-compose.yml](C:/Users/Sandeep/projects/lotus-core/docker-compose.yml)
+- App-local stack guide:
+  - [App-Local-Stack-Guide.md](C:/Users/Sandeep/projects/lotus-core/docs/operations/App-Local-Stack-Guide.md)
