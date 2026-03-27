@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-03-10T14:02:51.352178+00:00",
+  "generatedAt": "2026-03-27T09:07:42.686247+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -27,6 +27,20 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.account_currency",
+      "canonicalTerm": "account_currency",
+      "preferredName": "account_currency",
+      "description": "Native cash account currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -62,7 +76,7 @@
       "canonicalTerm": "adjustment_reason",
       "preferredName": "adjustment_reason",
       "description": "Canonical reason code describing why an ADJUSTMENT cash leg exists.",
-      "example": "adjustment_reason_example",
+      "example": "BUY_SETTLEMENT",
       "type": "object",
       "locations": [
         "body"
@@ -76,13 +90,27 @@
       "canonicalTerm": "advisor_id",
       "preferredName": "advisor_id",
       "description": "Primary advisor identifier.",
-      "example": "ADVISOR_001",
+      "example": "ADV-987",
       "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amount",
+      "canonicalTerm": "amount",
+      "preferredName": "amount",
+      "description": "Monetary amount of the transaction cost in the stated fee currency.",
+      "example": "example_amount",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -120,7 +148,7 @@
       "canonicalTerm": "assignment_recorded_at",
       "preferredName": "assignment_recorded_at",
       "description": "Optional assignment capture timestamp from the source system; defaults to ingestion time when omitted.",
-      "example": "assignment_recorded_at_example",
+      "example": "2026-03-10T08:15:00Z",
       "type": "object",
       "locations": [
         "body"
@@ -172,6 +200,76 @@
       ]
     },
     {
+      "semanticId": "lotus.aum_portfolio_currency",
+      "canonicalTerm": "aum_portfolio_currency",
+      "preferredName": "aum_portfolio_currency",
+      "description": "Portfolio AUM in portfolio currency. Present for single-portfolio results.",
+      "example": "1250000.50",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.aum_reporting_currency",
+      "canonicalTerm": "aum_reporting_currency",
+      "preferredName": "aum_reporting_currency",
+      "description": "Aggregated assets under management in reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.balance_account_currency",
+      "canonicalTerm": "balance_account_currency",
+      "preferredName": "balance_account_currency",
+      "description": "Cash balance in native cash account currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.balance_portfolio_currency",
+      "canonicalTerm": "balance_portfolio_currency",
+      "preferredName": "balance_portfolio_currency",
+      "description": "Cash balance translated to portfolio currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.balance_reporting_currency",
+      "canonicalTerm": "balance_reporting_currency",
+      "preferredName": "balance_reporting_currency",
+      "description": "Cash balance translated to the effective reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.base_currency",
       "canonicalTerm": "base_currency",
       "preferredName": "base_currency",
@@ -191,7 +289,13 @@
       "preferredName": "benchmark_assignments",
       "description": "Portfolio benchmark assignment records to ingest or upsert.",
       "example": [
-        "benchmark_assignments_item_example"
+        {
+          "assignment_source": "benchmark_policy_engine",
+          "assignment_status": "active",
+          "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+          "effective_from": "2025-01-01",
+          "portfolio_id": "DEMO_DPM_EUR_001"
+        }
       ],
       "type": "array",
       "locations": [
@@ -207,7 +311,12 @@
       "preferredName": "benchmark_compositions",
       "description": "Benchmark composition records to ingest or upsert.",
       "example": [
-        "benchmark_compositions_item_example"
+        {
+          "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+          "composition_effective_from": "2026-01-01",
+          "composition_weight": "0.6000000000",
+          "index_id": "IDX_MSCI_WORLD_TR"
+        }
       ],
       "type": "array",
       "locations": [
@@ -237,7 +346,14 @@
       "preferredName": "benchmark_definitions",
       "description": "Benchmark definition records to ingest or upsert.",
       "example": [
-        "benchmark_definitions_item_example"
+        {
+          "benchmark_currency": "USD",
+          "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+          "benchmark_name": "Global Balanced 60/40 (TR)",
+          "benchmark_type": "composite",
+          "effective_from": "2025-01-01",
+          "return_convention": "total_return_index"
+        }
       ],
       "type": "array",
       "locations": [
@@ -252,7 +368,7 @@
       "canonicalTerm": "benchmark_family",
       "preferredName": "benchmark_family",
       "description": "Benchmark family grouping.",
-      "example": "benchmark_family_example",
+      "example": "multi_asset_strategic",
       "type": "object",
       "locations": [
         "body"
@@ -294,7 +410,7 @@
       "canonicalTerm": "benchmark_provider",
       "preferredName": "benchmark_provider",
       "description": "Benchmark provider name.",
-      "example": "benchmark_provider_example",
+      "example": "MSCI",
       "type": "object",
       "locations": [
         "body"
@@ -308,7 +424,7 @@
       "canonicalTerm": "benchmark_return",
       "preferredName": "benchmark_return",
       "description": "Benchmark return value.",
-      "example": "benchmark_return_example",
+      "example": "0.0019000000",
       "type": "object",
       "locations": [
         "body"
@@ -323,7 +439,15 @@
       "preferredName": "benchmark_return_series",
       "description": "Benchmark return series records to ingest or upsert.",
       "example": [
-        "benchmark_return_series_item_example"
+        {
+          "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+          "benchmark_return": "0.0019000000",
+          "return_convention": "total_return_index",
+          "return_period": "1d",
+          "series_currency": "USD",
+          "series_date": "2026-01-02",
+          "series_id": "series_bmk_60_40_ret"
+        }
       ],
       "type": "array",
       "locations": [
@@ -392,6 +516,27 @@
       ]
     },
     {
+      "semanticId": "lotus.buckets",
+      "canonicalTerm": "buckets",
+      "preferredName": "buckets",
+      "description": "Allocation buckets for the requested dimension.",
+      "example": [
+        {
+          "dimension_value": "example_dimension_value",
+          "market_value_reporting_currency": "USD",
+          "weight": "example_weight",
+          "position_count": 10
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.business_date",
       "canonicalTerm": "business_date",
       "preferredName": "business_date",
@@ -411,7 +556,13 @@
       "preferredName": "business_dates",
       "description": "Business dates to register for downstream valuation and timeseries scheduling.",
       "example": [
-        "2026-02-27"
+        {
+          "business_date": "2026-03-10",
+          "calendar_code": "GLOBAL",
+          "market_code": "XSWX",
+          "source_batch_id": "business-dates-20260310-am",
+          "source_system": "lotus-manage"
+        }
       ],
       "type": "array",
       "locations": [
@@ -426,7 +577,7 @@
       "canonicalTerm": "buy_amount",
       "preferredName": "buy_amount",
       "description": "Positive magnitude of currency bought.",
-      "example": "buy_amount_example",
+      "example": 1095000.0,
       "type": "object",
       "locations": [
         "body"
@@ -454,7 +605,7 @@
       "canonicalTerm": "calculation_policy_id",
       "preferredName": "calculation_policy_id",
       "description": "Calculation policy identifier used for BUY processing.",
-      "example": "CALCULATION_POLICY_001",
+      "example": "BUY_DEFAULT_POLICY",
       "type": "object",
       "locations": [
         "body"
@@ -468,7 +619,7 @@
       "canonicalTerm": "calculation_policy_version",
       "preferredName": "calculation_policy_version",
       "description": "Version of calculation policy used.",
-      "example": "calculation_policy_version_example",
+      "example": "1.0.0",
       "type": "object",
       "locations": [
         "body"
@@ -492,11 +643,64 @@
       ]
     },
     {
+      "semanticId": "lotus.cash_account_count",
+      "canonicalTerm": "cash_account_count",
+      "preferredName": "cash_account_count",
+      "description": "Number of cash accounts returned.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.cash_account_id",
+      "canonicalTerm": "cash_account_id",
+      "preferredName": "cash_account_id",
+      "description": "Lotus cash account identifier. Resolved from the latest known settlement cash account mapping when available, otherwise from the cash instrument identity.",
+      "example": "CASH_ACCOUNT_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.cash_accounts",
+      "canonicalTerm": "cash_accounts",
+      "preferredName": "cash_accounts",
+      "description": "Resolved cash accounts and balances for the portfolio.",
+      "example": [
+        {
+          "cash_account_id": "CASH_ACCOUNT_001",
+          "instrument_id": "EQ_US_AAPL",
+          "security_id": "AAPL",
+          "account_currency": "USD",
+          "instrument_name": "example_instrument_name",
+          "balance_account_currency": "USD",
+          "balance_portfolio_currency": "USD",
+          "balance_reporting_currency": "USD"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.cash_entry_mode",
       "canonicalTerm": "cash_entry_mode",
       "preferredName": "cash_entry_mode",
       "description": "Cash-leg generation mode. AUTO_GENERATE indicates service-generated cashflow; UPSTREAM_PROVIDED indicates upstream-provided separate cash entry.",
-      "example": "cash_entry_mode_example",
+      "example": "AUTO_GENERATE",
       "type": "object",
       "locations": [
         "body"
@@ -510,7 +714,15 @@
       "canonicalTerm": "cashflow",
       "preferredName": "cashflow",
       "description": "Linked cashflow details when available.",
-      "example": "cashflow_example",
+      "example": {
+        "amount": "example_amount",
+        "currency": "USD",
+        "classification": "example_classification",
+        "timing": "example_timing",
+        "is_position_flow": true,
+        "is_portfolio_flow": true,
+        "calculation_type": "example_calculation_type"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -524,7 +736,7 @@
       "canonicalTerm": "cashflow_amount",
       "preferredName": "cashflow_amount",
       "description": "Linked cashflow amount.",
-      "example": "cashflow_amount_example",
+      "example": -15005.5,
       "type": "object",
       "locations": [
         "body"
@@ -538,7 +750,7 @@
       "canonicalTerm": "cashflow_classification",
       "preferredName": "cashflow_classification",
       "description": "Cashflow classification.",
-      "example": "cashflow_classification_example",
+      "example": "INVESTMENT_OUTFLOW",
       "type": "object",
       "locations": [
         "body"
@@ -566,7 +778,7 @@
       "canonicalTerm": "cashflow_date",
       "preferredName": "cashflow_date",
       "description": "Linked cashflow booking date.",
-      "example": "2026-02-27",
+      "example": "2026-02-28T00:00:00Z",
       "type": "object",
       "locations": [
         "body"
@@ -580,7 +792,7 @@
       "canonicalTerm": "child_role",
       "preferredName": "child_role",
       "description": "Canonical corporate-action child role.",
-      "example": "child_role_example",
+      "example": "SOURCE_POSITION_CLOSE",
       "type": "object",
       "locations": [
         "body"
@@ -594,7 +806,7 @@
       "canonicalTerm": "child_sequence_hint",
       "preferredName": "child_sequence_hint",
       "description": "Optional upstream child sequence hint.",
-      "example": "child_sequence_hint_example",
+      "example": 10,
       "type": "object",
       "locations": [
         "body"
@@ -609,7 +821,8 @@
       "preferredName": "classification_labels",
       "description": "Canonical classification labels.",
       "example": {
-        "key": "value"
+        "asset_class": "multi_asset",
+        "region": "global"
       },
       "type": "object",
       "locations": [
@@ -624,7 +837,7 @@
       "canonicalTerm": "classification_set_id",
       "preferredName": "classification_set_id",
       "description": "Classification taxonomy set identifier.",
-      "example": "CLASSIFICATION_SET_001",
+      "example": "wm_global_taxonomy_v1",
       "type": "string",
       "locations": [
         "body"
@@ -640,7 +853,13 @@
       "preferredName": "classification_taxonomy",
       "description": "Classification taxonomy records to ingest or upsert.",
       "example": [
-        "classification_taxonomy_item_example"
+        {
+          "classification_set_id": "wm_global_taxonomy_v1",
+          "dimension_name": "sector",
+          "dimension_value": "technology",
+          "effective_from": "2025-01-01",
+          "taxonomy_scope": "index"
+        }
       ],
       "type": "array",
       "locations": [
@@ -671,7 +890,7 @@
       "canonicalTerm": "close_date",
       "preferredName": "close_date",
       "description": "Portfolio close date, if portfolio is closed.",
-      "example": "2026-02-27",
+      "example": "2026-12-31",
       "type": "object",
       "locations": [
         "body"
@@ -685,7 +904,7 @@
       "canonicalTerm": "component_id",
       "preferredName": "component_id",
       "description": "Unique FX component identifier within the linked transaction group.",
-      "example": "COMPONENT_001",
+      "example": "FX-COMP-0001",
       "type": "object",
       "locations": [
         "body"
@@ -728,7 +947,7 @@
       "canonicalTerm": "composition_effective_to",
       "preferredName": "composition_effective_to",
       "description": "Composition effective end date.",
-      "example": "composition_effective_to_example",
+      "example": "2026-03-31",
       "type": "object",
       "locations": [
         "body"
@@ -742,7 +961,7 @@
       "canonicalTerm": "composition_weight",
       "preferredName": "composition_weight",
       "description": "Component weight between 0 and 1.",
-      "example": "composition_weight_example",
+      "example": "0.6000000000",
       "type": "object",
       "locations": [
         "body"
@@ -756,7 +975,7 @@
       "canonicalTerm": "compounding_convention",
       "preferredName": "compounding_convention",
       "description": "Compounding convention.",
-      "example": "compounding_convention_example",
+      "example": "simple",
       "type": "object",
       "locations": [
         "body"
@@ -770,7 +989,7 @@
       "canonicalTerm": "contract_rate",
       "preferredName": "contract_rate",
       "description": "Contractual FX rate.",
-      "example": "contract_rate_example",
+      "example": 1.095,
       "type": "object",
       "locations": [
         "body"
@@ -812,7 +1031,7 @@
       "canonicalTerm": "cost_basis_local",
       "preferredName": "cost_basis_local",
       "description": "Total cost basis in the instrument's local currency.",
-      "example": "cost_basis_local_example",
+      "example": 15000.0,
       "type": "object",
       "locations": [
         "body"
@@ -825,8 +1044,8 @@
       "semanticId": "lotus.cost_basis_method",
       "canonicalTerm": "cost_basis_method",
       "preferredName": "cost_basis_method",
-      "description": "Canonical cost-basis method used for sell linkage and realized P&L calculation.",
-      "example": "cost_basis_method_example",
+      "description": "Portfolio-level cost-basis accounting method used by lot accounting.",
+      "example": "FIFO",
       "type": "object",
       "locations": [
         "body"
@@ -836,11 +1055,31 @@
       ]
     },
     {
+      "semanticId": "lotus.costs",
+      "canonicalTerm": "costs",
+      "preferredName": "costs",
+      "description": "Detailed transaction costs associated with the transaction.",
+      "example": [
+        {
+          "fee_type": "example_fee_type",
+          "amount": "example_amount",
+          "currency": "USD"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.country_of_risk",
       "canonicalTerm": "country_of_risk",
       "preferredName": "country_of_risk",
       "description": "Instrument country of risk (ISO 3166-1 alpha-2).",
-      "example": "country_of_risk_example",
+      "example": "US",
       "type": "object",
       "locations": [
         "body"
@@ -883,7 +1122,7 @@
       "canonicalTerm": "day_count_convention",
       "preferredName": "day_count_convention",
       "description": "Day-count convention for annualized rates.",
-      "example": "day_count_convention_example",
+      "example": "act_360",
       "type": "object",
       "locations": [
         "body"
@@ -898,7 +1137,8 @@
       "preferredName": "dependencies",
       "description": "Dependency-level readiness results keyed by dependency name.",
       "example": {
-        "key": "value"
+        "database": "ok",
+        "kafka": "ok"
       },
       "type": "object",
       "locations": [
@@ -913,7 +1153,9 @@
       "canonicalTerm": "dependency_reference_ids",
       "preferredName": "dependency_reference_ids",
       "description": "Optional dependency references for CA child ordering.",
-      "example": "dependency_reference_ids_example",
+      "example": [
+        "CA-CHILD-OUT-001"
+      ],
       "type": "object",
       "locations": [
         "body"
@@ -923,11 +1165,25 @@
       ]
     },
     {
+      "semanticId": "lotus.dimension",
+      "canonicalTerm": "dimension",
+      "preferredName": "dimension",
+      "description": "Classification dimension.",
+      "example": "asset_class",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.dimension_description",
       "canonicalTerm": "dimension_description",
       "preferredName": "dimension_description",
       "description": "Dimension description.",
-      "example": "dimension_description_example",
+      "example": "Technology sector classification",
       "type": "object",
       "locations": [
         "body"
@@ -954,7 +1210,7 @@
       "semanticId": "lotus.dimension_value",
       "canonicalTerm": "dimension_value",
       "preferredName": "dimension_value",
-      "description": "Dimension value.",
+      "description": "Resolved classification label for the allocation bucket.",
       "example": "STANDARD",
       "type": "string",
       "locations": [
@@ -965,11 +1221,29 @@
       ]
     },
     {
+      "semanticId": "lotus.dimensions",
+      "canonicalTerm": "dimensions",
+      "preferredName": "dimensions",
+      "description": "Classification dimensions to return as allocation views. Supported values reflect lotus-core instrument classifications.",
+      "example": [
+        "asset_class",
+        "currency",
+        "sector"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.disposal_cost_basis_base",
       "canonicalTerm": "disposal_cost_basis_base",
       "preferredName": "disposal_cost_basis_base",
       "description": "Disposed cost basis in portfolio base currency (absolute value).",
-      "example": "disposal_cost_basis_base_example",
+      "example": 3750.0,
       "type": "object",
       "locations": [
         "body"
@@ -983,7 +1257,7 @@
       "canonicalTerm": "disposal_cost_basis_local",
       "preferredName": "disposal_cost_basis_local",
       "description": "Disposed cost basis in trade/local currency (absolute value).",
-      "example": "disposal_cost_basis_local_example",
+      "example": 3750.0,
       "type": "object",
       "locations": [
         "body"
@@ -997,7 +1271,7 @@
       "canonicalTerm": "economic_event_id",
       "preferredName": "economic_event_id",
       "description": "Economic event identifier linking security/cash effects.",
-      "example": "ECONOMIC_EVENT_001",
+      "example": "EVT-2026-00987",
       "type": "object",
       "locations": [
         "body"
@@ -1025,7 +1299,7 @@
       "canonicalTerm": "effective_to",
       "preferredName": "effective_to",
       "description": "Assignment effective end date, null for open-ended assignment.",
-      "example": "effective_to_example",
+      "example": "2026-12-31",
       "type": "object",
       "locations": [
         "body"
@@ -1068,7 +1342,10 @@
       "preferredName": "errors",
       "description": "Validation errors by row for correction before commit.",
       "example": [
-        "errors_item_example"
+        {
+          "message": "baseCurrency is required",
+          "row_number": 7
+        }
       ],
       "type": "array",
       "locations": [
@@ -1097,7 +1374,7 @@
       "canonicalTerm": "external_cash_transaction_id",
       "preferredName": "external_cash_transaction_id",
       "description": "Linked upstream cash transaction id when cash_entry_mode is UPSTREAM_PROVIDED.",
-      "example": "EXTERNAL_CASH_TRANSACTION_001",
+      "example": "CASH-ENTRY-2026-0001",
       "type": "object",
       "locations": [
         "body"
@@ -1119,6 +1396,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.fee_type",
+      "canonicalTerm": "fee_type",
+      "preferredName": "fee_type",
+      "description": "Fee type or cost category.",
+      "example": "example_fee_type",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -1155,7 +1446,7 @@
       "canonicalTerm": "fx_cash_leg_role",
       "preferredName": "fx_cash_leg_role",
       "description": "FX cash-leg role when applicable.",
-      "example": "fx_cash_leg_role_example",
+      "example": "BUY",
       "type": "object",
       "locations": [
         "body"
@@ -1169,7 +1460,7 @@
       "canonicalTerm": "fx_contract_close_transaction_id",
       "preferredName": "fx_contract_close_transaction_id",
       "description": "Linked FX contract-close transaction identifier.",
-      "example": "FX_CONTRACT_CLOSE_TRANSACTION_001",
+      "example": "FX-CLOSE-0001",
       "type": "object",
       "locations": [
         "body"
@@ -1198,7 +1489,7 @@
       "canonicalTerm": "fx_contract_open_transaction_id",
       "preferredName": "fx_contract_open_transaction_id",
       "description": "Linked FX contract-open transaction identifier.",
-      "example": "FX_CONTRACT_OPEN_TRANSACTION_001",
+      "example": "FX-OPEN-0001",
       "type": "object",
       "locations": [
         "body"
@@ -1212,7 +1503,7 @@
       "canonicalTerm": "fx_rate_quote_convention",
       "preferredName": "fx_rate_quote_convention",
       "description": "Explicit FX quote convention.",
-      "example": "fx_rate_quote_convention_example",
+      "example": "QUOTE_PER_BASE",
       "type": "object",
       "locations": [
         "body"
@@ -1227,7 +1518,12 @@
       "preferredName": "fx_rates",
       "description": "FX reference-rate observations to publish into valuation and conversion workflows.",
       "example": [
-        "fx_rates_item_example"
+        {
+          "from_currency": "USD",
+          "rate": "1.3500000000",
+          "rate_date": "2026-03-10",
+          "to_currency": "SGD"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1242,7 +1538,21 @@
       "canonicalTerm": "fx_realized_pnl_mode",
       "preferredName": "fx_realized_pnl_mode",
       "description": "Policy-driven realized FX P&L mode.",
-      "example": "fx_realized_pnl_mode_example",
+      "example": "UPSTREAM_PROVIDED",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.gross_cost",
+      "canonicalTerm": "gross_cost",
+      "preferredName": "gross_cost",
+      "description": "Gross cost impact before fees and adjustments.",
+      "example": 18542.0,
       "type": "object",
       "locations": [
         "body"
@@ -1285,7 +1595,7 @@
       "canonicalTerm": "has_synthetic_flow",
       "preferredName": "has_synthetic_flow",
       "description": "Whether this transaction carries position-level synthetic flow details.",
-      "example": "has_synthetic_flow_example",
+      "example": true,
       "type": "object",
       "locations": [
         "body"
@@ -1299,7 +1609,7 @@
       "canonicalTerm": "held_since_date",
       "preferredName": "held_since_date",
       "description": "Start date of the current continuous holding period in the active epoch.",
-      "example": "2026-02-27",
+      "example": "2025-01-15",
       "type": "object",
       "locations": [
         "body"
@@ -1341,7 +1651,7 @@
       "canonicalTerm": "idempotency_key",
       "preferredName": "idempotency_key",
       "description": "Client-supplied idempotency key if provided in the X-Idempotency-Key header.",
-      "example": "idempotency_key_example",
+      "example": "core-ingest-20260228-portfolio-123-batch-01",
       "type": "object",
       "locations": [
         "body"
@@ -1398,7 +1708,7 @@
       "canonicalTerm": "index_market",
       "preferredName": "index_market",
       "description": "Index market or universe scope.",
-      "example": "index_market_example",
+      "example": "global_developed",
       "type": "object",
       "locations": [
         "body"
@@ -1426,7 +1736,7 @@
       "canonicalTerm": "index_price",
       "preferredName": "index_price",
       "description": "Index price value.",
-      "example": "index_price_example",
+      "example": "4567.1234000000",
       "type": "object",
       "locations": [
         "body"
@@ -1441,7 +1751,14 @@
       "preferredName": "index_price_series",
       "description": "Index price series records to ingest or upsert.",
       "example": [
-        "index_price_series_item_example"
+        {
+          "index_id": "IDX_MSCI_WORLD_TR",
+          "index_price": "4567.1234000000",
+          "series_currency": "USD",
+          "series_date": "2026-01-02",
+          "series_id": "series_idx_world_price",
+          "value_convention": "close_price"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1456,7 +1773,7 @@
       "canonicalTerm": "index_provider",
       "preferredName": "index_provider",
       "description": "Index provider.",
-      "example": "index_provider_example",
+      "example": "MSCI",
       "type": "object",
       "locations": [
         "body"
@@ -1470,7 +1787,7 @@
       "canonicalTerm": "index_return",
       "preferredName": "index_return",
       "description": "Index return value.",
-      "example": "index_return_example",
+      "example": "0.0023000000",
       "type": "object",
       "locations": [
         "body"
@@ -1485,7 +1802,15 @@
       "preferredName": "index_return_series",
       "description": "Index return series records to ingest or upsert.",
       "example": [
-        "index_return_series_item_example"
+        {
+          "index_id": "IDX_MSCI_WORLD_TR",
+          "index_return": "0.0023000000",
+          "return_convention": "total_return_index",
+          "return_period": "1d",
+          "series_currency": "USD",
+          "series_date": "2026-01-02",
+          "series_id": "series_idx_world_ret"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1514,7 +1839,7 @@
       "canonicalTerm": "index_type",
       "preferredName": "index_type",
       "description": "Index type descriptor.",
-      "example": "index_type_example",
+      "example": "equity_index",
       "type": "object",
       "locations": [
         "body"
@@ -1529,7 +1854,12 @@
       "preferredName": "indices",
       "description": "Index definition records to ingest or upsert.",
       "example": [
-        "indices_item_example"
+        {
+          "effective_from": "2025-01-01",
+          "index_currency": "USD",
+          "index_id": "IDX_MSCI_WORLD_TR",
+          "index_name": "MSCI World Total Return"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1547,9 +1877,11 @@
       "example": "EQ_US_AAPL",
       "type": "string",
       "locations": [
-        "body"
+        "body",
+        "query"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -1571,7 +1903,7 @@
       "semanticId": "lotus.instrument_page_limit",
       "canonicalTerm": "instrument_page_limit",
       "preferredName": "instrument_page_limit",
-      "description": "Canonical instrument page limit value used in request parameter.",
+      "description": "Page size used when scanning instruments to derive the currency catalog.",
       "example": 500,
       "type": "integer",
       "locations": [
@@ -1587,7 +1919,23 @@
       "preferredName": "instruments",
       "description": "The list of instrument records for the current page.",
       "example": [
-        "instruments_item_example"
+        {
+          "security_id": "AAPL",
+          "name": "example_name",
+          "isin": "US0378331005",
+          "currency": "USD",
+          "product_type": "example_product_type",
+          "asset_class": "Equity",
+          "portfolio_id": "PORT-FX-001",
+          "trade_date": "2026-03-10",
+          "pair_base_currency": "USD",
+          "pair_quote_currency": "SGD",
+          "buy_currency": "USD",
+          "sell_currency": "SGD",
+          "buy_amount": "1000000",
+          "sell_amount": "1345000",
+          "contract_rate": "1.345000"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1602,7 +1950,7 @@
       "canonicalTerm": "interest_direction",
       "preferredName": "interest_direction",
       "description": "INTEREST semantic direction when applicable.",
-      "example": "interest_direction_example",
+      "example": "INCOME",
       "type": "object",
       "locations": [
         "body"
@@ -1673,7 +2021,7 @@
       "canonicalTerm": "issuer_id",
       "preferredName": "issuer_id",
       "description": "Canonical identifier for the direct issuer of the security.",
-      "example": "ISSUER_001",
+      "example": "ISSUER_BARC",
       "type": "object",
       "locations": [
         "body"
@@ -1687,7 +2035,7 @@
       "canonicalTerm": "issuer_name",
       "preferredName": "issuer_name",
       "description": "Display name for the direct issuer of the security.",
-      "example": "Apple Inc.",
+      "example": "Barclays PLC",
       "type": "object",
       "locations": [
         "body"
@@ -1702,7 +2050,10 @@
       "preferredName": "items",
       "description": "Lookup options returned for the requested catalog.",
       "example": [
-        "items_item_example"
+        {
+          "id": "example_id",
+          "label": "example_label"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1760,7 +2111,7 @@
       "canonicalTerm": "link_type",
       "preferredName": "link_type",
       "description": "Canonical relationship label between product leg and ADJUSTMENT cash leg.",
-      "example": "link_type_example",
+      "example": "BUY_TO_CASH",
       "type": "object",
       "locations": [
         "body"
@@ -1774,7 +2125,7 @@
       "canonicalTerm": "linked_cash_transaction_id",
       "preferredName": "linked_cash_transaction_id",
       "description": "Linked cash transaction id for CASH_IN_LIEU settlement.",
-      "example": "LINKED_CASH_TRANSACTION_001",
+      "example": "CA-CIL-CASH-001",
       "type": "object",
       "locations": [
         "body"
@@ -1788,7 +2139,10 @@
       "canonicalTerm": "linked_component_ids",
       "preferredName": "linked_component_ids",
       "description": "Related FX component identifiers within the same economic event.",
-      "example": "linked_component_ids_example",
+      "example": [
+        "FX-COMP-0002",
+        "FX-COMP-0003"
+      ],
       "type": "object",
       "locations": [
         "body"
@@ -1802,7 +2156,7 @@
       "canonicalTerm": "linked_fx_cash_leg_id",
       "preferredName": "linked_fx_cash_leg_id",
       "description": "Opposite FX cash settlement transaction identifier.",
-      "example": "LINKED_FX_CASH_LEG_001",
+      "example": "FX-SETTLE-SELL-0001",
       "type": "object",
       "locations": [
         "body"
@@ -1816,7 +2170,7 @@
       "canonicalTerm": "linked_parent_event_id",
       "preferredName": "linked_parent_event_id",
       "description": "Linked corporate-action parent event identifier.",
-      "example": "LINKED_PARENT_EVENT_001",
+      "example": "CA-EVT-2026-0001",
       "type": "object",
       "locations": [
         "body"
@@ -1830,7 +2184,7 @@
       "canonicalTerm": "linked_transaction_group_id",
       "preferredName": "linked_transaction_group_id",
       "description": "Group ID linking related transactions.",
-      "example": "LINKED_TRANSACTION_GROUP_001",
+      "example": "LTG-2026-00456",
       "type": "object",
       "locations": [
         "body",
@@ -1888,7 +2242,24 @@
       "preferredName": "lots",
       "description": "Current lot records for the portfolio-security key.",
       "example": [
-        "lots_item_example"
+        {
+          "lot_id": "LOT_001",
+          "source_transaction_id": "SOURCE_TRANSACTION_001",
+          "portfolio_id": "DEMO_DPM_EUR_001",
+          "instrument_id": "EQ_US_AAPL",
+          "security_id": "AAPL",
+          "acquisition_date": "2026-02-27",
+          "original_quantity": 100.0,
+          "open_quantity": 100.0,
+          "lot_cost_local": "example_lot_cost_local",
+          "lot_cost_base": "example_lot_cost_base",
+          "accrued_interest_paid_local": "example_accrued_interest_paid_local",
+          "economic_event_id": "EVT-2026-00987",
+          "linked_transaction_group_id": "LTG-2026-00456",
+          "calculation_policy_id": "BUY_DEFAULT_POLICY",
+          "calculation_policy_version": "1.0.0",
+          "source_system": "OMS_PRIMARY"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1903,7 +2274,7 @@
       "canonicalTerm": "market_code",
       "preferredName": "market_code",
       "description": "Optional market or venue code associated with the business date.",
-      "example": "market_code_example",
+      "example": "XSWX",
       "type": "object",
       "locations": [
         "body"
@@ -1918,7 +2289,12 @@
       "preferredName": "market_prices",
       "description": "Market price observations to publish into the valuation reference-data flow.",
       "example": [
-        "market_prices_item_example"
+        {
+          "currency": "USD",
+          "price": "175.5000000000",
+          "price_date": "2026-03-10",
+          "security_id": "SEC_AAPL"
+        }
       ],
       "type": "array",
       "locations": [
@@ -1929,11 +2305,25 @@
       ]
     },
     {
+      "semanticId": "lotus.market_value_reporting_currency",
+      "canonicalTerm": "market_value_reporting_currency",
+      "preferredName": "market_value_reporting_currency",
+      "description": "Bucket market value in the effective reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.maturity_date",
       "canonicalTerm": "maturity_date",
       "preferredName": "maturity_date",
       "description": "Maturity date for instruments with contractual maturity.",
-      "example": "2026-02-27",
+      "example": "2035-12-31",
       "type": "object",
       "locations": [
         "body"
@@ -1975,7 +2365,7 @@
       "canonicalTerm": "movement_direction",
       "preferredName": "movement_direction",
       "description": "Cash movement direction for ADJUSTMENT transactions (INFLOW or OUTFLOW).",
-      "example": "movement_direction_example",
+      "example": "INFLOW",
       "type": "object",
       "locations": [
         "body"
@@ -2032,7 +2422,7 @@
       "canonicalTerm": "net_cost",
       "preferredName": "net_cost",
       "description": "Net cost impact in base currency. SELL disposal values are negative.",
-      "example": 18242.5,
+      "example": -3750.0,
       "type": "object",
       "locations": [
         "body"
@@ -2046,7 +2436,7 @@
       "canonicalTerm": "net_cost_local",
       "preferredName": "net_cost_local",
       "description": "Net cost impact in local/trade currency. SELL disposal values are negative.",
-      "example": "net_cost_local_example",
+      "example": -3750.0,
       "type": "object",
       "locations": [
         "body"
@@ -2060,7 +2450,7 @@
       "canonicalTerm": "net_interest_amount",
       "preferredName": "net_interest_amount",
       "description": "Net-interest amount when provided for reconciliation.",
-      "example": "net_interest_amount_example",
+      "example": 108.2,
       "type": "object",
       "locations": [
         "body"
@@ -2074,7 +2464,7 @@
       "canonicalTerm": "net_sell_proceeds_base",
       "preferredName": "net_sell_proceeds_base",
       "description": "Net SELL proceeds in portfolio base currency after fees.",
-      "example": "net_sell_proceeds_base_example",
+      "example": 4250.0,
       "type": "object",
       "locations": [
         "body"
@@ -2088,7 +2478,7 @@
       "canonicalTerm": "net_sell_proceeds_local",
       "preferredName": "net_sell_proceeds_local",
       "description": "Net SELL proceeds in trade/local currency after fees.",
-      "example": "net_sell_proceeds_local_example",
+      "example": 4250.0,
       "type": "object",
       "locations": [
         "body"
@@ -2102,7 +2492,7 @@
       "canonicalTerm": "notes",
       "preferredName": "notes",
       "description": "Additional context for operators or downstream analytics.",
-      "example": "notes_example",
+      "example": "Projected window includes settlement-dated future transactions.",
       "type": "object",
       "locations": [
         "body"
@@ -2116,7 +2506,7 @@
       "canonicalTerm": "objective",
       "preferredName": "objective",
       "description": "Primary client objective for this portfolio.",
-      "example": "objective_example",
+      "example": "GROWTH",
       "type": "object",
       "locations": [
         "body"
@@ -2145,7 +2535,20 @@
       "preferredName": "offsets",
       "description": "Accrued-income offset records for the portfolio-security key.",
       "example": [
-        "offsets_item_example"
+        {
+          "offset_id": "OFFSET_001",
+          "source_transaction_id": "SOURCE_TRANSACTION_001",
+          "portfolio_id": "DEMO_DPM_EUR_001",
+          "instrument_id": "EQ_US_AAPL",
+          "security_id": "AAPL",
+          "accrued_interest_paid_local": "example_accrued_interest_paid_local",
+          "remaining_offset_local": "example_remaining_offset_local",
+          "economic_event_id": "EVT-2026-00987",
+          "linked_transaction_group_id": "LTG-2026-00456",
+          "calculation_policy_id": "BUY_DEFAULT_POLICY",
+          "calculation_policy_version": "1.0.0",
+          "source_system": "OMS_PRIMARY"
+        }
       ],
       "type": "array",
       "locations": [
@@ -2202,7 +2605,7 @@
       "canonicalTerm": "originating_transaction_id",
       "preferredName": "originating_transaction_id",
       "description": "Originating product-leg transaction id linked to an ADJUSTMENT cash leg.",
-      "example": "ORIGINATING_TRANSACTION_001",
+      "example": "TRN001",
       "type": "object",
       "locations": [
         "body"
@@ -2216,7 +2619,7 @@
       "canonicalTerm": "originating_transaction_type",
       "preferredName": "originating_transaction_type",
       "description": "Originating product-leg transaction type linked to an ADJUSTMENT cash leg.",
-      "example": "originating_transaction_type_example",
+      "example": "BUY",
       "type": "object",
       "locations": [
         "body"
@@ -2244,7 +2647,7 @@
       "canonicalTerm": "other_interest_deductions_amount",
       "preferredName": "other_interest_deductions_amount",
       "description": "Other deductions captured for INTEREST transactions.",
-      "example": "other_interest_deductions_amount_example",
+      "example": 1.0,
       "type": "object",
       "locations": [
         "body"
@@ -2258,7 +2661,7 @@
       "canonicalTerm": "pair_base_currency",
       "preferredName": "pair_base_currency",
       "description": "Base currency of the quoted FX pair.",
-      "example": "USD",
+      "example": "EUR",
       "type": "object",
       "locations": [
         "body"
@@ -2286,7 +2689,7 @@
       "canonicalTerm": "parent_event_reference",
       "preferredName": "parent_event_reference",
       "description": "Upstream parent-event reference shared by related CA children.",
-      "example": "parent_event_reference_example",
+      "example": "UPSTREAM-CA-REF-2026-0001",
       "type": "object",
       "locations": [
         "body"
@@ -2300,7 +2703,7 @@
       "canonicalTerm": "parent_transaction_reference",
       "preferredName": "parent_transaction_reference",
       "description": "Corporate-action parent transaction reference for child linkage.",
-      "example": "parent_transaction_reference_example",
+      "example": "CA_PARENT_TXN_001",
       "type": "object",
       "locations": [
         "body"
@@ -2315,7 +2718,11 @@
       "preferredName": "points",
       "description": "Daily projection points in ascending date order.",
       "example": [
-        "points_item_example"
+        {
+          "projection_date": "2026-02-27",
+          "net_cashflow": "example_net_cashflow",
+          "projected_cumulative_cashflow": "example_projected_cumulative_cashflow"
+        }
       ],
       "type": "array",
       "locations": [
@@ -2330,13 +2737,41 @@
       "canonicalTerm": "policy_pack_id",
       "preferredName": "policy_pack_id",
       "description": "Optional policy pack identifier.",
-      "example": "POLICY_PACK_001",
+      "example": "policy_pack_wm_v1",
       "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.portfolio_count",
+      "canonicalTerm": "portfolio_count",
+      "preferredName": "portfolio_count",
+      "description": "Number of portfolios included in the result.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.portfolio_currency",
+      "canonicalTerm": "portfolio_currency",
+      "preferredName": "portfolio_currency",
+      "description": "Portfolio base currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -2354,6 +2789,25 @@
       "observedTypes": [
         "object",
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.portfolio_ids",
+      "canonicalTerm": "portfolio_ids",
+      "preferredName": "portfolio_ids",
+      "description": "Filter by an explicit portfolio identifier list.",
+      "example": [
+        "PORT-DISC-001",
+        "PORT-DISC-002"
+      ],
+      "type": "array",
+      "locations": [
+        "body",
+        "query"
+      ],
+      "observedTypes": [
+        "array",
+        "object"
       ]
     },
     {
@@ -2376,7 +2830,22 @@
       "preferredName": "portfolios",
       "description": "List of portfolio records matching the applied query filters.",
       "example": [
-        "portfolios_item_example"
+        {
+          "portfolio_id": "PF-001",
+          "base_currency": "USD",
+          "open_date": "2024-01-01",
+          "close_date": "2026-12-31",
+          "risk_exposure": "MODERATE",
+          "investment_time_horizon": "LONG_TERM",
+          "portfolio_type": "DISCRETIONARY",
+          "objective": "GROWTH",
+          "booking_center_code": "LON-01",
+          "client_id": "CIF-12345",
+          "is_leverage_allowed": false,
+          "advisor_id": "ADV-987",
+          "status": "ACTIVE",
+          "cost_basis_method": "FIFO"
+        }
       ],
       "type": "array",
       "locations": [
@@ -2384,6 +2853,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.position_count",
+      "canonicalTerm": "position_count",
+      "preferredName": "position_count",
+      "description": "Number of non-zero positions included in the result.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -2406,7 +2889,21 @@
       "preferredName": "positions",
       "description": "Time-series list of position-history records for the security.",
       "example": [
-        "positions_item_example"
+        {
+          "position_date": "2025-12-30",
+          "transaction_id": "TXN-2025-12030-0007",
+          "quantity": 125.0,
+          "cost_basis": 15000.0,
+          "cost_basis_local": 15000.0,
+          "valuation": {
+            "market_price": 185.42,
+            "market_value": 23177.5,
+            "unrealized_gain_loss": 3177.5,
+            "market_value_local": 23177.5,
+            "unrealized_gain_loss_local": 3177.5
+          },
+          "reprocessing_status": "CURRENT"
+        }
       ],
       "type": "array",
       "locations": [
@@ -2451,7 +2948,11 @@
       "preferredName": "prices",
       "description": "Market price records for the requested security and date range.",
       "example": [
-        "prices_item_example"
+        {
+          "price_date": "2026-02-27",
+          "price": 182.35,
+          "currency": "USD"
+        }
       ],
       "type": "array",
       "locations": [
@@ -2654,7 +3155,10 @@
       "preferredName": "rates",
       "description": "FX rate observations for the requested currency pair and date range.",
       "example": [
-        "rates_item_example"
+        {
+          "rate_date": "2026-02-27",
+          "rate": 1.3524
+        }
       ],
       "type": "array",
       "locations": [
@@ -2669,7 +3173,7 @@
       "canonicalTerm": "rating",
       "preferredName": "rating",
       "description": "Credit rating for fixed-income instruments.",
-      "example": "rating_example",
+      "example": "BB+",
       "type": "object",
       "locations": [
         "body"
@@ -2683,7 +3187,7 @@
       "canonicalTerm": "realized_capital_pnl_base",
       "preferredName": "realized_capital_pnl_base",
       "description": "Realized capital P&L in base currency. Must be zero for FX.",
-      "example": "realized_capital_pnl_base_example",
+      "example": 0.0,
       "type": "object",
       "locations": [
         "body"
@@ -2697,7 +3201,7 @@
       "canonicalTerm": "realized_capital_pnl_local",
       "preferredName": "realized_capital_pnl_local",
       "description": "Realized capital P&L in local currency. Must be zero for FX.",
-      "example": "realized_capital_pnl_local_example",
+      "example": 0.0,
       "type": "object",
       "locations": [
         "body"
@@ -2711,7 +3215,7 @@
       "canonicalTerm": "realized_fx_pnl_base",
       "preferredName": "realized_fx_pnl_base",
       "description": "Realized FX P&L in base currency.",
-      "example": "realized_fx_pnl_base_example",
+      "example": 1250.0,
       "type": "object",
       "locations": [
         "body"
@@ -2725,7 +3229,7 @@
       "canonicalTerm": "realized_fx_pnl_local",
       "preferredName": "realized_fx_pnl_local",
       "description": "Realized FX P&L in local currency.",
-      "example": "realized_fx_pnl_local_example",
+      "example": 1250.0,
       "type": "object",
       "locations": [
         "body"
@@ -2739,7 +3243,7 @@
       "canonicalTerm": "realized_gain_loss",
       "preferredName": "realized_gain_loss",
       "description": "Realized gain/loss in base currency.",
-      "example": "realized_gain_loss_example",
+      "example": 500.0,
       "type": "object",
       "locations": [
         "body"
@@ -2753,7 +3257,7 @@
       "canonicalTerm": "realized_gain_loss_base",
       "preferredName": "realized_gain_loss_base",
       "description": "Realized gain/loss in portfolio base currency for this SELL.",
-      "example": "realized_gain_loss_base_example",
+      "example": 500.0,
       "type": "object",
       "locations": [
         "body"
@@ -2767,7 +3271,7 @@
       "canonicalTerm": "realized_gain_loss_local",
       "preferredName": "realized_gain_loss_local",
       "description": "Realized gain/loss in trade/local currency for this SELL.",
-      "example": "realized_gain_loss_local_example",
+      "example": 500.0,
       "type": "object",
       "locations": [
         "body"
@@ -2781,7 +3285,7 @@
       "canonicalTerm": "realized_total_pnl_base",
       "preferredName": "realized_total_pnl_base",
       "description": "Total realized P&L in base currency.",
-      "example": "realized_total_pnl_base_example",
+      "example": 1250.0,
       "type": "object",
       "locations": [
         "body"
@@ -2795,7 +3299,7 @@
       "canonicalTerm": "realized_total_pnl_local",
       "preferredName": "realized_total_pnl_local",
       "description": "Total realized P&L in local currency.",
-      "example": "realized_total_pnl_local_example",
+      "example": 1250.0,
       "type": "object",
       "locations": [
         "body"
@@ -2809,7 +3313,7 @@
       "canonicalTerm": "rebalance_event_id",
       "preferredName": "rebalance_event_id",
       "description": "Rebalance event identifier.",
-      "example": "REBALANCE_EVENT_001",
+      "example": "rebalance_2026q1",
       "type": "object",
       "locations": [
         "body"
@@ -2823,7 +3327,7 @@
       "canonicalTerm": "rebalance_frequency",
       "preferredName": "rebalance_frequency",
       "description": "Rebalance frequency for composite benchmarks.",
-      "example": "rebalance_frequency_example",
+      "example": "quarterly",
       "type": "object",
       "locations": [
         "body"
@@ -2837,7 +3341,7 @@
       "canonicalTerm": "reconciliation_key",
       "preferredName": "reconciliation_key",
       "description": "Optional reconciliation key shared by paired dual-leg transactions.",
-      "example": "reconciliation_key_example",
+      "example": "REC-2026-0001",
       "type": "object",
       "locations": [
         "body"
@@ -2861,11 +3365,26 @@
       ]
     },
     {
+      "semanticId": "lotus.reporting_currency",
+      "canonicalTerm": "reporting_currency",
+      "preferredName": "reporting_currency",
+      "description": "Optional reporting currency. Defaults to the portfolio currency for single-portfolio queries and is required for portfolio-list or BU scopes.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object",
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.reprocessing_status",
       "canonicalTerm": "reprocessing_status",
       "preferredName": "reprocessing_status",
       "description": "Reprocessing status for this portfolio-security key.",
-      "example": "ACTIVE",
+      "example": "CURRENT",
       "type": "object",
       "locations": [
         "body"
@@ -2880,6 +3399,20 @@
       "preferredName": "request_id",
       "description": "Request identifier for ingress request tracking.",
       "example": "REQ:1a2b3c4d-1234-5678-9abc-000000000001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.resolved_as_of_date",
+      "canonicalTerm": "resolved_as_of_date",
+      "preferredName": "resolved_as_of_date",
+      "description": "Effective as-of date used by the query.",
+      "example": "2026-02-27",
       "type": "string",
       "locations": [
         "body"
@@ -2950,7 +3483,14 @@
       "preferredName": "risk_free_series",
       "description": "Risk-free series records to ingest or upsert.",
       "example": [
-        "risk_free_series_item_example"
+        {
+          "risk_free_curve_id": "USD_SOFR_3M",
+          "series_currency": "USD",
+          "series_date": "2026-01-02",
+          "series_id": "rf_usd_3m",
+          "value": "0.0350000000",
+          "value_convention": "annualized_rate"
+        }
       ],
       "type": "array",
       "locations": [
@@ -2981,7 +3521,9 @@
       "description": "Normalized and validated sample rows for UI preview.",
       "example": [
         {
-          "key": "value"
+          "baseCurrency": "USD",
+          "portfolioId": "PORT_001",
+          "status": "Active"
         }
       ],
       "type": "array",
@@ -2993,11 +3535,46 @@
       ]
     },
     {
+      "semanticId": "lotus.scope",
+      "canonicalTerm": "scope",
+      "preferredName": "scope",
+      "description": "Portfolio, multi-portfolio, or BU scope.",
+      "example": {
+        "portfolio_id": "PORT-001",
+        "portfolio_ids": [
+          "PORT-001",
+          "PORT-002"
+        ],
+        "booking_center_code": "SGPB"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "ReportingScope"
+      ]
+    },
+    {
+      "semanticId": "lotus.scope_type",
+      "canonicalTerm": "scope_type",
+      "preferredName": "scope_type",
+      "description": "Resolved reporting scope type.",
+      "example": "portfolio",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.sector",
       "canonicalTerm": "sector",
       "preferredName": "sector",
       "description": "Instrument sector classification.",
-      "example": "sector_example",
+      "example": "Technology",
       "type": "object",
       "locations": [
         "body"
@@ -3028,7 +3605,7 @@
       "canonicalTerm": "sell_amount",
       "preferredName": "sell_amount",
       "description": "Positive magnitude of currency sold.",
-      "example": "sell_amount_example",
+      "example": 1000000.0,
       "type": "object",
       "locations": [
         "body"
@@ -3042,7 +3619,7 @@
       "canonicalTerm": "sell_currency",
       "preferredName": "sell_currency",
       "description": "Currency sold/delivered by the FX transaction.",
-      "example": "USD",
+      "example": "EUR",
       "type": "object",
       "locations": [
         "body"
@@ -3057,7 +3634,24 @@
       "preferredName": "sell_disposals",
       "description": "SELL disposal records in descending transaction date order.",
       "example": [
-        "sell_disposals_item_example"
+        {
+          "transaction_id": "TXN_0001",
+          "transaction_date": "2026-02-27T10:30:00Z",
+          "instrument_id": "EQ_US_AAPL",
+          "security_id": "AAPL",
+          "quantity_disposed": "example_quantity_disposed",
+          "disposal_cost_basis_base": 3750.0,
+          "disposal_cost_basis_local": 3750.0,
+          "net_sell_proceeds_base": 4250.0,
+          "net_sell_proceeds_local": 4250.0,
+          "realized_gain_loss_base": 500.0,
+          "realized_gain_loss_local": 500.0,
+          "economic_event_id": "EVT-SELL-PORT-10001-TXN-SELL-2026-0001",
+          "linked_transaction_group_id": "LTG-SELL-PORT-10001-TXN-SELL-2026-0001",
+          "calculation_policy_id": "SELL_FIFO_POLICY",
+          "calculation_policy_version": "1.0.0",
+          "source_system": "OMS_PRIMARY"
+        }
       ],
       "type": "array",
       "locations": [
@@ -3114,7 +3708,7 @@
       "canonicalTerm": "settlement_cash_account_id",
       "preferredName": "settlement_cash_account_id",
       "description": "Settlement cash account identifier used for generated ADJUSTMENT cash leg construction in AUTO_GENERATE mode.",
-      "example": "SETTLEMENT_CASH_ACCOUNT_001",
+      "example": "CASH-ACC-USD-001",
       "type": "object",
       "locations": [
         "body"
@@ -3128,7 +3722,7 @@
       "canonicalTerm": "settlement_cash_instrument_id",
       "preferredName": "settlement_cash_instrument_id",
       "description": "Cash instrument identifier used for generated ADJUSTMENT cash legs.",
-      "example": "SETTLEMENT_CASH_INSTRUMENT_001",
+      "example": "CASH-USD",
       "type": "object",
       "locations": [
         "body"
@@ -3141,8 +3735,8 @@
       "semanticId": "lotus.settlement_date",
       "canonicalTerm": "settlement_date",
       "preferredName": "settlement_date",
-      "description": "Optional settlement timestamp used for cash-leg timing and operations monitoring.",
-      "example": "2023-01-17T10:00:00Z",
+      "description": "Transaction settlement timestamp when known.",
+      "example": "2026-03-03T00:00:00Z",
       "type": "object",
       "locations": [
         "body"
@@ -3156,7 +3750,7 @@
       "canonicalTerm": "settlement_of_fx_contract_id",
       "preferredName": "settlement_of_fx_contract_id",
       "description": "FX contract identifier settled by this cash component.",
-      "example": "SETTLEMENT_OF_FX_CONTRACT_001",
+      "example": "FXC-2026-0001",
       "type": "object",
       "locations": [
         "body"
@@ -3170,7 +3764,7 @@
       "canonicalTerm": "settlement_status",
       "preferredName": "settlement_status",
       "description": "Settlement status for FX cash settlement components.",
-      "example": "ACTIVE",
+      "example": "PENDING",
       "type": "object",
       "locations": [
         "body"
@@ -3255,7 +3849,7 @@
       "canonicalTerm": "source_batch_id",
       "preferredName": "source_batch_id",
       "description": "Optional upstream batch identifier for lineage and replay tracking.",
-      "example": "SOURCE_BATCH_001",
+      "example": "business-dates-20260310-am",
       "type": "object",
       "locations": [
         "body"
@@ -3269,7 +3863,7 @@
       "canonicalTerm": "source_instrument_id",
       "preferredName": "source_instrument_id",
       "description": "Source instrument identifier for transfer-style corporate actions.",
-      "example": "SOURCE_INSTRUMENT_001",
+      "example": "OLD_SEC_001",
       "type": "object",
       "locations": [
         "body"
@@ -3283,7 +3877,7 @@
       "canonicalTerm": "source_record_id",
       "preferredName": "source_record_id",
       "description": "Source record identifier.",
-      "example": "SOURCE_RECORD_001",
+      "example": "bmk_v20260131",
       "type": "object",
       "locations": [
         "body"
@@ -3311,7 +3905,7 @@
       "canonicalTerm": "source_timestamp",
       "preferredName": "source_timestamp",
       "description": "Source publication timestamp for the benchmark definition payload.",
-      "example": "2026-02-27T10:30:00Z",
+      "example": "2026-01-31T23:00:00Z",
       "type": "object",
       "locations": [
         "body"
@@ -3339,7 +3933,7 @@
       "canonicalTerm": "source_transaction_reference",
       "preferredName": "source_transaction_reference",
       "description": "Reference to source-side corporate-action child transaction.",
-      "example": "source_transaction_reference_example",
+      "example": "CA-CHILD-OUT-001",
       "type": "object",
       "locations": [
         "body"
@@ -3353,7 +3947,7 @@
       "canonicalTerm": "source_vendor",
       "preferredName": "source_vendor",
       "description": "Source vendor.",
-      "example": "source_vendor_example",
+      "example": "MSCI",
       "type": "object",
       "locations": [
         "body"
@@ -3367,7 +3961,7 @@
       "canonicalTerm": "spot_exposure_model",
       "preferredName": "spot_exposure_model",
       "description": "Policy-driven spot exposure model.",
-      "example": "spot_exposure_model_example",
+      "example": "NONE",
       "type": "object",
       "locations": [
         "body"
@@ -3438,7 +4032,7 @@
       "canonicalTerm": "synthetic_flow_amount_base",
       "preferredName": "synthetic_flow_amount_base",
       "description": "Synthetic flow amount translated to portfolio base currency.",
-      "example": "synthetic_flow_amount_base_example",
+      "example": -10000.0,
       "type": "object",
       "locations": [
         "body"
@@ -3452,7 +4046,7 @@
       "canonicalTerm": "synthetic_flow_amount_local",
       "preferredName": "synthetic_flow_amount_local",
       "description": "Synthetic flow amount in local flow currency.",
-      "example": "synthetic_flow_amount_local_example",
+      "example": -10000.0,
       "type": "object",
       "locations": [
         "body"
@@ -3466,7 +4060,7 @@
       "canonicalTerm": "synthetic_flow_classification",
       "preferredName": "synthetic_flow_classification",
       "description": "Synthetic flow classification for position-level analytics.",
-      "example": "synthetic_flow_classification_example",
+      "example": "POSITION_TRANSFER_OUT",
       "type": "object",
       "locations": [
         "body"
@@ -3494,7 +4088,7 @@
       "canonicalTerm": "synthetic_flow_effective_date",
       "preferredName": "synthetic_flow_effective_date",
       "description": "Synthetic flow effective date used by CA analytics.",
-      "example": "2026-02-27",
+      "example": "2026-03-15",
       "type": "object",
       "locations": [
         "body"
@@ -3508,7 +4102,7 @@
       "canonicalTerm": "synthetic_flow_fx_rate_to_base",
       "preferredName": "synthetic_flow_fx_rate_to_base",
       "description": "FX rate used to translate synthetic flow local amount to base.",
-      "example": "synthetic_flow_fx_rate_to_base_example",
+      "example": 1.0,
       "type": "object",
       "locations": [
         "body"
@@ -3522,7 +4116,7 @@
       "canonicalTerm": "synthetic_flow_fx_source",
       "preferredName": "synthetic_flow_fx_source",
       "description": "Synthetic flow FX source.",
-      "example": "synthetic_flow_fx_source_example",
+      "example": "FX_SERVICE",
       "type": "object",
       "locations": [
         "body"
@@ -3536,7 +4130,7 @@
       "canonicalTerm": "synthetic_flow_price_source",
       "preferredName": "synthetic_flow_price_source",
       "description": "Synthetic flow price source.",
-      "example": "synthetic_flow_price_source_example",
+      "example": "UPSTREAM",
       "type": "object",
       "locations": [
         "body"
@@ -3550,7 +4144,7 @@
       "canonicalTerm": "synthetic_flow_price_used",
       "preferredName": "synthetic_flow_price_used",
       "description": "Price input used for synthetic MVT valuation.",
-      "example": "synthetic_flow_price_used_example",
+      "example": 200.0,
       "type": "object",
       "locations": [
         "body"
@@ -3564,7 +4158,7 @@
       "canonicalTerm": "synthetic_flow_quantity_used",
       "preferredName": "synthetic_flow_quantity_used",
       "description": "Quantity input used for synthetic MVT valuation.",
-      "example": "synthetic_flow_quantity_used_example",
+      "example": 50.0,
       "type": "object",
       "locations": [
         "body"
@@ -3578,7 +4172,7 @@
       "canonicalTerm": "synthetic_flow_source",
       "preferredName": "synthetic_flow_source",
       "description": "Synthetic flow origin descriptor for audit and lineage.",
-      "example": "synthetic_flow_source_example",
+      "example": "UPSTREAM_PROVIDED",
       "type": "object",
       "locations": [
         "body"
@@ -3592,7 +4186,7 @@
       "canonicalTerm": "synthetic_flow_valuation_method",
       "preferredName": "synthetic_flow_valuation_method",
       "description": "Synthetic flow valuation method.",
-      "example": "synthetic_flow_valuation_method_example",
+      "example": "MVT_PRICE_X_QTY",
       "type": "object",
       "locations": [
         "body"
@@ -3606,7 +4200,7 @@
       "canonicalTerm": "target_instrument_id",
       "preferredName": "target_instrument_id",
       "description": "Target instrument identifier for transfer-style corporate actions.",
-      "example": "TARGET_INSTRUMENT_001",
+      "example": "NEW_SEC_001",
       "type": "object",
       "locations": [
         "body"
@@ -3620,7 +4214,7 @@
       "canonicalTerm": "target_transaction_reference",
       "preferredName": "target_transaction_reference",
       "description": "Reference to target-side corporate-action child transaction.",
-      "example": "target_transaction_reference_example",
+      "example": "CA-CHILD-IN-001",
       "type": "object",
       "locations": [
         "body"
@@ -3673,6 +4267,48 @@
       ]
     },
     {
+      "semanticId": "lotus.total_balance_portfolio_currency",
+      "canonicalTerm": "total_balance_portfolio_currency",
+      "preferredName": "total_balance_portfolio_currency",
+      "description": "Total cash balance in portfolio currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.total_balance_reporting_currency",
+      "canonicalTerm": "total_balance_reporting_currency",
+      "preferredName": "total_balance_reporting_currency",
+      "description": "Total cash balance in reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.total_market_value_reporting_currency",
+      "canonicalTerm": "total_market_value_reporting_currency",
+      "preferredName": "total_market_value_reporting_currency",
+      "description": "Total AUM represented by the allocation views.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.total_net_cashflow",
       "canonicalTerm": "total_net_cashflow",
       "preferredName": "total_net_cashflow",
@@ -3701,6 +4337,25 @@
       ]
     },
     {
+      "semanticId": "lotus.totals",
+      "canonicalTerm": "totals",
+      "preferredName": "totals",
+      "description": "Scope-level AUM totals.",
+      "example": {
+        "portfolio_count": 10,
+        "position_count": 10,
+        "aum_reporting_currency": "USD"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "AssetsUnderManagementTotals",
+        "CashBalancesTotals"
+      ]
+    },
+    {
       "semanticId": "lotus.trace_id",
       "canonicalTerm": "trace_id",
       "preferredName": "trace_id",
@@ -3718,13 +4373,14 @@
       "semanticId": "lotus.trade_currency",
       "canonicalTerm": "trade_currency",
       "preferredName": "trade_currency",
-      "description": "Trade currency in which price and gross amount are quoted.",
+      "description": "Trade or execution currency when distinct from book currency.",
       "example": "USD",
       "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -3733,7 +4389,7 @@
       "canonicalTerm": "trade_date",
       "preferredName": "trade_date",
       "description": "Optional trade date associated with the instrument record.",
-      "example": "2026-02-27",
+      "example": "2026-03-10",
       "type": "object",
       "locations": [
         "body"
@@ -3746,8 +4402,8 @@
       "semanticId": "lotus.trade_fee",
       "canonicalTerm": "trade_fee",
       "preferredName": "trade_fee",
-      "description": "Aggregate trade fee applied to the transaction when fee breakdown is not split out.",
-      "example": "5.0",
+      "description": "Primary trade fee recorded directly on the transaction.",
+      "example": 12.5,
       "type": "object",
       "locations": [
         "body"
@@ -3775,7 +4431,7 @@
       "canonicalTerm": "transaction_fx_rate",
       "preferredName": "transaction_fx_rate",
       "description": "FX rate from local/trade currency to portfolio base currency.",
-      "example": "transaction_fx_rate_example",
+      "example": 1.08,
       "type": "object",
       "locations": [
         "body"
@@ -3805,7 +4461,8 @@
       "preferredName": "transaction_ids",
       "description": "Canonical transaction identifiers to reprocess in the current replay request.",
       "example": [
-        "example_transaction_ids_item"
+        "TRN_001",
+        "TRN_002"
       ],
       "type": "array",
       "locations": [
@@ -3837,7 +4494,119 @@
       "preferredName": "transactions",
       "description": "The list of transaction records for the current page.",
       "example": [
-        "transactions_item_example"
+        {
+          "transaction_id": "TXN-2026-0001",
+          "transaction_date": "2026-03-01T09:30:00Z",
+          "settlement_date": "2026-03-03T00:00:00Z",
+          "transaction_type": "BUY",
+          "instrument_id": "AAPL",
+          "security_id": "US0378331005",
+          "quantity": 100.0,
+          "price": 185.42,
+          "gross_transaction_amount": 18542.0,
+          "gross_cost": 18542.0,
+          "trade_fee": 12.5,
+          "trade_currency": "USD",
+          "currency": "USD",
+          "net_cost": -3750.0,
+          "realized_gain_loss": 500.0,
+          "net_cost_local": -3750.0,
+          "realized_gain_loss_local": 500.0,
+          "transaction_fx_rate": 1.08,
+          "economic_event_id": "EVT-SELL-PORT-10001-TXN-SELL-2026-0001",
+          "linked_transaction_group_id": "LTG-SELL-PORT-10001-TXN-SELL-2026-0001",
+          "calculation_policy_id": "SELL_FIFO_POLICY",
+          "calculation_policy_version": "1.0.0",
+          "source_system": "OMS_PRIMARY",
+          "cash_entry_mode": "AUTO_GENERATE",
+          "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
+          "settlement_cash_account_id": "CASH-ACC-USD-001",
+          "settlement_cash_instrument_id": "CASH-USD",
+          "movement_direction": "INFLOW",
+          "originating_transaction_id": "TRN001",
+          "originating_transaction_type": "BUY",
+          "adjustment_reason": "BUY_SETTLEMENT",
+          "link_type": "BUY_TO_CASH",
+          "reconciliation_key": "REC-2026-0001",
+          "interest_direction": "INCOME",
+          "withholding_tax_amount": 15.25,
+          "other_interest_deductions_amount": 1.0,
+          "net_interest_amount": 108.2,
+          "component_type": "FX_CASH_SETTLEMENT_BUY",
+          "component_id": "FX-COMP-0001",
+          "linked_component_ids": [
+            "FX-COMP-0002",
+            "FX-COMP-0003"
+          ],
+          "fx_cash_leg_role": "BUY",
+          "linked_fx_cash_leg_id": "FX-SETTLE-SELL-0001",
+          "settlement_status": "PENDING",
+          "pair_base_currency": "EUR",
+          "pair_quote_currency": "USD",
+          "fx_rate_quote_convention": "QUOTE_PER_BASE",
+          "buy_currency": "USD",
+          "sell_currency": "EUR",
+          "buy_amount": 1095000.0,
+          "sell_amount": 1000000.0,
+          "contract_rate": 1.095,
+          "fx_contract_id": "FXC-2026-0001",
+          "fx_contract_open_transaction_id": "FX-OPEN-0001",
+          "fx_contract_close_transaction_id": "FX-CLOSE-0001",
+          "settlement_of_fx_contract_id": "FXC-2026-0001",
+          "swap_event_id": "FXSWAP-2026-0001",
+          "near_leg_group_id": "FXSWAP-2026-0001-NEAR",
+          "far_leg_group_id": "FXSWAP-2026-0001-FAR",
+          "spot_exposure_model": "NONE",
+          "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+          "realized_capital_pnl_local": 0.0,
+          "realized_fx_pnl_local": 1250.0,
+          "realized_total_pnl_local": 1250.0,
+          "realized_capital_pnl_base": 0.0,
+          "realized_fx_pnl_base": 1250.0,
+          "realized_total_pnl_base": 1250.0,
+          "parent_transaction_reference": "CA_PARENT_TXN_001",
+          "linked_parent_event_id": "CA-EVT-2026-0001",
+          "parent_event_reference": "UPSTREAM-CA-REF-2026-0001",
+          "child_role": "SOURCE_POSITION_CLOSE",
+          "child_sequence_hint": 10,
+          "dependency_reference_ids": [
+            "CA-CHILD-OUT-001"
+          ],
+          "source_instrument_id": "OLD_SEC_001",
+          "target_instrument_id": "NEW_SEC_001",
+          "source_transaction_reference": "CA-CHILD-OUT-001",
+          "target_transaction_reference": "CA-CHILD-IN-001",
+          "linked_cash_transaction_id": "CA-CIL-CASH-001",
+          "has_synthetic_flow": true,
+          "synthetic_flow_effective_date": "2026-03-15",
+          "synthetic_flow_amount_local": -10000.0,
+          "synthetic_flow_currency": "USD",
+          "synthetic_flow_amount_base": -10000.0,
+          "synthetic_flow_fx_rate_to_base": 1.0,
+          "synthetic_flow_price_used": 200.0,
+          "synthetic_flow_quantity_used": 50.0,
+          "synthetic_flow_valuation_method": "MVT_PRICE_X_QTY",
+          "synthetic_flow_classification": "POSITION_TRANSFER_OUT",
+          "synthetic_flow_price_source": "UPSTREAM",
+          "synthetic_flow_fx_source": "FX_SERVICE",
+          "synthetic_flow_source": "UPSTREAM_PROVIDED",
+          "costs": [
+            {
+              "fee_type": "BROKERAGE",
+              "amount": 12.5,
+              "currency": "USD"
+            }
+          ],
+          "cashflow": {
+            "amount": "example_amount",
+            "currency": "USD",
+            "classification": "example_classification",
+            "timing": "example_timing",
+            "is_position_flow": true,
+            "is_portfolio_flow": true,
+            "calculation_type": "example_calculation_type"
+          }
+        }
       ],
       "type": "array",
       "locations": [
@@ -3852,7 +4621,7 @@
       "canonicalTerm": "ultimate_parent_issuer_id",
       "preferredName": "ultimate_parent_issuer_id",
       "description": "Canonical identifier for the ultimate parent of the issuer.",
-      "example": "ULTIMATE_PARENT_ISSUER_001",
+      "example": "ULTIMATE_BARC",
       "type": "object",
       "locations": [
         "body"
@@ -3866,7 +4635,7 @@
       "canonicalTerm": "ultimate_parent_issuer_name",
       "preferredName": "ultimate_parent_issuer_name",
       "description": "Display name for the ultimate parent issuer.",
-      "example": "ultimate_parent_issuer_name_example",
+      "example": "Barclays Group Holdings PLC",
       "type": "object",
       "locations": [
         "body"
@@ -3894,7 +4663,13 @@
       "canonicalTerm": "valuation",
       "preferredName": "valuation",
       "description": "Valuation details for this record.",
-      "example": "valuation_example",
+      "example": {
+        "market_price": 185.42,
+        "market_value": 23177.5,
+        "unrealized_gain_loss": 3177.5,
+        "market_value_local": 23177.5,
+        "unrealized_gain_loss_local": 3177.5
+      },
       "type": "object",
       "locations": [
         "body"
@@ -3908,7 +4683,7 @@
       "canonicalTerm": "value",
       "preferredName": "value",
       "description": "Risk-free value.",
-      "example": "value_example",
+      "example": "0.0350000000",
       "type": "object",
       "locations": [
         "body"
@@ -3932,17 +4707,45 @@
       ]
     },
     {
-      "semanticId": "lotus.weight",
-      "canonicalTerm": "weight",
-      "preferredName": "weight",
-      "description": "Position weight versus total portfolio market value (0.0 to 1.0).",
-      "example": "weight_example",
-      "type": "object",
+      "semanticId": "lotus.views",
+      "canonicalTerm": "views",
+      "preferredName": "views",
+      "description": "Allocation views for the requested classification dimensions.",
+      "example": [
+        {
+          "dimension": "asset_class",
+          "total_market_value_reporting_currency": "USD",
+          "buckets": [
+            {
+              "dimension_value": "example_dimension_value",
+              "market_value_reporting_currency": "USD",
+              "weight": "example_weight",
+              "position_count": 10
+            }
+          ]
+        }
+      ],
+      "type": "array",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.weight",
+      "canonicalTerm": "weight",
+      "preferredName": "weight",
+      "description": "Position weight versus total portfolio market value (0.0 to 1.0).",
+      "example": 0.2417,
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object",
+        "string"
       ]
     },
     {
@@ -3950,7 +4753,7 @@
       "canonicalTerm": "withholding_tax_amount",
       "preferredName": "withholding_tax_amount",
       "description": "Withholding tax amount captured for INTEREST transactions.",
-      "example": "withholding_tax_amount_example",
+      "example": 15.25,
       "type": "object",
       "locations": [
         "body"
@@ -3975,6 +4778,24 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "portfolio_id",
       "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "portfolio_ids",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Filter by an explicit portfolio identifier list.",
+      "example": [
+        "PORT-DISC-001",
+        "PORT-DISC-002"
+      ],
+      "behaviorImpact": "Affects get_portfolios_portfolios__get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_ids",
+      "semanticId": "lotus.portfolio_ids"
     },
     {
       "name": "client_id",
@@ -4290,6 +5111,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "portfolio_id",
       "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "instrument_id",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Filter by a specific instrument identifier.",
+      "example": "INST-AAPL-USD",
+      "behaviorImpact": "Affects get_transactions_portfolios__portfolio_id__transactions_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "instrument_id",
+      "semanticId": "lotus.instrument_id"
     },
     {
       "name": "security_id",
@@ -4809,7 +5645,7 @@
       "required": false,
       "default": 500,
       "allowedValues": [],
-      "description": "Canonical limit value used in request parameter.",
+      "description": "Maximum number of lookup items to return after filtering and sorting.",
       "example": 100,
       "behaviorImpact": "Affects get_portfolio_lookups_lookups_portfolios_get request behavior.",
       "exposure": "consumer_visible",
@@ -4824,7 +5660,7 @@
       "required": false,
       "default": 200,
       "allowedValues": [],
-      "description": "Canonical limit value used in request parameter.",
+      "description": "Maximum number of instrument lookup items to return.",
       "example": 200,
       "behaviorImpact": "Affects get_instrument_lookups_lookups_instruments_get request behavior.",
       "exposure": "consumer_visible",
@@ -4869,7 +5705,7 @@
       "required": false,
       "default": 500,
       "allowedValues": [],
-      "description": "Canonical instrument page limit value used in request parameter.",
+      "description": "Page size used when scanning instruments to derive the currency catalog.",
       "example": 500,
       "behaviorImpact": "Affects get_currency_lookups_lookups_currencies_get request behavior.",
       "exposure": "consumer_visible",
@@ -4914,7 +5750,7 @@
       "required": false,
       "default": 500,
       "allowedValues": [],
-      "description": "Canonical limit value used in request parameter.",
+      "description": "Maximum number of currency lookup items to return after filtering.",
       "example": 100,
       "behaviorImpact": "Affects get_currency_lookups_lookups_currencies_get request behavior.",
       "exposure": "consumer_visible",
@@ -5132,11 +5968,13 @@
           "booking_center_code",
           "client_id",
           "close_date",
+          "cost_basis_method",
           "investment_time_horizon",
           "is_leverage_allowed",
           "objective",
           "open_date",
           "portfolio_id",
+          "portfolio_ids",
           "portfolio_type",
           "portfolios",
           "risk_exposure",
@@ -5152,6 +5990,14 @@
             "type": "object",
             "semanticId": "lotus.portfolio_id",
             "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolio_ids",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
           },
           {
             "name": "client_id",
@@ -5286,6 +6132,14 @@
             "type": "string",
             "semanticId": "lotus.status",
             "attributeRef": "lotus.status"
+          },
+          {
+            "name": "portfolios[].cost_basis_method",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.cost_basis_method",
+            "attributeRef": "lotus.cost_basis_method"
           }
         ]
       }
@@ -5309,6 +6163,7 @@
           "booking_center_code",
           "client_id",
           "close_date",
+          "cost_basis_method",
           "investment_time_horizon",
           "is_leverage_allowed",
           "objective",
@@ -5438,6 +6293,14 @@
             "type": "string",
             "semanticId": "lotus.status",
             "attributeRef": "lotus.status"
+          },
+          {
+            "name": "cost_basis_method",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.cost_basis_method",
+            "attributeRef": "lotus.cost_basis_method"
           }
         ]
       }
@@ -6676,11 +7539,12 @@
         "Transactions"
       ],
       "summary": "Get Transactions for a Portfolio",
-      "description": "Returns transactions for a portfolio with filters, pagination, and sorting. Designed for transaction ledgers, audit timelines, and investigative support.",
+      "description": "Returns transactions for a portfolio with date-window filters, optional instrument filtering, pagination, and sorting. Designed for transaction ledgers, audit timelines, and investigative support.",
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
           "adjustment_reason",
+          "amount",
           "as_of_date",
           "buy_amount",
           "buy_currency",
@@ -6693,18 +7557,21 @@
           "component_id",
           "component_type",
           "contract_rate",
+          "costs",
           "currency",
           "dependency_reference_ids",
           "economic_event_id",
           "end_date",
           "external_cash_transaction_id",
           "far_leg_group_id",
+          "fee_type",
           "fx_cash_leg_role",
           "fx_contract_close_transaction_id",
           "fx_contract_id",
           "fx_contract_open_transaction_id",
           "fx_rate_quote_convention",
           "fx_realized_pnl_mode",
+          "gross_cost",
           "gross_transaction_amount",
           "has_synthetic_flow",
           "include_projected",
@@ -6746,6 +7613,7 @@
           "sell_currency",
           "settlement_cash_account_id",
           "settlement_cash_instrument_id",
+          "settlement_date",
           "settlement_of_fx_contract_id",
           "settlement_status",
           "skip",
@@ -6772,6 +7640,8 @@
           "target_instrument_id",
           "target_transaction_reference",
           "total",
+          "trade_currency",
+          "trade_fee",
           "transaction_date",
           "transaction_fx_rate",
           "transaction_id",
@@ -6789,6 +7659,14 @@
             "type": "string",
             "semanticId": "lotus.portfolio_id",
             "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "instrument_id",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.instrument_id",
+            "attributeRef": "lotus.instrument_id"
           },
           {
             "name": "security_id",
@@ -6981,6 +7859,14 @@
             "attributeRef": "lotus.transaction_date"
           },
           {
+            "name": "transactions[].settlement_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.settlement_date",
+            "attributeRef": "lotus.settlement_date"
+          },
+          {
             "name": "transactions[].transaction_type",
             "location": "body",
             "required": true,
@@ -7027,6 +7913,30 @@
             "type": "string",
             "semanticId": "lotus.gross_transaction_amount",
             "attributeRef": "lotus.gross_transaction_amount"
+          },
+          {
+            "name": "transactions[].gross_cost",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_cost",
+            "attributeRef": "lotus.gross_cost"
+          },
+          {
+            "name": "transactions[].trade_fee",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.trade_fee",
+            "attributeRef": "lotus.trade_fee"
+          },
+          {
+            "name": "transactions[].trade_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.trade_currency",
+            "attributeRef": "lotus.trade_currency"
           },
           {
             "name": "transactions[].currency",
@@ -7651,6 +8561,38 @@
             "type": "object",
             "semanticId": "lotus.synthetic_flow_source",
             "attributeRef": "lotus.synthetic_flow_source"
+          },
+          {
+            "name": "transactions[].costs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.costs",
+            "attributeRef": "lotus.costs"
+          },
+          {
+            "name": "transactions[].costs[].fee_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.fee_type",
+            "attributeRef": "lotus.fee_type"
+          },
+          {
+            "name": "transactions[].costs[].amount",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.amount",
+            "attributeRef": "lotus.amount"
+          },
+          {
+            "name": "transactions[].costs[].currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
           },
           {
             "name": "transactions[].cashflow",
@@ -8522,6 +9464,682 @@
             "type": "string",
             "semanticId": "lotus.label",
             "attributeRef": "lotus.label"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_assets_under_management_reporting_assets_under_management_query_post",
+      "method": "POST",
+      "path": "/reporting/assets-under-management/query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Assets Under Management",
+      "description": "Returns assets-under-management views for a single portfolio, an explicit portfolio list, or a business unit (booking center). Designed for PB/WM dashboards and reporting packs using latest-snapshot, as-of-date semantics.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "as_of_date",
+          "aum_portfolio_currency",
+          "aum_reporting_currency",
+          "booking_center_code",
+          "client_id",
+          "portfolio_count",
+          "portfolio_currency",
+          "portfolio_id",
+          "portfolio_ids",
+          "portfolios",
+          "position_count",
+          "reporting_currency",
+          "resolved_as_of_date",
+          "scope",
+          "scope_type",
+          "totals"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "AssetsUnderManagementResponse",
+        "fields": [
+          {
+            "name": "scope_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.scope_type",
+            "attributeRef": "lotus.scope_type"
+          },
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "resolved_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "totals",
+            "location": "body",
+            "required": true,
+            "type": "AssetsUnderManagementTotals",
+            "semanticId": "lotus.totals",
+            "attributeRef": "lotus.totals"
+          },
+          {
+            "name": "totals.portfolio_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.portfolio_count",
+            "attributeRef": "lotus.portfolio_count"
+          },
+          {
+            "name": "totals.position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.position_count",
+            "attributeRef": "lotus.position_count"
+          },
+          {
+            "name": "totals.aum_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.aum_reporting_currency",
+            "attributeRef": "lotus.aum_reporting_currency"
+          },
+          {
+            "name": "portfolios",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.portfolios",
+            "attributeRef": "lotus.portfolios"
+          },
+          {
+            "name": "portfolios[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolios[].booking_center_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "portfolios[].client_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.client_id",
+            "attributeRef": "lotus.client_id"
+          },
+          {
+            "name": "portfolios[].portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_currency",
+            "attributeRef": "lotus.portfolio_currency"
+          },
+          {
+            "name": "portfolios[].aum_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.aum_portfolio_currency",
+            "attributeRef": "lotus.aum_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].aum_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.aum_reporting_currency",
+            "attributeRef": "lotus.aum_reporting_currency"
+          },
+          {
+            "name": "portfolios[].position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.position_count",
+            "attributeRef": "lotus.position_count"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_asset_allocation_reporting_asset_allocation_query_post",
+      "method": "POST",
+      "path": "/reporting/asset-allocation/query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Asset Allocation",
+      "description": "Returns allocation views grouped by Lotus-supported classification dimensions such as asset class, currency, sector, country, product type, rating, and issuer hierarchy. Optimized for interactive reporting over resolved portfolio scopes.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "as_of_date",
+          "booking_center_code",
+          "buckets",
+          "dimension",
+          "dimension_value",
+          "dimensions",
+          "market_value_reporting_currency",
+          "portfolio_id",
+          "portfolio_ids",
+          "position_count",
+          "reporting_currency",
+          "resolved_as_of_date",
+          "scope",
+          "scope_type",
+          "total_market_value_reporting_currency",
+          "views",
+          "weight"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "dimensions",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.dimensions",
+            "attributeRef": "lotus.dimensions"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "AssetAllocationResponse",
+        "fields": [
+          {
+            "name": "scope_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.scope_type",
+            "attributeRef": "lotus.scope_type"
+          },
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "resolved_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "total_market_value_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_market_value_reporting_currency",
+            "attributeRef": "lotus.total_market_value_reporting_currency"
+          },
+          {
+            "name": "views",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.views",
+            "attributeRef": "lotus.views"
+          },
+          {
+            "name": "views[].dimension",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.dimension",
+            "attributeRef": "lotus.dimension"
+          },
+          {
+            "name": "views[].total_market_value_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_market_value_reporting_currency",
+            "attributeRef": "lotus.total_market_value_reporting_currency"
+          },
+          {
+            "name": "views[].buckets",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.buckets",
+            "attributeRef": "lotus.buckets"
+          },
+          {
+            "name": "views[].buckets[].dimension_value",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.dimension_value",
+            "attributeRef": "lotus.dimension_value"
+          },
+          {
+            "name": "views[].buckets[].market_value_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.market_value_reporting_currency",
+            "attributeRef": "lotus.market_value_reporting_currency"
+          },
+          {
+            "name": "views[].buckets[].weight",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.weight",
+            "attributeRef": "lotus.weight"
+          },
+          {
+            "name": "views[].buckets[].position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.position_count",
+            "attributeRef": "lotus.position_count"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_cash_balances_reporting_cash_balances_query_post",
+      "method": "POST",
+      "path": "/reporting/cash-balances/query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Cash Balances",
+      "description": "Returns portfolio cash accounts, native balances, and translated totals in portfolio currency and reporting currency for UI and reporting workflows. For large-scale export workflows, prefer a dedicated async export contract.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "account_currency",
+          "as_of_date",
+          "balance_account_currency",
+          "balance_portfolio_currency",
+          "balance_reporting_currency",
+          "cash_account_count",
+          "cash_account_id",
+          "cash_accounts",
+          "instrument_id",
+          "instrument_name",
+          "portfolio_currency",
+          "portfolio_id",
+          "reporting_currency",
+          "resolved_as_of_date",
+          "security_id",
+          "total_balance_portfolio_currency",
+          "total_balance_reporting_currency",
+          "totals"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "CashBalancesResponse",
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_currency",
+            "attributeRef": "lotus.portfolio_currency"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "resolved_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "totals",
+            "location": "body",
+            "required": true,
+            "type": "CashBalancesTotals",
+            "semanticId": "lotus.totals",
+            "attributeRef": "lotus.totals"
+          },
+          {
+            "name": "totals.cash_account_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.cash_account_count",
+            "attributeRef": "lotus.cash_account_count"
+          },
+          {
+            "name": "totals.total_balance_portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_balance_portfolio_currency",
+            "attributeRef": "lotus.total_balance_portfolio_currency"
+          },
+          {
+            "name": "totals.total_balance_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_balance_reporting_currency",
+            "attributeRef": "lotus.total_balance_reporting_currency"
+          },
+          {
+            "name": "cash_accounts",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.cash_accounts",
+            "attributeRef": "lotus.cash_accounts"
+          },
+          {
+            "name": "cash_accounts[].cash_account_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.cash_account_id",
+            "attributeRef": "lotus.cash_account_id"
+          },
+          {
+            "name": "cash_accounts[].instrument_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.instrument_id",
+            "attributeRef": "lotus.instrument_id"
+          },
+          {
+            "name": "cash_accounts[].security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "cash_accounts[].account_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.account_currency",
+            "attributeRef": "lotus.account_currency"
+          },
+          {
+            "name": "cash_accounts[].instrument_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.instrument_name",
+            "attributeRef": "lotus.instrument_name"
+          },
+          {
+            "name": "cash_accounts[].balance_account_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.balance_account_currency",
+            "attributeRef": "lotus.balance_account_currency"
+          },
+          {
+            "name": "cash_accounts[].balance_portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.balance_portfolio_currency",
+            "attributeRef": "lotus.balance_portfolio_currency"
+          },
+          {
+            "name": "cash_accounts[].balance_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.balance_reporting_currency",
+            "attributeRef": "lotus.balance_reporting_currency"
           }
         ]
       }

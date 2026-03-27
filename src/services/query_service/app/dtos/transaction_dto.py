@@ -10,7 +10,11 @@ from .cashflow_dto import CashflowRecord
 
 class TransactionCostRecord(BaseModel):
     fee_type: str = Field(..., description="Fee type or cost category.", examples=["BROKERAGE"])
-    amount: Decimal = Field(..., description="Fee amount.", examples=[12.5])
+    amount: Decimal = Field(
+        ...,
+        description="Monetary amount of the transaction cost in the stated fee currency.",
+        examples=[12.5],
+    )
     currency: str = Field(..., description="Fee currency.", examples=["USD"])
 
     model_config = ConfigDict(from_attributes=True)
