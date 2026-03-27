@@ -88,15 +88,28 @@ Follow these steps to set up the development environment.
 
 ## Running the System
 
-1.  **Start Infrastructure**:
-    This command starts Kafka, Zookeeper, PostgreSQL, Prometheus, all lotus-core services,
-    and an automated one-shot demo data loader (`demo_data_loader`).
+Canonical shared infrastructure ownership now lives in `lotus-platform`:
+
+- shared local/platform baseline:
+  - `C:\Users\Sandeep\projects\lotus-platform\platform-stack`
+
+Use the local `lotus-core` compose stack when you specifically want an app-local or isolated-dev
+environment for `lotus-core`.
+
+1.  **Start App-Local Stack**:
+    This command starts the local `lotus-core` app stack, including app-local Kafka, Zookeeper,
+    PostgreSQL, Prometheus, `grafana`, all `lotus-core` services, and an automated one-shot demo
+    data loader (`demo_data_loader`).
     ```bash
     docker compose up -d
     ```
 
+    This stack is convenient for isolated development, but it is not the canonical owner of shared
+    platform infrastructure for the rest of Lotus.
+
 2.  **Set Up Kafka Topics**:
-    This tool idempotently creates all necessary Kafka topics.
+    This tool idempotently creates `lotus-core` domain topics. Topic definitions remain app-owned
+    even when the canonical shared Kafka broker is started from `lotus-platform/platform-stack`.
     ```bash
     python -m tools.kafka_setup
     ```

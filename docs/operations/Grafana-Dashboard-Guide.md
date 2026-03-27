@@ -2,6 +2,14 @@
 
 ## Access
 
+Canonical shared observability baseline:
+
+- `lotus-platform/platform-stack`
+
+This guide describes the `lotus-core` operational dashboard content. The shared Grafana and
+Prometheus runtime baseline should come from `lotus-platform/platform-stack` unless you are
+explicitly using the app-local `lotus-core` isolated-dev stack.
+
 - Grafana base URL: `http://localhost:3300`
 - Dashboard URL: `http://localhost:3300/d/portfolio-analytics-overview/lotus-core-operational-overview`
 - Default admin credentials:
@@ -11,7 +19,8 @@
 
 ## What This Dashboard Is For
 
-`Lotus Core Operational Overview` is the primary live operations dashboard for the local `lotus-core` platform. It is designed to answer four questions quickly:
+`Lotus Core Operational Overview` is the primary live operations dashboard for `lotus-core`. It is
+designed to answer four questions quickly:
 
 1. Is the platform healthy right now?
 2. Is replay or recovery pressure building?
@@ -137,9 +146,11 @@ Use this section for control-plane completion.
 
 This dashboard expects:
 
-- Grafana on `localhost:3300`
-- Prometheus configured with the `Prometheus` datasource UID
-- `lotus-core` Docker services exposing metrics and being scraped by Prometheus
+1. Grafana on `localhost:3300`
+2. Prometheus configured with the `Prometheus` datasource UID
+3. `lotus-core` services exposing metrics and being scraped by Prometheus
+4. the canonical shared observability runtime to come from `lotus-platform/platform-stack`, unless
+   an isolated `lotus-core` app-local stack is intentionally being used
 
 ## Related Files
 
@@ -147,5 +158,5 @@ This dashboard expects:
   - [portfolio_analytics.json](C:/Users/Sandeep/projects/lotus-core/grafana/dashboards/portfolio_analytics.json)
 - Dashboard provisioning:
   - [dashboard.yml](C:/Users/Sandeep/projects/lotus-core/grafana/provisioning/dashboards/dashboard.yml)
-- Docker topology:
+- App-local Docker topology:
   - [docker-compose.yml](C:/Users/Sandeep/projects/lotus-core/docker-compose.yml)
