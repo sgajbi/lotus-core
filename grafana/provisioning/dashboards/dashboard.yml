@@ -1,4 +1,5 @@
-# grafana/provisioning/dashboards/dashboard.yml
+# App-local Grafana dashboard provisioning overlay for isolated lotus-core development.
+# Canonical shared Grafana provisioning lives in lotus-platform/platform-stack.
 apiVersion: 1
 providers:
   - name: 'default-dashboards'

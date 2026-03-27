@@ -1,4 +1,17 @@
-# docker-compose.yml
+# App-local / isolated-dev stack for lotus-core.
+# Canonical shared infrastructure ownership lives in lotus-platform/platform-stack.
+name: lotus-core-app-local
+
+x-lotus-stack-contract:
+  stack_classification: app-local
+  canonical_shared_infra: false
+  canonical_owner: lotus-core
+  canonical_shared_infra_owner: lotus-platform/platform-stack
+  purpose:
+    - isolated-development
+    - service-local-debugging
+    - app-local-observability
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -561,6 +574,8 @@ services:
     networks:
       - app_network
 
+  # App-local observability overlay for isolated lotus-core development.
+  # Canonical shared Prometheus ownership lives in lotus-platform/platform-stack.
   prometheus:
     image: prom/prometheus:v2.47.2
     ports:
@@ -586,6 +601,8 @@ services:
       - timeseries_generator_service
       - portfolio_aggregation_service
 
+  # App-local Grafana overlay for isolated lotus-core development.
+  # Canonical shared Grafana provisioning lives in lotus-platform/platform-stack.
   grafana:
     image: grafana/grafana:10.1.5
     ports:

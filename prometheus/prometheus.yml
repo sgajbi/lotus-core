@@ -1,4 +1,6 @@
-# prometheus/prometheus.yml
+# App-local Prometheus scrape config for the isolated lotus-core stack.
+# Canonical shared Prometheus ownership lives in:
+#   lotus-platform/platform-stack/prometheus/prometheus.yml
 global:
   scrape_interval: 15s
 
