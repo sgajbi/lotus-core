@@ -143,7 +143,7 @@ def _resolve_runtime_ids(
     timeout_seconds: int,
     progress_check: Callable[[], None] | None = None,
 ) -> tuple[str, str]:
-    resolved_portfolio_id = portfolio_id
+    resolved_portfolio_id: str | None = None
     resolved_benchmark_id = benchmark_id
 
     def _portfolio_ready(candidate_id: str) -> bool:
@@ -227,9 +227,15 @@ def _resolve_runtime_ids(
             if _portfolio_ready(candidate_id):
                 resolved_portfolio_id = candidate_id
                 break
-        if resolved_portfolio_id != portfolio_id:
+        if resolved_portfolio_id is not None:
             break
         time.sleep(2)
+
+    if resolved_portfolio_id is None:
+        raise RuntimeError(
+            "Latency profile could not resolve a query-ready portfolio before timeout. "
+            "Services were healthy, but portfolio-specific endpoints never became ready."
+        )
 
     if resolved_portfolio_id != portfolio_id:
         print(
