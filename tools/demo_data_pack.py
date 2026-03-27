@@ -8,6 +8,7 @@ import logging
 import math
 import time
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from urllib import error, parse, request
@@ -132,10 +133,10 @@ def _build_index_series(
     secondary_amplitude: float,
     secondary_cycle: float,
     currency: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[float]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[Decimal]]:
     index_prices: list[dict[str, Any]] = []
     index_returns: list[dict[str, Any]] = []
-    daily_returns: list[float] = []
+    daily_returns: list[Decimal] = []
     current_level = start_level
 
     for index, current_date in enumerate(dates):
@@ -147,8 +148,9 @@ def _build_index_series(
                 + primary_amplitude * math.sin(index / primary_cycle)
                 + secondary_amplitude * math.cos(index / secondary_cycle)
             )
+        daily_return_decimal = Decimal(f"{daily_return:.10f}")
         current_level *= 1 + daily_return
-        daily_returns.append(daily_return)
+        daily_returns.append(daily_return_decimal)
         source_timestamp = _iso_utc_timestamp(date.fromisoformat(current_date))
         index_prices.append(
             {
@@ -169,7 +171,7 @@ def _build_index_series(
                 "series_id": f"{series_id_prefix}_return",
                 "index_id": index_id,
                 "series_date": current_date,
-                "index_return": f"{daily_return:.10f}",
+                "index_return": f"{daily_return_decimal:.10f}",
                 "return_period": "1d",
                 "return_convention": "total_return_index",
                 "series_currency": currency,
@@ -217,7 +219,9 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
     for current_date, equity_return, bond_return in zip(
         series_dates, equity_daily_returns, bond_daily_returns, strict=True
     ):
-        benchmark_return = (equity_return * 0.6) + (bond_return * 0.4)
+        benchmark_return = (equity_return * Decimal("0.6")) + (
+            bond_return * Decimal("0.4")
+        )
         benchmark_return_series.append(
             {
                 "series_id": "bmk_global_balanced_60_40_return",
