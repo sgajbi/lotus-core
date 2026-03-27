@@ -95,6 +95,76 @@ def test_resolve_runtime_ids_overrides_from_catalogs() -> None:
     assert benchmark_id == "BMK_ABC"
 
 
+def test_resolve_runtime_ids_accepts_default_portfolio_when_ready(monkeypatch) -> None:
+    session = MagicMock()
+    lookup_response = MagicMock()
+    lookup_response.status_code = 200
+    lookup_response.json.return_value = {"items": [{"portfolio_id": "DEMO_DPM_EUR_001"}]}
+    ready_response = MagicMock()
+    ready_response.status_code = 200
+    benchmark_response = MagicMock()
+    benchmark_response.status_code = 200
+    benchmark_response.json.return_value = {"benchmarks": [{"benchmark_id": "BMK_ABC"}]}
+
+    def get_side_effect(url: str, timeout: int = 10):  # noqa: ARG001
+        if "/lookups/portfolios" in url:
+            return lookup_response
+        if "DEMO_DPM_EUR_001" in url:
+            return ready_response
+        return ready_response
+
+    session.get.side_effect = get_side_effect
+    session.post.return_value = benchmark_response
+    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+
+    portfolio_id, benchmark_id = _resolve_runtime_ids(
+        session,
+        query_base_url="http://localhost:8201",
+        query_control_plane_base_url="http://localhost:8202",
+        portfolio_id="DEMO_DPM_EUR_001",
+        benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+        timeout_seconds=5,
+    )
+
+    assert portfolio_id == "DEMO_DPM_EUR_001"
+    assert benchmark_id == "BMK_ABC"
+
+
+def test_resolve_runtime_ids_raises_when_no_portfolio_becomes_ready(monkeypatch) -> None:
+    session = MagicMock()
+    lookup_response = MagicMock()
+    lookup_response.status_code = 200
+    lookup_response.json.return_value = {"items": [{"portfolio_id": "PORT_123"}]}
+    not_ready_response = MagicMock()
+    not_ready_response.status_code = 404
+
+    def get_side_effect(url: str, timeout: int = 10):  # noqa: ARG001
+        if "/lookups/portfolios" in url:
+            return lookup_response
+        return not_ready_response
+
+    session.get.side_effect = get_side_effect
+    session.post.return_value = not_ready_response
+    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+
+    timeline = iter([100.0, 101.0, 106.0])
+    monkeypatch.setattr("scripts.latency_profile.time.time", lambda: next(timeline))
+
+    try:
+        _resolve_runtime_ids(
+            session,
+            query_base_url="http://localhost:8201",
+            query_control_plane_base_url="http://localhost:8202",
+            portfolio_id="DEMO_DPM_EUR_001",
+            benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+            timeout_seconds=5,
+        )
+    except RuntimeError as exc:
+        assert "could not resolve a query-ready portfolio" in str(exc)
+    else:
+        raise AssertionError("Expected _resolve_runtime_ids to raise when no portfolio is ready.")
+
+
 def test_raise_if_compose_service_failed_ignores_running_service(monkeypatch) -> None:
     def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
         if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
