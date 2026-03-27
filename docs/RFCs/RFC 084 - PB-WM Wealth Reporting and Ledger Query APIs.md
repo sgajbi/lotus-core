@@ -7,7 +7,7 @@
 | Last Updated | 2026-03-27 |
 | Owners | lotus-core query-service maintainers |
 | Depends On | RFC 035, RFC 057, RFC 067, RFC 068 |
-| Scope | Gold-standard PB/WM query APIs for portfolio discovery, transaction ledgers, AUM, asset allocation, and cash balances |
+| Scope | Gold-standard PB/WM query APIs for portfolio discovery, transaction ledgers, AUM, asset allocation, cash balances, income summaries, and activity summaries |
 
 ## Executive Summary
 
@@ -21,6 +21,8 @@ The implementation delivers:
    - assets under management
    - asset allocation
    - cash balances
+   - income summaries
+   - activity summaries
 4. Performance-aware query design using bounded scope semantics, latest-snapshot resolution, FX caching,
    and new query-hotspot indexes.
 
@@ -50,6 +52,15 @@ The requested scope for this RFC family was:
    - totals in portfolio and reporting currency
    - support `as_of_date` and optional `reporting_currency`
 6. Architectural decision on whether AUM and cash should be combined
+7. Income Summary API
+   - support single portfolio, portfolio list, and BU scope
+   - requested date range plus year-to-date view
+   - values in portfolio currency and reporting currency
+8. Activity Summary API
+   - portfolio-level flow buckets
+   - inflows, outflows, fees, taxes
+   - requested date range plus year-to-date view
+   - values in portfolio currency and reporting currency
 
 ## Architecture Decision
 
@@ -111,6 +122,8 @@ operationally portfolio-centric.
 - `POST /reporting/assets-under-management/query`
 - `POST /reporting/asset-allocation/query`
 - `POST /reporting/cash-balances/query`
+- `POST /reporting/income-summary/query`
+- `POST /reporting/activity-summary/query`
 
 Request scope model:
 
@@ -144,6 +157,49 @@ Cash-balance semantics:
 - returns native account balances, portfolio-currency balances, and reporting-currency balances
 - returns totals in both portfolio and reporting currency
 
+Income-summary semantics:
+
+- supports `portfolio_id`, `portfolio_ids`, and `booking_center_code` scope
+- accepts `window.start_date` and `window.end_date`
+- returns:
+  - requested-window totals
+  - year-to-date totals through `window.end_date`
+- covers canonical Lotus income types:
+  - `DIVIDEND`
+  - `INTEREST`
+  - `CASH_IN_LIEU`
+- exposes:
+  - gross income
+  - withholding tax
+  - other deductions
+  - net income
+  - transaction count
+- returns reporting-currency totals for every scope
+- returns portfolio-currency values for:
+  - per-portfolio rows
+  - single-portfolio scope totals
+
+Activity-summary semantics:
+
+- supports `portfolio_id`, `portfolio_ids`, and `booking_center_code` scope
+- accepts `window.start_date` and `window.end_date`
+- returns:
+  - requested-window totals
+  - year-to-date totals through `window.end_date`
+- activity is modeled as portfolio-level flow buckets, not generic ledger volume
+- buckets are:
+  - `INFLOWS`
+  - `OUTFLOWS`
+  - `FEES`
+  - `TAXES`
+- `TAXES` includes both:
+  - explicit tax transactions
+  - withholding-tax deductions from income transactions
+- returns reporting-currency totals for every scope
+- returns portfolio-currency values for:
+  - per-portfolio rows
+  - single-portfolio scope totals
+
 ## Performance Design
 
 The implementation was designed for interactive PB/WM use, not naive unbounded scans.
@@ -164,6 +220,9 @@ The implementation was designed for interactive PB/WM use, not naive unbounded s
 3. Only current-epoch state is used.
 4. FX conversion is cached per request in the service layer.
 5. BU and portfolio-list reporting stays scope-bounded through explicit scope resolution.
+6. Income and activity summaries aggregate in SQL over bounded transaction-date windows rather than
+   materializing raw ledger rows into Python.
+7. Additional hot-path indexes support portfolio/date/type filters for income and flow summaries.
 
 This is appropriate for:
 
@@ -192,6 +251,7 @@ Implementation:
 - `src/services/query_service/app/dtos/reporting_dto.py`
 - `src/libs/portfolio-common/portfolio_common/database_models.py`
 - `alembic/versions/a7c8d9e0f1a2_perf_add_wealth_query_indexes.py`
+- `alembic/versions/b8d9e0f1a2b3_perf_add_income_activity_reporting_indexes.py`
 
 Docs:
 
@@ -222,6 +282,8 @@ Validation:
 | Asset allocation by PB/WM dimensions | Implemented | allocation DTO/service |
 | Portfolio API supports BU and explicit portfolio list | Implemented | portfolios router/service/repository |
 | Cash balances with native/portfolio/reporting currency | Implemented | cash balances DTO/service/router |
+| Income summary with requested-window and YTD currency views | Implemented | reporting DTO/service/repository/router + tests |
+| Activity summary with portfolio-level flow buckets and YTD currency views | Implemented | reporting DTO/service/repository/router + tests |
 | Performance-aware design | Implemented | date-range predicates, latest-snapshot query, hot-path indexes, tests |
 
 ## Validation Summary
@@ -235,6 +297,8 @@ The implementation passed:
    - `468 passed`
 4. Full query-service integration suite:
    - `90 passed`
+5. Focused income/activity reporting contract pack:
+   - `83 passed`
 
 Alembic head is clean with the new migration registered.
 
@@ -249,5 +313,7 @@ Alembic head is clean with the new migration registered.
 
 1. Keep this RFC as the active authority for PB/WM read-model and reporting query behavior in
    `lotus-core`.
-2. If downstream consumers require bulk export at larger BU scale, add an asynchronous export contract
+2. Preserve the requested-window plus year-to-date summary pattern for future source-data summary
+   contracts so UI and reporting consumers do not need to rebuild the same logic client-side.
+3. If downstream consumers require bulk export at larger BU scale, add an asynchronous export contract
    rather than broadening the interactive query endpoints.
