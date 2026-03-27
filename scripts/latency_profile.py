@@ -208,8 +208,10 @@ def _resolve_runtime_ids(
                 return None
         for url, payload in post_checks:
             try:
-                response = session.get(url, timeout=15) if payload is None else session.post(
-                    url, json=payload, timeout=15
+                response = (
+                    session.get(url, timeout=15)
+                    if payload is None
+                    else session.post(url, json=payload, timeout=15)
                 )
             except requests.RequestException:
                 return None
