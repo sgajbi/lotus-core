@@ -652,6 +652,12 @@ class Transaction(Base):
             "settlement_cash_instrument_id",
             "transaction_date",
         ),
+        Index(
+            "ix_transactions_portfolio_type_date",
+            "portfolio_id",
+            "transaction_type",
+            "transaction_date",
+        ),
     )
 
 
@@ -696,7 +702,21 @@ class Cashflow(Base):
 
     transaction = relationship("Transaction", back_populates="cashflow")
 
-    __table_args__ = (UniqueConstraint("transaction_id", "epoch", name="_transaction_epoch_uc"),)
+    __table_args__ = (
+        UniqueConstraint("transaction_id", "epoch", name="_transaction_epoch_uc"),
+        Index(
+            "ix_cashflows_portfolio_classification_date",
+            "portfolio_id",
+            "classification",
+            "cashflow_date",
+        ),
+        Index(
+            "ix_cashflows_portfolio_flow_date",
+            "portfolio_id",
+            "is_portfolio_flow",
+            "cashflow_date",
+        ),
+    )
 
 
 class PositionLotState(Base):

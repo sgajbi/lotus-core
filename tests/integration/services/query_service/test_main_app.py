@@ -163,6 +163,8 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/reporting/assets-under-management/query" in paths
     assert "/reporting/asset-allocation/query" in paths
     assert "/reporting/cash-balances/query" in paths
+    assert "/reporting/income-summary/query" in paths
+    assert "/reporting/activity-summary/query" in paths
 
 
 async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(async_test_client):
@@ -175,13 +177,18 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     aum_query = paths["/reporting/assets-under-management/query"]["post"]
     allocation_query = paths["/reporting/asset-allocation/query"]["post"]
     cash_query = paths["/reporting/cash-balances/query"]["post"]
+    income_query = paths["/reporting/income-summary/query"]["post"]
+    activity_query = paths["/reporting/activity-summary/query"]["post"]
     portfolios_query = paths["/portfolios/"]["get"]
 
-    assert "single portfolio, an explicit portfolio list, or a business unit" in aum_query[
-        "description"
-    ]
+    assert (
+        "single portfolio, an explicit portfolio list, or a business unit"
+        in aum_query["description"]
+    )
     assert "classification dimensions" in allocation_query["description"]
     assert "portfolio currency and reporting currency" in cash_query["description"]
+    assert "requested reporting window and year-to-date" in income_query["description"]
+    assert "portfolio-level flow buckets" in activity_query["description"]
 
     portfolio_ids = next(
         parameter
@@ -192,12 +199,18 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
 
     aum_request = components["AssetsUnderManagementQueryRequest"]
     cash_response = components["CashBalancesResponse"]
+    income_response = components["IncomeSummaryResponse"]
+    activity_response = components["ActivitySummaryResponse"]
     transaction_record = components["TransactionRecord"]
 
     assert aum_request["properties"]["reporting_currency"]["description"].startswith(
         "Optional reporting currency."
     )
     assert cash_response["properties"]["totals"]["description"] == "Portfolio-level cash totals."
+    assert income_response["properties"]["totals"]["description"] == "Scope-level income totals."
+    assert (
+        activity_response["properties"]["totals"]["description"] == "Scope-level activity totals."
+    )
     assert transaction_record["properties"]["trade_fee"]["description"] == (
         "Primary trade fee recorded directly on the transaction."
     )
@@ -266,7 +279,7 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         if parameter["name"] == "include_projected"
     )
     assert include_projected["description"] == (
-        "When true, includes future-dated projected position state " "beyond current business_date."
+        "When true, includes future-dated projected position state beyond current business_date."
     )
 
     history_security_id = next(

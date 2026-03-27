@@ -18,6 +18,9 @@ class _FakeExecuteResult:
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
 
+    def mappings(self):
+        return self
+
     def scalars(self):
         return self
 
@@ -47,8 +50,9 @@ async def test_reporting_repository_lists_portfolios_with_scope_filters() -> Non
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_latest_snapshot_query_is_latest_non_zero_current_epoch(
-) -> None:
+async def test_reporting_repository_latest_snapshot_query_is_latest_non_zero_current_epoch() -> (
+    None
+):
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
@@ -107,8 +111,9 @@ async def test_reporting_repository_get_latest_fx_rate_uses_desc_limit_one() -> 
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_cash_account_resolution_uses_index_friendly_date_bound(
-) -> None:
+async def test_reporting_repository_cash_account_resolution_uses_index_friendly_date_bound() -> (
+    None
+):
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [("CASH_USD", "CASH-ACC-USD-001"), ("CASH_SGD", "CASH-ACC-SGD-001")]
@@ -133,6 +138,51 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
     assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
     assert "transactions.settlement_cash_account_id IS NOT NULL" in compiled
     assert (
-        "row_number() over (partition by transactions.settlement_cash_instrument_id"
-        in normalized
+        "row_number() over (partition by transactions.settlement_cash_instrument_id" in normalized
     )
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_income_summary_uses_grouped_window_aggregation() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReportingRepository(db)
+
+    await repo.list_income_summary_rows(
+        portfolio_ids=["P1", "P2"],
+        start_date=date(2026, 3, 1),
+        end_date=date(2026, 3, 27),
+        income_types=["DIVIDEND", "INTEREST"],
+    )
+
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.portfolio_id IN ('P1', 'P2')" in compiled
+    assert "transactions.transaction_type IN ('DIVIDEND', 'INTEREST')" in compiled
+    assert "transactions.transaction_date >= '2026-01-01 00:00:00'" in compiled
+    assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
+    assert "GROUP BY portfolios.portfolio_id" in compiled
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_activity_summary_uses_union_for_withholding_tax_bucket() -> (
+    None
+):
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReportingRepository(db)
+
+    await repo.list_activity_summary_rows(
+        portfolio_ids=["P1"],
+        start_date=date(2026, 3, 1),
+        end_date=date(2026, 3, 27),
+    )
+
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    normalized = compiled.lower()
+    assert "union all" in normalized
+    assert "'TAXES'" in compiled
+    assert "transactions.withholding_tax_amount IS NOT NULL" in compiled
+    assert "transactions.transaction_type = 'FEE'" in compiled
+    assert "transactions.transaction_type = 'TAX'" in compiled

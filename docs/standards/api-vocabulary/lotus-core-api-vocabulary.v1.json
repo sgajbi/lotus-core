@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-03-27T09:07:42.686247+00:00",
+  "generatedAt": "2026-03-27T10:00:55.939881+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -105,6 +105,36 @@
       "preferredName": "amount",
       "description": "Monetary amount of the transaction cost in the stated fee currency.",
       "example": "example_amount",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.amount_portfolio_currency",
+      "canonicalTerm": "amount_portfolio_currency",
+      "preferredName": "amount_portfolio_currency",
+      "description": "Flow amount translated to portfolio currency. Present for single-portfolio totals and per-portfolio rows.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amount_reporting_currency",
+      "canonicalTerm": "amount_reporting_currency",
+      "preferredName": "amount_reporting_currency",
+      "description": "Flow amount translated to the effective reporting currency.",
+      "example": "USD",
       "type": "string",
       "locations": [
         "body"
@@ -513,6 +543,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.bucket",
+      "canonicalTerm": "bucket",
+      "preferredName": "bucket",
+      "description": "Canonical portfolio-flow bucket.",
+      "example": "INFLOWS",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -1314,12 +1358,14 @@
       "preferredName": "end_date",
       "description": "The end date for the date range filter (inclusive).",
       "example": "2026-03-31",
-      "type": "object",
+      "type": "string",
       "locations": [
+        "body",
         "query"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -1548,6 +1594,36 @@
       ]
     },
     {
+      "semanticId": "lotus.gross_amount_portfolio_currency",
+      "canonicalTerm": "gross_amount_portfolio_currency",
+      "preferredName": "gross_amount_portfolio_currency",
+      "description": "Gross income translated to portfolio currency. Present for single-portfolio totals and per-portfolio rows.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.gross_amount_reporting_currency",
+      "canonicalTerm": "gross_amount_reporting_currency",
+      "preferredName": "gross_amount_reporting_currency",
+      "description": "Gross income translated to the effective reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.gross_cost",
       "canonicalTerm": "gross_cost",
       "preferredName": "gross_cost",
@@ -1673,6 +1749,37 @@
       ],
       "observedTypes": [
         "boolean"
+      ]
+    },
+    {
+      "semanticId": "lotus.income_type",
+      "canonicalTerm": "income_type",
+      "preferredName": "income_type",
+      "description": "Canonical Lotus income transaction type.",
+      "example": "DIVIDEND",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.income_types",
+      "canonicalTerm": "income_types",
+      "preferredName": "income_types",
+      "description": "Income transaction types to include. Defaults to the full canonical Lotus income set.",
+      "example": [
+        "DIVIDEND",
+        "INTEREST"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
       ]
     },
     {
@@ -2404,6 +2511,36 @@
       ]
     },
     {
+      "semanticId": "lotus.net_amount_portfolio_currency",
+      "canonicalTerm": "net_amount_portfolio_currency",
+      "preferredName": "net_amount_portfolio_currency",
+      "description": "Net income translated to portfolio currency when applicable.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.net_amount_reporting_currency",
+      "canonicalTerm": "net_amount_reporting_currency",
+      "preferredName": "net_amount_reporting_currency",
+      "description": "Net income translated to the effective reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.net_cashflow",
       "canonicalTerm": "net_cashflow",
       "preferredName": "net_cashflow",
@@ -2626,6 +2763,36 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.other_deductions_portfolio_currency",
+      "canonicalTerm": "other_deductions_portfolio_currency",
+      "preferredName": "other_deductions_portfolio_currency",
+      "description": "Other income deductions translated to portfolio currency when applicable.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.other_deductions_reporting_currency",
+      "canonicalTerm": "other_deductions_reporting_currency",
+      "preferredName": "other_deductions_reporting_currency",
+      "description": "Other income deductions translated to reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -3408,6 +3575,31 @@
       ]
     },
     {
+      "semanticId": "lotus.requested_window",
+      "canonicalTerm": "requested_window",
+      "preferredName": "requested_window",
+      "description": "Scope-level income totals for the requested reporting window.",
+      "example": {
+        "transaction_count": 10,
+        "gross_amount_portfolio_currency": "example_value",
+        "gross_amount_reporting_currency": "USD",
+        "withholding_tax_portfolio_currency": "example_value",
+        "withholding_tax_reporting_currency": "USD",
+        "other_deductions_portfolio_currency": "example_value",
+        "other_deductions_reporting_currency": "USD",
+        "net_amount_portfolio_currency": "example_value",
+        "net_amount_reporting_currency": "USD"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "FlowPeriodSummary",
+        "IncomePeriodSummary"
+      ]
+    },
+    {
       "semanticId": "lotus.resolved_as_of_date",
       "canonicalTerm": "resolved_as_of_date",
       "preferredName": "resolved_as_of_date",
@@ -3419,6 +3611,23 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.resolved_window",
+      "canonicalTerm": "resolved_window",
+      "preferredName": "resolved_window",
+      "description": "Effective reporting window used.",
+      "example": {
+        "start_date": "2026-01-01",
+        "end_date": "2026-03-27"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "ReportingWindow"
       ]
     },
     {
@@ -3990,12 +4199,14 @@
       "preferredName": "start_date",
       "description": "The start date for the date range filter (inclusive).",
       "example": "2026-01-01",
-      "type": "object",
+      "type": "string",
       "locations": [
+        "body",
         "query"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -4351,8 +4562,10 @@
         "body"
       ],
       "observedTypes": [
+        "ActivitySummaryTotals",
         "AssetsUnderManagementTotals",
-        "CashBalancesTotals"
+        "CashBalancesTotals",
+        "IncomeSummaryTotals"
       ]
     },
     {
@@ -4410,6 +4623,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.transaction_count",
+      "canonicalTerm": "transaction_count",
+      "preferredName": "transaction_count",
+      "description": "Number of income transactions included.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -4749,6 +4976,23 @@
       ]
     },
     {
+      "semanticId": "lotus.window",
+      "canonicalTerm": "window",
+      "preferredName": "window",
+      "description": "Requested reporting window. The response also includes year-to-date values anchored to window.end_date.",
+      "example": {
+        "start_date": "2026-01-01",
+        "end_date": "2026-03-27"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "ReportingWindow"
+      ]
+    },
+    {
       "semanticId": "lotus.withholding_tax_amount",
       "canonicalTerm": "withholding_tax_amount",
       "preferredName": "withholding_tax_amount",
@@ -4760,6 +5004,61 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.withholding_tax_portfolio_currency",
+      "canonicalTerm": "withholding_tax_portfolio_currency",
+      "preferredName": "withholding_tax_portfolio_currency",
+      "description": "Withholding tax translated to portfolio currency when applicable.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.withholding_tax_reporting_currency",
+      "canonicalTerm": "withholding_tax_reporting_currency",
+      "preferredName": "withholding_tax_reporting_currency",
+      "description": "Withholding tax translated to reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.year_to_date",
+      "canonicalTerm": "year_to_date",
+      "preferredName": "year_to_date",
+      "description": "Scope-level income totals from January 1 through the window end date.",
+      "example": {
+        "transaction_count": 10,
+        "gross_amount_portfolio_currency": "example_value",
+        "gross_amount_reporting_currency": "USD",
+        "withholding_tax_portfolio_currency": "example_value",
+        "withholding_tax_reporting_currency": "USD",
+        "other_deductions_portfolio_currency": "example_value",
+        "other_deductions_reporting_currency": "USD",
+        "net_amount_portfolio_currency": "example_value",
+        "net_amount_reporting_currency": "USD"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "FlowPeriodSummary",
+        "IncomePeriodSummary"
       ]
     }
   ],
@@ -10140,6 +10439,1158 @@
             "type": "string",
             "semanticId": "lotus.balance_reporting_currency",
             "attributeRef": "lotus.balance_reporting_currency"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_income_summary_reporting_income_summary_query_post",
+      "method": "POST",
+      "path": "/reporting/income-summary/query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Income Summary",
+      "description": "Returns income totals for the requested reporting window and year-to-date, with values in portfolio currency and reporting currency. Income is grouped by canonical Lotus income transaction types such as dividend, interest, and cash-in-lieu.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "booking_center_code",
+          "client_id",
+          "end_date",
+          "gross_amount_portfolio_currency",
+          "gross_amount_reporting_currency",
+          "income_type",
+          "income_types",
+          "net_amount_portfolio_currency",
+          "net_amount_reporting_currency",
+          "other_deductions_portfolio_currency",
+          "other_deductions_reporting_currency",
+          "portfolio_count",
+          "portfolio_currency",
+          "portfolio_id",
+          "portfolio_ids",
+          "portfolios",
+          "reporting_currency",
+          "requested_window",
+          "resolved_window",
+          "scope",
+          "scope_type",
+          "start_date",
+          "totals",
+          "transaction_count",
+          "window",
+          "withholding_tax_portfolio_currency",
+          "withholding_tax_reporting_currency",
+          "year_to_date"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "window",
+            "location": "body",
+            "required": true,
+            "type": "ReportingWindow",
+            "semanticId": "lotus.window",
+            "attributeRef": "lotus.window"
+          },
+          {
+            "name": "window.start_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.start_date",
+            "attributeRef": "lotus.start_date"
+          },
+          {
+            "name": "window.end_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.end_date",
+            "attributeRef": "lotus.end_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "income_types",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.income_types",
+            "attributeRef": "lotus.income_types"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "IncomeSummaryResponse",
+        "fields": [
+          {
+            "name": "scope_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.scope_type",
+            "attributeRef": "lotus.scope_type"
+          },
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "resolved_window",
+            "location": "body",
+            "required": true,
+            "type": "ReportingWindow",
+            "semanticId": "lotus.resolved_window",
+            "attributeRef": "lotus.resolved_window"
+          },
+          {
+            "name": "resolved_window.start_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.start_date",
+            "attributeRef": "lotus.start_date"
+          },
+          {
+            "name": "resolved_window.end_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.end_date",
+            "attributeRef": "lotus.end_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "totals",
+            "location": "body",
+            "required": true,
+            "type": "IncomeSummaryTotals",
+            "semanticId": "lotus.totals",
+            "attributeRef": "lotus.totals"
+          },
+          {
+            "name": "totals.portfolio_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.portfolio_count",
+            "attributeRef": "lotus.portfolio_count"
+          },
+          {
+            "name": "totals.requested_window",
+            "location": "body",
+            "required": true,
+            "type": "IncomePeriodSummary",
+            "semanticId": "lotus.requested_window",
+            "attributeRef": "lotus.requested_window"
+          },
+          {
+            "name": "totals.requested_window.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "totals.requested_window.gross_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_amount_portfolio_currency",
+            "attributeRef": "lotus.gross_amount_portfolio_currency"
+          },
+          {
+            "name": "totals.requested_window.gross_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.gross_amount_reporting_currency",
+            "attributeRef": "lotus.gross_amount_reporting_currency"
+          },
+          {
+            "name": "totals.requested_window.withholding_tax_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_portfolio_currency",
+            "attributeRef": "lotus.withholding_tax_portfolio_currency"
+          },
+          {
+            "name": "totals.requested_window.withholding_tax_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.withholding_tax_reporting_currency",
+            "attributeRef": "lotus.withholding_tax_reporting_currency"
+          },
+          {
+            "name": "totals.requested_window.other_deductions_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_deductions_portfolio_currency",
+            "attributeRef": "lotus.other_deductions_portfolio_currency"
+          },
+          {
+            "name": "totals.requested_window.other_deductions_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.other_deductions_reporting_currency",
+            "attributeRef": "lotus.other_deductions_reporting_currency"
+          },
+          {
+            "name": "totals.requested_window.net_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_amount_portfolio_currency",
+            "attributeRef": "lotus.net_amount_portfolio_currency"
+          },
+          {
+            "name": "totals.requested_window.net_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.net_amount_reporting_currency",
+            "attributeRef": "lotus.net_amount_reporting_currency"
+          },
+          {
+            "name": "totals.year_to_date",
+            "location": "body",
+            "required": true,
+            "type": "IncomePeriodSummary",
+            "semanticId": "lotus.year_to_date",
+            "attributeRef": "lotus.year_to_date"
+          },
+          {
+            "name": "totals.year_to_date.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "totals.year_to_date.gross_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_amount_portfolio_currency",
+            "attributeRef": "lotus.gross_amount_portfolio_currency"
+          },
+          {
+            "name": "totals.year_to_date.gross_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.gross_amount_reporting_currency",
+            "attributeRef": "lotus.gross_amount_reporting_currency"
+          },
+          {
+            "name": "totals.year_to_date.withholding_tax_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_portfolio_currency",
+            "attributeRef": "lotus.withholding_tax_portfolio_currency"
+          },
+          {
+            "name": "totals.year_to_date.withholding_tax_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.withholding_tax_reporting_currency",
+            "attributeRef": "lotus.withholding_tax_reporting_currency"
+          },
+          {
+            "name": "totals.year_to_date.other_deductions_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_deductions_portfolio_currency",
+            "attributeRef": "lotus.other_deductions_portfolio_currency"
+          },
+          {
+            "name": "totals.year_to_date.other_deductions_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.other_deductions_reporting_currency",
+            "attributeRef": "lotus.other_deductions_reporting_currency"
+          },
+          {
+            "name": "totals.year_to_date.net_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_amount_portfolio_currency",
+            "attributeRef": "lotus.net_amount_portfolio_currency"
+          },
+          {
+            "name": "totals.year_to_date.net_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.net_amount_reporting_currency",
+            "attributeRef": "lotus.net_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.portfolios",
+            "attributeRef": "lotus.portfolios"
+          },
+          {
+            "name": "portfolios[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolios[].booking_center_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "portfolios[].client_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.client_id",
+            "attributeRef": "lotus.client_id"
+          },
+          {
+            "name": "portfolios[].portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_currency",
+            "attributeRef": "lotus.portfolio_currency"
+          },
+          {
+            "name": "portfolios[].requested_window",
+            "location": "body",
+            "required": true,
+            "type": "IncomePeriodSummary",
+            "semanticId": "lotus.requested_window",
+            "attributeRef": "lotus.requested_window"
+          },
+          {
+            "name": "portfolios[].requested_window.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "portfolios[].requested_window.gross_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_amount_portfolio_currency",
+            "attributeRef": "lotus.gross_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].requested_window.gross_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.gross_amount_reporting_currency",
+            "attributeRef": "lotus.gross_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].requested_window.withholding_tax_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_portfolio_currency",
+            "attributeRef": "lotus.withholding_tax_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].requested_window.withholding_tax_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.withholding_tax_reporting_currency",
+            "attributeRef": "lotus.withholding_tax_reporting_currency"
+          },
+          {
+            "name": "portfolios[].requested_window.other_deductions_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_deductions_portfolio_currency",
+            "attributeRef": "lotus.other_deductions_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].requested_window.other_deductions_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.other_deductions_reporting_currency",
+            "attributeRef": "lotus.other_deductions_reporting_currency"
+          },
+          {
+            "name": "portfolios[].requested_window.net_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_amount_portfolio_currency",
+            "attributeRef": "lotus.net_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].requested_window.net_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.net_amount_reporting_currency",
+            "attributeRef": "lotus.net_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date",
+            "location": "body",
+            "required": true,
+            "type": "IncomePeriodSummary",
+            "semanticId": "lotus.year_to_date",
+            "attributeRef": "lotus.year_to_date"
+          },
+          {
+            "name": "portfolios[].year_to_date.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "portfolios[].year_to_date.gross_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_amount_portfolio_currency",
+            "attributeRef": "lotus.gross_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date.gross_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.gross_amount_reporting_currency",
+            "attributeRef": "lotus.gross_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date.withholding_tax_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_portfolio_currency",
+            "attributeRef": "lotus.withholding_tax_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date.withholding_tax_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.withholding_tax_reporting_currency",
+            "attributeRef": "lotus.withholding_tax_reporting_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date.other_deductions_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_deductions_portfolio_currency",
+            "attributeRef": "lotus.other_deductions_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date.other_deductions_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.other_deductions_reporting_currency",
+            "attributeRef": "lotus.other_deductions_reporting_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date.net_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_amount_portfolio_currency",
+            "attributeRef": "lotus.net_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].year_to_date.net_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.net_amount_reporting_currency",
+            "attributeRef": "lotus.net_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.income_types",
+            "attributeRef": "lotus.income_types"
+          },
+          {
+            "name": "portfolios[].income_types[].income_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.income_type",
+            "attributeRef": "lotus.income_type"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window",
+            "location": "body",
+            "required": true,
+            "type": "IncomePeriodSummary",
+            "semanticId": "lotus.requested_window",
+            "attributeRef": "lotus.requested_window"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.gross_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_amount_portfolio_currency",
+            "attributeRef": "lotus.gross_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.gross_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.gross_amount_reporting_currency",
+            "attributeRef": "lotus.gross_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.withholding_tax_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_portfolio_currency",
+            "attributeRef": "lotus.withholding_tax_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.withholding_tax_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.withholding_tax_reporting_currency",
+            "attributeRef": "lotus.withholding_tax_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.other_deductions_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_deductions_portfolio_currency",
+            "attributeRef": "lotus.other_deductions_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.other_deductions_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.other_deductions_reporting_currency",
+            "attributeRef": "lotus.other_deductions_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.net_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_amount_portfolio_currency",
+            "attributeRef": "lotus.net_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].requested_window.net_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.net_amount_reporting_currency",
+            "attributeRef": "lotus.net_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date",
+            "location": "body",
+            "required": true,
+            "type": "IncomePeriodSummary",
+            "semanticId": "lotus.year_to_date",
+            "attributeRef": "lotus.year_to_date"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.gross_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_amount_portfolio_currency",
+            "attributeRef": "lotus.gross_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.gross_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.gross_amount_reporting_currency",
+            "attributeRef": "lotus.gross_amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.withholding_tax_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_portfolio_currency",
+            "attributeRef": "lotus.withholding_tax_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.withholding_tax_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.withholding_tax_reporting_currency",
+            "attributeRef": "lotus.withholding_tax_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.other_deductions_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_deductions_portfolio_currency",
+            "attributeRef": "lotus.other_deductions_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.other_deductions_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.other_deductions_reporting_currency",
+            "attributeRef": "lotus.other_deductions_reporting_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.net_amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_amount_portfolio_currency",
+            "attributeRef": "lotus.net_amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].income_types[].year_to_date.net_amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.net_amount_reporting_currency",
+            "attributeRef": "lotus.net_amount_reporting_currency"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_activity_summary_reporting_activity_summary_query_post",
+      "method": "POST",
+      "path": "/reporting/activity-summary/query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Activity Summary",
+      "description": "Returns portfolio-level flow buckets for the requested reporting window and year-to-date. The summary is intentionally scoped to portfolio flows: inflows, outflows, fees, and taxes, with values translated to portfolio currency and reporting currency.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "amount_portfolio_currency",
+          "amount_reporting_currency",
+          "booking_center_code",
+          "bucket",
+          "buckets",
+          "client_id",
+          "end_date",
+          "portfolio_count",
+          "portfolio_currency",
+          "portfolio_id",
+          "portfolio_ids",
+          "portfolios",
+          "reporting_currency",
+          "requested_window",
+          "resolved_window",
+          "scope",
+          "scope_type",
+          "start_date",
+          "totals",
+          "transaction_count",
+          "window",
+          "year_to_date"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "window",
+            "location": "body",
+            "required": true,
+            "type": "ReportingWindow",
+            "semanticId": "lotus.window",
+            "attributeRef": "lotus.window"
+          },
+          {
+            "name": "window.start_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.start_date",
+            "attributeRef": "lotus.start_date"
+          },
+          {
+            "name": "window.end_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.end_date",
+            "attributeRef": "lotus.end_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "ActivitySummaryResponse",
+        "fields": [
+          {
+            "name": "scope_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.scope_type",
+            "attributeRef": "lotus.scope_type"
+          },
+          {
+            "name": "scope",
+            "location": "body",
+            "required": true,
+            "type": "ReportingScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "scope.portfolio_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "scope.booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "resolved_window",
+            "location": "body",
+            "required": true,
+            "type": "ReportingWindow",
+            "semanticId": "lotus.resolved_window",
+            "attributeRef": "lotus.resolved_window"
+          },
+          {
+            "name": "resolved_window.start_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.start_date",
+            "attributeRef": "lotus.start_date"
+          },
+          {
+            "name": "resolved_window.end_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.end_date",
+            "attributeRef": "lotus.end_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "totals",
+            "location": "body",
+            "required": true,
+            "type": "ActivitySummaryTotals",
+            "semanticId": "lotus.totals",
+            "attributeRef": "lotus.totals"
+          },
+          {
+            "name": "totals.portfolio_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.portfolio_count",
+            "attributeRef": "lotus.portfolio_count"
+          },
+          {
+            "name": "totals.buckets",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.buckets",
+            "attributeRef": "lotus.buckets"
+          },
+          {
+            "name": "totals.buckets[].bucket",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.bucket",
+            "attributeRef": "lotus.bucket"
+          },
+          {
+            "name": "totals.buckets[].requested_window",
+            "location": "body",
+            "required": true,
+            "type": "FlowPeriodSummary",
+            "semanticId": "lotus.requested_window",
+            "attributeRef": "lotus.requested_window"
+          },
+          {
+            "name": "totals.buckets[].requested_window.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "totals.buckets[].requested_window.amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amount_portfolio_currency",
+            "attributeRef": "lotus.amount_portfolio_currency"
+          },
+          {
+            "name": "totals.buckets[].requested_window.amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.amount_reporting_currency",
+            "attributeRef": "lotus.amount_reporting_currency"
+          },
+          {
+            "name": "totals.buckets[].year_to_date",
+            "location": "body",
+            "required": true,
+            "type": "FlowPeriodSummary",
+            "semanticId": "lotus.year_to_date",
+            "attributeRef": "lotus.year_to_date"
+          },
+          {
+            "name": "totals.buckets[].year_to_date.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "totals.buckets[].year_to_date.amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amount_portfolio_currency",
+            "attributeRef": "lotus.amount_portfolio_currency"
+          },
+          {
+            "name": "totals.buckets[].year_to_date.amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.amount_reporting_currency",
+            "attributeRef": "lotus.amount_reporting_currency"
+          },
+          {
+            "name": "portfolios",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.portfolios",
+            "attributeRef": "lotus.portfolios"
+          },
+          {
+            "name": "portfolios[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolios[].booking_center_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "portfolios[].client_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.client_id",
+            "attributeRef": "lotus.client_id"
+          },
+          {
+            "name": "portfolios[].portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_currency",
+            "attributeRef": "lotus.portfolio_currency"
+          },
+          {
+            "name": "portfolios[].buckets",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.buckets",
+            "attributeRef": "lotus.buckets"
+          },
+          {
+            "name": "portfolios[].buckets[].bucket",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.bucket",
+            "attributeRef": "lotus.bucket"
+          },
+          {
+            "name": "portfolios[].buckets[].requested_window",
+            "location": "body",
+            "required": true,
+            "type": "FlowPeriodSummary",
+            "semanticId": "lotus.requested_window",
+            "attributeRef": "lotus.requested_window"
+          },
+          {
+            "name": "portfolios[].buckets[].requested_window.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "portfolios[].buckets[].requested_window.amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amount_portfolio_currency",
+            "attributeRef": "lotus.amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].buckets[].requested_window.amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.amount_reporting_currency",
+            "attributeRef": "lotus.amount_reporting_currency"
+          },
+          {
+            "name": "portfolios[].buckets[].year_to_date",
+            "location": "body",
+            "required": true,
+            "type": "FlowPeriodSummary",
+            "semanticId": "lotus.year_to_date",
+            "attributeRef": "lotus.year_to_date"
+          },
+          {
+            "name": "portfolios[].buckets[].year_to_date.transaction_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.transaction_count",
+            "attributeRef": "lotus.transaction_count"
+          },
+          {
+            "name": "portfolios[].buckets[].year_to_date.amount_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amount_portfolio_currency",
+            "attributeRef": "lotus.amount_portfolio_currency"
+          },
+          {
+            "name": "portfolios[].buckets[].year_to_date.amount_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.amount_reporting_currency",
+            "attributeRef": "lotus.amount_reporting_currency"
           }
         ]
       }
