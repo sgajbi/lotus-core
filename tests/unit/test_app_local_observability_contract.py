@@ -44,3 +44,17 @@ def test_app_local_prometheus_targets_match_local_compose_service_names() -> Non
         target = job["static_configs"][0]["targets"][0]
         host = target.split(":", maxsplit=1)[0]
         assert host in services
+
+
+def test_app_local_grafana_overlay_files_are_explicitly_marked_non_canonical() -> None:
+    datasource = (ROOT / "grafana" / "provisioning" / "datasources" / "datasource.yml").read_text(
+        encoding="utf-8"
+    )
+    dashboards = (ROOT / "grafana" / "provisioning" / "dashboards" / "dashboard.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "App-local" in datasource
+    assert "lotus-platform/platform-stack" in datasource
+    assert "App-local" in dashboards
+    assert "lotus-platform/platform-stack" in dashboards
