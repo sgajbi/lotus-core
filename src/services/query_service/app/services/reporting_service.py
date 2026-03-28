@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,7 @@ from ..dtos.reporting_dto import (
     ActivitySummaryResponse,
     ActivitySummaryTotals,
     AllocationBucket,
+    AllocationLookThroughInfo,
     AllocationView,
     AssetAllocationQueryRequest,
     AssetAllocationResponse,
@@ -23,6 +25,9 @@ from ..dtos.reporting_dto import (
     CashBalancesResponse,
     CashBalancesTotals,
     FlowPeriodSummary,
+    HoldingSnapshotRecord,
+    HoldingsSnapshotQueryRequest,
+    HoldingsSnapshotResponse,
     IncomePeriodSummary,
     IncomeSummaryQueryRequest,
     IncomeSummaryResponse,
@@ -30,14 +35,20 @@ from ..dtos.reporting_dto import (
     IncomeTypeSummary,
     PortfolioActivitySummary,
     PortfolioIncomeSummary,
+    PortfolioSummaryQueryRequest,
+    PortfolioSummaryResponse,
+    PortfolioSummarySnapshotMetadata,
+    PortfolioSummaryTotals,
     ReportingPortfolioSummary,
     ReportingScope,
 )
 from ..repositories.reporting_repository import (
     ActivitySummaryAggregateRow,
     IncomeSummaryAggregateRow,
+    InstrumentLookthroughComponentRow,
     ReportingRepository,
 )
+from .reporting_classification import resolve_region
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
@@ -48,6 +59,9 @@ ALLOCATION_DIMENSION_ACCESSORS = {
     ),
     "sector": lambda instrument, snapshot: instrument.sector if instrument else None,
     "country": lambda instrument, snapshot: instrument.country_of_risk if instrument else None,
+    "region": lambda instrument, snapshot: (
+        resolve_region(instrument.country_of_risk) if instrument else None
+    ),
     "product_type": lambda instrument, snapshot: instrument.product_type if instrument else None,
     "rating": lambda instrument, snapshot: instrument.rating if instrument else None,
     "issuer_id": lambda instrument, snapshot: instrument.issuer_id if instrument else None,
@@ -150,6 +164,12 @@ class ReportingService:
             portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
             as_of_date=resolved_as_of_date,
         )
+        allocation_rows, look_through_info = await self._resolve_allocation_rows(
+            rows=rows,
+            requested_mode=request.look_through_mode,
+            as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
 
         total_market_value = ZERO
         views_payload: dict[str, dict[str, Decimal]] = {
@@ -159,18 +179,11 @@ class ReportingService:
             dimension: defaultdict(int) for dimension in request.dimensions
         }
 
-        for row in rows:
-            native_value = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_value = await self._convert_amount(
-                amount=native_value,
-                from_currency=row.portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=resolved_as_of_date,
-            )
+        for instrument, snapshot, reporting_value in allocation_rows:
             total_market_value += reporting_value
             for dimension in request.dimensions:
                 accessor = ALLOCATION_DIMENSION_ACCESSORS[dimension]
-                raw_value = accessor(row.instrument, row.snapshot)
+                raw_value = accessor(instrument, snapshot)
                 bucket_key = str(raw_value or "UNCLASSIFIED")
                 views_payload[dimension][bucket_key] += reporting_value
                 views_position_counts[dimension][bucket_key] += 1
@@ -201,6 +214,7 @@ class ReportingService:
             resolved_as_of_date=resolved_as_of_date,
             reporting_currency=reporting_currency,
             total_market_value_reporting_currency=total_market_value,
+            look_through=look_through_info,
             views=views,
         )
 
@@ -218,50 +232,21 @@ class ReportingService:
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        cash_rows = [
-            row
-            for row in rows
-            if row.instrument is not None
-            and str(row.instrument.asset_class or "").upper() == CASH_ASSET_CLASS
-        ]
-        cash_account_map = await self.repo.get_latest_cash_account_ids(
-            portfolio_id=portfolio.portfolio_id,
-            cash_security_ids=[row.snapshot.security_id for row in cash_rows],
-            as_of_date=resolved_as_of_date,
+        cash_rows = [row for row in rows if self._is_cash_row(row)]
+        account_records = await self._build_cash_account_balance_records(
+            portfolio=portfolio,
+            cash_rows=cash_rows,
+            resolved_as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
         )
-
-        account_records: list[CashAccountBalanceRecord] = []
-        total_portfolio_currency = ZERO
-        total_reporting_currency = ZERO
-        for row in cash_rows:
-            account_currency = row.instrument.currency or portfolio.base_currency
-            native_source_value = (
-                row.snapshot.market_value_local or row.snapshot.market_value or ZERO
-            )
-            native_balance = Decimal(str(native_source_value))
-            portfolio_balance = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_balance = await self._convert_amount(
-                amount=portfolio_balance,
-                from_currency=portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=resolved_as_of_date,
-            )
-            total_portfolio_currency += portfolio_balance
-            total_reporting_currency += reporting_balance
-            account_records.append(
-                CashAccountBalanceRecord(
-                    cash_account_id=(
-                        cash_account_map.get(row.snapshot.security_id) or row.snapshot.security_id
-                    ),
-                    instrument_id=row.instrument.security_id,
-                    security_id=row.snapshot.security_id,
-                    account_currency=account_currency,
-                    instrument_name=row.instrument.name,
-                    balance_account_currency=native_balance,
-                    balance_portfolio_currency=portfolio_balance,
-                    balance_reporting_currency=reporting_balance,
-                )
-            )
+        total_portfolio_currency = sum(
+            (record.balance_portfolio_currency for record in account_records),
+            ZERO,
+        )
+        total_reporting_currency = sum(
+            (record.balance_reporting_currency for record in account_records),
+            ZERO,
+        )
 
         return CashBalancesResponse(
             portfolio_id=portfolio.portfolio_id,
@@ -274,6 +259,402 @@ class ReportingService:
                 total_balance_reporting_currency=total_reporting_currency,
             ),
             cash_accounts=account_records,
+        )
+
+    async def get_portfolio_summary(
+        self, request: PortfolioSummaryQueryRequest
+    ) -> PortfolioSummaryResponse:
+        portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
+        if portfolio is None:
+            raise ValueError(f"Portfolio with id {request.portfolio_id} not found")
+
+        resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
+        if resolved_as_of_date is None:
+            raise ValueError("No business date is available for portfolio summary queries.")
+        reporting_currency = request.reporting_currency or portfolio.base_currency
+
+        rows = await self.repo.list_latest_snapshot_rows(
+            portfolio_ids=[portfolio.portfolio_id],
+            as_of_date=resolved_as_of_date,
+        )
+        cash_rows = [row for row in rows if self._is_cash_row(row)]
+        cash_account_records = await self._build_cash_account_balance_records(
+            portfolio=portfolio,
+            cash_rows=cash_rows,
+            resolved_as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
+
+        total_portfolio = ZERO
+        total_reporting = ZERO
+        cash_portfolio = sum(
+            (record.balance_portfolio_currency for record in cash_account_records),
+            ZERO,
+        )
+        cash_reporting = sum(
+            (record.balance_reporting_currency for record in cash_account_records),
+            ZERO,
+        )
+        valued_position_count = 0
+        unvalued_position_count = 0
+        snapshot_date = resolved_as_of_date
+
+        for row in rows:
+            snapshot_date = max(snapshot_date, row.snapshot.date)
+            portfolio_value = Decimal(str(row.snapshot.market_value or ZERO))
+            reporting_value = await self._convert_amount(
+                amount=portfolio_value,
+                from_currency=portfolio.base_currency,
+                to_currency=reporting_currency,
+                as_of_date=resolved_as_of_date,
+            )
+            total_portfolio += portfolio_value
+            total_reporting += reporting_value
+            if str(row.snapshot.valuation_status or "").upper() == "UNVALUED":
+                unvalued_position_count += 1
+            else:
+                valued_position_count += 1
+
+        return PortfolioSummaryResponse(
+            portfolio_id=portfolio.portfolio_id,
+            booking_center_code=portfolio.booking_center_code,
+            client_id=portfolio.client_id,
+            portfolio_currency=portfolio.base_currency,
+            reporting_currency=reporting_currency,
+            resolved_as_of_date=resolved_as_of_date,
+            portfolio_type=portfolio.portfolio_type,
+            objective=portfolio.objective,
+            risk_exposure=portfolio.risk_exposure,
+            status=portfolio.status,
+            totals=PortfolioSummaryTotals(
+                total_market_value_portfolio_currency=total_portfolio,
+                total_market_value_reporting_currency=total_reporting,
+                cash_balance_portfolio_currency=cash_portfolio,
+                cash_balance_reporting_currency=cash_reporting,
+                invested_market_value_portfolio_currency=total_portfolio - cash_portfolio,
+                invested_market_value_reporting_currency=total_reporting - cash_reporting,
+            ),
+            snapshot_metadata=PortfolioSummarySnapshotMetadata(
+                snapshot_date=snapshot_date,
+                position_count=len(rows),
+                cash_account_count=len(cash_account_records),
+                valued_position_count=valued_position_count,
+                unvalued_position_count=unvalued_position_count,
+            ),
+        )
+
+    async def get_holdings_snapshot(
+        self, request: HoldingsSnapshotQueryRequest
+    ) -> HoldingsSnapshotResponse:
+        portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
+        if portfolio is None:
+            raise ValueError(f"Portfolio with id {request.portfolio_id} not found")
+
+        resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
+        if resolved_as_of_date is None:
+            raise ValueError("No business date is available for holdings snapshot queries.")
+        reporting_currency = request.reporting_currency or portfolio.base_currency
+
+        rows = await self.repo.list_latest_snapshot_rows(
+            portfolio_ids=[portfolio.portfolio_id],
+            as_of_date=resolved_as_of_date,
+        )
+        if not request.include_cash_positions:
+            rows = [
+                row
+                for row in rows
+                if not (
+                    row.instrument is not None
+                    and str(row.instrument.asset_class or "").upper() == CASH_ASSET_CLASS
+                )
+            ]
+
+        snapshot_date = resolved_as_of_date
+        total_portfolio_value = ZERO
+        reporting_values: list[Decimal] = []
+        portfolio_values: list[Decimal] = []
+
+        for row in rows:
+            snapshot_date = max(snapshot_date, row.snapshot.date)
+            portfolio_value = Decimal(str(row.snapshot.market_value or ZERO))
+            reporting_value = await self._convert_amount(
+                amount=portfolio_value,
+                from_currency=portfolio.base_currency,
+                to_currency=reporting_currency,
+                as_of_date=resolved_as_of_date,
+            )
+            portfolio_values.append(portfolio_value)
+            reporting_values.append(reporting_value)
+            total_portfolio_value += portfolio_value
+
+        holdings: list[HoldingSnapshotRecord] = []
+        total_reporting_value = sum(reporting_values, ZERO)
+        for row, portfolio_value, reporting_value in zip(rows, portfolio_values, reporting_values):
+            holdings.append(
+                HoldingSnapshotRecord(
+                    security_id=row.snapshot.security_id,
+                    instrument_name=(
+                        row.instrument.name if row.instrument else row.snapshot.security_id
+                    ),
+                    asset_class=(row.instrument.asset_class if row.instrument else None),
+                    sector=(row.instrument.sector if row.instrument else None),
+                    country=(row.instrument.country_of_risk if row.instrument else None),
+                    region=(
+                        resolve_region(row.instrument.country_of_risk) if row.instrument else None
+                    ),
+                    account_currency=(row.instrument.currency if row.instrument else None),
+                    quantity=Decimal(str(row.snapshot.quantity)),
+                    market_value_portfolio_currency=portfolio_value,
+                    market_value_reporting_currency=reporting_value,
+                    weight=(
+                        portfolio_value / total_portfolio_value if total_portfolio_value else ZERO
+                    ),
+                    valuation_status=row.snapshot.valuation_status,
+                )
+            )
+
+        return HoldingsSnapshotResponse(
+            portfolio_id=portfolio.portfolio_id,
+            portfolio_currency=portfolio.base_currency,
+            reporting_currency=reporting_currency,
+            resolved_as_of_date=resolved_as_of_date,
+            snapshot_date=snapshot_date,
+            total_market_value_portfolio_currency=total_portfolio_value,
+            total_market_value_reporting_currency=total_reporting_value,
+            positions=holdings,
+        )
+
+    async def _build_cash_account_balance_records(
+        self,
+        *,
+        portfolio,
+        cash_rows: list,
+        resolved_as_of_date: date,
+        reporting_currency: str,
+    ) -> list[CashAccountBalanceRecord]:
+        cash_security_ids = [row.snapshot.security_id for row in cash_rows]
+        master_rows = await self.repo.list_cash_account_masters(
+            portfolio_id=portfolio.portfolio_id,
+            as_of_date=resolved_as_of_date,
+        )
+        master_by_security_id = {row.security_id: row for row in master_rows}
+        fallback_cash_account_ids = await self.repo.get_latest_cash_account_ids(
+            portfolio_id=portfolio.portfolio_id,
+            cash_security_ids=cash_security_ids,
+            as_of_date=resolved_as_of_date,
+        )
+        snapshot_by_security_id = {row.snapshot.security_id: row for row in cash_rows}
+
+        account_records: list[CashAccountBalanceRecord] = []
+        emitted_cash_account_ids: set[str] = set()
+
+        for master_row in master_rows:
+            snapshot_row = snapshot_by_security_id.get(master_row.security_id)
+            account_record = await self._build_cash_account_balance_record(
+                portfolio=portfolio,
+                snapshot_row=snapshot_row,
+                resolved_as_of_date=resolved_as_of_date,
+                reporting_currency=reporting_currency,
+                cash_account_id=master_row.cash_account_id,
+                security_id=master_row.security_id,
+                instrument_name=(
+                    snapshot_row.instrument.name
+                    if snapshot_row and snapshot_row.instrument
+                    else master_row.display_name
+                ),
+                account_currency=master_row.account_currency,
+            )
+            account_records.append(account_record)
+            emitted_cash_account_ids.add(master_row.cash_account_id)
+
+        for cash_row in cash_rows:
+            master_row = master_by_security_id.get(cash_row.snapshot.security_id)
+            fallback_cash_account_id = (
+                master_row.cash_account_id
+                if master_row is not None
+                else fallback_cash_account_ids.get(cash_row.snapshot.security_id)
+                or cash_row.snapshot.security_id
+            )
+            if fallback_cash_account_id in emitted_cash_account_ids:
+                continue
+            account_records.append(
+                await self._build_cash_account_balance_record(
+                    portfolio=portfolio,
+                    snapshot_row=cash_row,
+                    resolved_as_of_date=resolved_as_of_date,
+                    reporting_currency=reporting_currency,
+                    cash_account_id=fallback_cash_account_id,
+                    security_id=cash_row.snapshot.security_id,
+                    instrument_name=(
+                        cash_row.instrument.name
+                        if cash_row.instrument is not None
+                        else cash_row.snapshot.security_id
+                    ),
+                    account_currency=(
+                        cash_row.instrument.currency
+                        if cash_row.instrument and cash_row.instrument.currency
+                        else portfolio.base_currency
+                    ),
+                )
+            )
+
+        account_records.sort(key=lambda row: (row.account_currency, row.cash_account_id))
+        return account_records
+
+    async def _build_cash_account_balance_record(
+        self,
+        *,
+        portfolio,
+        snapshot_row,
+        resolved_as_of_date: date,
+        reporting_currency: str,
+        cash_account_id: str,
+        security_id: str,
+        instrument_name: str,
+        account_currency: str,
+    ) -> CashAccountBalanceRecord:
+        if snapshot_row is None:
+            native_balance = ZERO
+            portfolio_balance = ZERO
+        else:
+            native_source_value = (
+                snapshot_row.snapshot.market_value_local
+                or snapshot_row.snapshot.market_value
+                or ZERO
+            )
+            native_balance = Decimal(str(native_source_value))
+            portfolio_balance = Decimal(str(snapshot_row.snapshot.market_value or ZERO))
+        reporting_balance = await self._convert_amount(
+            amount=portfolio_balance,
+            from_currency=portfolio.base_currency,
+            to_currency=reporting_currency,
+            as_of_date=resolved_as_of_date,
+        )
+        return CashAccountBalanceRecord(
+            cash_account_id=cash_account_id,
+            instrument_id=security_id,
+            security_id=security_id,
+            account_currency=account_currency,
+            instrument_name=instrument_name,
+            balance_account_currency=native_balance,
+            balance_portfolio_currency=portfolio_balance,
+            balance_reporting_currency=reporting_balance,
+        )
+
+    async def _resolve_allocation_rows(
+        self,
+        *,
+        rows: list,
+        requested_mode: str,
+        as_of_date: date,
+        reporting_currency: str,
+    ) -> tuple[list[tuple[object | None, object, Decimal]], AllocationLookThroughInfo]:
+        direct_rows: list[tuple[object | None, object, Decimal]] = []
+        for row in rows:
+            native_value = Decimal(str(row.snapshot.market_value or ZERO))
+            reporting_value = await self._convert_amount(
+                amount=native_value,
+                from_currency=row.portfolio.base_currency,
+                to_currency=reporting_currency,
+                as_of_date=as_of_date,
+            )
+            direct_rows.append((row.instrument, row.snapshot, reporting_value))
+
+        component_rows = await self.repo.list_instrument_lookthrough_components(
+            parent_security_ids=[row.snapshot.security_id for row in rows],
+            as_of_date=as_of_date,
+        )
+        components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)
+        for component_row in component_rows:
+            components_by_parent[component_row.parent_security_id].append(component_row)
+        decomposable_parent_ids = {
+            parent_security_id
+            for parent_security_id, components in components_by_parent.items()
+            if self._can_decompose_position(components)
+        }
+
+        if requested_mode == "direct_only":
+            return direct_rows, AllocationLookThroughInfo(
+                requested_mode=requested_mode,
+                applied_mode="direct_only",
+                supported=bool(decomposable_parent_ids),
+                decomposed_position_count=0,
+                limitation_reason=None,
+            )
+
+        allocation_rows: list[tuple[object | None, object, Decimal]] = []
+        decomposed_position_count = 0
+        undecomposed_requested_count = 0
+
+        for row in rows:
+            native_value = Decimal(str(row.snapshot.market_value or ZERO))
+            reporting_value = await self._convert_amount(
+                amount=native_value,
+                from_currency=row.portfolio.base_currency,
+                to_currency=reporting_currency,
+                as_of_date=as_of_date,
+            )
+            components = components_by_parent.get(row.snapshot.security_id, [])
+            if row.snapshot.security_id not in decomposable_parent_ids:
+                allocation_rows.append((row.instrument, row.snapshot, reporting_value))
+                if not self._is_cash_row(row):
+                    undecomposed_requested_count += 1
+                continue
+
+            decomposed_position_count += 1
+            for component in components:
+                allocation_rows.append(
+                    (
+                        component.component_instrument,
+                        SimpleNamespace(security_id=component.component_security_id),
+                        reporting_value * Decimal(str(component.component_weight)),
+                    )
+                )
+
+        if decomposed_position_count == 0:
+            limitation_reason = (
+                "Look-through components were requested but no fully weighted source-owned "
+                "decomposition set was available for the resolved holdings."
+            )
+            return direct_rows, AllocationLookThroughInfo(
+                requested_mode=requested_mode,
+                applied_mode="direct_only",
+                supported=False,
+                decomposed_position_count=0,
+                limitation_reason=limitation_reason,
+            )
+
+        limitation_reason = None
+        if undecomposed_requested_count:
+            limitation_reason = (
+                "Look-through was applied where complete component weights were available; "
+                "remaining positions stayed at direct-holding level."
+            )
+        return allocation_rows, AllocationLookThroughInfo(
+            requested_mode=requested_mode,
+            applied_mode="prefer_look_through",
+            supported=True,
+            decomposed_position_count=decomposed_position_count,
+            limitation_reason=limitation_reason,
+        )
+
+    @staticmethod
+    def _can_decompose_position(
+        components: list[InstrumentLookthroughComponentRow],
+    ) -> bool:
+        if not components:
+            return False
+        total_weight = sum(
+            (Decimal(str(component.component_weight)) for component in components),
+            ZERO,
+        )
+        return abs(total_weight - Decimal("1")) <= Decimal("0.000001")
+
+    @staticmethod
+    def _is_cash_row(row) -> bool:
+        return (
+            row.instrument is not None
+            and str(row.instrument.asset_class or "").upper() == CASH_ASSET_CLASS
         )
 
     async def get_income_summary(self, request: IncomeSummaryQueryRequest) -> IncomeSummaryResponse:

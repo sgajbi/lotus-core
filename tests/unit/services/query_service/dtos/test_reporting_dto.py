@@ -8,7 +8,9 @@ from src.services.query_service.app.dtos.reporting_dto import (
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
     CashBalancesQueryRequest,
+    HoldingsSnapshotQueryRequest,
     IncomeSummaryQueryRequest,
+    PortfolioSummaryQueryRequest,
     ReportingScope,
     ReportingWindow,
 )
@@ -66,3 +68,31 @@ def test_activity_summary_accepts_single_portfolio_without_reporting_currency() 
 
     assert request.scope.scope_type == "portfolio"
     assert request.reporting_currency is None
+
+
+def test_asset_allocation_request_supports_region_and_lookthrough_mode() -> None:
+    request = AssetAllocationQueryRequest(
+        scope=ReportingScope(portfolio_id="P1"),
+        dimensions=["region", "asset_class"],
+        look_through_mode="prefer_look_through",
+    )
+
+    assert request.dimensions == ["region", "asset_class"]
+    assert request.look_through_mode == "prefer_look_through"
+
+
+def test_portfolio_summary_request_is_single_portfolio_contract() -> None:
+    request = PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="USD")
+
+    assert request.portfolio_id == "P1"
+    assert request.reporting_currency == "USD"
+
+
+def test_holdings_snapshot_request_supports_include_cash_toggle() -> None:
+    request = HoldingsSnapshotQueryRequest(
+        portfolio_id="P1",
+        include_cash_positions=False,
+    )
+
+    assert request.portfolio_id == "P1"
+    assert request.include_cash_positions is False

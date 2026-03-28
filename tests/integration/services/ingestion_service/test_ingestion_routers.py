@@ -569,8 +569,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             row = self.replay_audit.get(replay_fingerprint)
             if (
                 row
-                and row.get("replay_status")
-                in {"replayed", "replayed_bookkeeping_failed"}
+                and row.get("replay_status") in {"replayed", "replayed_bookkeeping_failed"}
                 and (recovery_path is None or row.get("recovery_path") == recovery_path)
             ):
                 return {
@@ -708,9 +707,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 normalized.append(row)
             self.persisted["benchmark_assignments"].extend(normalized)
 
-        async def upsert_benchmark_definitions(
-            self, records: list[dict[str, object]]
-        ) -> None:
+        async def upsert_benchmark_definitions(self, records: list[dict[str, object]]) -> None:
             self.persisted["benchmark_definitions"].extend(records)
 
         async def upsert_benchmark_compositions(self, records: list[dict[str, object]]) -> None:
@@ -734,6 +731,14 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
             return None
 
+        async def upsert_cash_account_masters(self, records: list[dict[str, object]]) -> None:
+            return None
+
+        async def upsert_instrument_lookthrough_components(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            return None
+
     fake_job_service = FakeIngestionJobService()
     fake_reference_data_service = FakeReferenceDataIngestionService()
     target_apps = (app, event_replay_app)
@@ -742,31 +747,31 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         target_app.dependency_overrides[get_ingestion_job_service] = lambda: fake_job_service
         target_app.dependency_overrides[get_kafka_producer] = override_get_kafka_producer
 
-    app.dependency_overrides[transactions_router.get_ingestion_job_service] = (
-        lambda: fake_job_service
+    app.dependency_overrides[transactions_router.get_ingestion_job_service] = lambda: (
+        fake_job_service
     )
     app.dependency_overrides[portfolios_router.get_ingestion_job_service] = lambda: fake_job_service
-    app.dependency_overrides[instruments_router.get_ingestion_job_service] = (
-        lambda: fake_job_service
+    app.dependency_overrides[instruments_router.get_ingestion_job_service] = lambda: (
+        fake_job_service
     )
-    app.dependency_overrides[market_prices_router.get_ingestion_job_service] = (
-        lambda: fake_job_service
+    app.dependency_overrides[market_prices_router.get_ingestion_job_service] = lambda: (
+        fake_job_service
     )
     app.dependency_overrides[fx_rates_router.get_ingestion_job_service] = lambda: fake_job_service
-    app.dependency_overrides[business_dates_router.get_ingestion_job_service] = (
-        lambda: fake_job_service
+    app.dependency_overrides[business_dates_router.get_ingestion_job_service] = lambda: (
+        fake_job_service
     )
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
-    app.dependency_overrides[reprocessing_router.get_ingestion_job_service] = (
-        lambda: fake_job_service
+    app.dependency_overrides[reprocessing_router.get_ingestion_job_service] = lambda: (
+        fake_job_service
     )
-    app.dependency_overrides[reference_data_router.get_ingestion_job_service] = (
-        lambda: fake_job_service
+    app.dependency_overrides[reference_data_router.get_ingestion_job_service] = lambda: (
+        fake_job_service
     )
-    app.dependency_overrides[reference_data_router.get_reference_data_ingestion_service] = (
-        lambda: fake_reference_data_service
+    app.dependency_overrides[reference_data_router.get_reference_data_ingestion_service] = lambda: (
+        fake_reference_data_service
     )
     event_replay_app.dependency_overrides[ingestion_operations_router.get_ingestion_job_service] = (
         lambda: fake_job_service
@@ -1181,9 +1186,7 @@ async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publ
         params={"job_id": failed_job_id},
     )
     audits = audit_response.json()["audits"]
-    assert any(
-        row["replay_status"] == "replayed_bookkeeping_failed" for row in audits
-    )
+    assert any(row["replay_status"] == "replayed_bookkeeping_failed" for row in audits)
 
     ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.discard(failed_job_id)
     duplicate_response = await event_replay_test_client.post(
@@ -1671,9 +1674,7 @@ async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publi
         params={"job_id": job_id},
     )
     audits = audit_response.json()["audits"]
-    assert any(
-        row["replay_status"] == "replayed_bookkeeping_failed" for row in audits
-    )
+    assert any(row["replay_status"] == "replayed_bookkeeping_failed" for row in audits)
 
     ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.discard(job_id)
     second = await event_replay_test_client.post(
@@ -1821,6 +1822,53 @@ async def test_ingest_fx_rates_endpoint(
 
     assert response.status_code == 202
     mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_cash_account_masters_endpoint(
+    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = {
+        "cash_accounts": [
+            {
+                "cash_account_id": "CASH-ACC-USD-001",
+                "portfolio_id": "P1",
+                "security_id": "CASH_USD",
+                "display_name": "USD Operating Cash",
+                "account_currency": "USD",
+                "lifecycle_status": "ACTIVE",
+            }
+        ]
+    }
+
+    response = await async_test_client.post("/ingest/reference/cash-accounts", json=payload)
+
+    assert response.status_code == 202
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_instrument_lookthrough_components_endpoint(
+    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = {
+        "lookthrough_components": [
+            {
+                "parent_security_id": "FUND_001",
+                "component_security_id": "ETF_001",
+                "effective_from": "2026-01-01",
+                "component_weight": "0.6000000000",
+            }
+        ]
+    }
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=payload,
+    )
+
+    assert response.status_code == 202
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_ingest_portfolio_bundle_endpoint(

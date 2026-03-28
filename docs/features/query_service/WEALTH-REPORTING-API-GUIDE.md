@@ -12,6 +12,14 @@ This guide documents the gold-standard PB/WM reporting APIs exposed by `lotus-co
 The design goal is to keep canonical ledger and discovery reads simple while giving
 wealth-reporting use cases stronger, typed contracts.
 
+This guide also covers the portfolio-workspace follow-up contracts that make historical
+portfolio workspaces trustworthy for PB/WM consumers:
+
+- canonical cash-account master ingestion and query
+- true historical as-of portfolio summary and holdings snapshot contracts
+- reporting-currency restatement for portfolio workspace modules
+- region and look-through allocation support
+
 ## API Surface
 
 ### Portfolio discovery
@@ -58,6 +66,25 @@ The response includes both canonical transaction attributes and reporting-releva
 - trade currency
 - linked cashflow details
 - detailed transaction costs
+
+### Cash account master
+
+- `GET /portfolios/{portfolio_id}/cash-accounts`
+
+Use this contract for canonical cash-account identity and lifecycle metadata.
+
+Inputs:
+
+- `portfolio_id`
+- optional `as_of_date`
+
+Behavior:
+
+- returns source-owned cash-account master rows
+- filters accounts by `opened_on` / `closed_on` when `as_of_date` is provided
+- does not infer account identity from transactions
+
+This is the master-data contract that reporting cash-balance queries build on top of.
 
 ## Why AUM and Cash Balances Are Separate
 
@@ -144,6 +171,7 @@ Supported dimensions:
 - `currency`
 - `sector`
 - `country`
+- `region`
 - `product_type`
 - `rating`
 - `issuer_id`
@@ -151,10 +179,70 @@ Supported dimensions:
 - `ultimate_parent_issuer_id`
 - `ultimate_parent_issuer_name`
 
+Look-through behavior:
+
+- `look_through_mode = direct_only`
+  - keep parent holdings intact
+- `look_through_mode = prefer_look_through`
+  - decompose eligible parent instruments when a fully weighted source-owned component set exists
+  - preserve direct holdings for the remaining positions
+  - return a `look_through` capability / limitation block in the response
+
 Behavior:
 
 - returns one allocation view per requested dimension
 - every bucket includes reporting-currency market value, weight, and position count
+- region is derived from country-of-risk using the source-owned Lotus classification helper
+
+### Portfolio Summary
+
+- `POST /reporting/portfolio-summary/query`
+
+Inputs:
+
+- `portfolio_id`
+- `as_of_date`
+- optional `reporting_currency`
+
+Behavior:
+
+- returns a true historical as-of portfolio snapshot summary
+- returns totals in:
+  - portfolio currency
+  - reporting currency
+- separates:
+  - total market value
+  - cash balance
+  - invested market value
+- returns snapshot metadata including:
+  - resolved snapshot date
+  - position count
+  - cash-account count
+  - valued / unvalued counts
+
+### Holdings Snapshot
+
+- `POST /reporting/holdings-snapshot/query`
+
+Inputs:
+
+- `portfolio_id`
+- `as_of_date`
+- optional `reporting_currency`
+- `include_cash_positions`
+
+Behavior:
+
+- returns a true historical as-of holdings snapshot
+- returns each holding in:
+  - portfolio currency
+  - reporting currency
+- returns portfolio-workspace classifications including:
+  - asset class
+  - sector
+  - country
+  - region
+- supports excluding cash positions for pure investment holdings views
 
 ### Cash Balances
 
@@ -169,6 +257,8 @@ Inputs:
 Behavior:
 
 - defaults `reporting_currency` to portfolio currency
+- resolves accounts from canonical cash-account master data first
+- falls back to latest settlement-cash transaction linkage only when no master row exists
 - returns each cash account in:
   - account currency
   - portfolio currency
@@ -176,9 +266,10 @@ Behavior:
 - returns portfolio totals in:
   - portfolio currency
   - reporting currency
+- includes zero-balance master accounts so the workspace sees the full account inventory
 
-Cash account identity is resolved from the latest known settlement-cash mapping when available.
-If no explicit account mapping is available, the API falls back to the cash instrument identity.
+If no explicit account master or linkage is available, the API falls back to the cash instrument
+identity as the last-resort identifier.
 
 ### Income Summary
 
@@ -279,15 +370,16 @@ very large reporting jobs without weakening the main ledger contract.
 ### Reporting APIs
 
 The reporting APIs use the latest non-zero snapshot per `(portfolio_id, security_id)` as of the
-requested date. This keeps the query bounded and aligned with PB/WM as-of reporting semantics.
+requested date. This keeps the query bounded while preserving true historical as-of semantics.
 
 Important characteristics:
 
 - latest-snapshot resolution is handled in SQL with a window function
-- only current-epoch position state is used
+- historical queries are not pinned to current epoch only
 - FX conversion is cached per request in the service layer
 - scope-wide reporting is based on the resolved portfolio set instead of repeated per-portfolio
   round trips
+- look-through decomposition is only applied when source-owned component weights form a complete set
 
 This makes the APIs suitable for:
 
@@ -312,15 +404,18 @@ These APIs follow a few rules consistently:
 - canonical discovery reads stay in `query_service`
 - higher-order reporting uses typed `POST` contracts
 - portfolio currency and reporting currency semantics are explicit
+- true historical `as_of_date` semantics are explicit for snapshot-backed views
 - scope resolution is part of the request contract, not implicit server behavior
 - responses echo resolved dates and effective currencies
+- canonical account identity comes from source-owned master data, not downstream inference
 
 ## Testing Standard
 
 The supporting tests are intended to lock real domain behavior:
 
 - DTO tests cover scope and currency rules
-- service tests cover aggregation, FX conversion, and cash-account behavior
+- service tests cover aggregation, FX conversion, historical snapshot behavior, look-through, and
+  cash-account behavior
 - repository tests cover SQL shape for scope filters, latest-snapshot resolution, and
   index-friendly date predicates
 - integration tests cover FastAPI routing and OpenAPI contract visibility

@@ -11,13 +11,16 @@ from src.services.query_service.app.dtos.reporting_dto import (
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
     CashBalancesQueryRequest,
+    HoldingsSnapshotQueryRequest,
     IncomeSummaryQueryRequest,
+    PortfolioSummaryQueryRequest,
     ReportingScope,
     ReportingWindow,
 )
 from src.services.query_service.app.repositories.reporting_repository import (
     ActivitySummaryAggregateRow,
     IncomeSummaryAggregateRow,
+    InstrumentLookthroughComponentRow,
     ReportingSnapshotRow,
 )
 from src.services.query_service.app.services.reporting_service import ReportingService
@@ -76,11 +79,17 @@ def _snapshot(
     *,
     market_value: str,
     market_value_local: str | None = None,
+    quantity: str = "1",
+    valuation_status: str | None = "VALUED",
+    snapshot_date: date = date(2026, 3, 27),
 ):
     return SimpleNamespace(
         security_id=security_id,
+        date=snapshot_date,
         market_value=Decimal(market_value),
         market_value_local=Decimal(market_value_local or market_value),
+        quantity=Decimal(quantity),
+        valuation_status=valuation_status,
     )
 
 
@@ -207,6 +216,274 @@ async def test_get_cash_balances_returns_cash_accounts_and_totals() -> None:
     assert response.totals.total_balance_portfolio_currency == Decimal("250")
     assert response.totals.total_balance_reporting_currency == Decimal("300.0")
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+
+
+async def test_get_cash_balances_prefers_cash_account_master_and_keeps_zero_balance_accounts() -> (
+    None
+):
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="250", market_value_local="250"),
+            instrument=_instrument(
+                "CASH_USD",
+                name="USD Cash Account",
+                currency="USD",
+                asset_class="CASH",
+                sector="CASH",
+                product_type="CASH",
+            ),
+        )
+    ]
+    repo.list_cash_account_masters.return_value = [
+        SimpleNamespace(
+            cash_account_id="CASH-ACC-USD-001",
+            security_id="CASH_USD",
+            display_name="USD Operating Cash",
+            account_currency="USD",
+        ),
+        SimpleNamespace(
+            cash_account_id="CASH-ACC-SGD-001",
+            security_id="CASH_SGD",
+            display_name="SGD Reserve Cash",
+            account_currency="SGD",
+        ),
+    ]
+    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "LEGACY-MAP"}
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(CashBalancesQueryRequest(portfolio_id="P1"))
+
+    assert [record.cash_account_id for record in response.cash_accounts] == [
+        "CASH-ACC-SGD-001",
+        "CASH-ACC-USD-001",
+    ]
+    assert response.cash_accounts[0].balance_portfolio_currency == Decimal("0")
+    assert response.cash_accounts[1].balance_portfolio_currency == Decimal("250")
+    assert response.totals.cash_account_count == 2
+
+
+async def test_get_portfolio_summary_returns_historical_restated_totals() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio.portfolio_type = "DISCRETIONARY"
+    portfolio.objective = "Growth"
+    portfolio.risk_exposure = "BALANCED"
+    portfolio.status = "ACTIVE"
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(
+                "CASH_USD",
+                market_value="200",
+                quantity="1",
+                snapshot_date=date(2026, 3, 26),
+            ),
+            instrument=_instrument(
+                "CASH_USD",
+                name="USD Cash",
+                currency="USD",
+                asset_class="CASH",
+                sector="CASH",
+                product_type="CASH",
+            ),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(
+                "SEC1",
+                market_value="800",
+                quantity="10",
+                valuation_status="UNVALUED",
+                snapshot_date=date(2026, 3, 27),
+            ),
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+        ),
+    ]
+    repo.list_cash_account_masters.return_value = [
+        SimpleNamespace(
+            cash_account_id="CASH-ACC-USD-001",
+            security_id="CASH_USD",
+            display_name="USD Operating Cash",
+            account_currency="USD",
+        )
+    ]
+    repo.get_latest_cash_account_ids.return_value = {}
+    repo.get_latest_fx_rate.return_value = Decimal("1.5")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+        )
+
+    assert response.totals.total_market_value_portfolio_currency == Decimal("1000")
+    assert response.totals.cash_balance_portfolio_currency == Decimal("200")
+    assert response.totals.invested_market_value_reporting_currency == Decimal("1200.0")
+    assert response.snapshot_metadata.snapshot_date == date(2026, 3, 27)
+    assert response.snapshot_metadata.cash_account_count == 1
+    assert response.snapshot_metadata.valued_position_count == 1
+    assert response.snapshot_metadata.unvalued_position_count == 1
+
+
+async def test_get_holdings_snapshot_restates_reporting_currency_and_region() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="100"),
+            instrument=_instrument(
+                "SEC1",
+                asset_class="EQUITY",
+                sector="TECH",
+                country_of_risk="US",
+            ),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="50"),
+            instrument=_instrument(
+                "CASH_USD",
+                asset_class="CASH",
+                sector="CASH",
+                product_type="CASH",
+            ),
+        ),
+    ]
+    repo.get_latest_fx_rate.return_value = Decimal("1.2")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_holdings_snapshot(
+            HoldingsSnapshotQueryRequest(
+                portfolio_id="P1",
+                reporting_currency="SGD",
+                include_cash_positions=False,
+            )
+        )
+
+    assert response.total_market_value_portfolio_currency == Decimal("100")
+    assert response.total_market_value_reporting_currency == Decimal("120.0")
+    assert len(response.positions) == 1
+    assert response.positions[0].region == "North America"
+    assert response.positions[0].weight == Decimal("1")
+
+
+async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("FUND1", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2", asset_class="EQUITY", country_of_risk="US"),
+        ),
+    ]
+    repo.list_instrument_lookthrough_components.return_value = [
+        InstrumentLookthroughComponentRow(
+            parent_security_id="FUND1",
+            component_security_id="ETF1",
+            component_weight=Decimal("0.6"),
+            component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+        ),
+        InstrumentLookthroughComponentRow(
+            parent_security_id="FUND1",
+            component_security_id="ETF2",
+            component_weight=Decimal("0.4"),
+            component_instrument=_instrument("ETF2", asset_class="BOND", country_of_risk="DE"),
+        ),
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_asset_allocation(
+            AssetAllocationQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                dimensions=["region", "asset_class"],
+                look_through_mode="prefer_look_through",
+            )
+        )
+
+    assert response.look_through.applied_mode == "prefer_look_through"
+    assert response.look_through.supported is True
+    assert response.look_through.decomposed_position_count == 1
+    assert "remaining positions" in response.look_through.limitation_reason
+    region_view = next(view for view in response.views if view.dimension == "region")
+    north_america_bucket = next(
+        bucket for bucket in region_view.buckets if bucket.dimension_value == "North America"
+    )
+    europe_bucket = next(
+        bucket for bucket in region_view.buckets if bucket.dimension_value == "Europe"
+    )
+    assert north_america_bucket.market_value_reporting_currency == Decimal("110.0")
+    assert europe_bucket.market_value_reporting_currency == Decimal("40.0")
+
+
+async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mode() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("FUND1", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        )
+    ]
+    repo.list_instrument_lookthrough_components.return_value = [
+        InstrumentLookthroughComponentRow(
+            parent_security_id="FUND1",
+            component_security_id="ETF1",
+            component_weight=Decimal("1"),
+            component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+        )
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_asset_allocation(
+            AssetAllocationQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                dimensions=["asset_class"],
+            )
+        )
+
+    assert response.look_through.requested_mode == "direct_only"
+    assert response.look_through.applied_mode == "direct_only"
+    assert response.look_through.supported is True
 
 
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:

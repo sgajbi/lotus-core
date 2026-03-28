@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field, model_validator
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
 IncomeType = Literal["DIVIDEND", "INTEREST", "CASH_IN_LIEU"]
 ActivityBucketType = Literal["INFLOWS", "OUTFLOWS", "FEES", "TAXES"]
+LookThroughMode = Literal["direct_only", "prefer_look_through"]
 AllocationDimension = Literal[
     "asset_class",
     "currency",
     "sector",
     "country",
+    "region",
     "product_type",
     "rating",
     "issuer_id",
@@ -135,6 +137,15 @@ class AssetAllocationQueryRequest(BaseModel):
         ),
         examples=[["asset_class", "currency", "sector"]],
     )
+    look_through_mode: LookThroughMode = Field(
+        "direct_only",
+        description=(
+            "Allocation decomposition mode. `direct_only` keeps parent holdings intact. "
+            "`prefer_look_through` decomposes eligible parent instruments when source-owned "
+            "look-through components are available."
+        ),
+        examples=["prefer_look_through"],
+    )
 
     @model_validator(mode="after")
     def validate_reporting_currency_requirements(self) -> "AssetAllocationQueryRequest":
@@ -163,6 +174,51 @@ class CashBalancesQueryRequest(BaseModel):
             "Optional reporting currency. Defaults to the portfolio currency when not provided."
         ),
         examples=["USD"],
+    )
+
+
+class PortfolioSummaryQueryRequest(BaseModel):
+    portfolio_id: str = Field(
+        ...,
+        description="Portfolio identifier for the summary query.",
+        examples=["PORT-001"],
+    )
+    as_of_date: date | None = Field(
+        None,
+        description=(
+            "As-of date for the historical portfolio snapshot. Defaults to latest business date."
+        ),
+        examples=["2026-03-27"],
+    )
+    reporting_currency: str | None = Field(
+        None,
+        description="Optional reporting currency. Defaults to the portfolio currency.",
+        examples=["USD"],
+    )
+
+
+class HoldingsSnapshotQueryRequest(BaseModel):
+    portfolio_id: str = Field(
+        ...,
+        description="Portfolio identifier for the holdings snapshot query.",
+        examples=["PORT-001"],
+    )
+    as_of_date: date | None = Field(
+        None,
+        description=(
+            "As-of date for the historical holdings snapshot. Defaults to latest business date."
+        ),
+        examples=["2026-03-27"],
+    )
+    reporting_currency: str | None = Field(
+        None,
+        description="Optional reporting currency. Defaults to the portfolio currency.",
+        examples=["USD"],
+    )
+    include_cash_positions: bool = Field(
+        True,
+        description="When false, excludes cash positions from the holdings snapshot.",
+        examples=[True],
     )
 
 
@@ -308,8 +364,35 @@ class AssetAllocationResponse(BaseModel):
     total_market_value_reporting_currency: Decimal = Field(
         ..., description="Total AUM represented by the allocation views."
     )
+    look_through: "AllocationLookThroughInfo" = Field(
+        ...,
+        description="Applied look-through mode and capability summary for the allocation query.",
+    )
     views: list[AllocationView] = Field(
         ..., description="Allocation views for the requested classification dimensions."
+    )
+
+
+class AllocationLookThroughInfo(BaseModel):
+    requested_mode: LookThroughMode = Field(
+        ...,
+        description="Look-through mode requested by the caller.",
+    )
+    applied_mode: LookThroughMode = Field(
+        ...,
+        description="Look-through mode actually applied to the response.",
+    )
+    supported: bool = Field(
+        ...,
+        description="Whether source-owned look-through decomposition was available for the query.",
+    )
+    decomposed_position_count: int = Field(
+        ...,
+        description="Number of parent positions decomposed into underlying components.",
+    )
+    limitation_reason: str | None = Field(
+        None,
+        description="Explanation when look-through was requested but could not be applied.",
     )
 
 
@@ -367,6 +450,117 @@ class CashBalancesResponse(BaseModel):
     totals: CashBalancesTotals = Field(..., description="Portfolio-level cash totals.")
     cash_accounts: list[CashAccountBalanceRecord] = Field(
         ..., description="Resolved cash accounts and balances for the portfolio."
+    )
+
+
+class PortfolioSummaryTotals(BaseModel):
+    total_market_value_portfolio_currency: Decimal = Field(
+        ...,
+        description="Total portfolio market value in portfolio currency.",
+    )
+    total_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Total portfolio market value in reporting currency.",
+    )
+    cash_balance_portfolio_currency: Decimal = Field(
+        ...,
+        description="Cash balance subtotal in portfolio currency.",
+    )
+    cash_balance_reporting_currency: Decimal = Field(
+        ...,
+        description="Cash balance subtotal in reporting currency.",
+    )
+    invested_market_value_portfolio_currency: Decimal = Field(
+        ...,
+        description="Non-cash invested market value in portfolio currency.",
+    )
+    invested_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Non-cash invested market value in reporting currency.",
+    )
+
+
+class PortfolioSummarySnapshotMetadata(BaseModel):
+    snapshot_date: date = Field(..., description="Resolved snapshot date backing the summary.")
+    position_count: int = Field(..., description="Number of positions in the snapshot.")
+    cash_account_count: int = Field(..., description="Number of cash accounts represented.")
+    valued_position_count: int = Field(
+        ...,
+        description="Number of snapshot positions with non-UNVALUED coverage.",
+    )
+    unvalued_position_count: int = Field(
+        ...,
+        description="Number of snapshot positions still lacking valuation coverage.",
+    )
+
+
+class PortfolioSummaryResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-001"])
+    booking_center_code: str = Field(..., description="Booking center code.", examples=["SGPB"])
+    client_id: str = Field(..., description="Client identifier.", examples=["CIF-1001"])
+    portfolio_currency: str = Field(..., description="Portfolio base currency.", examples=["USD"])
+    reporting_currency: str = Field(
+        ...,
+        description="Effective reporting currency.",
+        examples=["USD"],
+    )
+    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
+    portfolio_type: str = Field(..., description="Portfolio product/type classification.")
+    objective: str | None = Field(None, description="Primary portfolio objective.")
+    risk_exposure: str = Field(..., description="Risk-exposure classification.")
+    status: str = Field(..., description="Portfolio lifecycle status.")
+    totals: PortfolioSummaryTotals = Field(..., description="Portfolio summary totals.")
+    snapshot_metadata: PortfolioSummarySnapshotMetadata = Field(
+        ...,
+        description="Resolved snapshot metadata for the summary query.",
+    )
+
+
+class HoldingSnapshotRecord(BaseModel):
+    security_id: str = Field(..., description="Security identifier.", examples=["SEC-US-AAPL"])
+    instrument_name: str = Field(..., description="Instrument display name.")
+    asset_class: str | None = Field(None, description="Asset class classification.")
+    sector: str | None = Field(None, description="Sector classification.")
+    country: str | None = Field(None, description="Country of risk classification.")
+    region: str | None = Field(None, description="Derived region classification.")
+    account_currency: str | None = Field(None, description="Instrument or account currency.")
+    quantity: Decimal = Field(..., description="Position quantity.")
+    market_value_portfolio_currency: Decimal = Field(
+        ...,
+        description="Position market value in portfolio currency.",
+    )
+    market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Position market value in reporting currency.",
+    )
+    weight: Decimal = Field(..., description="Position weight versus total snapshot market value.")
+    valuation_status: str | None = Field(None, description="Snapshot valuation status.")
+
+
+class HoldingsSnapshotResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-001"])
+    portfolio_currency: str = Field(..., description="Portfolio base currency.", examples=["USD"])
+    reporting_currency: str = Field(
+        ...,
+        description="Effective reporting currency.",
+        examples=["USD"],
+    )
+    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
+    snapshot_date: date = Field(
+        ...,
+        description="Resolved snapshot date backing the holdings view.",
+    )
+    total_market_value_portfolio_currency: Decimal = Field(
+        ...,
+        description="Total snapshot market value in portfolio currency.",
+    )
+    total_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Total snapshot market value in reporting currency.",
+    )
+    positions: list[HoldingSnapshotRecord] = Field(
+        ...,
+        description="Holdings snapshot rows for the resolved portfolio and as-of date.",
     )
 
 
@@ -506,3 +700,6 @@ class ActivitySummaryResponse(BaseModel):
     portfolios: list[PortfolioActivitySummary] = Field(
         ..., description="Per-portfolio activity summary rows for the resolved scope."
     )
+
+
+AssetAllocationResponse.model_rebuild()

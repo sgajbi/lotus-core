@@ -9,10 +9,12 @@ from ..DTOs.reference_data_dto import (
     BenchmarkCompositionIngestionRequest,
     BenchmarkDefinitionIngestionRequest,
     BenchmarkReturnSeriesIngestionRequest,
+    CashAccountMasterIngestionRequest,
     ClassificationTaxonomyIngestionRequest,
     IndexDefinitionIngestionRequest,
     IndexPriceSeriesIngestionRequest,
     IndexReturnSeriesIngestionRequest,
+    InstrumentLookthroughComponentIngestionRequest,
     PortfolioBenchmarkAssignmentIngestionRequest,
     RiskFreeSeriesIngestionRequest,
 )
@@ -437,6 +439,76 @@ async def ingest_classification_taxonomy(
         request_payload=request.model_dump(mode="json"),
         persist_fn=lambda: reference_data_service.upsert_classification_taxonomy(
             [item.model_dump() for item in request.classification_taxonomy]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/reference/cash-accounts",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest cash-account master records",
+    description=(
+        "What: Accept canonical cash-account master records.\n"
+        "How: Validate PB/WM cash-account identity and upsert durable portfolio/account linkage "
+        "metadata.\n"
+        "When: Use during onboarding and cash-account lifecycle maintenance."
+    ),
+)
+async def ingest_cash_account_masters(
+    request: CashAccountMasterIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/reference/cash-accounts",
+        entity_type="cash_account_master",
+        accepted_count=len(request.cash_accounts),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_cash_account_masters(
+            [item.model_dump() for item in request.cash_accounts]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/reference/instrument-lookthrough-components",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest instrument look-through components",
+    description=(
+        "What: Accept effective-dated look-through composition rows for funds and structured "
+        "products.\n"
+        "How: Validate component weights and upsert durable decomposition records.\n"
+        "When: Use when downstream allocation consumers need source-owned look-through views."
+    ),
+)
+async def ingest_instrument_lookthrough_components(
+    request: InstrumentLookthroughComponentIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/reference/instrument-lookthrough-components",
+        entity_type="instrument_lookthrough_component",
+        accepted_count=len(request.lookthrough_components),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_instrument_lookthrough_components(
+            [item.model_dump() for item in request.lookthrough_components]
         ),
         ingestion_job_service=ingestion_job_service,
     )

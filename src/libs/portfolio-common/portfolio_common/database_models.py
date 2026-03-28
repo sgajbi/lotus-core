@@ -531,6 +531,69 @@ class ClassificationTaxonomy(Base):
     )
 
 
+class CashAccountMaster(Base):
+    __tablename__ = "cash_account_masters"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cash_account_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    security_id = Column(String, nullable=False, index=True)
+    display_name = Column(String, nullable=False)
+    account_currency = Column(String(3), nullable=False, index=True)
+    account_role = Column(String, nullable=True, index=True)
+    lifecycle_status = Column(String, nullable=False, server_default="ACTIVE", index=True)
+    opened_on = Column(Date, nullable=True, index=True)
+    closed_on = Column(Date, nullable=True, index=True)
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("cash_account_id", name="_cash_account_master_id_uc"),
+        Index(
+            "ix_cash_account_master_portfolio_effective_window",
+            "portfolio_id",
+            "opened_on",
+            "closed_on",
+        ),
+    )
+
+
+class InstrumentLookthroughComponent(Base):
+    __tablename__ = "instrument_lookthrough_components"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    parent_security_id = Column(String, nullable=False, index=True)
+    component_security_id = Column(String, nullable=False, index=True)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    component_weight = Column(Numeric(18, 10), nullable=False)
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "parent_security_id",
+            "component_security_id",
+            "effective_from",
+            name="_instrument_lookthrough_component_effective_uc",
+        ),
+        Index(
+            "ix_instrument_lookthrough_parent_effective_window",
+            "parent_security_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
 

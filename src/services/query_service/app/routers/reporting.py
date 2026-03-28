@@ -11,8 +11,12 @@ from ..dtos.reporting_dto import (
     AssetsUnderManagementResponse,
     CashBalancesQueryRequest,
     CashBalancesResponse,
+    HoldingsSnapshotQueryRequest,
+    HoldingsSnapshotResponse,
     IncomeSummaryQueryRequest,
     IncomeSummaryResponse,
+    PortfolioSummaryQueryRequest,
+    PortfolioSummaryResponse,
 )
 from ..services.reporting_service import ReportingService
 
@@ -81,6 +85,47 @@ async def query_cash_balances(
 ):
     try:
         return await service.get_cash_balances(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post(
+    "/portfolio-summary/query",
+    response_model=PortfolioSummaryResponse,
+    summary="Query Portfolio Summary Snapshot",
+    description=(
+        "Returns a true historical as-of portfolio summary for one portfolio, including market "
+        "value totals, cash versus invested split, and snapshot coverage metadata. Use this "
+        "contract when UI or reporting consumers need a restated summary in portfolio currency "
+        "and reporting currency without rebuilding holdings totals client-side."
+    ),
+)
+async def query_portfolio_summary(
+    request: PortfolioSummaryQueryRequest,
+    service: ReportingService = Depends(get_reporting_service),
+):
+    try:
+        return await service.get_portfolio_summary(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post(
+    "/holdings-snapshot/query",
+    response_model=HoldingsSnapshotResponse,
+    summary="Query Historical Holdings Snapshot",
+    description=(
+        "Returns a true historical as-of holdings snapshot for one portfolio with reporting-"
+        "currency restatement and portfolio-workspace classifications. Use this contract for "
+        "UI holdings views and reporting extracts that need region-aware, restated holdings rows."
+    ),
+)
+async def query_holdings_snapshot(
+    request: HoldingsSnapshotQueryRequest,
+    service: ReportingService = Depends(get_reporting_service),
+):
+    try:
+        return await service.get_holdings_snapshot(request)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

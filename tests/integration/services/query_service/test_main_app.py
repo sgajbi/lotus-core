@@ -151,6 +151,7 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/positions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
+    assert "404" in paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cashflow-projection"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
 
@@ -163,8 +164,11 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/reporting/assets-under-management/query" in paths
     assert "/reporting/asset-allocation/query" in paths
     assert "/reporting/cash-balances/query" in paths
+    assert "/reporting/portfolio-summary/query" in paths
+    assert "/reporting/holdings-snapshot/query" in paths
     assert "/reporting/income-summary/query" in paths
     assert "/reporting/activity-summary/query" in paths
+    assert "/portfolios/{portfolio_id}/cash-accounts" in paths
 
 
 async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(async_test_client):
@@ -177,9 +181,12 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     aum_query = paths["/reporting/assets-under-management/query"]["post"]
     allocation_query = paths["/reporting/asset-allocation/query"]["post"]
     cash_query = paths["/reporting/cash-balances/query"]["post"]
+    portfolio_summary_query = paths["/reporting/portfolio-summary/query"]["post"]
+    holdings_snapshot_query = paths["/reporting/holdings-snapshot/query"]["post"]
     income_query = paths["/reporting/income-summary/query"]["post"]
     activity_query = paths["/reporting/activity-summary/query"]["post"]
     portfolios_query = paths["/portfolios/"]["get"]
+    cash_accounts_query = paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]
 
     assert (
         "single portfolio, an explicit portfolio list, or a business unit"
@@ -187,8 +194,11 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     )
     assert "classification dimensions" in allocation_query["description"]
     assert "portfolio currency and reporting currency" in cash_query["description"]
+    assert "true historical as-of portfolio summary" in portfolio_summary_query["description"]
+    assert "true historical as-of holdings snapshot" in holdings_snapshot_query["description"]
     assert "requested reporting window and year-to-date" in income_query["description"]
     assert "portfolio-level flow buckets" in activity_query["description"]
+    assert "canonical cash-account master records" in cash_accounts_query["description"]
 
     portfolio_ids = next(
         parameter
@@ -198,18 +208,35 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert portfolio_ids["description"] == "Filter by an explicit portfolio identifier list."
 
     aum_request = components["AssetsUnderManagementQueryRequest"]
+    allocation_response = components["AssetAllocationResponse"]
     cash_response = components["CashBalancesResponse"]
+    portfolio_summary_response = components["PortfolioSummaryResponse"]
+    holdings_snapshot_response = components["HoldingsSnapshotResponse"]
     income_response = components["IncomeSummaryResponse"]
     activity_response = components["ActivitySummaryResponse"]
+    cash_account_query_response = components["CashAccountQueryResponse"]
     transaction_record = components["TransactionRecord"]
 
     assert aum_request["properties"]["reporting_currency"]["description"].startswith(
         "Optional reporting currency."
     )
+    assert allocation_response["properties"]["look_through"]["description"].startswith(
+        "Applied look-through mode"
+    )
     assert cash_response["properties"]["totals"]["description"] == "Portfolio-level cash totals."
+    assert (
+        portfolio_summary_response["properties"]["snapshot_metadata"]["description"]
+        == "Resolved snapshot metadata for the summary query."
+    )
+    assert holdings_snapshot_response["properties"]["positions"]["description"].startswith(
+        "Holdings snapshot rows"
+    )
     assert income_response["properties"]["totals"]["description"] == "Scope-level income totals."
     assert (
         activity_response["properties"]["totals"]["description"] == "Scope-level activity totals."
+    )
+    assert cash_account_query_response["properties"]["cash_accounts"]["description"] == (
+        "Canonical cash accounts linked to the portfolio."
     )
     assert transaction_record["properties"]["trade_fee"]["description"] == (
         "Primary trade fee recorded directly on the transaction."

@@ -8,10 +8,12 @@ from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
     BenchmarkDefinition,
     BenchmarkReturnSeries,
+    CashAccountMaster,
     ClassificationTaxonomy,
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
+    InstrumentLookthroughComponent,
     PortfolioBenchmarkAssignment,
     RiskFreeSeries,
 )
@@ -199,6 +201,44 @@ class ReferenceDataIngestionService:
                 "source_vendor",
                 "source_record_id",
                 "quality_status",
+            ],
+        )
+
+    async def upsert_cash_account_masters(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=CashAccountMaster,
+            records=records,
+            conflict_columns=["cash_account_id"],
+            update_columns=[
+                "portfolio_id",
+                "security_id",
+                "display_name",
+                "account_currency",
+                "account_role",
+                "lifecycle_status",
+                "opened_on",
+                "closed_on",
+                "source_system",
+                "source_record_id",
+            ],
+        )
+
+    async def upsert_instrument_lookthrough_components(
+        self, records: list[dict[str, Any]]
+    ) -> None:
+        await self._upsert_many(
+            model=InstrumentLookthroughComponent,
+            records=records,
+            conflict_columns=[
+                "parent_security_id",
+                "component_security_id",
+                "effective_from",
+            ],
+            update_columns=[
+                "effective_to",
+                "component_weight",
+                "source_system",
+                "source_record_id",
             ],
         )
 

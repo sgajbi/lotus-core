@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-03-27T10:00:55.939881+00:00",
+  "generatedAt": "2026-03-28T09:26:05.498419+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -40,7 +40,22 @@
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.account_role",
+      "canonicalTerm": "account_role",
+      "preferredName": "account_role",
+      "description": "Optional cash-account role classification.",
+      "example": "OPERATING_CASH",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -135,6 +150,20 @@
       "preferredName": "amount_reporting_currency",
       "description": "Flow amount translated to the effective reporting currency.",
       "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.applied_mode",
+      "canonicalTerm": "applied_mode",
+      "preferredName": "applied_mode",
+      "description": "Look-through mode actually applied to the response.",
+      "example": "direct_only",
       "type": "string",
       "locations": [
         "body"
@@ -704,7 +733,7 @@
       "semanticId": "lotus.cash_account_id",
       "canonicalTerm": "cash_account_id",
       "preferredName": "cash_account_id",
-      "description": "Lotus cash account identifier. Resolved from the latest known settlement cash account mapping when available, otherwise from the cash instrument identity.",
+      "description": "Canonical Lotus cash account identifier.",
       "example": "CASH_ACCOUNT_001",
       "type": "string",
       "locations": [
@@ -718,17 +747,19 @@
       "semanticId": "lotus.cash_accounts",
       "canonicalTerm": "cash_accounts",
       "preferredName": "cash_accounts",
-      "description": "Resolved cash accounts and balances for the portfolio.",
+      "description": "Canonical cash accounts linked to the portfolio.",
       "example": [
         {
-          "cash_account_id": "CASH_ACCOUNT_001",
-          "instrument_id": "EQ_US_AAPL",
-          "security_id": "AAPL",
+          "cash_account_id": "CASH-ACC-USD-001",
+          "portfolio_id": "PORT-001",
+          "security_id": "CASH_USD",
+          "display_name": "USD Operating Cash",
           "account_currency": "USD",
-          "instrument_name": "example_instrument_name",
-          "balance_account_currency": "USD",
-          "balance_portfolio_currency": "USD",
-          "balance_reporting_currency": "USD"
+          "account_role": "OPERATING_CASH",
+          "lifecycle_status": "ACTIVE",
+          "opened_on": "2026-01-01",
+          "closed_on": "2026-12-31",
+          "source_system": "lotus-manage"
         }
       ],
       "type": "array",
@@ -737,6 +768,34 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.cash_balance_portfolio_currency",
+      "canonicalTerm": "cash_balance_portfolio_currency",
+      "preferredName": "cash_balance_portfolio_currency",
+      "description": "Cash balance subtotal in portfolio currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.cash_balance_reporting_currency",
+      "canonicalTerm": "cash_balance_reporting_currency",
+      "preferredName": "cash_balance_reporting_currency",
+      "description": "Cash balance subtotal in reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -944,6 +1003,20 @@
       ]
     },
     {
+      "semanticId": "lotus.closed_on",
+      "canonicalTerm": "closed_on",
+      "preferredName": "closed_on",
+      "description": "Cash-account close date when known.",
+      "example": "2026-12-31",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.component_id",
       "canonicalTerm": "component_id",
       "preferredName": "component_id",
@@ -958,6 +1031,20 @@
       ]
     },
     {
+      "semanticId": "lotus.component_security_id",
+      "canonicalTerm": "component_security_id",
+      "preferredName": "component_security_id",
+      "description": "Underlying component security identifier.",
+      "example": "COMPONENT_SECURITY_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.component_type",
       "canonicalTerm": "component_type",
       "preferredName": "component_type",
@@ -967,6 +1054,20 @@
       "locations": [
         "body",
         "query"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.component_weight",
+      "canonicalTerm": "component_weight",
+      "preferredName": "component_weight",
+      "description": "Weight of the underlying component between 0 and 1.",
+      "example": "0.6000000000",
+      "type": "object",
+      "locations": [
+        "body"
       ],
       "observedTypes": [
         "object"
@@ -1119,6 +1220,22 @@
       ]
     },
     {
+      "semanticId": "lotus.country",
+      "canonicalTerm": "country",
+      "preferredName": "country",
+      "description": "Country of risk classification.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.country_of_risk",
       "canonicalTerm": "country_of_risk",
       "preferredName": "country_of_risk",
@@ -1173,6 +1290,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.decomposed_position_count",
+      "canonicalTerm": "decomposed_position_count",
+      "preferredName": "decomposed_position_count",
+      "description": "Number of parent positions decomposed into underlying components.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -1280,6 +1411,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.display_name",
+      "canonicalTerm": "display_name",
+      "preferredName": "display_name",
+      "description": "Cash account display name.",
+      "example": "example_display_name",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -1737,6 +1882,20 @@
       ]
     },
     {
+      "semanticId": "lotus.include_cash_positions",
+      "canonicalTerm": "include_cash_positions",
+      "preferredName": "include_cash_positions",
+      "description": "When false, excludes cash positions from the holdings snapshot.",
+      "example": true,
+      "type": "boolean",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "boolean"
+      ]
+    },
+    {
       "semanticId": "lotus.include_projected",
       "canonicalTerm": "include_projected",
       "preferredName": "include_projected",
@@ -2081,6 +2240,34 @@
       ]
     },
     {
+      "semanticId": "lotus.invested_market_value_portfolio_currency",
+      "canonicalTerm": "invested_market_value_portfolio_currency",
+      "preferredName": "invested_market_value_portfolio_currency",
+      "description": "Non-cash invested market value in portfolio currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.invested_market_value_reporting_currency",
+      "canonicalTerm": "invested_market_value_reporting_currency",
+      "preferredName": "invested_market_value_reporting_currency",
+      "description": "Non-cash invested market value in reporting currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.investment_time_horizon",
       "canonicalTerm": "investment_time_horizon",
       "preferredName": "investment_time_horizon",
@@ -2199,6 +2386,20 @@
       ]
     },
     {
+      "semanticId": "lotus.lifecycle_status",
+      "canonicalTerm": "lifecycle_status",
+      "preferredName": "lifecycle_status",
+      "description": "Cash-account lifecycle status.",
+      "example": "ACTIVE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.limit",
       "canonicalTerm": "limit",
       "preferredName": "limit",
@@ -2211,6 +2412,22 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.limitation_reason",
+      "canonicalTerm": "limitation_reason",
+      "preferredName": "limitation_reason",
+      "description": "Explanation when look-through was requested but could not be applied.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -2299,6 +2516,61 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.look_through",
+      "canonicalTerm": "look_through",
+      "preferredName": "look_through",
+      "description": "Applied look-through mode and capability summary for the allocation query.",
+      "example": {
+        "requested_mode": "direct_only",
+        "applied_mode": "direct_only",
+        "supported": true,
+        "decomposed_position_count": 10,
+        "limitation_reason": "example_value"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "AllocationLookThroughInfo"
+      ]
+    },
+    {
+      "semanticId": "lotus.look_through_mode",
+      "canonicalTerm": "look_through_mode",
+      "preferredName": "look_through_mode",
+      "description": "Allocation decomposition mode. `direct_only` keeps parent holdings intact. `prefer_look_through` decomposes eligible parent instruments when source-owned look-through components are available.",
+      "example": "direct_only",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.lookthrough_components",
+      "canonicalTerm": "lookthrough_components",
+      "preferredName": "lookthrough_components",
+      "description": "Instrument look-through composition rows to ingest or upsert.",
+      "example": [
+        {
+          "component_security_id": "ETF_WORLD_EQUITY",
+          "component_weight": "0.6000000000",
+          "effective_from": "2026-01-01",
+          "parent_security_id": "FUND_GLOBAL_60_40"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
       ]
     },
     {
@@ -2409,6 +2681,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.market_value_portfolio_currency",
+      "canonicalTerm": "market_value_portfolio_currency",
+      "preferredName": "market_value_portfolio_currency",
+      "description": "Position market value in portfolio currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -2724,6 +3010,20 @@
       ]
     },
     {
+      "semanticId": "lotus.opened_on",
+      "canonicalTerm": "opened_on",
+      "preferredName": "opened_on",
+      "description": "Cash-account open date when known.",
+      "example": "2026-01-01",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.original_quantity",
       "canonicalTerm": "original_quantity",
       "preferredName": "original_quantity",
@@ -2863,6 +3163,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.parent_security_id",
+      "canonicalTerm": "parent_security_id",
+      "preferredName": "parent_security_id",
+      "description": "Structured product or fund security identifier being decomposed.",
+      "example": "PARENT_SECURITY_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -3518,6 +3832,22 @@
       ]
     },
     {
+      "semanticId": "lotus.region",
+      "canonicalTerm": "region",
+      "preferredName": "region",
+      "description": "Derived region classification.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.remaining_offset_local",
       "canonicalTerm": "remaining_offset_local",
       "preferredName": "remaining_offset_local",
@@ -3575,6 +3905,20 @@
       ]
     },
     {
+      "semanticId": "lotus.requested_mode",
+      "canonicalTerm": "requested_mode",
+      "preferredName": "requested_mode",
+      "description": "Look-through mode requested by the caller.",
+      "example": "direct_only",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.requested_window",
       "canonicalTerm": "requested_window",
       "preferredName": "requested_window",
@@ -3603,13 +3947,14 @@
       "semanticId": "lotus.resolved_as_of_date",
       "canonicalTerm": "resolved_as_of_date",
       "preferredName": "resolved_as_of_date",
-      "description": "Effective as-of date used by the query.",
-      "example": "2026-02-27",
+      "description": "Effective as-of date used to resolve the cash-account master set.",
+      "example": "2026-03-28",
       "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -4012,6 +4357,40 @@
       ]
     },
     {
+      "semanticId": "lotus.snapshot_date",
+      "canonicalTerm": "snapshot_date",
+      "preferredName": "snapshot_date",
+      "description": "Resolved snapshot date backing the summary.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.snapshot_metadata",
+      "canonicalTerm": "snapshot_metadata",
+      "preferredName": "snapshot_metadata",
+      "description": "Resolved snapshot metadata for the summary query.",
+      "example": {
+        "snapshot_date": "2026-02-27",
+        "position_count": 10,
+        "cash_account_count": 10,
+        "valued_position_count": 10,
+        "unvalued_position_count": 10
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "PortfolioSummarySnapshotMetadata"
+      ]
+    },
+    {
       "semanticId": "lotus.sort_by",
       "canonicalTerm": "sort_by",
       "preferredName": "sort_by",
@@ -4099,8 +4478,8 @@
       "semanticId": "lotus.source_system",
       "canonicalTerm": "source_system",
       "preferredName": "source_system",
-      "description": "Source system from which this transaction originated.",
-      "example": "OMS_PRIMARY",
+      "description": "Upstream source system.",
+      "example": "lotus-manage",
       "type": "object",
       "locations": [
         "body"
@@ -4221,6 +4600,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.supported",
+      "canonicalTerm": "supported",
+      "preferredName": "supported",
+      "description": "Whether source-owned look-through decomposition was available for the query.",
+      "example": true,
+      "type": "boolean",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "boolean"
       ]
     },
     {
@@ -4506,6 +4899,20 @@
       ]
     },
     {
+      "semanticId": "lotus.total_market_value_portfolio_currency",
+      "canonicalTerm": "total_market_value_portfolio_currency",
+      "preferredName": "total_market_value_portfolio_currency",
+      "description": "Total portfolio market value in portfolio currency.",
+      "example": "USD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.total_market_value_reporting_currency",
       "canonicalTerm": "total_market_value_reporting_currency",
       "preferredName": "total_market_value_reporting_currency",
@@ -4565,7 +4972,8 @@
         "ActivitySummaryTotals",
         "AssetsUnderManagementTotals",
         "CashBalancesTotals",
-        "IncomeSummaryTotals"
+        "IncomeSummaryTotals",
+        "PortfolioSummaryTotals"
       ]
     },
     {
@@ -4872,6 +5280,20 @@
       ]
     },
     {
+      "semanticId": "lotus.unvalued_position_count",
+      "canonicalTerm": "unvalued_position_count",
+      "preferredName": "unvalued_position_count",
+      "description": "Number of snapshot positions still lacking valuation coverage.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.valid_rows",
       "canonicalTerm": "valid_rows",
       "preferredName": "valid_rows",
@@ -4896,6 +5318,22 @@
         "unrealized_gain_loss": 3177.5,
         "market_value_local": 23177.5,
         "unrealized_gain_loss_local": 3177.5
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.valuation_status",
+      "canonicalTerm": "valuation_status",
+      "preferredName": "valuation_status",
+      "description": "Snapshot valuation status.",
+      "example": {
+        "id": "OBJ_001"
       },
       "type": "object",
       "locations": [
@@ -4931,6 +5369,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.valued_position_count",
+      "canonicalTerm": "valued_position_count",
+      "preferredName": "valued_position_count",
+      "description": "Number of snapshot positions with non-UNVALUED coverage.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -5245,6 +5697,36 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "include_projected",
       "semanticId": "lotus.include_projected"
+    },
+    {
+      "name": "portfolio_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Portfolio identifier.",
+      "example": "PORT-CASH-001",
+      "behaviorImpact": "Affects get_cash_accounts_portfolios__portfolio_id__cash_accounts_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_id",
+      "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "as_of_date",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Optional as-of date used to filter cash-account master records by open/close window.",
+      "example": "2026-03-28",
+      "behaviorImpact": "Affects get_cash_accounts_portfolios__portfolio_id__cash_accounts_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "as_of_date",
+      "semanticId": "lotus.as_of_date"
     },
     {
       "name": "portfolio_id",
@@ -6957,6 +7439,166 @@
             "type": "object",
             "semanticId": "lotus.weight",
             "attributeRef": "lotus.weight"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "get_cash_accounts_portfolios__portfolio_id__cash_accounts_get",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/cash-accounts",
+      "domain": "cash_accounts",
+      "serviceGroup": "query",
+      "tags": [
+        "Cash Accounts"
+      ],
+      "summary": "Get canonical cash accounts for a portfolio",
+      "description": "Returns source-owned canonical cash-account master records for one portfolio. Use this endpoint for canonical account identity and lifecycle metadata; use reporting cash-balances when balances and translated totals are required.",
+      "naming": {
+        "boundedContext": "cash_accounts",
+        "canonicalTerms": [
+          "account_currency",
+          "account_role",
+          "as_of_date",
+          "cash_account_id",
+          "cash_accounts",
+          "closed_on",
+          "display_name",
+          "lifecycle_status",
+          "opened_on",
+          "portfolio_id",
+          "resolved_as_of_date",
+          "security_id",
+          "source_system"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "as_of_date",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "CashAccountQueryResponse",
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "resolved_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "cash_accounts",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.cash_accounts",
+            "attributeRef": "lotus.cash_accounts"
+          },
+          {
+            "name": "cash_accounts[].cash_account_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.cash_account_id",
+            "attributeRef": "lotus.cash_account_id"
+          },
+          {
+            "name": "cash_accounts[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "cash_accounts[].security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "cash_accounts[].display_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.display_name",
+            "attributeRef": "lotus.display_name"
+          },
+          {
+            "name": "cash_accounts[].account_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.account_currency",
+            "attributeRef": "lotus.account_currency"
+          },
+          {
+            "name": "cash_accounts[].account_role",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.account_role",
+            "attributeRef": "lotus.account_role"
+          },
+          {
+            "name": "cash_accounts[].lifecycle_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.lifecycle_status",
+            "attributeRef": "lotus.lifecycle_status"
+          },
+          {
+            "name": "cash_accounts[].opened_on",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.opened_on",
+            "attributeRef": "lotus.opened_on"
+          },
+          {
+            "name": "cash_accounts[].closed_on",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.closed_on",
+            "attributeRef": "lotus.closed_on"
+          },
+          {
+            "name": "cash_accounts[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
           }
         ]
       }
@@ -10024,20 +10666,27 @@
       "naming": {
         "boundedContext": "wealth_reporting",
         "canonicalTerms": [
+          "applied_mode",
           "as_of_date",
           "booking_center_code",
           "buckets",
+          "decomposed_position_count",
           "dimension",
           "dimension_value",
           "dimensions",
+          "limitation_reason",
+          "look_through",
+          "look_through_mode",
           "market_value_reporting_currency",
           "portfolio_id",
           "portfolio_ids",
           "position_count",
           "reporting_currency",
+          "requested_mode",
           "resolved_as_of_date",
           "scope",
           "scope_type",
+          "supported",
           "total_market_value_reporting_currency",
           "views",
           "weight"
@@ -10100,6 +10749,14 @@
             "type": "array",
             "semanticId": "lotus.dimensions",
             "attributeRef": "lotus.dimensions"
+          },
+          {
+            "name": "look_through_mode",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.look_through_mode",
+            "attributeRef": "lotus.look_through_mode"
           }
         ]
       },
@@ -10170,6 +10827,54 @@
             "type": "string",
             "semanticId": "lotus.total_market_value_reporting_currency",
             "attributeRef": "lotus.total_market_value_reporting_currency"
+          },
+          {
+            "name": "look_through",
+            "location": "body",
+            "required": true,
+            "type": "AllocationLookThroughInfo",
+            "semanticId": "lotus.look_through",
+            "attributeRef": "lotus.look_through"
+          },
+          {
+            "name": "look_through.requested_mode",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.requested_mode",
+            "attributeRef": "lotus.requested_mode"
+          },
+          {
+            "name": "look_through.applied_mode",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.applied_mode",
+            "attributeRef": "lotus.applied_mode"
+          },
+          {
+            "name": "look_through.supported",
+            "location": "body",
+            "required": true,
+            "type": "boolean",
+            "semanticId": "lotus.supported",
+            "attributeRef": "lotus.supported"
+          },
+          {
+            "name": "look_through.decomposed_position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.decomposed_position_count",
+            "attributeRef": "lotus.decomposed_position_count"
+          },
+          {
+            "name": "look_through.limitation_reason",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.limitation_reason",
+            "attributeRef": "lotus.limitation_reason"
           },
           {
             "name": "views",
@@ -10439,6 +11144,506 @@
             "type": "string",
             "semanticId": "lotus.balance_reporting_currency",
             "attributeRef": "lotus.balance_reporting_currency"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_portfolio_summary_reporting_portfolio_summary_query_post",
+      "method": "POST",
+      "path": "/reporting/portfolio-summary/query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Portfolio Summary Snapshot",
+      "description": "Returns a true historical as-of portfolio summary for one portfolio, including market value totals, cash versus invested split, and snapshot coverage metadata. Use this contract when UI or reporting consumers need a restated summary in portfolio currency and reporting currency without rebuilding holdings totals client-side.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "as_of_date",
+          "booking_center_code",
+          "cash_account_count",
+          "cash_balance_portfolio_currency",
+          "cash_balance_reporting_currency",
+          "client_id",
+          "invested_market_value_portfolio_currency",
+          "invested_market_value_reporting_currency",
+          "objective",
+          "portfolio_currency",
+          "portfolio_id",
+          "portfolio_type",
+          "position_count",
+          "reporting_currency",
+          "resolved_as_of_date",
+          "risk_exposure",
+          "snapshot_date",
+          "snapshot_metadata",
+          "status",
+          "total_market_value_portfolio_currency",
+          "total_market_value_reporting_currency",
+          "totals",
+          "unvalued_position_count",
+          "valued_position_count"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "PortfolioSummaryResponse",
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "booking_center_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "client_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.client_id",
+            "attributeRef": "lotus.client_id"
+          },
+          {
+            "name": "portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_currency",
+            "attributeRef": "lotus.portfolio_currency"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "resolved_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "portfolio_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_type",
+            "attributeRef": "lotus.portfolio_type"
+          },
+          {
+            "name": "objective",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.objective",
+            "attributeRef": "lotus.objective"
+          },
+          {
+            "name": "risk_exposure",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.risk_exposure",
+            "attributeRef": "lotus.risk_exposure"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "totals",
+            "location": "body",
+            "required": true,
+            "type": "PortfolioSummaryTotals",
+            "semanticId": "lotus.totals",
+            "attributeRef": "lotus.totals"
+          },
+          {
+            "name": "totals.total_market_value_portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_market_value_portfolio_currency",
+            "attributeRef": "lotus.total_market_value_portfolio_currency"
+          },
+          {
+            "name": "totals.total_market_value_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_market_value_reporting_currency",
+            "attributeRef": "lotus.total_market_value_reporting_currency"
+          },
+          {
+            "name": "totals.cash_balance_portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.cash_balance_portfolio_currency",
+            "attributeRef": "lotus.cash_balance_portfolio_currency"
+          },
+          {
+            "name": "totals.cash_balance_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.cash_balance_reporting_currency",
+            "attributeRef": "lotus.cash_balance_reporting_currency"
+          },
+          {
+            "name": "totals.invested_market_value_portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.invested_market_value_portfolio_currency",
+            "attributeRef": "lotus.invested_market_value_portfolio_currency"
+          },
+          {
+            "name": "totals.invested_market_value_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.invested_market_value_reporting_currency",
+            "attributeRef": "lotus.invested_market_value_reporting_currency"
+          },
+          {
+            "name": "snapshot_metadata",
+            "location": "body",
+            "required": true,
+            "type": "PortfolioSummarySnapshotMetadata",
+            "semanticId": "lotus.snapshot_metadata",
+            "attributeRef": "lotus.snapshot_metadata"
+          },
+          {
+            "name": "snapshot_metadata.snapshot_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.snapshot_date",
+            "attributeRef": "lotus.snapshot_date"
+          },
+          {
+            "name": "snapshot_metadata.position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.position_count",
+            "attributeRef": "lotus.position_count"
+          },
+          {
+            "name": "snapshot_metadata.cash_account_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.cash_account_count",
+            "attributeRef": "lotus.cash_account_count"
+          },
+          {
+            "name": "snapshot_metadata.valued_position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.valued_position_count",
+            "attributeRef": "lotus.valued_position_count"
+          },
+          {
+            "name": "snapshot_metadata.unvalued_position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.unvalued_position_count",
+            "attributeRef": "lotus.unvalued_position_count"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_holdings_snapshot_reporting_holdings_snapshot_query_post",
+      "method": "POST",
+      "path": "/reporting/holdings-snapshot/query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Historical Holdings Snapshot",
+      "description": "Returns a true historical as-of holdings snapshot for one portfolio with reporting-currency restatement and portfolio-workspace classifications. Use this contract for UI holdings views and reporting extracts that need region-aware, restated holdings rows.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "account_currency",
+          "as_of_date",
+          "asset_class",
+          "country",
+          "include_cash_positions",
+          "instrument_name",
+          "market_value_portfolio_currency",
+          "market_value_reporting_currency",
+          "portfolio_currency",
+          "portfolio_id",
+          "positions",
+          "quantity",
+          "region",
+          "reporting_currency",
+          "resolved_as_of_date",
+          "sector",
+          "security_id",
+          "snapshot_date",
+          "total_market_value_portfolio_currency",
+          "total_market_value_reporting_currency",
+          "valuation_status",
+          "weight"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "include_cash_positions",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.include_cash_positions",
+            "attributeRef": "lotus.include_cash_positions"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "HoldingsSnapshotResponse",
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_currency",
+            "attributeRef": "lotus.portfolio_currency"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "resolved_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "snapshot_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.snapshot_date",
+            "attributeRef": "lotus.snapshot_date"
+          },
+          {
+            "name": "total_market_value_portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_market_value_portfolio_currency",
+            "attributeRef": "lotus.total_market_value_portfolio_currency"
+          },
+          {
+            "name": "total_market_value_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.total_market_value_reporting_currency",
+            "attributeRef": "lotus.total_market_value_reporting_currency"
+          },
+          {
+            "name": "positions",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.positions",
+            "attributeRef": "lotus.positions"
+          },
+          {
+            "name": "positions[].security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "positions[].instrument_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.instrument_name",
+            "attributeRef": "lotus.instrument_name"
+          },
+          {
+            "name": "positions[].asset_class",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.asset_class",
+            "attributeRef": "lotus.asset_class"
+          },
+          {
+            "name": "positions[].sector",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.sector",
+            "attributeRef": "lotus.sector"
+          },
+          {
+            "name": "positions[].country",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.country",
+            "attributeRef": "lotus.country"
+          },
+          {
+            "name": "positions[].region",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.region",
+            "attributeRef": "lotus.region"
+          },
+          {
+            "name": "positions[].account_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.account_currency",
+            "attributeRef": "lotus.account_currency"
+          },
+          {
+            "name": "positions[].quantity",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.quantity",
+            "attributeRef": "lotus.quantity"
+          },
+          {
+            "name": "positions[].market_value_portfolio_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.market_value_portfolio_currency",
+            "attributeRef": "lotus.market_value_portfolio_currency"
+          },
+          {
+            "name": "positions[].market_value_reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.market_value_reporting_currency",
+            "attributeRef": "lotus.market_value_reporting_currency"
+          },
+          {
+            "name": "positions[].weight",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.weight",
+            "attributeRef": "lotus.weight"
+          },
+          {
+            "name": "positions[].valuation_status",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.valuation_status",
+            "attributeRef": "lotus.valuation_status"
           }
         ]
       }
@@ -18122,6 +19327,384 @@
             "type": "string",
             "semanticId": "lotus.quality_status",
             "attributeRef": "lotus.quality_status"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_cash_account_masters_ingest_reference_cash_accounts_post",
+      "method": "POST",
+      "path": "/ingest/reference/cash-accounts",
+      "domain": "reference_data",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Reference Data"
+      ],
+      "summary": "Ingest cash-account master records",
+      "description": "What: Accept canonical cash-account master records.\nHow: Validate PB/WM cash-account identity and upsert durable portfolio/account linkage metadata.\nWhen: Use during onboarding and cash-account lifecycle maintenance.",
+      "naming": {
+        "boundedContext": "reference_data",
+        "canonicalTerms": [
+          "accepted_count",
+          "account_currency",
+          "account_role",
+          "cash_account_id",
+          "cash_accounts",
+          "closed_on",
+          "correlation_id",
+          "display_name",
+          "entity_type",
+          "idempotency_key",
+          "job_id",
+          "lifecycle_status",
+          "message",
+          "opened_on",
+          "portfolio_id",
+          "request_id",
+          "security_id",
+          "source_record_id",
+          "source_system",
+          "trace_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "cash_accounts",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.cash_accounts",
+            "attributeRef": "lotus.cash_accounts"
+          },
+          {
+            "name": "cash_accounts[].cash_account_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.cash_account_id",
+            "attributeRef": "lotus.cash_account_id"
+          },
+          {
+            "name": "cash_accounts[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "cash_accounts[].security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "cash_accounts[].display_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.display_name",
+            "attributeRef": "lotus.display_name"
+          },
+          {
+            "name": "cash_accounts[].account_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.account_currency",
+            "attributeRef": "lotus.account_currency"
+          },
+          {
+            "name": "cash_accounts[].account_role",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.account_role",
+            "attributeRef": "lotus.account_role"
+          },
+          {
+            "name": "cash_accounts[].lifecycle_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.lifecycle_status",
+            "attributeRef": "lotus.lifecycle_status"
+          },
+          {
+            "name": "cash_accounts[].opened_on",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.opened_on",
+            "attributeRef": "lotus.opened_on"
+          },
+          {
+            "name": "cash_accounts[].closed_on",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.closed_on",
+            "attributeRef": "lotus.closed_on"
+          },
+          {
+            "name": "cash_accounts[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "cash_accounts[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_instrument_lookthrough_components_ingest_reference_instrument_lookthrough_components_post",
+      "method": "POST",
+      "path": "/ingest/reference/instrument-lookthrough-components",
+      "domain": "reference_data",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Reference Data"
+      ],
+      "summary": "Ingest instrument look-through components",
+      "description": "What: Accept effective-dated look-through composition rows for funds and structured products.\nHow: Validate component weights and upsert durable decomposition records.\nWhen: Use when downstream allocation consumers need source-owned look-through views.",
+      "naming": {
+        "boundedContext": "reference_data",
+        "canonicalTerms": [
+          "accepted_count",
+          "component_security_id",
+          "component_weight",
+          "correlation_id",
+          "effective_from",
+          "effective_to",
+          "entity_type",
+          "idempotency_key",
+          "job_id",
+          "lookthrough_components",
+          "message",
+          "parent_security_id",
+          "request_id",
+          "source_record_id",
+          "source_system",
+          "trace_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "lookthrough_components",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.lookthrough_components",
+            "attributeRef": "lotus.lookthrough_components"
+          },
+          {
+            "name": "lookthrough_components[].parent_security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.parent_security_id",
+            "attributeRef": "lotus.parent_security_id"
+          },
+          {
+            "name": "lookthrough_components[].component_security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.component_security_id",
+            "attributeRef": "lotus.component_security_id"
+          },
+          {
+            "name": "lookthrough_components[].effective_from",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.effective_from",
+            "attributeRef": "lotus.effective_from"
+          },
+          {
+            "name": "lookthrough_components[].effective_to",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.effective_to",
+            "attributeRef": "lotus.effective_to"
+          },
+          {
+            "name": "lookthrough_components[].component_weight",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.component_weight",
+            "attributeRef": "lotus.component_weight"
+          },
+          {
+            "name": "lookthrough_components[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "lookthrough_components[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
           }
         ]
       },
