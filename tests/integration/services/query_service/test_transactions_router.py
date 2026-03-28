@@ -178,6 +178,36 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
     )
 
 
+async def test_get_transactions_for_security_drill_down_defaults_to_latest_first(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+
+    response = await client.get("/portfolios/P1/transactions?security_id=SEC-HOLDING-1")
+
+    assert response.status_code == 200
+    mock_service.get_transactions.assert_awaited_once_with(
+        portfolio_id="P1",
+        instrument_id=None,
+        security_id="SEC-HOLDING-1",
+        transaction_type=None,
+        component_type=None,
+        linked_transaction_group_id=None,
+        fx_contract_id=None,
+        swap_event_id=None,
+        near_leg_group_id=None,
+        far_leg_group_id=None,
+        start_date=None,
+        end_date=None,
+        as_of_date=None,
+        include_projected=False,
+        skip=0,
+        limit=100,
+        sort_by=None,
+        sort_order="desc",
+    )
+
+
 async def test_get_transactions_forwards_fx_filters(async_test_client):
     client, mock_service = async_test_client
 

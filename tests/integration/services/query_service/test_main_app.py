@@ -280,7 +280,24 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         if parameter["name"] == "instrument_id"
     )
     assert instrument_id["description"] == "Filter by a specific instrument identifier."
-    assert transactions["summary"] == "Get Transactions for a Portfolio"
+    security_id = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "security_id"
+    )
+    assert security_id["description"] == (
+        "Filter by a specific security identifier for holdings drill-down and latest "
+        "transaction retrieval within the portfolio."
+    )
+    assert transactions["summary"] == "Get Portfolio Transactions"
+    assert (
+        "Use `security_id` for holdings drill-down and latest transaction retrieval for a "
+        "specific security within the portfolio."
+    ) in transactions["description"]
+    assert (
+        "Results default to latest-first ordering by `transaction_date` descending"
+        in transactions["description"]
+    )
     assert (
         schema["components"]["schemas"]["TransactionRecord"]["properties"]["settlement_date"][
             "description"

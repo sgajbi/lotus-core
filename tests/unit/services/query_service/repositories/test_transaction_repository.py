@@ -53,6 +53,23 @@ async def test_get_transactions_default_sort(
     assert "ORDER BY transactions.transaction_date DESC" in compiled_query
 
 
+async def test_get_transactions_security_drill_down_defaults_to_latest_first(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    await repository.get_transactions(
+        portfolio_id="P1",
+        security_id="SEC-HOLDING-1",
+        skip=0,
+        limit=25,
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "transactions.security_id = 'SEC-HOLDING-1'" in compiled_query
+    assert "ORDER BY transactions.transaction_date DESC" in compiled_query
+
+
 async def test_get_transactions_custom_sort(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):

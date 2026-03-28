@@ -68,6 +68,15 @@ The response includes both canonical transaction attributes and reporting-releva
 - linked cashflow details
 - detailed transaction costs
 
+Security drill-down behavior:
+
+- use `security_id` to retrieve the transaction history for a specific holding inside the
+  portfolio
+- this is the source-backed contract for holdings workspace drill-down and "latest transaction for
+  this security" use cases
+- when callers do not override sorting, results are returned latest-first using
+  `transaction_date DESC`
+
 Settlement-date semantics:
 
 - `transaction_date` is the booked ledger date/time
