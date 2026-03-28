@@ -50,7 +50,7 @@ async def test_reporting_repository_lists_portfolios_with_scope_filters() -> Non
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_latest_snapshot_query_is_latest_non_zero_current_epoch() -> (
+async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_of_snapshot() -> (
     None
 ):
     db = AsyncMock(spec=AsyncSession)
@@ -80,7 +80,6 @@ async def test_reporting_repository_latest_snapshot_query_is_latest_non_zero_cur
     )
     assert "daily_position_snapshots.date <= '2026-03-27'" in compiled
     assert "daily_position_snapshots.quantity != 0" in compiled
-    assert "JOIN position_state" in compiled
     assert "LEFT OUTER JOIN instruments" in compiled
     assert (
         "ORDER BY daily_position_snapshots.portfolio_id ASC, "
@@ -140,6 +139,42 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
     assert (
         "row_number() over (partition by transactions.settlement_cash_instrument_id" in normalized
     )
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_cash_account_master_query_uses_effective_window() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReportingRepository(db)
+
+    await repo.list_cash_account_masters(
+        portfolio_id="P1",
+        as_of_date=date(2026, 3, 27),
+    )
+
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "cash_account_masters.portfolio_id = 'P1'" in compiled
+    assert "cash_account_masters.opened_on <= '2026-03-27'" in compiled
+    assert "cash_account_masters.closed_on >= '2026-03-27'" in compiled
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_lookthrough_query_uses_effective_window() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReportingRepository(db)
+
+    await repo.list_instrument_lookthrough_components(
+        parent_security_ids=["FUND1", "FUND2"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "instrument_lookthrough_components.parent_security_id IN ('FUND1', 'FUND2')" in compiled
+    assert "instrument_lookthrough_components.effective_from <= '2026-03-27'" in compiled
+    assert "instrument_lookthrough_components.effective_to >= '2026-03-27'" in compiled
 
 
 @pytest.mark.asyncio

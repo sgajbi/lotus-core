@@ -57,6 +57,13 @@ async def test_query_asset_allocation(async_test_client):
         "resolved_as_of_date": date(2026, 3, 27),
         "reporting_currency": "USD",
         "total_market_value_reporting_currency": Decimal("150"),
+        "look_through": {
+            "requested_mode": "direct_only",
+            "applied_mode": "direct_only",
+            "supported": False,
+            "decomposed_position_count": 0,
+            "limitation_reason": None,
+        },
         "views": [],
     }
 
@@ -90,6 +97,76 @@ async def test_query_cash_balances(async_test_client):
     assert response.json()["totals"]["cash_account_count"] == 1
 
 
+async def test_query_portfolio_summary(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_summary.return_value = {
+        "portfolio_id": "P1",
+        "booking_center_code": "SGPB",
+        "client_id": "CIF-1",
+        "portfolio_currency": "USD",
+        "reporting_currency": "USD",
+        "resolved_as_of_date": date(2026, 3, 27),
+        "portfolio_type": "DISCRETIONARY",
+        "objective": "Growth",
+        "risk_exposure": "BALANCED",
+        "status": "ACTIVE",
+        "totals": {
+            "total_market_value_portfolio_currency": Decimal("1000"),
+            "total_market_value_reporting_currency": Decimal("1000"),
+            "cash_balance_portfolio_currency": Decimal("200"),
+            "cash_balance_reporting_currency": Decimal("200"),
+            "invested_market_value_portfolio_currency": Decimal("800"),
+            "invested_market_value_reporting_currency": Decimal("800"),
+        },
+        "snapshot_metadata": {
+            "snapshot_date": date(2026, 3, 27),
+            "position_count": 2,
+            "cash_account_count": 1,
+            "valued_position_count": 1,
+            "unvalued_position_count": 1,
+        },
+    }
+
+    response = await client.post("/reporting/portfolio-summary/query", json={"portfolio_id": "P1"})
+
+    assert response.status_code == 200
+    assert response.json()["totals"]["cash_balance_portfolio_currency"] == "200"
+
+
+async def test_query_holdings_snapshot(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_holdings_snapshot.return_value = {
+        "portfolio_id": "P1",
+        "portfolio_currency": "USD",
+        "reporting_currency": "USD",
+        "resolved_as_of_date": date(2026, 3, 27),
+        "snapshot_date": date(2026, 3, 27),
+        "total_market_value_portfolio_currency": Decimal("1000"),
+        "total_market_value_reporting_currency": Decimal("1000"),
+        "positions": [
+            {
+                "security_id": "SEC1",
+                "instrument_name": "Apple Inc.",
+                "asset_class": "EQUITY",
+                "sector": "TECH",
+                "country": "US",
+                "region": "North America",
+                "account_currency": "USD",
+                "quantity": Decimal("10"),
+                "market_value_portfolio_currency": Decimal("1000"),
+                "market_value_reporting_currency": Decimal("1000"),
+                "weight": Decimal("1"),
+                "valuation_status": "VALUED",
+            }
+        ],
+    }
+
+    response = await client.post("/reporting/holdings-snapshot/query", json={"portfolio_id": "P1"})
+
+    assert response.status_code == 200
+    assert response.json()["positions"][0]["region"] == "North America"
+
+
 async def test_reporting_router_maps_value_errors_to_400(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_assets_under_management.side_effect = ValueError("bad scope")
@@ -101,6 +178,14 @@ async def test_reporting_router_maps_value_errors_to_400(async_test_client):
 
     assert response.status_code == 400
     assert "bad scope" in response.json()["detail"]
+
+
+async def test_get_reporting_service_wraps_db_session():
+    db = object()
+    service = get_reporting_service(db)  # type: ignore[arg-type]
+
+    assert isinstance(service, ReportingService)
+    assert service.repo.db is db
 
 
 async def test_query_income_summary(async_test_client):
@@ -188,3 +273,66 @@ async def test_query_activity_summary(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["totals"]["buckets"][0]["bucket"] == "INFLOWS"
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "method_name", "error_detail"),
+    [
+        (
+            "/reporting/asset-allocation/query",
+            {"scope": {"portfolio_id": "P1"}, "dimensions": ["asset_class"]},
+            "get_asset_allocation",
+            "bad allocation scope",
+        ),
+        (
+            "/reporting/cash-balances/query",
+            {"portfolio_id": "P1"},
+            "get_cash_balances",
+            "bad cash scope",
+        ),
+        (
+            "/reporting/portfolio-summary/query",
+            {"portfolio_id": "P1"},
+            "get_portfolio_summary",
+            "bad snapshot request",
+        ),
+        (
+            "/reporting/holdings-snapshot/query",
+            {"portfolio_id": "P1"},
+            "get_holdings_snapshot",
+            "bad holdings request",
+        ),
+        (
+            "/reporting/income-summary/query",
+            {
+                "scope": {"portfolio_id": "P1"},
+                "window": {"start_date": "2026-03-01", "end_date": "2026-03-27"},
+            },
+            "get_income_summary",
+            "bad income scope",
+        ),
+        (
+            "/reporting/activity-summary/query",
+            {
+                "scope": {"portfolio_id": "P1"},
+                "window": {"start_date": "2026-03-01", "end_date": "2026-03-27"},
+            },
+            "get_activity_summary",
+            "bad activity scope",
+        ),
+    ],
+)
+async def test_reporting_router_maps_all_query_value_errors_to_400(
+    async_test_client,
+    path: str,
+    payload: dict,
+    method_name: str,
+    error_detail: str,
+):
+    client, mock_service = async_test_client
+    getattr(mock_service, method_name).side_effect = ValueError(error_detail)
+
+    response = await client.post(path, json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == error_detail

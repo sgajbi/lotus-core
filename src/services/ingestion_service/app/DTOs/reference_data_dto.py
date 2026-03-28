@@ -357,6 +357,96 @@ class ClassificationTaxonomyRecord(BaseModel):
     model_config = ConfigDict()
 
 
+class CashAccountMasterRecord(BaseModel):
+    cash_account_id: str = Field(
+        ..., description="Canonical Lotus cash account identifier.", examples=["CASH-ACC-USD-001"]
+    )
+    portfolio_id: str = Field(..., description="Owning portfolio identifier.", examples=["PORT-001"])
+    security_id: str = Field(
+        ...,
+        description="Linked cash instrument/security identifier.",
+        examples=["CASH_USD"],
+    )
+    display_name: str = Field(
+        ..., description="Cash account display name.", examples=["USD Operating Cash"]
+    )
+    account_currency: str = Field(
+        ..., description="Native cash account currency.", examples=["USD"]
+    )
+    account_role: str | None = Field(
+        None,
+        description="Optional account role label.",
+        examples=["OPERATING_CASH"],
+    )
+    lifecycle_status: str = Field(
+        "ACTIVE",
+        description="Cash account lifecycle status.",
+        examples=["ACTIVE"],
+    )
+    opened_on: date | None = Field(
+        None,
+        description="Optional cash account open date.",
+        examples=["2026-01-01"],
+    )
+    closed_on: date | None = Field(
+        None,
+        description="Optional cash account close date.",
+        examples=["2026-12-31"],
+    )
+    source_system: str | None = Field(
+        None,
+        description="Upstream source system.",
+        examples=["lotus-manage"],
+    )
+    source_record_id: str | None = Field(
+        None,
+        description="Upstream source record identifier.",
+        examples=["cash-account-001"],
+    )
+
+    model_config = ConfigDict()
+
+
+class InstrumentLookthroughComponentRecord(BaseModel):
+    parent_security_id: str = Field(
+        ...,
+        description="Structured product or fund security identifier being decomposed.",
+        examples=["FUND_GLOBAL_60_40"],
+    )
+    component_security_id: str = Field(
+        ...,
+        description="Underlying component security identifier.",
+        examples=["ETF_WORLD_EQUITY"],
+    )
+    effective_from: date = Field(
+        ...,
+        description="Effective start date for the look-through composition row.",
+        examples=["2026-01-01"],
+    )
+    effective_to: date | None = Field(
+        None,
+        description="Effective end date for the look-through composition row.",
+        examples=["2026-12-31"],
+    )
+    component_weight: condecimal(ge=Decimal(0), le=Decimal(1)) = Field(
+        ...,
+        description="Weight of the underlying component between 0 and 1.",
+        examples=["0.6000000000"],
+    )
+    source_system: str | None = Field(
+        None,
+        description="Upstream source system.",
+        examples=["lotus-manage"],
+    )
+    source_record_id: str | None = Field(
+        None,
+        description="Upstream source record identifier.",
+        examples=["lt-001"],
+    )
+
+    model_config = ConfigDict()
+
+
 class PortfolioBenchmarkAssignmentIngestionRequest(BaseModel):
     benchmark_assignments: list[PortfolioBenchmarkAssignmentRecord] = Field(
         ...,
@@ -543,6 +633,49 @@ class ClassificationTaxonomyIngestionRequest(BaseModel):
                     "dimension_name": "sector",
                     "dimension_value": "technology",
                     "effective_from": "2025-01-01",
+                }
+            ]
+        ],
+    )
+
+    model_config = ConfigDict()
+
+
+class CashAccountMasterIngestionRequest(BaseModel):
+    cash_accounts: list[CashAccountMasterRecord] = Field(
+        ...,
+        description="Cash-account master records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "cash_account_id": "CASH-ACC-USD-001",
+                    "portfolio_id": "PORT-001",
+                    "security_id": "CASH_USD",
+                    "display_name": "USD Operating Cash",
+                    "account_currency": "USD",
+                    "account_role": "OPERATING_CASH",
+                    "lifecycle_status": "ACTIVE",
+                }
+            ]
+        ],
+    )
+
+    model_config = ConfigDict()
+
+
+class InstrumentLookthroughComponentIngestionRequest(BaseModel):
+    lookthrough_components: list[InstrumentLookthroughComponentRecord] = Field(
+        ...,
+        description="Instrument look-through composition rows to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "parent_security_id": "FUND_GLOBAL_60_40",
+                    "component_security_id": "ETF_WORLD_EQUITY",
+                    "effective_from": "2026-01-01",
+                    "component_weight": "0.6000000000",
                 }
             ]
         ],

@@ -7,14 +7,15 @@ from decimal import Decimal
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
+    CashAccountMaster,
     DailyPositionSnapshot,
     FxRate,
     Instrument,
+    InstrumentLookthroughComponent,
     Portfolio,
-    PositionState,
     Transaction,
 )
-from sqlalchemy import String, and_, case, func, literal, select, union_all
+from sqlalchemy import String, and_, case, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .date_filters import start_of_day, start_of_next_day
@@ -59,6 +60,14 @@ class ActivitySummaryAggregateRow:
     ytd_transaction_count: int
     requested_amount: Decimal
     ytd_amount: Decimal
+
+
+@dataclass(frozen=True)
+class InstrumentLookthroughComponentRow:
+    parent_security_id: str
+    component_security_id: str
+    component_weight: Decimal
+    component_instrument: Instrument | None
 
 
 class ReportingRepository:
@@ -113,14 +122,6 @@ class ReportingRepository:
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
                 .label("rn"),
-            )
-            .join(
-                PositionState,
-                and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
-                ),
             )
             .where(
                 DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),
@@ -209,6 +210,79 @@ class ReportingRepository:
         ).where(ranked_txn_subq.c.rn == 1)
         rows = (await self.db.execute(stmt)).all()
         return {str(security_id): str(cash_account_id) for security_id, cash_account_id in rows}
+
+    async def list_cash_account_masters(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date: date | None,
+    ) -> list[CashAccountMaster]:
+        stmt = select(CashAccountMaster).where(CashAccountMaster.portfolio_id == portfolio_id)
+        if as_of_date is not None:
+            stmt = stmt.where(
+                or_(
+                    CashAccountMaster.opened_on.is_(None),
+                    CashAccountMaster.opened_on <= as_of_date,
+                ),
+                or_(
+                    CashAccountMaster.closed_on.is_(None),
+                    CashAccountMaster.closed_on >= as_of_date,
+                ),
+            )
+        stmt = stmt.order_by(
+            CashAccountMaster.account_currency.asc(),
+            CashAccountMaster.cash_account_id.asc(),
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def list_instrument_lookthrough_components(
+        self,
+        *,
+        parent_security_ids: list[str],
+        as_of_date: date,
+    ) -> list[InstrumentLookthroughComponentRow]:
+        if not parent_security_ids:
+            return []
+
+        stmt = (
+            select(
+                InstrumentLookthroughComponent.parent_security_id,
+                InstrumentLookthroughComponent.component_security_id,
+                InstrumentLookthroughComponent.component_weight,
+                Instrument,
+            )
+            .outerjoin(
+                Instrument,
+                Instrument.security_id == InstrumentLookthroughComponent.component_security_id,
+            )
+            .where(
+                InstrumentLookthroughComponent.parent_security_id.in_(parent_security_ids),
+                InstrumentLookthroughComponent.effective_from <= as_of_date,
+                or_(
+                    InstrumentLookthroughComponent.effective_to.is_(None),
+                    InstrumentLookthroughComponent.effective_to >= as_of_date,
+                ),
+            )
+            .order_by(
+                InstrumentLookthroughComponent.parent_security_id.asc(),
+                InstrumentLookthroughComponent.component_security_id.asc(),
+            )
+        )
+        rows = (await self.db.execute(stmt)).all()
+        return [
+            InstrumentLookthroughComponentRow(
+                parent_security_id=parent_security_id,
+                component_security_id=component_security_id,
+                component_weight=component_weight,
+                component_instrument=component_instrument,
+            )
+            for (
+                parent_security_id,
+                component_security_id,
+                component_weight,
+                component_instrument,
+            ) in rows
+        ]
 
     async def list_income_summary_rows(
         self,
@@ -314,8 +388,7 @@ class ReportingRepository:
             case(
                 (
                     Transaction.transaction_type == "FEE",
-                    Transaction.gross_transaction_amount
-                    + func.coalesce(Transaction.trade_fee, 0),
+                    Transaction.gross_transaction_amount + func.coalesce(Transaction.trade_fee, 0),
                 ),
                 else_=Transaction.gross_transaction_amount,
             )

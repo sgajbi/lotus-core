@@ -4,10 +4,10 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-03-27 |
-| Last Updated | 2026-03-27 |
+| Last Updated | 2026-03-28 |
 | Owners | lotus-core query-service maintainers |
 | Depends On | RFC 035, RFC 057, RFC 067, RFC 068 |
-| Scope | Gold-standard PB/WM query APIs for portfolio discovery, transaction ledgers, AUM, asset allocation, cash balances, income summaries, and activity summaries |
+| Scope | Gold-standard PB/WM query APIs for portfolio discovery, transaction ledgers, AUM, historical portfolio snapshots, holdings, allocation, cash-account master data, cash balances, income summaries, and activity summaries |
 
 ## Executive Summary
 
@@ -20,11 +20,14 @@ The implementation delivers:
 3. A typed wealth-reporting contract family for:
    - assets under management
    - asset allocation
+   - portfolio summary
+   - holdings snapshot
    - cash balances
    - income summaries
    - activity summaries
-4. Performance-aware query design using bounded scope semantics, latest-snapshot resolution, FX caching,
-   and new query-hotspot indexes.
+4. A canonical cash-account master ingestion and query surface for PB/WM onboarding and reporting.
+5. Performance-aware query design using bounded scope semantics, true historical as-of snapshot
+   resolution, FX caching, and new query-hotspot indexes.
 
 Classification: `Fully implemented and aligned`.
 
@@ -61,6 +64,11 @@ The requested scope for this RFC family was:
    - inflows, outflows, fees, taxes
    - requested date range plus year-to-date view
    - values in portfolio currency and reporting currency
+9. Portfolio workspace follow-up gaps
+   - reporting-currency restatement support for summary and holdings views
+   - true historical as-of portfolio snapshot contracts
+   - region and look-through allocation support
+   - canonical cash-account master ingestion and query
 
 ## Architecture Decision
 
@@ -121,9 +129,16 @@ operationally portfolio-centric.
 
 - `POST /reporting/assets-under-management/query`
 - `POST /reporting/asset-allocation/query`
+- `POST /reporting/portfolio-summary/query`
+- `POST /reporting/holdings-snapshot/query`
 - `POST /reporting/cash-balances/query`
 - `POST /reporting/income-summary/query`
 - `POST /reporting/activity-summary/query`
+
+### Cash Account Master
+
+- `POST /ingest/reference/cash-accounts`
+- `GET /portfolios/{portfolio_id}/cash-accounts`
 
 Request scope model:
 
@@ -144,6 +159,7 @@ Asset allocation dimensions:
 - `currency`
 - `sector`
 - `country`
+- `region`
 - `product_type`
 - `rating`
 - `issuer_id`
@@ -151,11 +167,52 @@ Asset allocation dimensions:
 - `ultimate_parent_issuer_id`
 - `ultimate_parent_issuer_name`
 
+Asset allocation look-through:
+
+- `look_through_mode = direct_only`
+- `look_through_mode = prefer_look_through`
+- response includes a `look_through` block that reports:
+  - requested mode
+  - applied mode
+  - support flag
+  - decomposed position count
+  - limitation reason when partial or unavailable
+
+Portfolio-summary semantics:
+
+- single-portfolio, true historical as-of contract
+- total market value, cash balance, and invested market value
+- returned in portfolio currency and reporting currency
+- includes operational snapshot metadata:
+  - resolved snapshot date
+  - position count
+  - cash-account count
+  - valued / unvalued counts
+
+Holdings-snapshot semantics:
+
+- single-portfolio, true historical as-of contract
+- holdings returned in portfolio currency and reporting currency
+- includes region classification
+- supports excluding cash positions for investment-only views
+
 Cash-balance semantics:
 
 - portfolio-scoped only
 - returns native account balances, portfolio-currency balances, and reporting-currency balances
 - returns totals in both portfolio and reporting currency
+- resolves account identity from cash-account master data first
+- falls back to latest settlement-cash linkage only as a migration path
+- includes zero-balance master accounts so the account inventory is complete
+
+Cash-account master semantics:
+
+- source-owned account identity and lifecycle contract
+- explicit linkage between:
+  - portfolio
+  - cash account
+  - cash security / instrument
+- query contract returns account metadata without requiring transaction inference
 
 Income-summary semantics:
 
@@ -217,12 +274,14 @@ The implementation was designed for interactive PB/WM use, not naive unbounded s
 1. Reporting queries resolve the latest non-zero snapshot per `(portfolio_id, security_id)` as of the
    requested date.
 2. Snapshot selection is handled in SQL via window functions.
-3. Only current-epoch state is used.
+3. Historical as-of contracts are not pinned to current epoch only.
 4. FX conversion is cached per request in the service layer.
 5. BU and portfolio-list reporting stays scope-bounded through explicit scope resolution.
 6. Income and activity summaries aggregate in SQL over bounded transaction-date windows rather than
    materializing raw ledger rows into Python.
 7. Additional hot-path indexes support portfolio/date/type filters for income and flow summaries.
+8. Look-through decomposition is only applied when component weights form a complete source-owned set,
+   which preserves valuation totals.
 
 This is appropriate for:
 
@@ -239,19 +298,28 @@ Implementation:
 - `src/services/query_service/app/routers/portfolios.py`
 - `src/services/query_service/app/routers/transactions.py`
 - `src/services/query_service/app/routers/reporting.py`
+- `src/services/query_service/app/routers/cash_accounts.py`
 - `src/services/query_service/app/services/portfolio_service.py`
 - `src/services/query_service/app/services/transaction_service.py`
 - `src/services/query_service/app/services/reporting_service.py`
+- `src/services/query_service/app/services/cash_account_service.py`
+- `src/services/query_service/app/services/reporting_classification.py`
 - `src/services/query_service/app/repositories/portfolio_repository.py`
 - `src/services/query_service/app/repositories/transaction_repository.py`
 - `src/services/query_service/app/repositories/reporting_repository.py`
+- `src/services/query_service/app/repositories/cash_account_repository.py`
 - `src/services/query_service/app/repositories/date_filters.py`
 - `src/services/query_service/app/dtos/portfolio_dto.py`
 - `src/services/query_service/app/dtos/transaction_dto.py`
 - `src/services/query_service/app/dtos/reporting_dto.py`
+- `src/services/query_service/app/dtos/cash_account_dto.py`
 - `src/libs/portfolio-common/portfolio_common/database_models.py`
 - `alembic/versions/a7c8d9e0f1a2_perf_add_wealth_query_indexes.py`
 - `alembic/versions/b8d9e0f1a2b3_perf_add_income_activity_reporting_indexes.py`
+- `alembic/versions/b1c2d3e4f5a6_feat_add_cash_account_master_and_lookthrough_tables.py`
+- `src/services/ingestion_service/app/DTOs/reference_data_dto.py`
+- `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- `src/services/ingestion_service/app/routers/reference_data.py`
 
 Docs:
 
@@ -265,12 +333,16 @@ Validation:
 - `tests/unit/services/query_service/repositories/test_transaction_repository.py`
 - `tests/unit/services/query_service/repositories/test_query_portfolio_repository.py`
 - `tests/unit/services/query_service/services/test_reporting_service.py`
+- `tests/unit/services/query_service/services/test_cash_account_service.py`
 - `tests/unit/services/query_service/services/test_transaction_service.py`
 - `tests/unit/services/query_service/services/test_portfolio_service.py`
 - `tests/integration/services/query_service/test_reporting_router.py`
+- `tests/integration/services/query_service/test_cash_accounts_router.py`
 - `tests/integration/services/query_service/test_transactions_router.py`
 - `tests/integration/services/query_service/test_portfolios_router_dependency.py`
 - `tests/integration/services/query_service/test_main_app.py`
+- `tests/unit/services/ingestion_service/test_reference_data_ingestion_service.py`
+- `tests/integration/services/ingestion_service/test_ingestion_routers.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -281,7 +353,11 @@ Validation:
 | AUM query for portfolio, portfolio list, BU | Implemented | reporting DTO/service/router |
 | Asset allocation by PB/WM dimensions | Implemented | allocation DTO/service |
 | Portfolio API supports BU and explicit portfolio list | Implemented | portfolios router/service/repository |
+| Portfolio summary and holdings support source-owned historical as-of snapshots | Implemented | reporting DTO/service/router + tests |
 | Cash balances with native/portfolio/reporting currency | Implemented | cash balances DTO/service/router |
+| Reporting-currency restatement for portfolio workspace source views | Implemented | reporting DTO/service/router + tests |
+| Region and look-through allocation support | Implemented | allocation DTO/service/repository + tests |
+| Canonical cash-account master ingestion and query | Implemented | ingestion + cash-account query contracts + tests |
 | Income summary with requested-window and YTD currency views | Implemented | reporting DTO/service/repository/router + tests |
 | Activity summary with portfolio-level flow buckets and YTD currency views | Implemented | reporting DTO/service/repository/router + tests |
 | Performance-aware design | Implemented | date-range predicates, latest-snapshot query, hot-path indexes, tests |
@@ -291,14 +367,9 @@ Validation:
 The implementation passed:
 
 1. Focused touched-surface lint.
-2. Focused query-service contract pack:
-   - `82 passed`
-3. Full query-service unit suite:
-   - `468 passed`
-4. Full query-service integration suite:
-   - `90 passed`
-5. Focused income/activity reporting contract pack:
-   - `83 passed`
+2. Focused PB/WM workspace and reference-data pack:
+   - `129 passed`
+3. Existing query-service unit and integration suites remained green on the earlier base slice.
 
 Alembic head is clean with the new migration registered.
 
@@ -308,6 +379,8 @@ Alembic head is clean with the new migration registered.
    reporting APIs or define export-specific envelope metadata?
 2. Should BU scope later broaden beyond `booking_center_code` into an explicit enterprise business-unit
    hierarchy contract?
+3. Does the platform want additional region taxonomy overrides beyond the current source-owned
+   country-to-region mapping helper?
 
 ## Next Actions
 
