@@ -93,6 +93,7 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     payload = response.json()
     assert payload["portfolio_id"] == "P1"
     assert payload["transactions"][0]["transaction_id"] == "T1"
+    assert payload["transactions"][0]["settlement_date"] == "2025-08-03T00:00:00"
     assert payload["transactions"][0]["gross_cost"] == "125.00"
     assert payload["transactions"][0]["trade_fee"] == "2.50"
     assert payload["transactions"][0]["trade_currency"] == "USD"
@@ -214,3 +215,61 @@ async def test_get_transactions_forwards_fx_filters(async_test_client):
         near_leg_group_id="FXSWAP-LTG-FX-2026-0001-NEAR",
         far_leg_group_id="FXSWAP-LTG-FX-2026-0001-FAR",
     )
+
+
+async def test_get_transactions_preserves_settlement_date_for_trade_cash_and_income_shapes(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+    mock_service.get_transactions.return_value = PaginatedTransactionResponse(
+        portfolio_id="P1",
+        total=3,
+        skip=0,
+        limit=10,
+        transactions=[
+            TransactionRecord(
+                transaction_id="BUY-1",
+                transaction_date=datetime(2025, 8, 1, 0, 0, 0),
+                settlement_date=datetime(2025, 8, 3, 0, 0, 0),
+                transaction_type="BUY",
+                instrument_id="INST_BUY",
+                security_id="SEC_BUY",
+                quantity=10,
+                price=100,
+                gross_transaction_amount=1000,
+                currency="USD",
+            ),
+            TransactionRecord(
+                transaction_id="DEP-1",
+                transaction_date=datetime(2025, 8, 2, 0, 0, 0),
+                settlement_date=datetime(2025, 8, 2, 12, 0, 0),
+                transaction_type="DEPOSIT",
+                instrument_id="CASH_USD",
+                security_id="CASH_USD",
+                quantity=1,
+                price=1,
+                gross_transaction_amount=5000,
+                currency="USD",
+            ),
+            TransactionRecord(
+                transaction_id="INT-1",
+                transaction_date=datetime(2025, 8, 4, 0, 0, 0),
+                settlement_date=datetime(2025, 8, 5, 0, 0, 0),
+                transaction_type="INTEREST",
+                instrument_id="BOND_1",
+                security_id="BOND_1",
+                quantity=0,
+                price=0,
+                gross_transaction_amount=125,
+                currency="USD",
+            ),
+        ],
+    )
+
+    response = await client.get("/portfolios/P1/transactions")
+
+    assert response.status_code == 200
+    transactions = response.json()["transactions"]
+    assert transactions[0]["settlement_date"] == "2025-08-03T00:00:00"
+    assert transactions[1]["settlement_date"] == "2025-08-02T12:00:00"
+    assert transactions[2]["settlement_date"] == "2025-08-05T00:00:00"

@@ -61,11 +61,19 @@ Supported filters include:
 
 The response includes both canonical transaction attributes and reporting-relevant analytics such as:
 
+- transaction date and settlement date
 - gross cost
 - trade fee
 - trade currency
 - linked cashflow details
 - detailed transaction costs
+
+Settlement-date semantics:
+
+- `transaction_date` is the booked ledger date/time
+- `settlement_date` is the canonical contractual or effective settlement timestamp when available
+- downstream UI and reporting consumers should use the source-owned `settlement_date` directly
+  rather than inferring settlement timing from cash legs or transaction type
 
 ### Cash account master
 

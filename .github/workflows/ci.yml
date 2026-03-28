@@ -403,7 +403,7 @@ jobs:
         run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group latency-gate
 
       - name: Run endpoint latency gate
-        run: python scripts/latency_profile.py --enforce
+        run: python scripts/latency_profile.py --context-timeout-seconds 300 --enforce
 
       - name: Capture docker compose logs on failure
         if: failure()
