@@ -1,11 +1,12 @@
 # services/query-service/app/services/portfolio_service.py
 import logging
 from typing import Optional
+
+from portfolio_common.database_models import Portfolio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
 from ..repositories.portfolio_repository import PortfolioRepository
-from ..dtos.portfolio_dto import PortfolioRecord, PortfolioQueryResponse
-from portfolio_common.database_models import Portfolio
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class PortfolioService:
     async def get_portfolios(
         self,
         portfolio_id: Optional[str] = None,
+        portfolio_ids: Optional[list[str]] = None,
         client_id: Optional[str] = None,
         booking_center_code: Optional[str] = None,
     ) -> PortfolioQueryResponse:
@@ -29,11 +31,16 @@ class PortfolioService:
         Retrieves a filtered list of portfolios.
         """
         logger.info(
-            f"Fetching portfolios with filters: portfolio_id={portfolio_id}, client_id={client_id}, booking_center_code={booking_center_code}"
+            "Fetching portfolios with filters: "
+            f"portfolio_id={portfolio_id}, portfolio_ids={portfolio_ids}, "
+            f"client_id={client_id}, booking_center_code={booking_center_code}"
         )
 
         db_results = await self.repo.get_portfolios(
-            portfolio_id=portfolio_id, client_id=client_id, booking_center_code=booking_center_code
+            portfolio_id=portfolio_id,
+            portfolio_ids=portfolio_ids,
+            client_id=client_id,
+            booking_center_code=booking_center_code,
         )
 
         portfolios = [PortfolioRecord.model_validate(p) for p in db_results]

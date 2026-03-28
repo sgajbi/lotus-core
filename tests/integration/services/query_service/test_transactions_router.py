@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,
+    TransactionCostRecord,
     TransactionRecord,
 )
 from src.services.query_service.app.main import app
@@ -30,13 +31,24 @@ async def async_test_client():
                 TransactionRecord(
                     transaction_id="T1",
                     transaction_date=datetime(2025, 8, 1, 0, 0, 0),
+                    settlement_date=datetime(2025, 8, 3, 0, 0, 0),
                     transaction_type="INTEREST",
                     instrument_id="INST_1",
                     security_id="SEC_1",
                     quantity=0.0,
                     price=0.0,
                     gross_transaction_amount=125.0,
+                    gross_cost=Decimal("125.00"),
+                    trade_fee=Decimal("2.50"),
+                    trade_currency="USD",
                     currency="USD",
+                    costs=[
+                        TransactionCostRecord(
+                            fee_type="BROKERAGE",
+                            amount=Decimal("2.50"),
+                            currency="USD",
+                        )
+                    ],
                     cash_entry_mode="UPSTREAM_PROVIDED",
                     external_cash_transaction_id="CASH-ENTRY-2026-0001",
                     interest_direction="INCOME",
@@ -66,6 +78,7 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     response = await client.get(
         "/portfolios/P1/transactions",
         params={
+            "instrument_id": "INST_1",
             "security_id": "SEC_1",
             "start_date": "2025-08-01",
             "end_date": "2025-08-31",
@@ -80,6 +93,10 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     payload = response.json()
     assert payload["portfolio_id"] == "P1"
     assert payload["transactions"][0]["transaction_id"] == "T1"
+    assert payload["transactions"][0]["gross_cost"] == "125.00"
+    assert payload["transactions"][0]["trade_fee"] == "2.50"
+    assert payload["transactions"][0]["trade_currency"] == "USD"
+    assert payload["transactions"][0]["costs"][0]["fee_type"] == "BROKERAGE"
     assert payload["transactions"][0]["cash_entry_mode"] == "UPSTREAM_PROVIDED"
     assert payload["transactions"][0]["external_cash_transaction_id"] == "CASH-ENTRY-2026-0001"
     assert payload["transactions"][0]["interest_direction"] == "INCOME"
@@ -88,6 +105,7 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     assert payload["transactions"][0]["net_interest_amount"] == "110.00"
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        instrument_id="INST_1",
         security_id="SEC_1",
         transaction_type=None,
         component_type=None,
@@ -139,6 +157,7 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        instrument_id=None,
         security_id=None,
         transaction_type=None,
         component_type=None,
@@ -177,6 +196,7 @@ async def test_get_transactions_forwards_fx_filters(async_test_client):
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        instrument_id=None,
         security_id=None,
         start_date=None,
         end_date=None,

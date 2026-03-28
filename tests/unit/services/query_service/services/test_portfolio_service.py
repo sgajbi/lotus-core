@@ -28,6 +28,7 @@ def mock_portfolio_repo() -> AsyncMock:
             client_id="C100",
             status="ACTIVE",
             is_leverage_allowed=False,
+            cost_basis_method="FIFO",
         )
     ]
     return repo
@@ -49,7 +50,12 @@ async def test_get_portfolios(mock_portfolio_repo: AsyncMock):
         mock_db_session = AsyncMock(spec=AsyncSession)
         service = PortfolioService(mock_db_session)
 
-        filters = {"portfolio_id": "P1", "client_id": "C100", "booking_center_code": "SG"}
+        filters = {
+            "portfolio_id": "P1",
+            "portfolio_ids": ["P1", "P2"],
+            "client_id": "C100",
+            "booking_center_code": "SG",
+        }
 
         # ACT
         response_dto = await service.get_portfolios(**filters)
@@ -64,6 +70,7 @@ async def test_get_portfolios(mock_portfolio_repo: AsyncMock):
         assert portfolio_record.portfolio_id == "P1"
         assert portfolio_record.client_id == "C100"
         assert portfolio_record.status == "ACTIVE"
+        assert portfolio_record.cost_basis_method == "FIFO"
 
 
 async def test_get_portfolios_empty_result(mock_portfolio_repo: AsyncMock):
@@ -98,6 +105,7 @@ async def test_get_portfolio_by_id_success(mock_portfolio_repo: AsyncMock):
             client_id="C100",
             status="ACTIVE",
             is_leverage_allowed=False,
+            cost_basis_method="FIFO",
         )
 
         result = await service.get_portfolio_by_id("P1")

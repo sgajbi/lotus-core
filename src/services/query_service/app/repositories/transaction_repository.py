@@ -10,10 +10,18 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from .date_filters import start_of_day, start_of_next_day
+
 logger = logging.getLogger(__name__)
 
 # Whitelist of columns that clients are allowed to sort by.
-ALLOWED_SORT_FIELDS = {"transaction_date", "quantity", "price", "gross_transaction_amount"}
+ALLOWED_SORT_FIELDS = {
+    "transaction_date",
+    "settlement_date",
+    "quantity",
+    "price",
+    "gross_transaction_amount",
+}
 
 
 class TransactionRepository:
@@ -37,6 +45,7 @@ class TransactionRepository:
     def _get_base_query(
         self,
         portfolio_id: str,
+        instrument_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_type: Optional[str] = None,
         component_type: Optional[str] = None,
@@ -55,10 +64,12 @@ class TransactionRepository:
         # FIX: Change from selectinload to joinedload for reliable eager loading
         stmt = (
             select(Transaction)
-            .options(joinedload(Transaction.cashflow))
+            .options(joinedload(Transaction.cashflow), joinedload(Transaction.costs))
             .filter_by(portfolio_id=portfolio_id)
         )
 
+        if instrument_id:
+            stmt = stmt.filter_by(instrument_id=instrument_id)
         if security_id:
             stmt = stmt.filter_by(security_id=security_id)
         if transaction_type:
@@ -76,11 +87,11 @@ class TransactionRepository:
         if far_leg_group_id:
             stmt = stmt.filter_by(far_leg_group_id=far_leg_group_id)
         if start_date:
-            stmt = stmt.filter(func.date(Transaction.transaction_date) >= start_date)
+            stmt = stmt.filter(Transaction.transaction_date >= start_of_day(start_date))
         if end_date:
-            stmt = stmt.filter(func.date(Transaction.transaction_date) <= end_date)
+            stmt = stmt.filter(Transaction.transaction_date < start_of_next_day(end_date))
         if as_of_date:
-            stmt = stmt.filter(func.date(Transaction.transaction_date) <= as_of_date)
+            stmt = stmt.filter(Transaction.transaction_date < start_of_next_day(as_of_date))
         return stmt
 
     @async_timed(repository="TransactionRepository", method="get_transactions")
@@ -91,6 +102,7 @@ class TransactionRepository:
         limit: int,
         sort_by: Optional[str] = None,
         sort_order: Optional[str] = "desc",
+        instrument_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_type: Optional[str] = None,
         component_type: Optional[str] = None,
@@ -108,6 +120,7 @@ class TransactionRepository:
         """
         stmt = self._get_base_query(
             portfolio_id=portfolio_id,
+            instrument_id=instrument_id,
             security_id=security_id,
             transaction_type=transaction_type,
             component_type=component_type,
@@ -144,6 +157,7 @@ class TransactionRepository:
     async def get_transactions_count(
         self,
         portfolio_id: str,
+        instrument_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_type: Optional[str] = None,
         component_type: Optional[str] = None,
@@ -160,6 +174,8 @@ class TransactionRepository:
         Returns the total count of transactions for the given filters.
         """
         stmt = select(func.count(Transaction.id)).filter_by(portfolio_id=portfolio_id)
+        if instrument_id:
+            stmt = stmt.filter_by(instrument_id=instrument_id)
         if security_id:
             stmt = stmt.filter_by(security_id=security_id)
         if transaction_type:
@@ -177,11 +193,11 @@ class TransactionRepository:
         if far_leg_group_id:
             stmt = stmt.filter_by(far_leg_group_id=far_leg_group_id)
         if start_date:
-            stmt = stmt.filter(func.date(Transaction.transaction_date) >= start_date)
+            stmt = stmt.filter(Transaction.transaction_date >= start_of_day(start_date))
         if end_date:
-            stmt = stmt.filter(func.date(Transaction.transaction_date) <= end_date)
+            stmt = stmt.filter(Transaction.transaction_date < start_of_next_day(end_date))
         if as_of_date:
-            stmt = stmt.filter(func.date(Transaction.transaction_date) <= as_of_date)
+            stmt = stmt.filter(Transaction.transaction_date < start_of_next_day(as_of_date))
 
         count = (await self.db.execute(stmt)).scalar() or 0
         return count

@@ -42,6 +42,11 @@ class PortfolioRecord(BaseModel):
         None, description="Primary advisor identifier.", examples=["ADV-987"]
     )
     status: str = Field(..., description="Portfolio lifecycle status.", examples=["ACTIVE"])
+    cost_basis_method: Optional[str] = Field(
+        None,
+        description="Portfolio-level cost-basis accounting method used by lot accounting.",
+        examples=["FIFO"],
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -11,6 +11,9 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/lotus-core-target-architecture.md`
 - `docs/standards/layering-boundaries.md`
 
+Query-service PB/WM reporting contract guide:
+- `docs/features/query_service/WEALTH-REPORTING-API-GUIDE.md`
+
 ## Table of Contents
 
 - [Architectural Overview](#architectural-overview)
@@ -242,7 +245,25 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     DEMO_DATA_PACK_ENABLED=false docker compose up -d
 
     # Run manually against a running stack
-    python -m tools.demo_data_pack --ingestion-base-url http://localhost:8200 --query-base-url http://localhost:8201
+    python -m tools.demo_data_pack --ingestion-base-url http://localhost:8200 --query-base-url http://localhost:8201 --query-control-plane-base-url http://localhost:8202
+    ```
+
+    The current flagship performance demo pack seeds:
+
+    - portfolio: `DEMO_ADV_USD_001`
+    - assigned benchmark: `BMK_GLOBAL_BALANCED_60_40` (`Global Balanced 60/40`)
+    - alternate benchmark: `BMK_GLOBAL_GROWTH_80_20` (`Global Growth 80/20`)
+
+    Verify benchmark discovery and assignment:
+
+    ```bash
+    curl -X POST "http://localhost:8202/integration/benchmarks/catalog" \
+      -H "Content-Type: application/json" \
+      -d '{"as_of_date":"2026-03-27","benchmark_currency":"USD","benchmark_status":"active","benchmark_type":"composite"}'
+
+    curl -X POST "http://localhost:8202/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
+      -H "Content-Type: application/json" \
+      -d '{"as_of_date":"2026-03-27"}'
     ```
 
     For UI/file-upload style onboarding, lotus-core also supports:

@@ -27,6 +27,7 @@ class TransactionService:
         limit: int,
         sort_by: Optional[str] = None,
         sort_order: Optional[str] = "desc",
+        instrument_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_type: Optional[str] = None,
         component_type: Optional[str] = None,
@@ -54,6 +55,7 @@ class TransactionService:
 
         total_count = await self.repo.get_transactions_count(
             portfolio_id=portfolio_id,
+            instrument_id=instrument_id,
             security_id=security_id,
             transaction_type=transaction_type,
             component_type=component_type,
@@ -73,6 +75,7 @@ class TransactionService:
             limit=limit,
             sort_by=sort_by,
             sort_order=sort_order,
+            instrument_id=instrument_id,
             security_id=security_id,
             transaction_type=transaction_type,
             component_type=component_type,
@@ -89,6 +92,7 @@ class TransactionService:
         transactions = []
         for transaction in db_results:
             record = TransactionRecord.model_validate(transaction)
+            record.costs = [cost for cost in transaction.costs or []]
             if transaction.cashflow:
                 record.cashflow = transaction.cashflow
             transactions.append(record)

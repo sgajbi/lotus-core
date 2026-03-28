@@ -56,6 +56,8 @@ class Portfolio(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (Index("ix_portfolios_booking_center_code", "booking_center_code"),)
+
 
 class SimulationSession(Base):
     __tablename__ = "simulation_sessions"
@@ -636,7 +638,27 @@ class Transaction(Base):
         "Cashflow", uselist=False, back_populates="transaction", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (Index("ix_transactions_portfolio_security", "portfolio_id", "security_id"),)
+    __table_args__ = (
+        Index("ix_transactions_portfolio_security", "portfolio_id", "security_id"),
+        Index(
+            "ix_transactions_portfolio_instrument_date",
+            "portfolio_id",
+            "instrument_id",
+            "transaction_date",
+        ),
+        Index(
+            "ix_transactions_portfolio_settlement_cash_instrument_date",
+            "portfolio_id",
+            "settlement_cash_instrument_id",
+            "transaction_date",
+        ),
+        Index(
+            "ix_transactions_portfolio_type_date",
+            "portfolio_id",
+            "transaction_type",
+            "transaction_date",
+        ),
+    )
 
 
 class TransactionCost(Base):
@@ -680,7 +702,21 @@ class Cashflow(Base):
 
     transaction = relationship("Transaction", back_populates="cashflow")
 
-    __table_args__ = (UniqueConstraint("transaction_id", "epoch", name="_transaction_epoch_uc"),)
+    __table_args__ = (
+        UniqueConstraint("transaction_id", "epoch", name="_transaction_epoch_uc"),
+        Index(
+            "ix_cashflows_portfolio_classification_date",
+            "portfolio_id",
+            "classification",
+            "cashflow_date",
+        ),
+        Index(
+            "ix_cashflows_portfolio_flow_date",
+            "portfolio_id",
+            "is_portfolio_flow",
+            "cashflow_date",
+        ),
+    )
 
 
 class PositionLotState(Base):

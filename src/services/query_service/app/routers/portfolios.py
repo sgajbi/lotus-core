@@ -36,6 +36,11 @@ async def get_portfolios(
         description="Filter by a single, specific portfolio ID.",
         examples=["PORT-DISC-001"],
     ),
+    portfolio_ids: list[str] | None = Query(
+        None,
+        description="Filter by an explicit portfolio identifier list.",
+        examples=[["PORT-DISC-001", "PORT-DISC-002"]],
+    ),
     client_id: Optional[str] = Query(
         None,
         description="Filter by the client grouping ID (CIF) to get all portfolios for a client.",
@@ -50,7 +55,10 @@ async def get_portfolios(
 ):
     try:
         return await service.get_portfolios(
-            portfolio_id=portfolio_id, client_id=client_id, booking_center_code=booking_center_code
+            portfolio_id=portfolio_id,
+            portfolio_ids=portfolio_ids,
+            client_id=client_id,
+            booking_center_code=booking_center_code,
         )
     except Exception as e:
         raise HTTPException(
