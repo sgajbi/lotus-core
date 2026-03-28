@@ -12,6 +12,7 @@ from src.services.query_service.app.dtos.operations_dto import (
     LineageKeyListResponse,
     LineageResponse,
     PortfolioControlStageListResponse,
+    PortfolioReadinessResponse,
     ReconciliationFindingListResponse,
     ReconciliationRunListResponse,
     ReprocessingKeyListResponse,
@@ -97,6 +98,73 @@ async def get_support_overview(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while building support overview.",
+        )
+
+
+@router.get(
+    "/support/portfolios/{portfolio_id}/readiness",
+    response_model=PortfolioReadinessResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
+    summary="Get source-owned portfolio readiness for pricing and reporting coverage",
+    description=(
+        "What: Return source-owned readiness states for holdings, pricing, transactions, and "
+        "reporting for one portfolio.\n"
+        "How: Combine durable support/control state with snapshot and historical-FX dependency "
+        "signals to expose explicit readiness reasons.\n"
+        "When: Use in gateway/UI and operations flows instead of inferring readiness from row "
+        "counts or indirect heuristics."
+    ),
+)
+async def get_portfolio_readiness(
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier.",
+        examples=["PORT-OPS-001"],
+    ),
+    as_of_date: Optional[str] = Query(
+        None,
+        description=(
+            "Optional as-of date in YYYY-MM-DD format used to scope booked-state "
+            "readiness."
+        ),
+        examples=["2026-03-28"],
+    ),
+    stale_threshold_minutes: int = Query(
+        DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        ge=1,
+        le=1440,
+        description=SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+        examples=[15],
+    ),
+    failed_window_hours: int = Query(
+        DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+        ge=1,
+        le=720,
+        description=SUPPORT_FAILED_WINDOW_DESCRIPTION,
+        examples=[24],
+    ),
+    service: OperationsService = Depends(get_operations_service),
+):
+    try:
+        parsed_as_of_date = date.fromisoformat(as_of_date) if as_of_date else None
+        return await service.get_portfolio_readiness(
+            portfolio_id=portfolio_id,
+            as_of_date=parsed_as_of_date,
+            stale_threshold_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception:
+        logger.exception("Failed to build readiness response for portfolio %s", portfolio_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected server error occurred while building portfolio readiness.",
         )
 
 

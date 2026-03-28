@@ -67,6 +67,31 @@ class ReconciliationFindingSummary:
     top_blocking_finding_transaction_id: Optional[str]
 
 
+@dataclass(frozen=True)
+class SnapshotValuationCoverageSummary:
+    snapshot_date: Optional[date]
+    total_positions: int
+    valued_positions: int
+    unvalued_positions: int
+
+
+@dataclass(frozen=True)
+class MissingHistoricalFxDependencyRecord:
+    transaction_id: str
+    security_id: str
+    transaction_date: date
+    trade_currency: str
+    portfolio_currency: str
+
+
+@dataclass(frozen=True)
+class MissingHistoricalFxDependencySummary:
+    missing_count: int
+    earliest_transaction_date: Optional[date]
+    latest_transaction_date: Optional[date]
+    sample_records: list[MissingHistoricalFxDependencyRecord]
+
+
 class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -644,6 +669,123 @@ class OperationsRepository:
             )
         )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def get_snapshot_valuation_coverage_summary(
+        self,
+        portfolio_id: str,
+        snapshot_date: Optional[date],
+        snapshot_as_of: Optional[datetime] = None,
+    ) -> SnapshotValuationCoverageSummary:
+        if snapshot_date is None:
+            return SnapshotValuationCoverageSummary(
+                snapshot_date=None,
+                total_positions=0,
+                valued_positions=0,
+                unvalued_positions=0,
+            )
+
+        stmt = (
+            select(
+                func.count().label("total_positions"),
+                func.count()
+                .filter(
+                    DailyPositionSnapshot.valuation_status.is_not(None),
+                    DailyPositionSnapshot.valuation_status != "UNVALUED",
+                )
+                .label("valued_positions"),
+            )
+            .select_from(DailyPositionSnapshot)
+            .join(
+                PositionState,
+                and_(
+                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
+                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    DailyPositionSnapshot.epoch == PositionState.epoch,
+                ),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.date == snapshot_date,
+            )
+        )
+        if snapshot_as_of is not None:
+            stmt = stmt.where(
+                DailyPositionSnapshot.created_at <= snapshot_as_of,
+                PositionState.updated_at <= snapshot_as_of,
+            )
+        row = (await self.db.execute(stmt)).one()
+        total_positions = int(row.total_positions or 0)
+        valued_positions = int(row.valued_positions or 0)
+        return SnapshotValuationCoverageSummary(
+            snapshot_date=snapshot_date,
+            total_positions=total_positions,
+            valued_positions=valued_positions,
+            unvalued_positions=max(total_positions - valued_positions, 0),
+        )
+
+    async def get_missing_historical_fx_dependency_summary(
+        self,
+        portfolio_id: str,
+        as_of_date: date,
+        snapshot_as_of: Optional[datetime] = None,
+        sample_limit: int = 10,
+    ) -> MissingHistoricalFxDependencySummary:
+        base_stmt = (
+            select(
+                Transaction.transaction_id.label("transaction_id"),
+                Transaction.security_id.label("security_id"),
+                cast(func.date(Transaction.transaction_date), Date).label("transaction_date"),
+                Transaction.trade_currency.label("trade_currency"),
+                Portfolio.base_currency.label("portfolio_currency"),
+            )
+            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
+            .where(
+                Transaction.portfolio_id == portfolio_id,
+                cast(func.date(Transaction.transaction_date), Date) <= as_of_date,
+                Transaction.trade_currency != Portfolio.base_currency,
+                Transaction.transaction_fx_rate.is_(None),
+            )
+        )
+        if snapshot_as_of is not None:
+            base_stmt = base_stmt.where(Transaction.created_at <= snapshot_as_of)
+        base_subq = base_stmt.subquery()
+
+        aggregate_row = (
+            await self.db.execute(
+                select(
+                    func.count().label("missing_count"),
+                    func.min(base_subq.c.transaction_date).label("earliest_transaction_date"),
+                    func.max(base_subq.c.transaction_date).label("latest_transaction_date"),
+                )
+            )
+        ).one()
+
+        sample_rows = (
+            await self.db.execute(
+                select(base_subq)
+                .order_by(
+                    base_subq.c.transaction_date.asc(),
+                    base_subq.c.transaction_id.asc(),
+                )
+                .limit(sample_limit)
+            )
+        ).all()
+
+        return MissingHistoricalFxDependencySummary(
+            missing_count=int(aggregate_row.missing_count or 0),
+            earliest_transaction_date=aggregate_row.earliest_transaction_date,
+            latest_transaction_date=aggregate_row.latest_transaction_date,
+            sample_records=[
+                MissingHistoricalFxDependencyRecord(
+                    transaction_id=row.transaction_id,
+                    security_id=row.security_id,
+                    transaction_date=row.transaction_date,
+                    trade_currency=row.trade_currency,
+                    portfolio_currency=row.portfolio_currency,
+                )
+                for row in sample_rows
+            ],
+        )
 
     async def get_latest_financial_reconciliation_control_stage(
         self, portfolio_id: str, as_of: Optional[datetime] = None
