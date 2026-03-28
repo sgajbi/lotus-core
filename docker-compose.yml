@@ -538,11 +538,11 @@ services:
     hostname: demo_data_loader
     environment:
       DEMO_DATA_PACK_ENABLED: ${DEMO_DATA_PACK_ENABLED:-true}
-      depends_on:
-        ingestion_service:
-          condition: service_healthy
-        query_service:
-          condition: service_healthy
+    depends_on:
+      ingestion_service:
+        condition: service_healthy
+      query_service:
+        condition: service_healthy
       query_control_plane_service:
         condition: service_healthy
       persistence_service:
@@ -551,12 +551,12 @@ services:
         condition: service_healthy
       valuation_orchestrator_service:
         condition: service_healthy
-        position_valuation_calculator:
-          condition: service_healthy
-        timeseries_generator_service:
-          condition: service_healthy
-        portfolio_aggregation_service:
-          condition: service_healthy
+      position_valuation_calculator:
+        condition: service_healthy
+      timeseries_generator_service:
+        condition: service_healthy
+      portfolio_aggregation_service:
+        condition: service_healthy
     command: >
       sh -c "
       if [ \"$$DEMO_DATA_PACK_ENABLED\" = \"false\" ]; then
