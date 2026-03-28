@@ -103,6 +103,8 @@ class ReprocessingWorker:
                                 )
                             )
 
+                            should_complete_job = True
+
                             if affected_portfolios:
                                 keys_to_update = [
                                     (p_id, security_id) for p_id in affected_portfolios
@@ -145,20 +147,33 @@ class ReprocessingWorker:
                                     "no_impacted_portfolios",
                                 )
                                 logger.info(
-                                    f"Job {job.id}: No portfolios found for "
-                                    f"security {security_id}, skipping "
-                                    "watermark reset."
+                                    "Job %s: No impacted portfolios are visible yet for "
+                                    "security %s on %s; requeueing durable replay intent.",
+                                    job.id,
+                                    security_id,
+                                    earliest_date.isoformat(),
                                 )
+                                should_complete_job = False
 
-                            if await job_repo.update_job_status(job.id, "COMPLETE"):
-                                observe_reprocessing_worker_jobs_completed("RESET_WATERMARKS")
+                            terminal_status = "COMPLETE" if should_complete_job else "PENDING"
+                            if await job_repo.update_job_status(job.id, terminal_status):
+                                if should_complete_job:
+                                    observe_reprocessing_worker_jobs_completed(
+                                        "RESET_WATERMARKS"
+                                    )
                             else:
+                                ownership_lost_reason = (
+                                    "reset_watermarks_terminal_ownership_lost"
+                                    if should_complete_job
+                                    else "reset_watermarks_requeue_ownership_lost"
+                                )
                                 observe_reprocessing_stale_skips(
-                                    "reset_watermarks_terminal_ownership_lost",
+                                    ownership_lost_reason,
                                     1,
                                 )
                                 logger.warning(
-                                    "Skipping replay job completion after losing job ownership.",
+                                    "Skipping replay job %s after losing job ownership.",
+                                    "completion" if should_complete_job else "requeue",
                                     extra={"job_id": job.id, "security_id": security_id},
                                 )
 

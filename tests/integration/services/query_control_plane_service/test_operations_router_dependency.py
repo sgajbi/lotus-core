@@ -156,6 +156,71 @@ async def test_support_overview_success(async_test_client):
     )
 
 
+async def test_portfolio_readiness_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_readiness.return_value = {
+        "portfolio_id": "P1",
+        "requested_as_of_date": date(2026, 3, 28),
+        "resolved_as_of_date": date(2026, 3, 28),
+        "generated_at_utc": "2026-03-28T08:45:00Z",
+        "holdings": {"status": "PENDING", "reasons": []},
+        "pricing": {"status": "BLOCKED", "reasons": []},
+        "transactions": {"status": "BLOCKED", "reasons": []},
+        "reporting": {"status": "BLOCKED", "reasons": []},
+        "blocking_reasons": [
+            {
+                "code": "MISSING_HISTORICAL_FX_PREREQUISITE",
+                "domain": "pricing",
+                "severity": "ERROR",
+                "message": (
+                    "Cross-currency transactions are missing historical FX "
+                    "prerequisites required for complete source-owned coverage."
+                ),
+                "affected_transaction_ids": ["TXN-1"],
+                "affected_security_ids": ["SEC-EUR-1"],
+            }
+        ],
+        "latest_booked_transaction_date": date(2026, 3, 28),
+        "latest_booked_position_snapshot_date": date(2026, 3, 27),
+        "current_epoch": 4,
+        "position_snapshot_history_mismatch_count": 1,
+        "snapshot_valuation_total_positions": 3,
+        "snapshot_valuation_valued_positions": 2,
+        "snapshot_valuation_unvalued_positions": 1,
+        "controls_status": "COMPLETED",
+        "publish_allowed": False,
+        "missing_historical_fx_dependencies": {
+            "missing_count": 1,
+            "earliest_transaction_date": date(2026, 3, 18),
+            "latest_transaction_date": date(2026, 3, 18),
+            "sample_records": [
+                {
+                    "transaction_id": "TXN-1",
+                    "security_id": "SEC-EUR-1",
+                    "transaction_date": date(2026, 3, 18),
+                    "trade_currency": "EUR",
+                    "portfolio_currency": "USD",
+                }
+            ],
+        },
+    }
+
+    response = await client.get(
+        "/support/portfolios/P1/readiness?as_of_date=2026-03-28&stale_threshold_minutes=30&failed_window_hours=48"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["pricing"]["status"] == "BLOCKED"
+    assert response.json()["missing_historical_fx_dependencies"]["missing_count"] == 1
+    mock_service.get_portfolio_readiness.assert_awaited_once_with(
+        portfolio_id="P1",
+        as_of_date=date(2026, 3, 28),
+        stale_threshold_minutes=30,
+        failed_window_hours=48,
+    )
+
+
 async def test_support_overview_unexpected_maps_to_500(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_support_overview.side_effect = RuntimeError("boom")
@@ -164,6 +229,16 @@ async def test_support_overview_unexpected_maps_to_500(async_test_client):
 
     assert response.status_code == 500
     assert "support overview" in response.json()["detail"].lower()
+
+
+async def test_portfolio_readiness_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_readiness.side_effect = ValueError("not found")
+
+    response = await client.get("/support/portfolios/P404/readiness?as_of_date=2026-03-28")
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
 
 
 async def test_calculator_slos_success(async_test_client):
