@@ -2395,3 +2395,339 @@ async def test_transaction_ingestion_allows_future_dated_trade(
         },
     )
     assert response.status_code == 202
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "entity_type"),
+    [
+        (
+            "/ingest/benchmark-assignments",
+            {
+                "benchmark_assignments": [
+                    {
+                        "portfolio_id": "P1",
+                        "benchmark_id": "BMK_001",
+                        "effective_from": "2026-01-01",
+                        "assignment_version": 1,
+                        "assignment_source": "benchmark_policy_engine",
+                        "assignment_status": "active",
+                    }
+                ]
+            },
+            "benchmark_assignment",
+        ),
+        (
+            "/ingest/benchmark-definitions",
+            {
+                "benchmark_definitions": [
+                    {
+                        "benchmark_id": "BMK_001",
+                        "effective_from": "2026-01-01",
+                        "benchmark_name": "Balanced Mandate Benchmark",
+                        "benchmark_type": "composite",
+                        "benchmark_currency": "USD",
+                        "return_convention": "total_return_index",
+                        "benchmark_status": "active",
+                    }
+                ]
+            },
+            "benchmark_definition",
+        ),
+        (
+            "/ingest/benchmark-compositions",
+            {
+                "benchmark_compositions": [
+                    {
+                        "benchmark_id": "BMK_001",
+                        "index_id": "IDX_001",
+                        "composition_effective_from": "2026-01-01",
+                        "composition_weight": "1.0",
+                    }
+                ]
+            },
+            "benchmark_composition",
+        ),
+        (
+            "/ingest/indices",
+            {
+                "indices": [
+                    {
+                        "index_id": "IDX_001",
+                        "effective_from": "2026-01-01",
+                        "index_name": "MSCI World",
+                        "index_currency": "USD",
+                        "index_type": "equity",
+                        "index_status": "active",
+                    }
+                ]
+            },
+            "index_definition",
+        ),
+        (
+            "/ingest/index-price-series",
+            {
+                "index_price_series": [
+                    {
+                        "series_id": "IDXP_001",
+                        "index_id": "IDX_001",
+                        "series_date": "2026-01-01",
+                        "index_price": "1234.56",
+                        "series_currency": "USD",
+                        "value_convention": "close",
+                    }
+                ]
+            },
+            "index_price_series",
+        ),
+        (
+            "/ingest/index-return-series",
+            {
+                "index_return_series": [
+                    {
+                        "series_id": "IDXR_001",
+                        "index_id": "IDX_001",
+                        "series_date": "2026-01-01",
+                        "index_return": "0.0123",
+                        "return_period": "daily",
+                        "return_convention": "gross",
+                        "series_currency": "USD",
+                    }
+                ]
+            },
+            "index_return_series",
+        ),
+        (
+            "/ingest/benchmark-return-series",
+            {
+                "benchmark_return_series": [
+                    {
+                        "series_id": "BMKR_001",
+                        "benchmark_id": "BMK_001",
+                        "series_date": "2026-01-01",
+                        "benchmark_return": "0.0100",
+                        "return_period": "daily",
+                        "return_convention": "gross",
+                        "series_currency": "USD",
+                    }
+                ]
+            },
+            "benchmark_return_series",
+        ),
+        (
+            "/ingest/risk-free-series",
+            {
+                "risk_free_series": [
+                    {
+                        "series_id": "RF_001",
+                        "risk_free_curve_id": "USD_OIS",
+                        "series_date": "2026-01-01",
+                        "value": "0.035",
+                        "value_convention": "annualized_rate",
+                        "day_count_convention": "ACT_360",
+                        "compounding_convention": "simple",
+                        "series_currency": "USD",
+                    }
+                ]
+            },
+            "risk_free_series",
+        ),
+        (
+            "/ingest/reference/classification-taxonomy",
+            {
+                "classification_taxonomy": [
+                    {
+                        "classification_set_id": "TAX_001",
+                        "taxonomy_scope": "portfolio_workspace",
+                        "dimension_name": "asset_class",
+                        "dimension_value": "EQUITY",
+                        "effective_from": "2026-01-01",
+                    }
+                ]
+            },
+            "classification_taxonomy",
+        ),
+        (
+            "/ingest/reference/cash-accounts",
+            {
+                "cash_accounts": [
+                    {
+                        "cash_account_id": "CASH-ACC-USD-001",
+                        "portfolio_id": "P1",
+                        "security_id": "CASH_USD",
+                        "display_name": "USD Operating Cash",
+                        "account_currency": "USD",
+                        "lifecycle_status": "ACTIVE",
+                    }
+                ]
+            },
+            "cash_account_master",
+        ),
+        (
+            "/ingest/reference/instrument-lookthrough-components",
+            {
+                "lookthrough_components": [
+                    {
+                        "parent_security_id": "FUND_001",
+                        "component_security_id": "ETF_001",
+                        "effective_from": "2026-01-01",
+                        "component_weight": "0.6000000000",
+                    }
+                ]
+            },
+            "instrument_lookthrough_component",
+        ),
+    ],
+)
+async def test_reference_data_ingestion_endpoints_return_canonical_ack_contract(
+    async_test_client: httpx.AsyncClient,
+    path: str,
+    payload: dict,
+    entity_type: str,
+):
+    response = await async_test_client.post(
+        path,
+        json=payload,
+        headers={"X-Idempotency-Key": f"{entity_type}-idempotency"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == entity_type
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == f"{entity_type}-idempotency"
+    assert body["job_id"]
+
+
+async def test_reference_data_ingestion_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+):
+    payload = {
+        "cash_accounts": [
+            {
+                "cash_account_id": "CASH-ACC-USD-001",
+                "portfolio_id": "P1",
+                "security_id": "CASH_USD",
+                "display_name": "USD Operating Cash",
+                "account_currency": "USD",
+                "lifecycle_status": "ACTIVE",
+            }
+        ]
+    }
+
+    first = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json=payload,
+        headers={"X-Idempotency-Key": "cash-account-replay"},
+    )
+    second = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json=payload,
+        headers={"X-Idempotency-Key": "cash-account-replay"},
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    second_body = second.json()
+    assert second_body["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    assert second_body["job_id"] == first.json()["job_id"]
+
+
+async def test_reference_data_ingestion_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    job_service = ingestion_test_harness["fake_job_service"]
+    job_service.mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json={
+            "cash_accounts": [
+                {
+                    "cash_account_id": "CASH-ACC-USD-001",
+                    "portfolio_id": "P1",
+                    "security_id": "CASH_USD",
+                    "display_name": "USD Operating Cash",
+                    "account_currency": "USD",
+                    "lifecycle_status": "ACTIVE",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+
+
+async def test_reference_data_ingestion_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json={
+            "cash_accounts": [
+                {
+                    "cash_account_id": "CASH-ACC-USD-001",
+                    "portfolio_id": "P1",
+                    "security_id": "CASH_USD",
+                    "display_name": "USD Operating Cash",
+                    "account_currency": "USD",
+                    "lifecycle_status": "ACTIVE",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+
+async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("cash account master persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_cash_account_masters",
+        _raise_persist_failure,
+    )
+
+    with pytest.raises(RuntimeError, match="cash account master persist failed"):
+        await async_test_client.post(
+            "/ingest/reference/cash-accounts",
+            json={
+                "cash_accounts": [
+                    {
+                        "cash_account_id": "CASH-ACC-USD-001",
+                        "portfolio_id": "P1",
+                        "security_id": "CASH_USD",
+                        "display_name": "USD Operating Cash",
+                        "account_currency": "USD",
+                        "lifecycle_status": "ACTIVE",
+                    }
+                ]
+            },
+        )
+
+    failed_jobs = [
+        job
+        for job in ingestion_test_harness["fake_job_service"].jobs.values()
+        if job.status == "failed"
+    ]
+    assert len(failed_jobs) == 1
+    assert failed_jobs[0].failure_reason == "cash account master persist failed"
