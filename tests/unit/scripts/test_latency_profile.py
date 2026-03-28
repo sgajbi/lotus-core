@@ -1,8 +1,6 @@
 from subprocess import CompletedProcess
 from unittest.mock import MagicMock
 
-import pytest
-
 from scripts.latency_profile import (
     _enforce_gate,
     _extract_runtime_as_of_date,
@@ -11,7 +9,6 @@ from scripts.latency_profile import (
     _raise_if_compose_service_failed,
     _resolve_runtime_ids,
     _run_compose_up,
-    _wait_for_compose_service_success,
 )
 
 
@@ -226,35 +223,6 @@ def test_raise_if_compose_service_failed_raises_on_failure(monkeypatch) -> None:
         assert "exited with status 1" in str(exc)
     else:
         raise AssertionError("Expected _raise_if_compose_service_failed to raise.")
-
-
-def test_wait_for_compose_service_success_returns_after_zero_exit(monkeypatch) -> None:
-    states = iter(
-        [
-            ("running", "0"),
-            ("running", "0"),
-            ("exited", "0"),
-        ]
-    )
-    monkeypatch.setattr(
-        "scripts.latency_profile._get_compose_service_status",
-        lambda service_name: next(states),  # noqa: ARG005
-    )
-    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
-
-    _wait_for_compose_service_success("demo_data_loader", timeout_seconds=5)
-
-
-def test_wait_for_compose_service_success_raises_on_failure_exit(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "scripts.latency_profile._get_compose_service_status",
-        lambda service_name: ("exited", "1"),  # noqa: ARG005
-    )
-    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
-
-    with pytest.raises(RuntimeError, match="exited with status 1"):
-        _wait_for_compose_service_success("demo_data_loader", timeout_seconds=5)
-
 
 def test_run_compose_up_limits_started_services(monkeypatch) -> None:
     calls: list[list[str]] = []

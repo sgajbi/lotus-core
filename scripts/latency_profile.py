@@ -115,28 +115,6 @@ def _get_compose_service_status(service_name: str) -> tuple[str | None, str | No
     return status or None, exit_code or None
 
 
-def _wait_for_compose_service_success(
-    service_name: str,
-    *,
-    timeout_seconds: int,
-) -> None:
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        status, exit_code = _get_compose_service_status(service_name)
-        if status == "exited":
-            if exit_code == "0":
-                return
-            raise RuntimeError(
-                "Compose service "
-                f"'{service_name}' exited with status {exit_code} "
-                "before latency profiling."
-            )
-        time.sleep(2)
-    raise RuntimeError(
-        f"Compose service '{service_name}' did not complete successfully before timeout."
-    )
-
-
 def _raise_if_compose_service_failed(
     service_name: str,
 ) -> None:
@@ -647,12 +625,6 @@ def main() -> int:
         base_query_control_plane_url=args.query_control_plane_base_url,
         timeout_seconds=args.ready_timeout_seconds,
     )
-
-    if not args.skip_compose:
-        _wait_for_compose_service_success(
-            "demo_data_loader",
-            timeout_seconds=args.ready_timeout_seconds,
-        )
 
     session = requests.Session()
     runtime_context = _resolve_runtime_ids(
