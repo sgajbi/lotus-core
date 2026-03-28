@@ -598,7 +598,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--as-of-date", default="2026-03-01")
     parser.add_argument("--warmup-runs", type=int, default=5)
     parser.add_argument("--measured-runs", type=int, default=30)
-    parser.add_argument("--ready-timeout-seconds", type=int, default=180)
+    parser.add_argument("--ready-timeout-seconds", type=int, default=300)
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--skip-compose", action="store_true")

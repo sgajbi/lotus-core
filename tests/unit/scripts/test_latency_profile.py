@@ -1,3 +1,4 @@
+import sys
 from subprocess import CompletedProcess
 from unittest.mock import MagicMock
 
@@ -9,6 +10,7 @@ from scripts.latency_profile import (
     _raise_if_compose_service_failed,
     _resolve_runtime_ids,
     _run_compose_up,
+    parse_args,
 )
 
 
@@ -255,3 +257,11 @@ def test_run_compose_up_limits_started_services(monkeypatch) -> None:
             "demo_data_loader",
         ]
     ]
+
+
+def test_parse_args_defaults_ready_timeout_to_five_minutes(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["latency_profile.py"])
+
+    args = parse_args()
+
+    assert args.ready_timeout_seconds == 300
