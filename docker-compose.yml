@@ -566,6 +566,7 @@ services:
       python -m tools.demo_data_pack
       --ingestion-base-url http://ingestion_service:8000
       --query-base-url http://query_service:8001
+      --query-control-plane-base-url http://query_control_plane_service:8002
       --force-ingest
       --wait-seconds 420
       --poll-interval-seconds 3

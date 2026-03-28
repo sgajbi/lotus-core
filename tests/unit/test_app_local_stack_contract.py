@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -47,3 +46,15 @@ def test_app_local_compose_keeps_local_overlay_services_available() -> None:
         "demo_data_loader",
     ]:
         assert service_name in services
+
+
+def test_demo_data_loader_uses_internal_service_urls() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    command = compose["services"]["demo_data_loader"]["command"]
+
+    assert "--ingestion-base-url http://ingestion_service:8000" in command
+    assert "--query-base-url http://query_service:8001" in command
+    assert (
+        "--query-control-plane-base-url http://query_control_plane_service:8002"
+        in command
+    )
