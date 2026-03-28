@@ -24,11 +24,13 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-TXN-00
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
         }
     },
-    summary="Get Transactions for a Portfolio",
+    summary="Get Portfolio Transactions",
     description=(
-        "Returns transactions for a portfolio with date-window filters, optional instrument "
-        "filtering, pagination, and sorting. Designed for transaction ledgers, audit timelines, "
-        "and investigative support."
+        "Returns the canonical portfolio transaction ledger with date-window filters, optional "
+        "instrument and security drill-down, pagination, and sorting. Use `security_id` for "
+        "holdings drill-down and latest transaction retrieval for a specific security within "
+        "the portfolio. Results default to latest-first ordering by `transaction_date` "
+        "descending unless `sort_by` and `sort_order` are provided explicitly."
     ),
 )
 async def get_transactions(
@@ -44,7 +46,10 @@ async def get_transactions(
     ),
     security_id: Optional[str] = Query(
         None,
-        description="Filter by a specific security ID.",
+        description=(
+            "Filter by a specific security identifier for holdings drill-down and latest "
+            "transaction retrieval within the portfolio."
+        ),
         examples=["SEC-US-IBM"],
     ),
     transaction_type: Optional[str] = Query(
