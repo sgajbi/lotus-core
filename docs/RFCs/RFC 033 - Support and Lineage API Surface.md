@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Partially Implemented |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-05 |
+| Last Updated | 2026-03-28 |
 | Owners | `query-service` operations support surface |
 | Depends On | RFC 057, API-first operations governance |
 | Scope | Support and lineage APIs replacing direct DB troubleshooting dependence |
@@ -16,7 +16,7 @@ Phase 1 endpoints are implemented and test-covered:
 1. `/support/portfolios/{portfolio_id}/overview`
 2. `/lineage/portfolios/{portfolio_id}/securities/{security_id}`
 
-Implementation has already expanded with additional support/lineage endpoints (`valuation-jobs`, `aggregation-jobs`, `lineage keys`).
+Implementation has already expanded with additional support/lineage endpoints (`valuation-jobs`, `aggregation-jobs`, `lineage keys`, `readiness`).
 But Phase 2 items (correlation trace APIs, DLQ/replay history APIs, authz policy integration) remain open.
 
 Classification: `Partially implemented (requires enhancement)`.
@@ -34,8 +34,9 @@ Original RFC 033 requested:
 Implemented:
 1. Support overview endpoint and service/repository aggregation logic.
 2. Lineage endpoint for portfolio-security keys.
-3. Additional operational endpoints (`valuation-jobs`, `aggregation-jobs`, `lineage keys`) beyond initial phase 1 summary.
-4. OpenAPI tests and router dependency tests validate behavior and error mappings.
+3. Source-owned portfolio readiness endpoint exposing holdings, pricing, transactions, and reporting readiness with explicit blocking reasons and missing historical FX prerequisites.
+4. Additional operational endpoints (`valuation-jobs`, `aggregation-jobs`, `lineage keys`) beyond initial phase 1 summary.
+5. OpenAPI tests and router dependency tests validate behavior and error mappings.
 
 Not yet implemented in query-service surface:
 1. Correlation-id trace API across outbox/consumer lifecycle.
@@ -57,6 +58,7 @@ Evidence:
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
 | Support overview API | Implemented | operations router/service/repo |
+| Source-owned readiness contract for downstream support/reporting consumers | Implemented as support-plane extension | operations router/service/repo + readiness tests |
 | Lineage API for one key | Implemented | operations router/service/repo |
 | OpenAPI quality on support endpoints | Implemented with explicit summaries/descriptions + tests | routers + integration tests |
 | Correlation trace API | Not implemented | endpoint inventory |
@@ -67,6 +69,7 @@ Evidence:
 
 1. API-first support surfaces reduce operational DB dependency and standardize diagnostics.
 2. Adding list endpoints (jobs/lineage keys) improved triage workflows beyond minimum phase 1.
+3. Readiness belongs in the query control plane because downstream consumers should not reconstruct pricing/reporting readiness from raw dates, counts, or partial analytics rows.
 
 Trade-off:
 - Without correlation/DLQ trace endpoints, deep incident forensics still require stitching from multiple tools/logs.
@@ -90,11 +93,13 @@ Remaining deltas:
 ## Test and Validation Evidence
 
 1. Router dependency integration tests:
-   - `tests/integration/services/query_service/test_operations_router_dependency.py`
+   - `tests/integration/services/query_control_plane_service/test_operations_router_dependency.py`
 2. Service-level unit tests:
    - `tests/unit/services/query_service/services/test_operations_service.py`
 3. OpenAPI contract checks:
-   - `tests/integration/services/query_service/test_main_app.py`
+   - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
+4. Focused readiness operations guide:
+   - `docs/operations/Portfolio-Readiness-Guide.md`
 
 ## Original Acceptance Criteria Alignment
 

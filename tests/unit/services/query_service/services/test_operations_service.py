@@ -2072,6 +2072,232 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     )
 
 
+async def test_get_portfolio_readiness_surfaces_missing_historical_fx_as_blocking(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_latest_business_date.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 4
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+        oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
+    )
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+        oldest_open_job_id=None,
+        oldest_open_request_fingerprint=None,
+    )
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
+        2026, 3, 28
+    )
+    mock_ops_repo.get_snapshot_valuation_coverage_summary.return_value = (
+        type(
+            "SnapshotCoverageStub",
+            (),
+            {
+                "snapshot_date": date(2026, 3, 28),
+                "total_positions": 2,
+                "valued_positions": 2,
+                "unvalued_positions": 0,
+            },
+        )()
+    )
+    mock_ops_repo.get_missing_historical_fx_dependency_summary.return_value = type(
+        "MissingFxSummaryStub",
+        (),
+        {
+            "missing_count": 2,
+            "earliest_transaction_date": date(2026, 3, 18),
+            "latest_transaction_date": date(2026, 3, 20),
+            "sample_records": [
+                type(
+                    "MissingFxRecordStub",
+                    (),
+                    {
+                        "transaction_id": "TXN-1",
+                        "security_id": "SEC-EUR-1",
+                        "transaction_date": date(2026, 3, 18),
+                        "trade_currency": "EUR",
+                        "portfolio_currency": "USD",
+                    },
+                )(),
+                type(
+                    "MissingFxRecordStub",
+                    (),
+                    {
+                        "transaction_id": "TXN-2",
+                        "security_id": "SEC-EUR-2",
+                        "transaction_date": date(2026, 3, 20),
+                        "trade_currency": "EUR",
+                        "portfolio_currency": "USD",
+                    },
+                )(),
+            ],
+        },
+    )()
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
+        "ControlStageStub",
+        (),
+        {
+            "id": 901,
+            "business_date": date(2026, 3, 28),
+            "epoch": 4,
+            "status": "COMPLETED",
+            "failure_reason": None,
+            "last_source_event_type": "portfolio_day.reconciliation.completed",
+            "created_at": datetime(2026, 3, 28, 8, 0, tzinfo=timezone.utc),
+            "ready_emitted_at": datetime(2026, 3, 28, 8, 5, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 3, 28, 8, 6, tzinfo=timezone.utc),
+        },
+    )()
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
+
+    response = await service.get_portfolio_readiness("P1", as_of_date=date(2026, 3, 28))
+
+    assert response.resolved_as_of_date == date(2026, 3, 28)
+    assert response.transactions.status == "BLOCKED"
+    assert response.pricing.status == "BLOCKED"
+    assert response.reporting.status == "BLOCKED"
+    assert response.holdings.status == "BLOCKED"
+    assert response.missing_historical_fx_dependencies.missing_count == 2
+    assert response.missing_historical_fx_dependencies.sample_records[0].transaction_id == "TXN-1"
+    assert any(
+        reason.code == "MISSING_HISTORICAL_FX_PREREQUISITE"
+        for reason in response.blocking_reasons
+    )
+    mock_ops_repo.get_missing_historical_fx_dependency_summary.assert_awaited_once_with(
+        "P1",
+        date(2026, 3, 28),
+        snapshot_as_of=response.generated_at_utc,
+    )
+
+
+async def test_get_portfolio_readiness_marks_pending_when_snapshots_lag_transactions(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_latest_business_date.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 4
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=1,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=date(2026, 3, 27),
+        oldest_reprocessing_security_id="SEC-1",
+        oldest_reprocessing_epoch=4,
+        oldest_reprocessing_updated_at=datetime(2026, 3, 28, 7, 59, tzinfo=timezone.utc),
+    )
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=1,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=date(2026, 3, 28),
+        oldest_open_job_id=1,
+        oldest_open_job_correlation_id="corr-val-1",
+        oldest_open_security_id="SEC-1",
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=1,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=date(2026, 3, 28),
+        oldest_open_job_id=2,
+        oldest_open_job_correlation_id="corr-agg-2",
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+        oldest_open_job_id=None,
+        oldest_open_request_fingerprint=None,
+    )
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2026, 3, 27)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
+        2026, 3, 27
+    )
+    mock_ops_repo.get_snapshot_valuation_coverage_summary.return_value = type(
+        "SnapshotCoverageStub",
+        (),
+        {
+            "snapshot_date": date(2026, 3, 27),
+            "total_positions": 3,
+            "valued_positions": 2,
+            "unvalued_positions": 1,
+        },
+    )()
+    mock_ops_repo.get_missing_historical_fx_dependency_summary.return_value = type(
+        "MissingFxSummaryStub",
+        (),
+        {
+            "missing_count": 0,
+            "earliest_transaction_date": None,
+            "latest_transaction_date": None,
+            "sample_records": [],
+        },
+    )()
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 1
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
+
+    response = await service.get_portfolio_readiness("P1", as_of_date=date(2026, 3, 28))
+
+    assert response.holdings.status == "PENDING"
+    assert response.pricing.status == "PENDING"
+    assert response.reporting.status == "PENDING"
+    assert response.transactions.status == "READY"
+    assert response.snapshot_valuation_unvalued_positions == 1
+    assert any(
+        reason.code == "SNAPSHOT_BEHIND_TRANSACTION_LEDGER"
+        for reason in response.holdings.reasons
+    )
+    assert any(
+        reason.code == "UNVALUED_POSITIONS_REMAIN"
+        for reason in response.pricing.reasons
+    )
+
+
 async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(

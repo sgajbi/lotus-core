@@ -494,6 +494,221 @@ class SupportOverviewResponse(BaseModel):
     )
 
 
+ReadinessStatus = Literal["READY", "PENDING", "BLOCKED", "NO_ACTIVITY"]
+ReadinessSeverity = Literal["INFO", "WARNING", "ERROR"]
+ReadinessDomain = Literal["holdings", "pricing", "transactions", "reporting"]
+
+
+class PortfolioReadinessReason(BaseModel):
+    code: str = Field(
+        ...,
+        description="Stable source-owned reason code explaining the readiness state.",
+        examples=["MISSING_HISTORICAL_FX_PREREQUISITE"],
+    )
+    domain: ReadinessDomain = Field(
+        ...,
+        description="Readiness domain affected by this reason.",
+        examples=["pricing"],
+    )
+    severity: ReadinessSeverity = Field(
+        ...,
+        description="Operational severity of the readiness reason.",
+        examples=["ERROR"],
+    )
+    message: str = Field(
+        ...,
+        description="Human-readable explanation of the readiness condition.",
+        examples=[
+            "Cross-currency transactions are missing historical FX prerequisites "
+            "required for full pricing coverage."
+        ],
+    )
+    affected_transaction_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Affected transaction identifiers when the readiness reason is "
+            "transaction-scoped."
+        ),
+        examples=[["TXN-20260328-0001", "TXN-20260328-0002"]],
+    )
+    affected_security_ids: list[str] = Field(
+        default_factory=list,
+        description="Affected security identifiers when the readiness reason is security-scoped.",
+        examples=[["SEC-EUR-STOCK-001"]],
+    )
+
+
+class PortfolioReadinessBucket(BaseModel):
+    status: ReadinessStatus = Field(
+        ...,
+        description="Source-owned readiness state for this portfolio domain.",
+        examples=["READY"],
+    )
+    reasons: list[PortfolioReadinessReason] = Field(
+        default_factory=list,
+        description="Source-owned reasons explaining why this readiness bucket is not fully ready.",
+    )
+
+
+class MissingHistoricalFxDependencyRecord(BaseModel):
+    transaction_id: str = Field(
+        ...,
+        description="Cross-currency transaction blocked by missing historical FX.",
+        examples=["TXN-20260328-0001"],
+    )
+    security_id: str = Field(
+        ...,
+        description="Security identifier carried by the affected transaction.",
+        examples=["SEC-EUR-STOCK-001"],
+    )
+    transaction_date: date = Field(
+        ...,
+        description="Transaction business date requiring historical FX coverage.",
+        examples=["2026-03-18"],
+    )
+    trade_currency: str = Field(
+        ...,
+        description="Trade currency on the affected transaction.",
+        examples=["EUR"],
+    )
+    portfolio_currency: str = Field(
+        ...,
+        description="Portfolio base currency that historical FX conversion is required against.",
+        examples=["USD"],
+    )
+
+
+class MissingHistoricalFxDependencySummary(BaseModel):
+    missing_count: int = Field(
+        ...,
+        description="Number of cross-currency transactions missing historical FX prerequisites.",
+        examples=[2],
+    )
+    earliest_transaction_date: Optional[date] = Field(
+        None,
+        description="Earliest affected transaction date among missing historical FX dependencies.",
+        examples=["2026-03-18"],
+    )
+    latest_transaction_date: Optional[date] = Field(
+        None,
+        description="Latest affected transaction date among missing historical FX dependencies.",
+        examples=["2026-03-20"],
+    )
+    sample_records: list[MissingHistoricalFxDependencyRecord] = Field(
+        default_factory=list,
+        description="Representative affected transactions for operator and downstream visibility.",
+    )
+
+
+class PortfolioReadinessResponse(BaseModel):
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
+    requested_as_of_date: Optional[date] = Field(
+        None,
+        description="Caller-requested as-of date, when one was supplied.",
+        examples=["2026-03-28"],
+    )
+    resolved_as_of_date: Optional[date] = Field(
+        None,
+        description="Resolved source-owned as-of date used for readiness evaluation.",
+        examples=["2026-03-28"],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this readiness snapshot was generated.",
+        examples=["2026-03-28T08:45:00Z"],
+    )
+    holdings: PortfolioReadinessBucket = Field(
+        ...,
+        description="Holdings/snapshot coverage readiness for the portfolio.",
+    )
+    pricing: PortfolioReadinessBucket = Field(
+        ...,
+        description="Pricing and valuation coverage readiness for the portfolio.",
+    )
+    transactions: PortfolioReadinessBucket = Field(
+        ...,
+        description="Ledger and transaction-prerequisite readiness for the portfolio.",
+    )
+    reporting: PortfolioReadinessBucket = Field(
+        ...,
+        description="Reporting/publish readiness for the portfolio.",
+    )
+    blocking_reasons: list[PortfolioReadinessReason] = Field(
+        default_factory=list,
+        description="Flattened blocking reasons that make the portfolio not fully ready.",
+    )
+    latest_booked_transaction_date: Optional[date] = Field(
+        None,
+        description="Most recent portfolio transaction date on or before resolved_as_of_date.",
+        examples=["2026-03-28"],
+    )
+    latest_booked_position_snapshot_date: Optional[date] = Field(
+        None,
+        description=(
+            "Most recent current-epoch position snapshot date on or before "
+            "resolved_as_of_date."
+        ),
+        examples=["2026-03-28"],
+    )
+    current_epoch: Optional[int] = Field(
+        None,
+        description="Current active epoch for the portfolio across position-state keys.",
+        examples=[3],
+    )
+    position_snapshot_history_mismatch_count: int = Field(
+        ...,
+        description=(
+            "Count of keys where position history exists but no matching current-epoch "
+            "snapshot exists."
+        ),
+        examples=[0],
+    )
+    snapshot_valuation_total_positions: int = Field(
+        ...,
+        description="Total current-epoch positions on the latest booked snapshot date.",
+        examples=[7],
+    )
+    snapshot_valuation_valued_positions: int = Field(
+        ...,
+        description=(
+            "Current-epoch positions on the latest booked snapshot date with "
+            "non-UNVALUED coverage."
+        ),
+        examples=[7],
+    )
+    snapshot_valuation_unvalued_positions: int = Field(
+        ...,
+        description=(
+            "Current-epoch positions on the latest booked snapshot date still lacking "
+            "valuation coverage."
+        ),
+        examples=[0],
+    )
+    controls_status: Optional[str] = Field(
+        None,
+        description=(
+            "Latest financial reconciliation control status relevant to reporting "
+            "readiness."
+        ),
+        examples=["COMPLETED"],
+    )
+    publish_allowed: bool = Field(
+        ...,
+        description=(
+            "Whether the latest source-owned financial controls currently allow "
+            "downstream publication."
+        ),
+        examples=[True],
+    )
+    missing_historical_fx_dependencies: MissingHistoricalFxDependencySummary = Field(
+        ...,
+        description=(
+            "Source-owned summary of cross-currency transactions blocked by missing "
+            "historical FX prerequisites."
+        ),
+    )
+
+
 class CalculatorSloBucket(BaseModel):
     pending_jobs: int = Field(
         ...,

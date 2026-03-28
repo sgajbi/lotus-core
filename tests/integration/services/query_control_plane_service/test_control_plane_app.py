@@ -75,6 +75,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/integration/capabilities" in paths
     assert "/integration/portfolios/{portfolio_id}/core-snapshot" in paths
     assert "/support/portfolios/{portfolio_id}/overview" in paths
+    assert "/support/portfolios/{portfolio_id}/readiness" in paths
     assert "/simulation-sessions/{session_id}" in paths
     assert "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries" in paths
     assert "/integration/portfolios/{portfolio_id}/analytics/reference" in paths
@@ -96,6 +97,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     schema = response.json()
 
     overview = schema["paths"]["/support/portfolios/{portfolio_id}/overview"]["get"]
+    readiness = schema["paths"]["/support/portfolios/{portfolio_id}/readiness"]["get"]
     calculator_slos = schema["paths"]["/support/portfolios/{portfolio_id}/calculator-slos"]["get"]
     lineage = schema["paths"]["/lineage/portfolios/{portfolio_id}/securities/{security_id}"]["get"]
 
@@ -115,6 +117,13 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "failed_window_hours"
     )
     assert overview_failed_window["description"].startswith("Window in hours")
+
+    readiness_as_of_date = next(
+        parameter for parameter in readiness["parameters"] if parameter["name"] == "as_of_date"
+    )
+    assert readiness_as_of_date["description"] == (
+        "Optional as-of date in YYYY-MM-DD format used to scope booked-state readiness."
+    )
 
     stale_threshold = next(
         parameter
@@ -330,6 +339,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     lineage_keys = components["LineageKeyListResponse"]
     support_jobs = components["SupportJobListResponse"]
     support_overview = components["SupportOverviewResponse"]
+    readiness_response = components["PortfolioReadinessResponse"]
     analytics_export_jobs_schema = components["AnalyticsExportJobListResponse"]
     analytics_export_job_record = components["AnalyticsExportJobRecord"]
 
@@ -374,6 +384,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
         "Number of valuation jobs currently in FAILED terminal state."
     )
+    assert readiness_response["properties"]["holdings"]["description"] == (
+        "Holdings/snapshot coverage readiness for the portfolio."
+    )
+    assert readiness_response["properties"]["pricing"]["description"] == (
+        "Pricing and valuation coverage readiness for the portfolio."
+    )
+    assert readiness_response["properties"]["missing_historical_fx_dependencies"][
+        "description"
+    ].startswith("Source-owned summary of cross-currency transactions blocked")
     assert support_overview["properties"]["controls_stage_id"]["description"].startswith(
         "Durable database identifier of the latest portfolio-day financial reconciliation"
     )
