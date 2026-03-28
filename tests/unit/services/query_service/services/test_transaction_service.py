@@ -119,9 +119,11 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.limit == 10
         assert len(response_dto.transactions) == 2
         assert response_dto.transactions[0].transaction_id == "T1"
+        assert response_dto.transactions[0].settlement_date == datetime(2025, 1, 12)
         assert response_dto.transactions[0].trade_fee == Decimal("12.5")
         assert response_dto.transactions[0].trade_currency == "USD"
         assert response_dto.transactions[0].cash_entry_mode == "AUTO_GENERATE"
+        assert response_dto.transactions[1].settlement_date is None
         assert response_dto.transactions[1].cash_entry_mode == "UPSTREAM_PROVIDED"
         assert response_dto.transactions[1].external_cash_transaction_id == "CASH-ENTRY-2026-0002"
         assert response_dto.transactions[1].interest_direction == "INCOME"

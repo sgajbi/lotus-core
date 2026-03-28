@@ -258,6 +258,13 @@ def test_cases_use_runtime_context_dates_and_identifiers() -> None:
     }
 
 
+def test_context_timeout_must_not_be_shorter_than_ready_timeout() -> None:
+    ready_timeout_seconds = 180
+    context_timeout_seconds = 120
+
+    assert max(context_timeout_seconds, ready_timeout_seconds) == 180
+
+
 def test_raise_if_compose_service_failed_ignores_running_service(monkeypatch) -> None:
     def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
         if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:

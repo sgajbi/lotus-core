@@ -280,6 +280,14 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         if parameter["name"] == "instrument_id"
     )
     assert instrument_id["description"] == "Filter by a specific instrument identifier."
+    assert transactions["summary"] == "Get Transactions for a Portfolio"
+    assert (
+        schema["components"]["schemas"]["TransactionRecord"]["properties"]["settlement_date"][
+            "description"
+        ]
+        == "Canonical settlement timestamp when known. Use alongside transaction_date to "
+        "differentiate trade booking from contractual or effective cash/value settlement."
+    )
 
     not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"

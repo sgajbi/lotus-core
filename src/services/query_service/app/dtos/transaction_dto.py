@@ -33,7 +33,10 @@ class TransactionRecord(BaseModel):
     )
     settlement_date: Optional[datetime] = Field(
         None,
-        description="Transaction settlement timestamp when known.",
+        description=(
+            "Canonical settlement timestamp when known. Use alongside transaction_date to "
+            "differentiate trade booking from contractual or effective cash/value settlement."
+        ),
         examples=["2026-03-03T00:00:00Z"],
     )
     transaction_type: str = Field(..., description="Transaction type.", examples=["BUY"])
