@@ -173,7 +173,7 @@ def build_manual_performance_seed_bundle(
         )
 
     benchmark_reference = _build_benchmark_reference_data(
-        dates=iso_dates,
+        dates=calendar_iso_dates,
         start_date=effective_benchmark_start_date,
     )
     benchmark_reference["benchmark_assignments"] = [

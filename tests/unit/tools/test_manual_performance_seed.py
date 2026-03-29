@@ -88,3 +88,18 @@ def test_build_manual_performance_seed_bundle_generates_calendar_daily_fx():
         "2026-03-07",
         "2026-03-08",
     ]
+
+
+def test_build_manual_performance_seed_bundle_extends_benchmark_series_to_calendar_end_date():
+    bundle = build_manual_performance_seed_bundle(
+        portfolio_id="MANUAL_PB_USD_001",
+        start_date=date(2026, 3, 6),
+        end_date=date(2026, 3, 8),
+        benchmark_start_date=date(2026, 1, 5),
+        benchmark_id=DEFAULT_DEMO_BENCHMARK_ID,
+    )
+
+    benchmark_dates = [row["series_date"] for row in bundle["benchmark_return_series"]]
+    index_dates = [row["series_date"] for row in bundle["index_price_series"]]
+    assert benchmark_dates[-1] == "2026-03-08"
+    assert index_dates[-1] == "2026-03-08"
