@@ -68,6 +68,15 @@ def _business_dates(start: date, end: date) -> list[date]:
     return dates
 
 
+def _calendar_dates(start: date, end: date) -> list[date]:
+    dates: list[date] = []
+    current = start
+    while current <= end:
+        dates.append(current)
+        current += timedelta(days=1)
+    return dates
+
+
 def _iso_utc_timestamp(day: date, hour: int = 21) -> str:
     return (
         datetime(day.year, day.month, day.day, hour=hour, tzinfo=UTC)
@@ -106,6 +115,8 @@ def build_manual_performance_seed_bundle(
 ) -> dict[str, Any]:
     business_dates = _business_dates(start_date, end_date)
     iso_dates = [current.isoformat() for current in business_dates]
+    calendar_dates = _calendar_dates(start_date, end_date)
+    calendar_iso_dates = [current.isoformat() for current in calendar_dates]
 
     market_prices: list[dict[str, Any]] = []
     for security in MANUAL_SECURITY_SEEDS:
@@ -126,7 +137,7 @@ def build_manual_performance_seed_bundle(
             )
 
     eur_usd_values = _interpolate_series(
-        dates=business_dates,
+        dates=calendar_dates,
         end_value=Decimal("1.1100000000"),
         start_multiplier=Decimal("0.98198198198"),
         precision="0.0000010000",
@@ -137,7 +148,7 @@ def build_manual_performance_seed_bundle(
     ]
     fx_rates: list[dict[str, Any]] = []
     for current_date, eur_usd, usd_eur in zip(
-        iso_dates,
+        calendar_iso_dates,
         eur_usd_values,
         usd_eur_values,
         strict=True,

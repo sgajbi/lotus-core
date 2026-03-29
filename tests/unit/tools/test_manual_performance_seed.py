@@ -66,3 +66,23 @@ def test_build_manual_performance_seed_bundle_generates_prices_fx_and_benchmark_
     ]
     assert [row["rate_date"] for row in eur_usd_rates] == ["2026-03-03", "2026-03-04"]
     assert eur_usd_rates[0]["rate"] != eur_usd_rates[1]["rate"]
+
+
+def test_build_manual_performance_seed_bundle_generates_calendar_daily_fx():
+    bundle = build_manual_performance_seed_bundle(
+        portfolio_id="MANUAL_PB_USD_001",
+        start_date=date(2026, 3, 6),
+        end_date=date(2026, 3, 8),
+        benchmark_id=DEFAULT_DEMO_BENCHMARK_ID,
+    )
+
+    eur_usd_rates = [
+        row
+        for row in bundle["fx_rates"]
+        if row["from_currency"] == "EUR" and row["to_currency"] == "USD"
+    ]
+    assert [row["rate_date"] for row in eur_usd_rates] == [
+        "2026-03-06",
+        "2026-03-07",
+        "2026-03-08",
+    ]
