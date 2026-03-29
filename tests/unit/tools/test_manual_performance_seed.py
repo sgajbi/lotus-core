@@ -3,6 +3,7 @@ from datetime import date
 from tools.manual_performance_seed import (
     DEFAULT_DEMO_BENCHMARK_ID,
     build_manual_performance_seed_bundle,
+    build_manual_seed_cleanup_sql,
 )
 
 
@@ -103,3 +104,20 @@ def test_build_manual_performance_seed_bundle_extends_benchmark_series_to_calend
     index_dates = [row["series_date"] for row in bundle["index_price_series"]]
     assert benchmark_dates[-1] == "2026-03-08"
     assert index_dates[-1] == "2026-03-08"
+
+
+def test_build_manual_seed_cleanup_sql_targets_only_manual_benchmark_rows():
+    sql = build_manual_seed_cleanup_sql(
+        portfolio_id="MANUAL_PB_USD_001",
+        benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+    )
+
+    assert "delete from portfolio_benchmark_assignments" in sql
+    assert "MANUAL_PB_USD_001" in sql
+    assert "BMK_GLOBAL_BALANCED_60_40" in sql
+    assert "delete from benchmark_composition_series" in sql
+    assert "delete from benchmark_return_series" in sql
+    assert "delete from benchmark_definitions" in sql
+    assert "delete from index_price_series" in sql
+    assert "delete from index_return_series" in sql
+    assert "delete from index_definitions" in sql

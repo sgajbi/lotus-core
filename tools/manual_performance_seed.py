@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ DEFAULT_PORTFOLIO_ID = "MANUAL_PB_USD_001"
 DEFAULT_INGESTION_BASE_URL = "http://127.0.0.1:8200"
 DEFAULT_QUERY_CONTROL_BASE_URL = "http://127.0.0.1:8202"
 DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:8100"
+DEFAULT_POSTGRES_CONTAINER = "lotus-core-app-local-postgres-1"
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,8 @@ MANUAL_SECURITY_SEEDS: tuple[ManualSecuritySeed, ...] = (
     ),
 )
 
+BENCHMARK_INDEX_IDS: tuple[str, str] = ("IDX_GLOBAL_EQUITY_TR", "IDX_GLOBAL_BOND_TR")
+
 
 def _business_dates(start: date, end: date) -> list[date]:
     dates: list[date] = []
@@ -82,6 +86,24 @@ def _iso_utc_timestamp(day: date, hour: int = 21) -> str:
         datetime(day.year, day.month, day.day, hour=hour, tzinfo=UTC)
         .isoformat()
         .replace("+00:00", "Z")
+    )
+
+
+def build_manual_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+    quoted_index_ids = ", ".join(f"'{index_id}'" for index_id in BENCHMARK_INDEX_IDS)
+    return "\n".join(
+        [
+            (
+                "delete from portfolio_benchmark_assignments "
+                f"where portfolio_id = '{portfolio_id}' and benchmark_id = '{benchmark_id}';"
+            ),
+            f"delete from benchmark_composition_series where benchmark_id = '{benchmark_id}';",
+            f"delete from benchmark_return_series where benchmark_id = '{benchmark_id}';",
+            f"delete from benchmark_definitions where benchmark_id = '{benchmark_id}';",
+            f"delete from index_price_series where index_id in ({quoted_index_ids});",
+            f"delete from index_return_series where index_id in ({quoted_index_ids});",
+            f"delete from index_definitions where index_id in ({quoted_index_ids});",
+        ]
     )
 
 
@@ -243,6 +265,30 @@ def _post_json(url: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         return response.status, json.loads(raw) if raw else {}
 
 
+def cleanup_existing_manual_seed(
+    *,
+    postgres_container: str,
+    portfolio_id: str,
+    benchmark_id: str,
+) -> None:
+    sql = build_manual_seed_cleanup_sql(portfolio_id=portfolio_id, benchmark_id=benchmark_id)
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            postgres_container,
+            "psql",
+            "-U",
+            "user",
+            "-d",
+            "portfolio_db",
+            "-c",
+            sql,
+        ],
+        check=True,
+    )
+
+
 def ingest_manual_performance_seed(
     *,
     ingestion_base_url: str,
@@ -336,6 +382,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ingestion-base-url", default=DEFAULT_INGESTION_BASE_URL)
     parser.add_argument("--query-control-base-url", default=DEFAULT_QUERY_CONTROL_BASE_URL)
     parser.add_argument("--gateway-base-url", default=DEFAULT_GATEWAY_BASE_URL)
+    parser.add_argument("--postgres-container", default=DEFAULT_POSTGRES_CONTAINER)
+    parser.add_argument("--skip-cleanup", action="store_true")
     parser.add_argument("--sleep-seconds", type=int, default=20)
     return parser.parse_args()
 
@@ -364,6 +412,12 @@ def main() -> int:
         len(bundle["fx_rates"]),
         len(bundle["benchmark_return_series"]),
     )
+    if not args.skip_cleanup:
+        cleanup_existing_manual_seed(
+            postgres_container=args.postgres_container,
+            portfolio_id=args.portfolio_id,
+            benchmark_id=args.benchmark_id,
+        )
     ingest_manual_performance_seed(ingestion_base_url=args.ingestion_base_url, bundle=bundle)
     LOGGER.info("Waiting %s seconds for downstream valuation and aggregation.", args.sleep_seconds)
     time.sleep(args.sleep_seconds)
