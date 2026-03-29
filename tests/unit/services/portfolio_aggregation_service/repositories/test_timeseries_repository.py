@@ -59,6 +59,7 @@ async def test_find_and_claim_eligible_jobs_first_day_gate_is_directly_correlate
         "portfolio_aggregation_jobs_1.portfolio_id = portfolio_aggregation_jobs.portfolio_id"
         in compiled_query
     )
+    assert "date < portfolio_aggregation_jobs.aggregation_date" in compiled_query
     assert "FROM portfolio_timeseries, portfolio_aggregation_jobs" not in compiled_query
 
 

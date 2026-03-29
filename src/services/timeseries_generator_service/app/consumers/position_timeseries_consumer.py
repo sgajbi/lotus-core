@@ -52,17 +52,22 @@ class _TimeseriesMaterialState:
 
 class PositionTimeseriesConsumer(BaseConsumer):
     @staticmethod
-    def _parse_supported_event(event_data: dict) -> DailyPositionSnapshotPersistedEvent:
+    def _parse_supported_event(
+        event_data: dict,
+    ) -> tuple[DailyPositionSnapshotPersistedEvent, bool]:
         try:
-            return DailyPositionSnapshotPersistedEvent.model_validate(event_data)
+            return DailyPositionSnapshotPersistedEvent.model_validate(event_data), False
         except ValidationError:
             valuation_event = ValuationDayCompletedEvent.model_validate(event_data)
-            return DailyPositionSnapshotPersistedEvent(
-                id=valuation_event.daily_position_snapshot_id,
-                portfolio_id=valuation_event.portfolio_id,
-                security_id=valuation_event.security_id,
-                date=valuation_event.valuation_date,
-                epoch=valuation_event.epoch,
+            return (
+                DailyPositionSnapshotPersistedEvent(
+                    id=valuation_event.daily_position_snapshot_id,
+                    portfolio_id=valuation_event.portfolio_id,
+                    security_id=valuation_event.security_id,
+                    date=valuation_event.valuation_date,
+                    epoch=valuation_event.epoch,
+                ),
+                True,
             )
 
     async def process_message(self, msg: Message):
@@ -148,7 +153,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
             ) as correlation_id:
-                event = self._parse_supported_event(event_data)
+                event, should_fence_epoch = self._parse_supported_event(event_data)
 
                 logger.info(
                     "Processing position snapshot for %s on %s for epoch %s",
@@ -163,9 +168,10 @@ class PositionTimeseriesConsumer(BaseConsumer):
                         outbox_repo = OutboxRepository(db)
 
                         # --- REFACTORED: Use EpochFencer ---
-                        fencer = EpochFencer(db, service_name=SERVICE_NAME)
-                        if not await fencer.check(event):
-                            return  # Acknowledge message without processing
+                        if should_fence_epoch:
+                            fencer = EpochFencer(db, service_name=SERVICE_NAME)
+                            if not await fencer.check(event):
+                                return  # Acknowledge message without processing
                         # --- END REFACTOR ---
 
                         instrument = await repo.get_instrument(event.security_id)

@@ -111,6 +111,7 @@ class TimeseriesRepositoryBase:
         p1 = PortfolioAggregationJob
         p2 = aliased(PortfolioAggregationJob)
         pts = PortfolioTimeseries
+        p1_pts = aliased(PortfolioTimeseries)
         dps = DailyPositionSnapshot
         position_ts = PositionTimeseries
 
@@ -121,16 +122,20 @@ class TimeseriesRepositoryBase:
             )
         ).correlate(p1)
 
-        no_portfolio_history_subq = ~exists(
-            select(1).where(pts.portfolio_id == p1.portfolio_id)
+        no_prior_portfolio_history_subq = ~exists(
+            select(1).where(
+                p1_pts.portfolio_id == p1.portfolio_id,
+                p1_pts.date < p1.aggregation_date,
+            )
         ).correlate(p1)
-        first_job_date_subq = (
-            select(func.min(p2.aggregation_date))
-            .where(p2.portfolio_id == p1.portfolio_id)
-            .scalar_subquery()
-            .correlate(p1)
-        )
-        is_first_job_subq = no_portfolio_history_subq & (p1.aggregation_date == first_job_date_subq)
+        no_earlier_pending_job_subq = ~exists(
+            select(1).where(
+                p2.portfolio_id == p1.portfolio_id,
+                p2.status == "PENDING",
+                p2.aggregation_date < p1.aggregation_date,
+            )
+        ).correlate(p1)
+        is_first_job_subq = no_prior_portfolio_history_subq & no_earlier_pending_job_subq
 
         latest_snapshot_epochs = (
             select(
