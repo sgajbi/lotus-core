@@ -3,14 +3,20 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from urllib import request
 
-from tools.demo_data_pack import (
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.demo_data_pack import (  # noqa: E402
     DEFAULT_DEMO_BENCHMARK_ID,
     _build_benchmark_reference_data,
 )
