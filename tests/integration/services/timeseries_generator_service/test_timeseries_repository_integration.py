@@ -352,6 +352,87 @@ async def test_find_and_claim_eligible_jobs_accepts_mixed_latest_epochs_per_secu
     assert claimed_jobs[0].aggregation_date == a_date
 
 
+async def test_find_and_claim_eligible_jobs_bootstraps_earliest_pending_day_before_existing_history(
+    db_engine, clean_db, async_db_session: AsyncSession
+):
+    portfolio_id = "STRANDED_BOOTSTRAP_PORT"
+    early_day = date(2025, 4, 1)
+    later_day = date(2025, 7, 2)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.flush()
+        session.add(
+            Instrument(
+                security_id="CASH_USD_BOOT",
+                name="Cash USD",
+                isin="CASH_USD_BOOT",
+                currency="USD",
+                product_type="Cash",
+            )
+        )
+        session.add(
+            PositionState(
+                portfolio_id=portfolio_id,
+                security_id="CASH_USD_BOOT",
+                epoch=0,
+                watermark_date=date(1970, 1, 1),
+            )
+        )
+        session.add_all(
+            [
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=early_day,
+                    status="PENDING",
+                ),
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=later_day,
+                    status="PENDING",
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                _snapshot(portfolio_id, "CASH_USD_BOOT", early_day, epoch=0),
+                _position_ts(portfolio_id, "CASH_USD_BOOT", early_day, epoch=0),
+                _snapshot(portfolio_id, "CASH_USD_BOOT", later_day, epoch=0),
+                _position_ts(portfolio_id, "CASH_USD_BOOT", later_day, epoch=0),
+                PortfolioTimeseries(
+                    portfolio_id=portfolio_id,
+                    date=later_day,
+                    epoch=0,
+                    bod_market_value=Decimal("0"),
+                    bod_cashflow=Decimal("0"),
+                    eod_cashflow=Decimal("0"),
+                    eod_market_value=Decimal("100"),
+                    fees=Decimal("0"),
+                ),
+            ]
+        )
+        session.commit()
+
+    repo = TimeseriesRepository(async_db_session)
+    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    await async_db_session.commit()
+
+    assert len(claimed_jobs) == 1
+    assert claimed_jobs[0].aggregation_date == early_day
+
+
 async def test_find_and_claim_eligible_jobs_uses_prior_day_portfolio_row_even_when_current_epoch_has_advanced(  # noqa: E501
     db_engine, clean_db, async_db_session: AsyncSession
 ):

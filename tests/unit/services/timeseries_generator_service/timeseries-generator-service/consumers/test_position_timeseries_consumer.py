@@ -127,7 +127,7 @@ async def test_process_message_success(
         await consumer._process_message_with_retry(mock_kafka_message)
 
         # ASSERT
-        mock_fencer_instance.check.assert_awaited_once()
+        mock_fencer_class.assert_not_called()
         mock_repo.upsert_position_timeseries.assert_awaited_once()
         mock_outbox_repo.create_outbox_event.assert_awaited_once()
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
@@ -139,13 +139,23 @@ async def test_process_message_success(
 
 async def test_process_message_skips_stale_epoch(
     consumer: PositionTimeseriesConsumer,
-    mock_kafka_message: MagicMock,
     mock_dependencies: dict,
     caplog,
 ):
     # ARRANGE
     mock_repo = mock_dependencies["repo"]
     mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    valuation_event = ValuationDayCompletedEvent(
+        daily_position_snapshot_id=123,
+        portfolio_id="PORT_TS_POS_01",
+        security_id="SEC_TS_POS_01",
+        valuation_date=date(2025, 8, 12),
+        epoch=1,
+    )
+    msg = MagicMock()
+    msg.value.return_value = valuation_event.model_dump_json().encode("utf-8")
+    msg.headers.return_value = []
 
     # Mock the fencer to return False (discard the message)
     with patch(
@@ -157,7 +167,7 @@ async def test_process_message_skips_stale_epoch(
 
         # ACT
         with caplog.at_level(logging.WARNING):
-            await consumer._process_message_with_retry(mock_kafka_message)
+            await consumer._process_message_with_retry(msg)
 
         # ASSERT
         mock_repo.get_instrument.assert_not_called()
@@ -165,6 +175,48 @@ async def test_process_message_skips_stale_epoch(
         mock_outbox_repo.create_outbox_event.assert_not_called()
         # The fencer now handles logging, so we don't need to check caplog here.
         # The key assertion is that the business logic was not executed.
+
+
+async def test_process_message_bypasses_epoch_fencing_for_snapshot_backfill(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_repo.get_instrument.return_value = Instrument(
+        security_id=mock_event.security_id, currency="USD"
+    )
+    mock_db_session.get.return_value = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal(100),
+        cost_basis_local=Decimal(1000),
+        market_value_local=Decimal(1100),
+    )
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal(1050)
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = None
+
+    with patch(
+        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = False
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await consumer._process_message_with_retry(mock_kafka_message)
+
+    mock_fencer_class.assert_not_called()
+    mock_repo.upsert_position_timeseries.assert_awaited_once()
+    mock_outbox_repo.create_outbox_event.assert_awaited_once()
 
 
 async def test_process_message_accepts_valuation_completed_event(
@@ -329,6 +381,6 @@ async def test_stage_aggregation_job_rearms_completed_job_for_late_material_inpu
         executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
     )
 
-    assert "SET status = %(param_1)s" in compiled_stmt or "SET status='PENDING'" in compiled_stmt
+    assert "SET status = 'PENDING'" in compiled_stmt or "SET status='PENDING'" in compiled_stmt
     assert "correlation_id" in compiled_stmt
     assert "WHERE NOT (" not in compiled_stmt

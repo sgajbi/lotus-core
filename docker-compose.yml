@@ -12,6 +12,9 @@ x-lotus-stack-contract:
     - service-local-debugging
     - app-local-observability
 
+x-shared-python-env: &shared_python_env
+  PYTHONPATH: /app/src/libs/portfolio-common
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -120,6 +123,7 @@ services:
     ports:
       - "${LOTUS_INGESTION_HOST_PORT:-8200}:8000"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
     depends_on:
       kafka:
@@ -155,6 +159,7 @@ services:
     ports:
       - "${LOTUS_QUERY_HOST_PORT:-8201}:8001"
     environment:
+      <<: *shared_python_env
       DATABASE_URL: ${QUERY_DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
       migration-runner:
@@ -182,6 +187,7 @@ services:
     ports:
       - "${LOTUS_QUERY_CONTROL_PLANE_HOST_PORT:-8202}:8002"
     environment:
+      <<: *shared_python_env
       DATABASE_URL: ${QUERY_DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
       migration-runner:
@@ -210,6 +216,7 @@ services:
     ports:
       - "${LOTUS_EVENT_REPLAY_HOST_PORT:-8209}:8009"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -241,6 +248,7 @@ services:
     ports:
       - "${LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT:-8210}:8010"
     environment:
+      <<: *shared_python_env
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
       migration-runner:
@@ -268,6 +276,7 @@ services:
     ports:
       - "${LOTUS_PERSISTENCE_HOST_PORT:-8080}:8080"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -298,6 +307,7 @@ services:
     ports:
       - "${LOTUS_COST_CALCULATOR_HOST_PORT:-8083}:8083"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -328,6 +338,7 @@ services:
     ports:
      - "${LOTUS_CASHFLOW_CALCULATOR_HOST_PORT:-8082}:8082"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -358,6 +369,7 @@ services:
     ports:
       - "${LOTUS_POSITION_CALCULATOR_HOST_PORT:-8081}:8081"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -388,6 +400,7 @@ services:
     ports:
       - "${LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT:-8086}:8086"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -418,6 +431,7 @@ services:
     ports:
       - "${LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT:-8087}:8087"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
       VALUATION_SCHEDULER_POLL_INTERVAL: 2
@@ -449,6 +463,7 @@ services:
     ports:
       - "${LOTUS_POSITION_VALUATION_HOST_PORT:-8084}:8084"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -479,6 +494,7 @@ services:
     ports:
       - "${LOTUS_TIMESERIES_GENERATOR_HOST_PORT:-8085}:8085"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -509,6 +525,7 @@ services:
     ports:
       - "${LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT:-8088}:8088"
     environment:
+      <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
