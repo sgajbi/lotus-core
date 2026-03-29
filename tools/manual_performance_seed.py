@@ -26,7 +26,7 @@ LOGGER = logging.getLogger("manual_performance_seed")
 DEFAULT_PORTFOLIO_ID = "MANUAL_PB_USD_001"
 DEFAULT_INGESTION_BASE_URL = "http://127.0.0.1:8200"
 DEFAULT_QUERY_CONTROL_BASE_URL = "http://127.0.0.1:8202"
-DEFAULT_PERFORMANCE_BASE_URL = "http://127.0.0.1:8002"
+DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:8100"
 
 
 @dataclass(frozen=True)
@@ -111,8 +111,10 @@ def build_manual_performance_seed_bundle(
     portfolio_id: str,
     start_date: date,
     end_date: date,
+    benchmark_start_date: date | None = None,
     benchmark_id: str = DEFAULT_DEMO_BENCHMARK_ID,
 ) -> dict[str, Any]:
+    effective_benchmark_start_date = benchmark_start_date or start_date
     business_dates = _business_dates(start_date, end_date)
     iso_dates = [current.isoformat() for current in business_dates]
     calendar_dates = _calendar_dates(start_date, end_date)
@@ -172,14 +174,14 @@ def build_manual_performance_seed_bundle(
 
     benchmark_reference = _build_benchmark_reference_data(
         dates=iso_dates,
-        start_date=start_date,
+        start_date=effective_benchmark_start_date,
     )
     benchmark_reference["benchmark_assignments"] = [
         {
             **assignment,
             "portfolio_id": portfolio_id,
             "benchmark_id": benchmark_id,
-            "effective_from": start_date.isoformat(),
+            "effective_from": effective_benchmark_start_date.isoformat(),
             "assignment_source": "manual_performance_seed",
             "source_system": "LOTUS_CORE_MANUAL_PORTFOLIO_SEED",
         }
@@ -220,6 +222,7 @@ def build_manual_performance_seed_bundle(
         "portfolio_id": portfolio_id,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
+        "benchmark_start_date": effective_benchmark_start_date.isoformat(),
         "business_dates": [{"business_date": current_date} for current_date in iso_dates],
         "market_prices": market_prices,
         "fx_rates": fx_rates,
@@ -277,7 +280,7 @@ def ingest_manual_performance_seed(
 def verify_manual_performance_seed(
     *,
     query_control_base_url: str,
-    performance_base_url: str,
+    gateway_base_url: str,
     portfolio_id: str,
     start_date: date,
     end_date: date,
@@ -306,7 +309,7 @@ def verify_manual_performance_seed(
         timeseries_payload,
     )
     with request.urlopen(
-        f"{performance_base_url}/api/v1/workbench/{portfolio_id}/performance/summary"
+        f"{gateway_base_url}/api/v1/workbench/{portfolio_id}/performance/summary"
         f"?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class"
         f"&attribution_dimension=asset_class&detail_basis=NET",
         timeout=60,
@@ -328,10 +331,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--portfolio-id", default=DEFAULT_PORTFOLIO_ID)
     parser.add_argument("--start-date", default="2026-03-03")
     parser.add_argument("--end-date", default="2026-03-28")
+    parser.add_argument("--benchmark-start-date", default="2026-01-05")
     parser.add_argument("--benchmark-id", default=DEFAULT_DEMO_BENCHMARK_ID)
     parser.add_argument("--ingestion-base-url", default=DEFAULT_INGESTION_BASE_URL)
     parser.add_argument("--query-control-base-url", default=DEFAULT_QUERY_CONTROL_BASE_URL)
-    parser.add_argument("--performance-base-url", default=DEFAULT_PERFORMANCE_BASE_URL)
+    parser.add_argument("--gateway-base-url", default=DEFAULT_GATEWAY_BASE_URL)
     parser.add_argument("--sleep-seconds", type=int, default=20)
     return parser.parse_args()
 
@@ -341,11 +345,13 @@ def main() -> int:
     args = parse_args()
     start_date = date.fromisoformat(args.start_date)
     end_date = date.fromisoformat(args.end_date)
+    benchmark_start_date = date.fromisoformat(args.benchmark_start_date)
 
     bundle = build_manual_performance_seed_bundle(
         portfolio_id=args.portfolio_id,
         start_date=start_date,
         end_date=end_date,
+        benchmark_start_date=benchmark_start_date,
         benchmark_id=args.benchmark_id,
     )
     LOGGER.info(
@@ -363,7 +369,7 @@ def main() -> int:
     time.sleep(args.sleep_seconds)
     verification = verify_manual_performance_seed(
         query_control_base_url=args.query_control_base_url,
-        performance_base_url=args.performance_base_url,
+        gateway_base_url=args.gateway_base_url,
         portfolio_id=args.portfolio_id,
         start_date=start_date,
         end_date=end_date,

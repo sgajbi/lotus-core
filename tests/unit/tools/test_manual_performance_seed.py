@@ -11,11 +11,13 @@ def test_build_manual_performance_seed_bundle_targets_manual_portfolio_and_busin
         portfolio_id="MANUAL_PB_USD_001",
         start_date=date(2026, 3, 3),
         end_date=date(2026, 3, 10),
+        benchmark_start_date=date(2026, 1, 5),
         benchmark_id=DEFAULT_DEMO_BENCHMARK_ID,
     )
 
     assert bundle["start_date"] == "2026-03-03"
     assert bundle["end_date"] == "2026-03-10"
+    assert bundle["benchmark_start_date"] == "2026-01-05"
     assert [row["business_date"] for row in bundle["business_dates"]] == [
         "2026-03-03",
         "2026-03-04",
@@ -28,12 +30,12 @@ def test_build_manual_performance_seed_bundle_targets_manual_portfolio_and_busin
         {
             "portfolio_id": "MANUAL_PB_USD_001",
             "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
-            "effective_from": "2026-03-03",
+            "effective_from": "2026-01-05",
             "assignment_source": "manual_performance_seed",
             "assignment_status": "active",
             "policy_pack_id": "demo_balanced_policy_v1",
             "source_system": "LOTUS_CORE_MANUAL_PORTFOLIO_SEED",
-            "assignment_recorded_at": "2026-03-03T08:00:00Z",
+            "assignment_recorded_at": "2026-01-05T08:00:00Z",
             "assignment_version": 1,
         }
     ]
