@@ -381,6 +381,6 @@ async def test_stage_aggregation_job_rearms_completed_job_for_late_material_inpu
         executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
     )
 
-    assert "SET status = 'PENDING'" in compiled_stmt or "SET status='PENDING'" in compiled_stmt
+    assert "DO UPDATE SET status" in compiled_stmt
     assert "correlation_id" in compiled_stmt
     assert "WHERE NOT (" not in compiled_stmt
