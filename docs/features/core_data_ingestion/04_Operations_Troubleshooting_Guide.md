@@ -50,8 +50,8 @@ lotus-core startup includes a one-shot `demo_data_loader` container that:
 # View bootstrap execution and verification output
 docker compose logs --tail=200 demo_data_loader
 
-# Re-run manually against running lotus-core APIs
-python -m tools.demo_data_pack --ingestion-base-url http://localhost:8200 --query-base-url http://localhost:8201
+# Re-run manually against the canonical local ingress identities
+python -m tools.demo_data_pack --ingestion-base-url http://core-ingestion.dev.lotus --query-base-url http://core-query.dev.lotus
 
 # Disable auto bootstrap for specific runs
 DEMO_DATA_PACK_ENABLED=false docker compose up -d

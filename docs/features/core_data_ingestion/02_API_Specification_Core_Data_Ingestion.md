@@ -2,7 +2,7 @@
 
 This document provides the detailed technical specification for the `ingestion_service` API.
 
-* **Base URL:** `http://localhost:8200`
+* **Base URL:** `http://core-ingestion.dev.lotus`
 * **Success Response:** All endpoints return a `202 Accepted` status code upon successfully queueing the data for processing.
 * **Error Responses:**
     * `422 Unprocessable Entity`: The request body is malformed or fails validation.

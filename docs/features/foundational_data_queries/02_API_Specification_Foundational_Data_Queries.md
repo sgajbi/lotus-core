@@ -2,7 +2,7 @@
 
 This document provides the detailed technical specification for the foundational `GET` endpoints in the `query_service`.
 
-* **Base URL:** `http://localhost:8201`
+* **Base URL:** `http://core-query.dev.lotus`
 * **Error Responses:**
     * `404 Not Found`: Returned if a specific resource (e.g., a portfolio) does not exist.
     * `422 Unprocessable Entity`: The query parameters are invalid.
