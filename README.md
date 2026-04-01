@@ -245,7 +245,7 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     DEMO_DATA_PACK_ENABLED=false docker compose up -d
 
     # Run manually against a running stack
-    python -m tools.demo_data_pack --ingestion-base-url http://localhost:8200 --query-base-url http://localhost:8201 --query-control-plane-base-url http://localhost:8202
+    python -m tools.demo_data_pack --ingestion-base-url http://core-ingestion.dev.lotus --query-base-url http://core-query.dev.lotus --query-control-plane-base-url http://core-query.dev.lotus
     ```
 
     The current flagship performance demo pack seeds:
@@ -257,11 +257,11 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     Verify benchmark discovery and assignment:
 
     ```bash
-    curl -X POST "http://localhost:8202/integration/benchmarks/catalog" \
+    curl -X POST "http://core-query.dev.lotus/integration/benchmarks/catalog" \
       -H "Content-Type: application/json" \
       -d '{"as_of_date":"2026-03-27","benchmark_currency":"USD","benchmark_status":"active","benchmark_type":"composite"}'
 
-    curl -X POST "http://localhost:8202/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
+    curl -X POST "http://core-query.dev.lotus/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
       -H "Content-Type: application/json" \
       -d '{"as_of_date":"2026-03-27"}'
     ```
@@ -269,7 +269,7 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     For UI/file-upload style onboarding, lotus-core also supports:
 
     ```bash
-    curl -X POST "http://localhost:8200/ingest/portfolio-bundle" \
+    curl -X POST "http://core-ingestion.dev.lotus/ingest/portfolio-bundle" \
       -H "Content-Type: application/json" \
       -d '{"mode":"UPSERT","businessDates":[],"portfolios":[],"instruments":[],"transactions":[],"marketPrices":[],"fxRates":[]}'
     ```
@@ -278,13 +278,13 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
 
     ```bash
     # Preview (validate only, no publishing)
-    curl -X POST "http://localhost:8200/ingest/uploads/preview" \
+    curl -X POST "http://core-ingestion.dev.lotus/ingest/uploads/preview" \
       -F "entityType=transactions" \
       -F "sampleSize=20" \
       -F "file=@./samples/transactions.csv"
 
     # Commit (strict by default; set allowPartial=true to publish valid rows only)
-    curl -X POST "http://localhost:8200/ingest/uploads/commit" \
+    curl -X POST "http://core-ingestion.dev.lotus/ingest/uploads/commit" \
       -F "entityType=transactions" \
       -F "allowPartial=true" \
       -F "file=@./samples/transactions.csv"
@@ -293,9 +293,9 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     For lotus-performance/lotus-manage style integration contracts, lotus-core query-service supports:
 
     ```bash
-    curl "http://localhost:8201/integration/policy/effective?consumer_system=lotus-performance&tenant_id=default&include_sections=OVERVIEW&include_sections=HOLDINGS"
+    curl "http://core-query.dev.lotus/integration/policy/effective?consumer_system=lotus-performance&tenant_id=default&include_sections=OVERVIEW&include_sections=HOLDINGS"
 
-    curl "http://localhost:8201/integration/capabilities?consumer_system=lotus-gateway&tenant_id=default"
+    curl "http://core-query.dev.lotus/integration/capabilities?consumer_system=lotus-gateway&tenant_id=default"
     ```
 
     Integration policy controls (optional):
@@ -326,24 +326,24 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
 2.  **Query the API**:
     Once the services have processed the data, you can query the `query-service` API endpoints.
 
-      * API Docs: `http://localhost:8201/docs`
+      * API Docs: `http://core-query.dev.lotus/docs`
 
 3.  **Use Support and Lineage APIs (Preferred over direct DB access)**:
     Use the query-service operational APIs for support diagnostics.
 
     ```bash
     # Portfolio-level support overview
-    curl "http://localhost:8201/support/portfolios/PORT001/overview"
+    curl "http://core-query.dev.lotus/support/portfolios/PORT001/overview"
 
     # Key-level lineage (epoch/watermark + latest artifacts)
-    curl "http://localhost:8201/lineage/portfolios/PORT001/securities/SEC001"
+    curl "http://core-query.dev.lotus/lineage/portfolios/PORT001/securities/SEC001"
 
     # Portfolio lineage key listing for support dashboards
-    curl "http://localhost:8201/lineage/portfolios/PORT001/keys?reprocessing_status=CURRENT&skip=0&limit=100"
+    curl "http://core-query.dev.lotus/lineage/portfolios/PORT001/keys?reprocessing_status=CURRENT&skip=0&limit=100"
 
     # Valuation and aggregation support job queues
-    curl "http://localhost:8201/support/portfolios/PORT001/valuation-jobs?status=PENDING&skip=0&limit=100"
-    curl "http://localhost:8201/support/portfolios/PORT001/aggregation-jobs?status=PROCESSING&skip=0&limit=100"
+    curl "http://core-query.dev.lotus/support/portfolios/PORT001/valuation-jobs?status=PENDING&skip=0&limit=100"
+    curl "http://core-query.dev.lotus/support/portfolios/PORT001/aggregation-jobs?status=PROCESSING&skip=0&limit=100"
     ```
 
 ## Code Quality

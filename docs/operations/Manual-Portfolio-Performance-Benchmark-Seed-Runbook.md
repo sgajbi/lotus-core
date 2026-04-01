@@ -65,9 +65,9 @@ The following services must already be running:
 
 Expected local endpoints:
 
-- ingestion: `http://127.0.0.1:8200`
-- query control plane: `http://127.0.0.1:8202`
-- gateway: `http://127.0.0.1:8100`
+- ingestion: `http://core-ingestion.dev.lotus`
+- query control plane: `http://core-query.dev.lotus`
+- gateway: `http://gateway.dev.lotus`
 
 The following portfolio must already exist from the manual portfolio bootstrap:
 
@@ -173,9 +173,7 @@ Run these checks after the seed completes.
 
 ### 1. Benchmark assignment resolves
 
-Request:
-
-`POST http://127.0.0.1:8202/integration/portfolios/MANUAL_PB_USD_001/benchmark-assignment`
+`POST http://core-query.dev.lotus/integration/portfolios/MANUAL_PB_USD_001/benchmark-assignment`
 
 Pass criteria:
 
@@ -191,9 +189,7 @@ Fail criteria:
 
 ### 2. Portfolio analytics timeseries resolves
 
-Request:
-
-`POST http://127.0.0.1:8202/integration/portfolios/MANUAL_PB_USD_001/analytics/portfolio-timeseries`
+`POST http://core-query.dev.lotus/integration/portfolios/MANUAL_PB_USD_001/analytics/portfolio-timeseries`
 
 Pass criteria:
 
@@ -210,9 +206,7 @@ Fail criteria:
 
 ### 3. Gateway performance summary resolves with benchmark-linked data
 
-Request:
-
-`GET http://127.0.0.1:8100/api/v1/workbench/MANUAL_PB_USD_001/performance/summary?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class&attribution_dimension=asset_class&detail_basis=NET`
+`GET http://gateway.dev.lotus/api/v1/workbench/MANUAL_PB_USD_001/performance/summary?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class&attribution_dimension=asset_class&detail_basis=NET`
 
 Pass criteria:
 
@@ -234,9 +228,7 @@ a calculation-quality issue, not as proof that the seed run failed.
 
 ### 4. Gateway performance details resolves with analytical content
 
-Request:
-
-`GET http://127.0.0.1:8100/api/v1/workbench/MANUAL_PB_USD_001/performance/details?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class&attribution_dimension=asset_class&detail_basis=NET`
+`GET http://gateway.dev.lotus/api/v1/workbench/MANUAL_PB_USD_001/performance/details?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class&attribution_dimension=asset_class&detail_basis=NET`
 
 Pass criteria:
 
