@@ -2,9 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Implemented |
 | Created | 2026-04-05 |
-| Last Updated | 2026-04-05 |
+| Last Updated | 2026-04-06 |
 | Owners | lotus-core query-service + lotus-advise owners |
 | Depends On | RFC 046A, RFC 058, RFC 067 |
 | Related Standards | `lotus-platform/docs/architecture/canonical-simulation-authority-and-domain-evaluation-pattern.md` |
@@ -28,24 +28,34 @@ This RFC introduces new requirements:
 4. `lotus-advise` must delegate runtime simulation authority to `lotus-core` after parity is proven.
 5. The cutover must not reduce advisory features, determinism, or replay evidence quality.
 
-## Current Implementation Reality
+## Implementation Outcome
 
-Implemented in `lotus-core` today:
+This RFC is implemented.
 
-1. generic simulation sessions,
-2. generic projected-position and projected-summary contracts,
-3. generic baseline/simulation snapshot contracts.
+Delivered in `lotus-core`:
 
-Implemented in `lotus-advise` today:
+1. advisory-grade canonical simulation execution endpoint,
+2. versioned advisory simulation contract governance through
+   `X-Lotus-Contract-Version: advisory-simulation.v1`,
+3. stable `application/problem+json` error taxonomy for contract mismatch, validation failure, and
+   execution failure,
+4. canonical lineage propagation including `lineage.simulation_contract_version`,
+5. curated parity coverage against the advisory semantics previously proven in `lotus-advise`.
 
-1. canonical advisory request normalization,
-2. advisory proposal simulation API,
-3. local advisory proposal simulation execution engine,
-4. suitability, workflow gates, artifact generation, and lifecycle persistence.
+Delivered in `lotus-advise`:
 
-Gap:
+1. runtime delegation to `lotus-core` as the normal simulation authority,
+2. contract-version validation on the upstream simulation seam,
+3. curated parity coverage across the old local oracle and the canonical `lotus-core` path,
+4. controlled local fallback quarantined to non-production environments and retained only for
+   migration safety and test-oracle use.
 
-`lotus-core` does not yet execute the canonical advisory proposal simulation contract consumed by `lotus-advise`, so `lotus-advise` still owns a local execution engine for projected-state behavior.
+Closure result:
+
+1. `lotus-core` is now the authoritative runtime owner of advisory simulation execution,
+2. `lotus-advise` remains the owner of advisory APIs, context normalization, workflow semantics,
+   lifecycle persistence, and advisory explainability,
+3. local projected-state execution in `lotus-advise` is no longer a normal production authority.
 
 ## Problem Statement
 
@@ -136,11 +146,52 @@ Trade-off:
 1. Add advisory execution DTOs and route in `lotus-core`.
 2. Bring advisory execution logic into `lotus-core` with targeted tests.
 3. Preserve deterministic request-hash and lineage inputs.
+4. Publish a versioned contract header and stable problem-details error taxonomy so downstream
+   consumers can detect contract drift separately from execution failure.
+
+#### Slice 1 delivery notes
+
+The canonical contract for the execution endpoint is:
+
+- Request header: `X-Lotus-Contract-Version: advisory-simulation.v1`
+- Response header: `X-Lotus-Contract-Version: advisory-simulation.v1`
+- Response lineage field: `lineage.simulation_contract_version = advisory-simulation.v1`
+
+Slice 1 error taxonomy uses `application/problem+json` with stable error codes:
+
+- `CANONICAL_SIMULATION_REQUEST_VALIDATION_FAILED`
+- `CANONICAL_SIMULATION_CONTRACT_VERSION_MISMATCH`
+- `CANONICAL_SIMULATION_EXECUTION_FAILED`
+
+This contract shape is required before parity and cutover work because it gives `lotus-advise`
+an explicit governance seam instead of an implicit best-effort integration.
 
 ### Slice 2 - Parity hardening
 
 1. Add parity scenarios comparing current `lotus-advise` local execution with `lotus-core` execution.
 2. Lock parity around status, intents, after-state totals, rule results, suitability, gate decisions, and lineage semantics.
+
+#### Slice 2 delivery notes
+
+Slice 2 should stay small and intentional. The parity gate is not “duplicate every engine test twice.”
+
+The required parity suite is a curated scenario set that locks the semantics most likely to drift:
+
+- FX funding and dependency ordering
+- blocked missing-FX behavior
+- reference-model drift outputs
+- suitability-driven gate outcomes
+
+Each scenario must normalize away transport-only noise and compare the business result shape:
+
+- status
+- execution intents and dependencies
+- after-state totals, cash, and positions
+- rule results
+- gate decision summary
+- suitability summary
+- drift-analysis summary
+- canonical lineage fields
 
 ### Slice 3 - Advise delegation cutover
 
@@ -154,13 +205,20 @@ Trade-off:
 2. Quarantine or retire the local advisory execution path so it is no longer the default runtime behavior.
 3. Ensure docs and operational posture across repos reflect the cutover.
 
-## Gap Assessment
+## Completion Assessment
 
-Open gaps before this RFC is complete:
+The planned scope for this RFC is complete:
 
-1. no advisory execution endpoint in `lotus-core`,
-2. no runtime delegation from `lotus-advise` to a real `lotus-core` endpoint,
-3. no formal parity gate proving advisory semantics match across old and new paths.
+1. `lotus-core` exposes a tested advisory execution contract,
+2. `lotus-advise` delegates runtime simulation execution to `lotus-core`,
+3. parity scenarios cover the highest-risk advisory semantics that were previously duplicated,
+4. the remaining local engine path is quarantined to non-production fallback and test-oracle use.
+
+No additional implementation slice is required inside this RFC.
+
+Any remaining work belongs to the follow-on platform hardening program for gold-standard canonical
+simulation governance, lineage, parity policy, and duplicate-path retirement rather than to
+RFC-085 itself.
 
 ## Test and Validation Evidence
 
@@ -192,8 +250,10 @@ This RFC is complete when:
 1. Should the long-term shared execution logic remain in `lotus-core` directly or later move into a dedicated shared simulation package owned by `lotus-core`?
 2. Should `lotus-risk` eventually consume the same advisory execution lineage metadata for scenario-linked analytics evidence?
 
-## Next Actions
+## Follow-on Work
 
-1. Implement Slice 1 and Slice 2 in the same branch so parity is established before advise cutover.
-2. Cut over `lotus-advise` only after parity evidence is green.
-3. Update repo capability/readiness docs after runtime authority moves.
+1. Continue the platform-level hardening program for canonical simulation governance and duplicate
+   path retirement under the newer gold-standard architecture RFCs.
+2. Keep curated parity scenarios active as regression controls whenever advisory or canonical
+   simulation semantics change.
+3. Avoid reopening RFC-085 unless the canonical simulation contract itself changes materially.

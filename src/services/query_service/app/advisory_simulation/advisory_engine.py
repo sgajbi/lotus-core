@@ -64,6 +64,7 @@ def run_proposal_simulation(
     request_hash: str = "no_hash",
     idempotency_key: Optional[str] = None,
     correlation_id: str = "c_none",
+    simulation_contract_version: Optional[str] = None,
 ) -> ProposalResult:
     run_id = proposal_run_id_from_request_hash(request_hash)
     diagnostics = make_diagnostics_data()
@@ -325,5 +326,6 @@ def run_proposal_simulation(
             request_hash=request_hash,
             idempotency_key=idempotency_key,
             engine_version="0.1.0",
+            simulation_contract_version=simulation_contract_version,
         ),
     )

@@ -20,6 +20,7 @@ def execute_advisory_simulation(
     request_hash: str | None,
     idempotency_key: str | None,
     correlation_id: str | None,
+    simulation_contract_version: str,
 ) -> ProposalResult:
     resolved_request_hash = request_hash or hash_canonical_payload(request.model_dump(mode="json"))
     resolved_correlation_id = correlation_id or f"corr_{uuid.uuid4().hex[:12]}"
@@ -34,4 +35,5 @@ def execute_advisory_simulation(
         request_hash=resolved_request_hash,
         idempotency_key=idempotency_key,
         correlation_id=resolved_correlation_id,
+        simulation_contract_version=simulation_contract_version,
     )
