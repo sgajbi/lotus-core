@@ -31,12 +31,14 @@ def test_execute_advisory_simulation_preserves_supplied_lineage_inputs():
         request_hash="sha256:test-hash",
         idempotency_key="idem-core-001",
         correlation_id="corr-core-001",
+        simulation_contract_version="advisory-simulation.v1",
     )
 
     assert result.status == "READY"
     assert result.correlation_id == "corr-core-001"
     assert result.lineage.request_hash == "sha256:test-hash"
     assert result.lineage.idempotency_key == "idem-core-001"
+    assert result.lineage.simulation_contract_version == "advisory-simulation.v1"
     assert [intent.intent_type for intent in result.intents] == [
         "CASH_FLOW",
         "SECURITY_TRADE",
@@ -49,7 +51,9 @@ def test_execute_advisory_simulation_computes_request_hash_when_missing():
         request_hash=None,
         idempotency_key=None,
         correlation_id="corr-core-002",
+        simulation_contract_version="advisory-simulation.v1",
     )
 
     assert result.lineage.request_hash.startswith("sha256:")
     assert result.correlation_id == "corr-core-002"
+    assert result.lineage.simulation_contract_version == "advisory-simulation.v1"

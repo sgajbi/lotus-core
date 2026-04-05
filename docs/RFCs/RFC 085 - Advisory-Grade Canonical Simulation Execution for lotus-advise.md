@@ -136,6 +136,25 @@ Trade-off:
 1. Add advisory execution DTOs and route in `lotus-core`.
 2. Bring advisory execution logic into `lotus-core` with targeted tests.
 3. Preserve deterministic request-hash and lineage inputs.
+4. Publish a versioned contract header and stable problem-details error taxonomy so downstream
+   consumers can detect contract drift separately from execution failure.
+
+#### Slice 1 delivery notes
+
+The canonical contract for the execution endpoint is:
+
+- Request header: `X-Lotus-Contract-Version: advisory-simulation.v1`
+- Response header: `X-Lotus-Contract-Version: advisory-simulation.v1`
+- Response lineage field: `lineage.simulation_contract_version = advisory-simulation.v1`
+
+Slice 1 error taxonomy uses `application/problem+json` with stable error codes:
+
+- `CANONICAL_SIMULATION_REQUEST_VALIDATION_FAILED`
+- `CANONICAL_SIMULATION_CONTRACT_VERSION_MISMATCH`
+- `CANONICAL_SIMULATION_EXECUTION_FAILED`
+
+This contract shape is required before parity and cutover work because it gives `lotus-advise`
+an explicit governance seam instead of an implicit best-effort integration.
 
 ### Slice 2 - Parity hardening
 

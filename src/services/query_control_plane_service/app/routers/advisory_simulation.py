@@ -2,8 +2,15 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Header, status
+from fastapi import APIRouter, Header, Response, status
 
+from src.services.query_control_plane_service.app.contracts import (
+    ADVISORY_SIMULATION_CONTRACT_VERSION,
+    ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER,
+    CanonicalSimulationContractError,
+    CanonicalSimulationErrorCode,
+    CanonicalSimulationProblemDetails,
+)
 from src.services.query_service.app.advisory_simulation.models import (
     ProposalResult,
     ProposalSimulateRequest,
@@ -23,11 +30,38 @@ router = APIRouter(prefix="/integration/advisory/proposals", tags=["Integration"
     description=(
         "Execute a canonical advisory proposal simulation request inside lotus-core. "
         "This endpoint is intended for lotus-advise after advisory context resolution, "
-        "request hashing, and lifecycle/idempotency orchestration have already occurred."
+        "request hashing, and lifecycle/idempotency orchestration have already occurred. "
+        f"The supported canonical contract version is "
+        f"`{ADVISORY_SIMULATION_CONTRACT_VERSION}`."
     ),
+    responses={
+        412: {
+            "model": CanonicalSimulationProblemDetails,
+            "description": "Caller requested an unsupported canonical simulation contract version.",
+        },
+        422: {
+            "model": CanonicalSimulationProblemDetails,
+            "description": "Request payload failed canonical simulation contract validation.",
+        },
+        500: {
+            "model": CanonicalSimulationProblemDetails,
+            "description": "Canonical simulation execution failed inside lotus-core.",
+        },
+    },
 )
 async def simulate_advisory_execution(
+    response: Response,
     request: ProposalSimulateRequest,
+    contract_version: Annotated[
+        str | None,
+        Header(
+            alias=ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER,
+            description=(
+                "Optional caller-declared canonical simulation contract version. "
+                "When provided, it must match the version supported by lotus-core."
+            ),
+        ),
+    ] = None,
     request_hash: Annotated[
         str | None,
         Header(
@@ -52,9 +86,24 @@ async def simulate_advisory_execution(
         ),
     ] = None,
 ) -> ProposalResult:
-    return execute_advisory_simulation(
+    if contract_version is not None and contract_version != ADVISORY_SIMULATION_CONTRACT_VERSION:
+        raise CanonicalSimulationContractError(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            error_code=CanonicalSimulationErrorCode.CONTRACT_VERSION_MISMATCH,
+            detail=(
+                "Unsupported canonical simulation contract version: "
+                f"{contract_version}. Expected {ADVISORY_SIMULATION_CONTRACT_VERSION}."
+            ),
+        )
+
+    result = execute_advisory_simulation(
         request=request,
         request_hash=request_hash,
         idempotency_key=idempotency_key,
         correlation_id=correlation_id,
+        simulation_contract_version=ADVISORY_SIMULATION_CONTRACT_VERSION,
     )
+    response.headers[ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER] = (
+        ADVISORY_SIMULATION_CONTRACT_VERSION
+    )
+    return result

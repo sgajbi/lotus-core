@@ -899,6 +899,11 @@ class LineageData(BaseModel):
         description="Engine version identifier.",
         examples=["0.1.0"],
     )
+    simulation_contract_version: Optional[str] = Field(
+        default=None,
+        description="Canonical simulation contract version used for this result.",
+        examples=["advisory-simulation.v1"],
+    )
 
 
 class Reconciliation(BaseModel):
