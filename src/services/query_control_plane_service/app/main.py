@@ -11,6 +11,7 @@ from .enterprise_readiness import (
     validate_enterprise_runtime_config,
 )
 from .routers import (
+    advisory_simulation,
     analytics_inputs,
     capabilities,
     integration,
@@ -60,6 +61,7 @@ include_routers(
     health_router,
     operations.router,
     integration.router,
+    advisory_simulation.router,
     analytics_inputs.router,
     capabilities.router,
     simulation.router,
