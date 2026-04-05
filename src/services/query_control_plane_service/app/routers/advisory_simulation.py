@@ -4,19 +4,20 @@ from typing import Annotated
 
 from fastapi import APIRouter, Header, Response, status
 
-from src.services.query_control_plane_service.app.contracts import (
-    ADVISORY_SIMULATION_CONTRACT_VERSION,
-    ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER,
-    CanonicalSimulationContractError,
-    CanonicalSimulationErrorCode,
-    CanonicalSimulationProblemDetails,
-)
 from src.services.query_service.app.advisory_simulation.models import (
     ProposalResult,
     ProposalSimulateRequest,
 )
 from src.services.query_service.app.services.advisory_simulation_service import (
     execute_advisory_simulation,
+)
+
+from ..contracts import (
+    ADVISORY_SIMULATION_CONTRACT_VERSION,
+    ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER,
+    CanonicalSimulationContractError,
+    CanonicalSimulationErrorCode,
+    CanonicalSimulationProblemDetails,
 )
 
 router = APIRouter(prefix="/integration/advisory/proposals", tags=["Integration"])
