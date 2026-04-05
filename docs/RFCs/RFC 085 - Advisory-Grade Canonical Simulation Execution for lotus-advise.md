@@ -161,6 +161,28 @@ an explicit governance seam instead of an implicit best-effort integration.
 1. Add parity scenarios comparing current `lotus-advise` local execution with `lotus-core` execution.
 2. Lock parity around status, intents, after-state totals, rule results, suitability, gate decisions, and lineage semantics.
 
+#### Slice 2 delivery notes
+
+Slice 2 should stay small and intentional. The parity gate is not “duplicate every engine test twice.”
+
+The required parity suite is a curated scenario set that locks the semantics most likely to drift:
+
+- FX funding and dependency ordering
+- blocked missing-FX behavior
+- reference-model drift outputs
+- suitability-driven gate outcomes
+
+Each scenario must normalize away transport-only noise and compare the business result shape:
+
+- status
+- execution intents and dependencies
+- after-state totals, cash, and positions
+- rule results
+- gate decision summary
+- suitability summary
+- drift-analysis summary
+- canonical lineage fields
+
 ### Slice 3 - Advise delegation cutover
 
 1. Replace the current runtime simulation authority in `lotus-advise` with the `lotus-core` execution client.
