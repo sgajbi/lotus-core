@@ -2,7 +2,7 @@ name: PR Auto Merge
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
 permissions:
   contents: write
@@ -15,12 +15,28 @@ jobs:
       github.event.pull_request.state == 'open' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.head.repo.fork == false
+      github.event.pull_request.head.repo.fork == false &&
+      contains(github.event.pull_request.labels.*.name, 'automerge')
     concurrency:
       group: pr-auto-merge-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
+      - name: Verify branch protection exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/branches/main/protection" > /tmp/branch-protection.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("/tmp/branch-protection.json").read_text())
+          checks = payload.get("required_status_checks") or {}
+          contexts = checks.get("contexts") or []
+          if not contexts:
+              raise SystemExit("main branch must have required status checks before auto-merge can be queued")
+          print("Protected branch contexts:", ", ".join(contexts))
+          PY
       - name: Enable auto-merge queue (squash)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -35,11 +51,6 @@ jobs:
             exit 0
           fi
           if echo "$output" | grep -qi "already"; then
-            echo "$output"
-            exit 0
-          fi
-          if echo "$output" | grep -qi "Auto merge is not allowed for this repository"; then
-            echo "Auto-merge is disabled at repository level; skipping queue step."
             echo "$output"
             exit 0
           fi

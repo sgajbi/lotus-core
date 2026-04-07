@@ -19,7 +19,7 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
 ## PR Model (Single Developer)
 1. PR is mandatory, even without reviewer approval requirements.
 2. Treat PR checks as the quality approval layer.
-3. Enable auto-merge only after all required checks are green.
+3. Enable auto-merge only on protected branches and only for PRs explicitly labeled `automerge`.
 
 ## CI Gate Tiers
 
