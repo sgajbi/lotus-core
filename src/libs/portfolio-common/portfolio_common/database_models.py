@@ -227,6 +227,7 @@ class Instrument(Base):
     sector = Column(String, nullable=True)
     country_of_risk = Column(String, nullable=True)
     rating = Column(String, nullable=True)
+    liquidity_tier = Column(String, nullable=True)
     maturity_date = Column(Date, nullable=True)
     issuer_id = Column(String, nullable=True, index=True)
     issuer_name = Column(String, nullable=True)

@@ -20,8 +20,13 @@ def test_build_demo_bundle_contains_multi_product_coverage():
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
-    assert bundle["benchmark_verification"]["benchmark_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID
-    assert bundle["benchmark_verification"]["portfolio_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID
+    assert (
+        bundle["benchmark_verification"]["benchmark_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID
+    )
+    assert (
+        bundle["benchmark_verification"]["portfolio_id"]
+        == demo_data_pack.DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID
+    )
     assert len(bundle["benchmark_assignments"]) == 1
     assert len(bundle["benchmark_definitions"]) == 1
     assert len(bundle["benchmark_compositions"]) == 2
@@ -32,6 +37,17 @@ def test_build_demo_bundle_contains_benchmark_seed_data():
     assert {
         composition["composition_weight"] for composition in bundle["benchmark_compositions"]
     } == {"0.6000000000", "0.4000000000"}
+
+
+def test_build_demo_bundle_contains_usd_risk_free_reference_series():
+    bundle = demo_data_pack.build_demo_bundle()
+
+    risk_free_series = bundle["risk_free_series"]
+    assert risk_free_series
+    assert risk_free_series[0]["series_currency"] == "USD"
+    assert risk_free_series[0]["risk_free_curve_id"] == "USD_SOFR_3M"
+    assert risk_free_series[0]["value_convention"] == "annualized_rate"
+    assert risk_free_series[-1]["series_date"] == bundle["as_of_date"]
 
 
 def test_expectations_cover_five_portfolios_with_terminal_holdings():

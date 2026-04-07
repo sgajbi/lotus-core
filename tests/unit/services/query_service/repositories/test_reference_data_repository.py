@@ -256,3 +256,41 @@ async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing(
     coverage = await repo.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
 
     assert coverage["observed_dates"] == [date(2026, 1, 1), date(2026, 1, 3)]
+
+
+@pytest.mark.asyncio
+async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                series_date=date(2026, 1, 1),
+                quality_status="accepted",
+                source_timestamp=None,
+                risk_free_curve_id="USD_FRONT_OFFICE",
+                series_id="front_office",
+            ),
+            SimpleNamespace(
+                series_date=date(2026, 1, 1),
+                quality_status="accepted",
+                source_timestamp=None,
+                risk_free_curve_id="USD_DEMO",
+                series_id="demo",
+            ),
+            SimpleNamespace(
+                series_date=date(2026, 1, 2),
+                quality_status="accepted",
+                source_timestamp=None,
+                risk_free_curve_id="USD_DEMO",
+                series_id="demo",
+            ),
+        ]
+    )
+
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_risk_free_series("USD", date(2026, 1, 1), date(2026, 1, 2))
+
+    assert [row.series_date for row in rows] == [date(2026, 1, 1), date(2026, 1, 2)]
+    assert rows[0].series_id == "front_office"
+    assert rows[1].series_id == "demo"

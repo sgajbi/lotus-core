@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,31 +49,11 @@ from ..repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,
     ReportingRepository,
 )
+from .allocation_calculator import AllocationInputRow, calculate_allocation_views
 from .reporting_classification import resolve_region
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
-ALLOCATION_DIMENSION_ACCESSORS = {
-    "asset_class": lambda instrument, snapshot: instrument.asset_class if instrument else None,
-    "currency": lambda instrument, snapshot: (
-        instrument.currency if instrument and instrument.currency else snapshot.security_id
-    ),
-    "sector": lambda instrument, snapshot: instrument.sector if instrument else None,
-    "country": lambda instrument, snapshot: instrument.country_of_risk if instrument else None,
-    "region": lambda instrument, snapshot: (
-        resolve_region(instrument.country_of_risk) if instrument else None
-    ),
-    "product_type": lambda instrument, snapshot: instrument.product_type if instrument else None,
-    "rating": lambda instrument, snapshot: instrument.rating if instrument else None,
-    "issuer_id": lambda instrument, snapshot: instrument.issuer_id if instrument else None,
-    "issuer_name": lambda instrument, snapshot: instrument.issuer_name if instrument else None,
-    "ultimate_parent_issuer_id": (
-        lambda instrument, snapshot: instrument.ultimate_parent_issuer_id if instrument else None
-    ),
-    "ultimate_parent_issuer_name": (
-        lambda instrument, snapshot: instrument.ultimate_parent_issuer_name if instrument else None
-    ),
-}
 
 
 class ReportingService:
@@ -171,49 +152,47 @@ class ReportingService:
             reporting_currency=reporting_currency,
         )
 
-        total_market_value = ZERO
-        views_payload: dict[str, dict[str, Decimal]] = {
-            dimension: defaultdict(lambda: ZERO) for dimension in request.dimensions
-        }
-        views_position_counts: dict[str, dict[str, int]] = {
-            dimension: defaultdict(int) for dimension in request.dimensions
-        }
+        allocation_result = calculate_allocation_views(
+            rows=[
+                AllocationInputRow(
+                    instrument=instrument,
+                    snapshot=snapshot,
+                    market_value_reporting_currency=reporting_value,
+                )
+                for instrument, snapshot, reporting_value in allocation_rows
+            ],
+            dimensions=request.dimensions,
+        )
 
-        for instrument, snapshot, reporting_value in allocation_rows:
-            total_market_value += reporting_value
-            for dimension in request.dimensions:
-                accessor = ALLOCATION_DIMENSION_ACCESSORS[dimension]
-                raw_value = accessor(instrument, snapshot)
-                bucket_key = str(raw_value or "UNCLASSIFIED")
-                views_payload[dimension][bucket_key] += reporting_value
-                views_position_counts[dimension][bucket_key] += 1
-
-        views: list[AllocationView] = []
-        for dimension in request.dimensions:
-            buckets = []
-            for bucket_key, bucket_value in sorted(views_payload[dimension].items()):
-                buckets.append(
+        views = [
+            AllocationView(
+                dimension=view.dimension,
+                total_market_value_reporting_currency=(
+                    view.total_market_value_reporting_currency
+                ),
+                buckets=[
                     AllocationBucket(
-                        dimension_value=bucket_key,
-                        market_value_reporting_currency=bucket_value,
-                        weight=(bucket_value / total_market_value if total_market_value else ZERO),
-                        position_count=views_position_counts[dimension][bucket_key],
+                        dimension_value=bucket.dimension_value,
+                        market_value_reporting_currency=(
+                            bucket.market_value_reporting_currency
+                        ),
+                        weight=bucket.weight,
+                        position_count=bucket.position_count,
                     )
-                )
-            views.append(
-                AllocationView(
-                    dimension=dimension,
-                    total_market_value_reporting_currency=total_market_value,
-                    buckets=buckets,
-                )
+                    for bucket in view.buckets
+                ],
             )
+            for view in allocation_result.views
+        ]
 
         return AssetAllocationResponse(
             scope_type=request.scope.scope_type,
             scope=request.scope,
             resolved_as_of_date=resolved_as_of_date,
             reporting_currency=reporting_currency,
-            total_market_value_reporting_currency=total_market_value,
+            total_market_value_reporting_currency=(
+                allocation_result.total_market_value_reporting_currency
+            ),
             look_through=look_through_info,
             views=views,
         )
@@ -612,7 +591,7 @@ class ReportingService:
                 )
 
         if decomposed_position_count == 0:
-            limitation_reason = (
+            limitation_reason: str | None = (
                 "Look-through components were requested but no fully weighted source-owned "
                 "decomposition set was available for the resolved holdings."
             )
@@ -932,13 +911,13 @@ class ReportingService:
         self,
         *,
         scope: ReportingScope,
-        portfolios: list[object],
+        portfolios: list[Any],
         requested_reporting_currency: str | None,
     ) -> str:
         if requested_reporting_currency:
             return requested_reporting_currency
         if scope.scope_type == "portfolio":
-            return portfolios[0].base_currency
+            return str(portfolios[0].base_currency)
         raise ValueError(
             "reporting_currency is required for portfolio-list and business-unit reporting queries."
         )
@@ -974,6 +953,7 @@ class ReportingService:
             raise ValueError(
                 f"FX rate not found for {from_currency}/{to_currency} as of {as_of_date}."
             )
+        rate = Decimal(str(rate))
         self._fx_cache[cache_key] = rate
         return rate
 

@@ -103,6 +103,7 @@ class InstrumentEvent(BaseModel):
     sector: Optional[str] = None
     country_of_risk: Optional[str] = Field(None)
     rating: Optional[str] = None
+    liquidity_tier: Optional[str] = Field(None)
     maturity_date: Optional[date] = Field(None)
     issuer_id: Optional[str] = Field(None)
     issuer_name: Optional[str] = Field(None)

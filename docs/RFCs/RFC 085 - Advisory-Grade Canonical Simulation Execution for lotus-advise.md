@@ -250,6 +250,70 @@ This RFC is complete when:
 1. Should the long-term shared execution logic remain in `lotus-core` directly or later move into a dedicated shared simulation package owned by `lotus-core`?
 2. Should `lotus-risk` eventually consume the same advisory execution lineage metadata for scenario-linked analytics evidence?
 
+## RFC-0020 Allocation Lens Baseline
+
+RFC-0020 extends the implemented advisory simulation contract with canonical allocation-lens
+governance before the Lotus apps are live. Because all callers remain controlled, the allocation
+lens is additive to `advisory-simulation.v1`; RFC-0020 does not introduce
+`advisory-simulation.v2`.
+
+The proposal-facing allocation subset is intentionally front-office oriented:
+
+1. `asset_class`
+2. `currency`
+3. `sector`
+4. `country`
+5. `region`
+6. `product_type`
+7. `rating`
+
+Live reporting still supports issuer dimensions:
+
+1. `issuer_id`
+2. `issuer_name`
+3. `ultimate_parent_issuer_id`
+4. `ultimate_parent_issuer_name`
+
+Those issuer dimensions remain available to live reporting, `lotus-risk` concentration analytics,
+and future drill-down work. They are intentionally excluded from the RFC-0020 proposal allocation
+API surface to avoid cluttering the advisor-facing before/after view.
+
+Slice 1 of RFC-0020 adds a guarded contract map in code so changes to live reporting allocation
+dimensions cannot silently drift away from advisory proposal allocation expectations.
+
+Slice 2 extracts a shared `lotus-core` allocation calculator and routes both live reporting and
+advisory simulation asset-class aggregation through it. Advisory simulation still retains
+compatibility fields such as instrument allocation and shelf-attribute allocation until the
+canonical allocation-lens response fields are introduced in RFC-0020 Slice 3.
+
+The Slice 2 test baseline covers:
+
+1. every live reporting allocation dimension in the shared calculator;
+2. live reporting regression behavior after the calculator extraction;
+3. advisory valuation parity against the shared calculator; and
+4. no-op advisory before/after allocation parity for the shared calculator path.
+
+Slice 3 adds canonical allocation-lens fields to `advisory-simulation.v1` without creating
+`advisory-simulation.v2`:
+
+1. `before.allocation_views`
+2. `after_simulated.allocation_views`
+3. top-level `allocation_lens`
+
+The allocation views expose only the RFC-0020 proposal subset: `asset_class`, `currency`, `sector`,
+`country`, `region`, `product_type`, and `rating`. Legacy allocation fields remain present for
+compatibility while `lotus-advise` migrates callers to the canonical allocation-lens shape.
+
+RFC-0020 Slice 6 closes the remaining live parity gaps for this contract:
+
+1. stateful advisory requests now preserve the live classification metadata needed by the shared
+   allocation calculator instead of collapsing non-asset-class dimensions into `UNCLASSIFIED`;
+2. proposal cash allocation preserves per-currency rows instead of aggregating all cash into one
+   base-currency bucket;
+3. proposal allocation-view labels and weight precision now align with direct live reporting; and
+4. the cross-service live parity validator passes against seeded portfolios with `lotus-core`,
+   `lotus-risk`, and `lotus-advise` running together.
+
 ## Follow-on Work
 
 1. Continue the platform-level hardening program for canonical simulation governance and duplicate

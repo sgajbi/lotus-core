@@ -19,6 +19,7 @@ from tools.demo_data_pack import (  # noqa: E402
     _build_benchmark_reference_data,
     _request_json,
     _wait_ready,
+    build_risk_free_reference_data,
 )
 
 LOGGER = logging.getLogger("front_office_portfolio_seed")
@@ -207,6 +208,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Custody Cash Ledger",
             "ultimate_parent_issuer_id": "CASH_LEDGER",
             "ultimate_parent_issuer_name": "Custody Cash Ledger",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "CASH_EUR_BOOK_OPERATING",
@@ -219,6 +221,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Custody Cash Ledger",
             "ultimate_parent_issuer_id": "CASH_LEDGER",
             "ultimate_parent_issuer_name": "Custody Cash Ledger",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_EQ_AAPL_US",
@@ -233,6 +236,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Apple Inc.",
             "ultimate_parent_issuer_id": "ISSUER_AAPL",
             "ultimate_parent_issuer_name": "Apple Inc.",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_EQ_MSFT_US",
@@ -247,6 +251,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Microsoft Corporation",
             "ultimate_parent_issuer_id": "ISSUER_MSFT",
             "ultimate_parent_issuer_name": "Microsoft Corporation",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_EQ_SAP_DE",
@@ -261,6 +266,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "SAP SE",
             "ultimate_parent_issuer_id": "ISSUER_SAP",
             "ultimate_parent_issuer_name": "SAP SE",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_ETF_MSCI_WORLD",
@@ -275,6 +281,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "BlackRock Asset Management Ireland Limited",
             "ultimate_parent_issuer_id": "ULTIMATE_BLACKROCK",
             "ultimate_parent_issuer_name": "BlackRock, Inc.",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_FUND_BLK_ALLOC",
@@ -289,6 +296,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "BlackRock Global Funds",
             "ultimate_parent_issuer_id": "ULTIMATE_BLACKROCK",
             "ultimate_parent_issuer_name": "BlackRock, Inc.",
+            "liquidity_tier": "L2",
         },
         {
             "security_id": "FO_FUND_PIMCO_INC",
@@ -303,6 +311,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "PIMCO Global Advisors (Ireland) Limited",
             "ultimate_parent_issuer_id": "ULTIMATE_PIMCO",
             "ultimate_parent_issuer_name": "Pacific Investment Management Company LLC",
+            "liquidity_tier": "L3",
         },
         {
             "security_id": "FO_BOND_UST_2030",
@@ -319,6 +328,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "United States Treasury",
             "ultimate_parent_issuer_id": "ISSUER_UST",
             "ultimate_parent_issuer_name": "United States Treasury",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_BOND_SIEMENS_2031",
@@ -335,6 +345,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Siemens Financieringsmaatschappij NV",
             "ultimate_parent_issuer_id": "ULTIMATE_SIEMENS",
             "ultimate_parent_issuer_name": "Siemens AG",
+            "liquidity_tier": "L2",
         },
         {
             "security_id": "FO_PRIV_PRIVATE_CREDIT_A",
@@ -349,6 +360,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Private Credit Opportunities Platform",
             "ultimate_parent_issuer_id": "ULTIMATE_PRIVCREDIT",
             "ultimate_parent_issuer_name": "Private Credit Opportunities Platform",
+            "liquidity_tier": "L5",
         },
     ]
 
@@ -885,6 +897,13 @@ def build_front_office_portfolio_bundle(
         }
         for assignment in benchmark_reference["benchmark_assignments"]
     ]
+    risk_free_reference = build_risk_free_reference_data(
+        start_date=start_date,
+        end_date=end_date + timedelta(days=30),
+        currency="USD",
+        source_vendor="LOTUS_FRONT_OFFICE_SEED",
+        source_prefix="front_office_risk_free",
+    )
 
     market_price_specs = {
         "FO_EQ_AAPL_US": (Decimal("184.00"), Decimal("212.00")),
@@ -979,6 +998,7 @@ def build_front_office_portfolio_bundle(
         "fx_rates": fx_rates,
         "as_of_date": as_of_date,
         **benchmark_reference,
+        **risk_free_reference,
     }
 
 
@@ -1023,6 +1043,7 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
             "/ingest/benchmark-assignments",
             {"benchmark_assignments": bundle["benchmark_assignments"]},
         ),
+        ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
     for endpoint, payload in reference_payloads:
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)

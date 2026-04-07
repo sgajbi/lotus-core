@@ -40,6 +40,26 @@ class InstrumentRecord(BaseModel):
         description="Optional asset-class classification.",
         examples=["Equity"],
     )
+    sector: Optional[str] = Field(
+        None,
+        description="Optional sector classification.",
+        examples=["Information Technology"],
+    )
+    country_of_risk: Optional[str] = Field(
+        None,
+        description="Optional country-of-risk classification.",
+        examples=["United States"],
+    )
+    rating: Optional[str] = Field(
+        None,
+        description="Optional credit rating used for allocation and analytics.",
+        examples=["AA+"],
+    )
+    liquidity_tier: Optional[str] = Field(
+        None,
+        description="Optional liquidity tier used by suitability and concentration workflows.",
+        examples=["L1", "L5"],
+    )
     portfolio_id: Optional[str] = Field(
         None,
         description="Optional portfolio identifier when the instrument is portfolio-scoped.",

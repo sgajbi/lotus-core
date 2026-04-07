@@ -8,8 +8,8 @@ import logging
 import math
 import time
 from dataclasses import dataclass
-from decimal import Decimal
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from urllib import error, parse, request
 
@@ -219,9 +219,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
     for current_date, equity_return, bond_return in zip(
         series_dates, equity_daily_returns, bond_daily_returns, strict=True
     ):
-        benchmark_return = (equity_return * Decimal("0.6")) + (
-            bond_return * Decimal("0.4")
-        )
+        benchmark_return = (equity_return * Decimal("0.6")) + (bond_return * Decimal("0.4"))
         benchmark_return_series.append(
             {
                 "series_id": "bmk_global_balanced_60_40_return",
@@ -349,6 +347,39 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
     }
 
 
+def build_risk_free_reference_data(
+    *,
+    start_date: date,
+    end_date: date,
+    currency: str = "USD",
+    curve_id: str | None = None,
+    annualized_rate: Decimal = Decimal("0.0435000000"),
+    source_vendor: str = "LOTUS_DEMO",
+    source_prefix: str = "risk_free",
+) -> dict[str, Any]:
+    normalized_currency = currency.upper()
+    normalized_curve_id = curve_id or f"{normalized_currency}_SOFR_3M"
+    risk_free_series: list[dict[str, Any]] = []
+    for current_date in _calendar_dates(start_date, end_date):
+        risk_free_series.append(
+            {
+                "series_id": f"{source_prefix}_{normalized_currency.lower()}_annualized_rate",
+                "risk_free_curve_id": normalized_curve_id,
+                "series_date": current_date,
+                "value": f"{annualized_rate:.10f}",
+                "value_convention": "annualized_rate",
+                "day_count_convention": "ACT_360",
+                "compounding_convention": "simple",
+                "series_currency": normalized_currency,
+                "source_timestamp": _iso_utc_timestamp(date.fromisoformat(current_date)),
+                "source_vendor": source_vendor,
+                "source_record_id": f"{source_prefix}_{normalized_currency.lower()}_{current_date}",
+                "quality_status": "accepted",
+            }
+        )
+    return {"risk_free_series": risk_free_series}
+
+
 def build_demo_bundle() -> dict[str, Any]:
     start_date = date.today() - timedelta(days=365)
     end_date = date.today()
@@ -367,6 +398,7 @@ def build_demo_bundle() -> dict[str, Any]:
             tzinfo=UTC,
         )
         return stamp.isoformat().replace("+00:00", "Z")
+
     portfolios = [
         {
             "portfolio_id": "DEMO_ADV_USD_001",
@@ -430,58 +462,568 @@ def build_demo_bundle() -> dict[str, Any]:
         },
     ]
     instruments = [
-        {"security_id": "CASH_USD", "name": "US Dollar Cash", "isin": "CASH_USD_DEMO", "currency": "USD", "product_type": "Cash", "asset_class": "Cash"},
-        {"security_id": "CASH_EUR", "name": "Euro Cash", "isin": "CASH_EUR_DEMO", "currency": "EUR", "product_type": "Cash", "asset_class": "Cash"},
-        {"security_id": "CASH_CHF", "name": "Swiss Franc Cash", "isin": "CASH_CHF_DEMO", "currency": "CHF", "product_type": "Cash", "asset_class": "Cash"},
-        {"security_id": "CASH_SGD", "name": "Singapore Dollar Cash", "isin": "CASH_SGD_DEMO", "currency": "SGD", "product_type": "Cash", "asset_class": "Cash"},
-        {"security_id": "SEC_AAPL_US", "name": "Apple Inc.", "isin": "US0378331005", "currency": "USD", "product_type": "Equity", "asset_class": "Equity", "sector": "Technology", "country_of_risk": "US"},
-        {"security_id": "SEC_SAP_DE", "name": "SAP SE", "isin": "DE0007164600", "currency": "EUR", "product_type": "Equity", "asset_class": "Equity", "sector": "Technology", "country_of_risk": "DE"},
-        {"security_id": "SEC_NOVN_CH", "name": "Novartis AG", "isin": "CH0012005267", "currency": "CHF", "product_type": "Equity", "asset_class": "Equity", "sector": "Healthcare", "country_of_risk": "CH"},
-        {"security_id": "SEC_SONY_JP", "name": "Sony Group Corp.", "isin": "JP3435000009", "currency": "JPY", "product_type": "Equity", "asset_class": "Equity", "sector": "Consumer Discretionary", "country_of_risk": "JP"},
-        {"security_id": "SEC_UST_5Y", "name": "US Treasury 5Y", "isin": "US91282CGM73", "currency": "USD", "product_type": "Bond", "asset_class": "Fixed Income", "rating": "AA+", "maturity_date": "2029-08-31"},
-        {"security_id": "SEC_CORP_IG_USD", "name": "Global Corp 4.2% 2030", "isin": "US0000000001", "currency": "USD", "product_type": "Bond", "asset_class": "Fixed Income", "rating": "A-", "maturity_date": "2030-06-15"},
-        {"security_id": "SEC_ETF_WORLD_USD", "name": "Global Equity ETF", "isin": "US0000000002", "currency": "USD", "product_type": "ETF", "asset_class": "Equity"},
-        {"security_id": "SEC_FUND_EM_EQ", "name": "Emerging Markets Equity Fund", "isin": "LU0000000003", "currency": "USD", "product_type": "Fund", "asset_class": "Equity"},
-        {"security_id": "SEC_GOLD_ETC_USD", "name": "Gold ETC", "isin": "JE00B1VS3770", "currency": "USD", "product_type": "ETC", "asset_class": "Commodity"},
+        {
+            "security_id": "CASH_USD",
+            "name": "US Dollar Cash",
+            "isin": "CASH_USD_DEMO",
+            "currency": "USD",
+            "product_type": "Cash",
+            "asset_class": "Cash",
+        },
+        {
+            "security_id": "CASH_EUR",
+            "name": "Euro Cash",
+            "isin": "CASH_EUR_DEMO",
+            "currency": "EUR",
+            "product_type": "Cash",
+            "asset_class": "Cash",
+        },
+        {
+            "security_id": "CASH_CHF",
+            "name": "Swiss Franc Cash",
+            "isin": "CASH_CHF_DEMO",
+            "currency": "CHF",
+            "product_type": "Cash",
+            "asset_class": "Cash",
+        },
+        {
+            "security_id": "CASH_SGD",
+            "name": "Singapore Dollar Cash",
+            "isin": "CASH_SGD_DEMO",
+            "currency": "SGD",
+            "product_type": "Cash",
+            "asset_class": "Cash",
+        },
+        {
+            "security_id": "SEC_AAPL_US",
+            "name": "Apple Inc.",
+            "isin": "US0378331005",
+            "currency": "USD",
+            "product_type": "Equity",
+            "asset_class": "Equity",
+            "sector": "Technology",
+            "country_of_risk": "US",
+        },
+        {
+            "security_id": "SEC_SAP_DE",
+            "name": "SAP SE",
+            "isin": "DE0007164600",
+            "currency": "EUR",
+            "product_type": "Equity",
+            "asset_class": "Equity",
+            "sector": "Technology",
+            "country_of_risk": "DE",
+        },
+        {
+            "security_id": "SEC_NOVN_CH",
+            "name": "Novartis AG",
+            "isin": "CH0012005267",
+            "currency": "CHF",
+            "product_type": "Equity",
+            "asset_class": "Equity",
+            "sector": "Healthcare",
+            "country_of_risk": "CH",
+        },
+        {
+            "security_id": "SEC_SONY_JP",
+            "name": "Sony Group Corp.",
+            "isin": "JP3435000009",
+            "currency": "JPY",
+            "product_type": "Equity",
+            "asset_class": "Equity",
+            "sector": "Consumer Discretionary",
+            "country_of_risk": "JP",
+        },
+        {
+            "security_id": "SEC_UST_5Y",
+            "name": "US Treasury 5Y",
+            "isin": "US91282CGM73",
+            "currency": "USD",
+            "product_type": "Bond",
+            "asset_class": "Fixed Income",
+            "rating": "AA+",
+            "maturity_date": "2029-08-31",
+        },
+        {
+            "security_id": "SEC_CORP_IG_USD",
+            "name": "Global Corp 4.2% 2030",
+            "isin": "US0000000001",
+            "currency": "USD",
+            "product_type": "Bond",
+            "asset_class": "Fixed Income",
+            "rating": "A-",
+            "maturity_date": "2030-06-15",
+        },
+        {
+            "security_id": "SEC_ETF_WORLD_USD",
+            "name": "Global Equity ETF",
+            "isin": "US0000000002",
+            "currency": "USD",
+            "product_type": "ETF",
+            "asset_class": "Equity",
+        },
+        {
+            "security_id": "SEC_FUND_EM_EQ",
+            "name": "Emerging Markets Equity Fund",
+            "isin": "LU0000000003",
+            "currency": "USD",
+            "product_type": "Fund",
+            "asset_class": "Equity",
+        },
+        {
+            "security_id": "SEC_GOLD_ETC_USD",
+            "name": "Gold ETC",
+            "isin": "JE00B1VS3770",
+            "currency": "USD",
+            "product_type": "ETC",
+            "asset_class": "Commodity",
+        },
     ]
     txs = [
-        _tx("DEMO_ADV_DEP_01", "DEMO_ADV_USD_001", "CASH", "CASH_USD", tx_ts(1, 9), "DEPOSIT", 500000, 1, 500000, "USD"),
-        _tx("DEMO_ADV_BUY_AAPL_01", "DEMO_ADV_USD_001", "AAPL", "SEC_AAPL_US", tx_ts(2), "BUY", 800, 185, 148000, "USD"),
-        _tx("DEMO_ADV_CASH_OUT_01", "DEMO_ADV_USD_001", "CASH", "CASH_USD", tx_ts(2), "SELL", 148000, 1, 148000, "USD"),
-        _tx("DEMO_ADV_BUY_UST_01", "DEMO_ADV_USD_001", "UST5Y", "SEC_UST_5Y", tx_ts(5), "BUY", 120, 980, 117600, "USD"),
-        _tx("DEMO_ADV_CASH_OUT_02", "DEMO_ADV_USD_001", "CASH", "CASH_USD", tx_ts(5), "SELL", 117600, 1, 117600, "USD"),
-        _tx("DEMO_ADV_DIV_01", "DEMO_ADV_USD_001", "AAPL", "SEC_AAPL_US", tx_ts(160), "DIVIDEND", 0, 0, 1200, "USD"),
-        _tx("DEMO_ADV_CASH_IN_01", "DEMO_ADV_USD_001", "CASH", "CASH_USD", tx_ts(160), "BUY", 1200, 1, 1200, "USD"),
-        _tx("DEMO_ADV_FEE_01", "DEMO_ADV_USD_001", "CASH", "CASH_USD", tx_ts(330), "FEE", 1, 250, 250, "USD"),
-        _tx("DEMO_DPM_DEP_01", "DEMO_DPM_EUR_001", "CASH", "CASH_EUR", tx_ts(1, 9), "DEPOSIT", 600000, 1, 600000, "EUR"),
-        _tx("DEMO_DPM_BUY_SAP_01", "DEMO_DPM_EUR_001", "SAP", "SEC_SAP_DE", tx_ts(3), "BUY", 1500, 120, 180000, "EUR"),
-        _tx("DEMO_DPM_CASH_OUT_01", "DEMO_DPM_EUR_001", "CASH", "CASH_EUR", tx_ts(3), "SELL", 180000, 1, 180000, "EUR"),
-        _tx("DEMO_DPM_BUY_ETF_01", "DEMO_DPM_EUR_001", "WORLD_ETF", "SEC_ETF_WORLD_USD", tx_ts(12), "BUY", 1000, 95, 95000, "USD"),
-        _tx("DEMO_DPM_CASH_OUT_02", "DEMO_DPM_EUR_001", "CASH", "CASH_EUR", tx_ts(12), "SELL", 86000, 1, 86000, "EUR"),
-        _tx("DEMO_DPM_SELL_SAP_01", "DEMO_DPM_EUR_001", "SAP", "SEC_SAP_DE", tx_ts(220), "SELL", 300, 128, 38400, "EUR"),
-        _tx("DEMO_DPM_CASH_IN_01", "DEMO_DPM_EUR_001", "CASH", "CASH_EUR", tx_ts(220), "BUY", 38400, 1, 38400, "EUR"),
-        _tx("DEMO_INCOME_DEP_01", "DEMO_INCOME_CHF_001", "CASH", "CASH_CHF", tx_ts(1, 9), "DEPOSIT", 420000, 1, 420000, "CHF"),
-        _tx("DEMO_INCOME_BUY_NOVN_01", "DEMO_INCOME_CHF_001", "NOVN", "SEC_NOVN_CH", tx_ts(4), "BUY", 1000, 92, 92000, "CHF"),
-        _tx("DEMO_INCOME_CASH_OUT_01", "DEMO_INCOME_CHF_001", "CASH", "CASH_CHF", tx_ts(4), "SELL", 92000, 1, 92000, "CHF"),
-        _tx("DEMO_INCOME_BUY_BOND_01", "DEMO_INCOME_CHF_001", "CORP_IG", "SEC_CORP_IG_USD", tx_ts(8), "BUY", 90, 1010, 90900, "USD"),
-        _tx("DEMO_INCOME_CASH_OUT_02", "DEMO_INCOME_CHF_001", "CASH", "CASH_CHF", tx_ts(8), "SELL", 82000, 1, 82000, "CHF"),
-        _tx("DEMO_INCOME_COUPON_01", "DEMO_INCOME_CHF_001", "CORP_IG", "SEC_CORP_IG_USD", tx_ts(190), "DIVIDEND", 0, 0, 650, "USD"),
-        _tx("DEMO_INCOME_CASH_IN_01", "DEMO_INCOME_CHF_001", "CASH", "CASH_CHF", tx_ts(190), "BUY", 580, 1, 580, "CHF"),
-        _tx("DEMO_BAL_DEP_01", "DEMO_BALANCED_SGD_001", "CASH", "CASH_SGD", tx_ts(1, 9), "DEPOSIT", 700000, 1, 700000, "SGD"),
-        _tx("DEMO_BAL_BUY_SONY_01", "DEMO_BALANCED_SGD_001", "SONY", "SEC_SONY_JP", tx_ts(3), "BUY", 1200, 1750, 2100000, "JPY"),
-        _tx("DEMO_BAL_CASH_OUT_01", "DEMO_BALANCED_SGD_001", "CASH", "CASH_SGD", tx_ts(3), "SELL", 19800, 1, 19800, "SGD"),
-        _tx("DEMO_BAL_BUY_GOLD_01", "DEMO_BALANCED_SGD_001", "GOLD_ETC", "SEC_GOLD_ETC_USD", tx_ts(30), "BUY", 500, 210, 105000, "USD"),
-        _tx("DEMO_BAL_CASH_OUT_02", "DEMO_BALANCED_SGD_001", "CASH", "CASH_SGD", tx_ts(30), "SELL", 141000, 1, 141000, "SGD"),
-        _tx("DEMO_BAL_SELL_SONY_01", "DEMO_BALANCED_SGD_001", "SONY", "SEC_SONY_JP", tx_ts(280), "SELL", 200, 1820, 364000, "JPY"),
-        _tx("DEMO_BAL_CASH_IN_01", "DEMO_BALANCED_SGD_001", "CASH", "CASH_SGD", tx_ts(280), "BUY", 3300, 1, 3300, "SGD"),
-        _tx("DEMO_REBAL_DEP_01", "DEMO_REBAL_USD_001", "CASH", "CASH_USD", tx_ts(1, 9), "DEPOSIT", 300000, 1, 300000, "USD"),
-        _tx("DEMO_REBAL_BUY_FUND_01", "DEMO_REBAL_USD_001", "EM_FUND", "SEC_FUND_EM_EQ", tx_ts(10), "BUY", 2000, 55, 110000, "USD"),
-        _tx("DEMO_REBAL_CASH_OUT_01", "DEMO_REBAL_USD_001", "CASH", "CASH_USD", tx_ts(10), "SELL", 110000, 1, 110000, "USD"),
-        _tx("DEMO_REBAL_BUY_BOND_01", "DEMO_REBAL_USD_001", "CORP_IG", "SEC_CORP_IG_USD", tx_ts(20), "BUY", 60, 1012, 60720, "USD"),
-        _tx("DEMO_REBAL_CASH_OUT_02", "DEMO_REBAL_USD_001", "CASH", "CASH_USD", tx_ts(20), "SELL", 60720, 1, 60720, "USD"),
-        _tx("DEMO_REBAL_TRANSFER_OUT_01", "DEMO_REBAL_USD_001", "EM_FUND", "SEC_FUND_EM_EQ", tx_ts(240), "TRANSFER_OUT", 200, 56, 11200, "USD"),
-        _tx("DEMO_REBAL_CASH_IN_01", "DEMO_REBAL_USD_001", "CASH", "CASH_USD", tx_ts(240), "BUY", 11200, 1, 11200, "USD"),
-        _tx("DEMO_REBAL_WITHDRAW_01", "DEMO_REBAL_USD_001", "CASH", "CASH_USD", tx_ts(340), "WITHDRAWAL", 15000, 1, 15000, "USD"),
+        _tx(
+            "DEMO_ADV_DEP_01",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(1, 9),
+            "DEPOSIT",
+            500000,
+            1,
+            500000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_BUY_AAPL_01",
+            "DEMO_ADV_USD_001",
+            "AAPL",
+            "SEC_AAPL_US",
+            tx_ts(2),
+            "BUY",
+            800,
+            185,
+            148000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_OUT_01",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(2),
+            "SELL",
+            148000,
+            1,
+            148000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_BUY_UST_01",
+            "DEMO_ADV_USD_001",
+            "UST5Y",
+            "SEC_UST_5Y",
+            tx_ts(5),
+            "BUY",
+            120,
+            980,
+            117600,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_OUT_02",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(5),
+            "SELL",
+            117600,
+            1,
+            117600,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_DIV_01",
+            "DEMO_ADV_USD_001",
+            "AAPL",
+            "SEC_AAPL_US",
+            tx_ts(160),
+            "DIVIDEND",
+            0,
+            0,
+            1200,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_IN_01",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(160),
+            "BUY",
+            1200,
+            1,
+            1200,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_FEE_01",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(330),
+            "FEE",
+            1,
+            250,
+            250,
+            "USD",
+        ),
+        _tx(
+            "DEMO_DPM_DEP_01",
+            "DEMO_DPM_EUR_001",
+            "CASH",
+            "CASH_EUR",
+            tx_ts(1, 9),
+            "DEPOSIT",
+            600000,
+            1,
+            600000,
+            "EUR",
+        ),
+        _tx(
+            "DEMO_DPM_BUY_SAP_01",
+            "DEMO_DPM_EUR_001",
+            "SAP",
+            "SEC_SAP_DE",
+            tx_ts(3),
+            "BUY",
+            1500,
+            120,
+            180000,
+            "EUR",
+        ),
+        _tx(
+            "DEMO_DPM_CASH_OUT_01",
+            "DEMO_DPM_EUR_001",
+            "CASH",
+            "CASH_EUR",
+            tx_ts(3),
+            "SELL",
+            180000,
+            1,
+            180000,
+            "EUR",
+        ),
+        _tx(
+            "DEMO_DPM_BUY_ETF_01",
+            "DEMO_DPM_EUR_001",
+            "WORLD_ETF",
+            "SEC_ETF_WORLD_USD",
+            tx_ts(12),
+            "BUY",
+            1000,
+            95,
+            95000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_DPM_CASH_OUT_02",
+            "DEMO_DPM_EUR_001",
+            "CASH",
+            "CASH_EUR",
+            tx_ts(12),
+            "SELL",
+            86000,
+            1,
+            86000,
+            "EUR",
+        ),
+        _tx(
+            "DEMO_DPM_SELL_SAP_01",
+            "DEMO_DPM_EUR_001",
+            "SAP",
+            "SEC_SAP_DE",
+            tx_ts(220),
+            "SELL",
+            300,
+            128,
+            38400,
+            "EUR",
+        ),
+        _tx(
+            "DEMO_DPM_CASH_IN_01",
+            "DEMO_DPM_EUR_001",
+            "CASH",
+            "CASH_EUR",
+            tx_ts(220),
+            "BUY",
+            38400,
+            1,
+            38400,
+            "EUR",
+        ),
+        _tx(
+            "DEMO_INCOME_DEP_01",
+            "DEMO_INCOME_CHF_001",
+            "CASH",
+            "CASH_CHF",
+            tx_ts(1, 9),
+            "DEPOSIT",
+            420000,
+            1,
+            420000,
+            "CHF",
+        ),
+        _tx(
+            "DEMO_INCOME_BUY_NOVN_01",
+            "DEMO_INCOME_CHF_001",
+            "NOVN",
+            "SEC_NOVN_CH",
+            tx_ts(4),
+            "BUY",
+            1000,
+            92,
+            92000,
+            "CHF",
+        ),
+        _tx(
+            "DEMO_INCOME_CASH_OUT_01",
+            "DEMO_INCOME_CHF_001",
+            "CASH",
+            "CASH_CHF",
+            tx_ts(4),
+            "SELL",
+            92000,
+            1,
+            92000,
+            "CHF",
+        ),
+        _tx(
+            "DEMO_INCOME_BUY_BOND_01",
+            "DEMO_INCOME_CHF_001",
+            "CORP_IG",
+            "SEC_CORP_IG_USD",
+            tx_ts(8),
+            "BUY",
+            90,
+            1010,
+            90900,
+            "USD",
+        ),
+        _tx(
+            "DEMO_INCOME_CASH_OUT_02",
+            "DEMO_INCOME_CHF_001",
+            "CASH",
+            "CASH_CHF",
+            tx_ts(8),
+            "SELL",
+            82000,
+            1,
+            82000,
+            "CHF",
+        ),
+        _tx(
+            "DEMO_INCOME_COUPON_01",
+            "DEMO_INCOME_CHF_001",
+            "CORP_IG",
+            "SEC_CORP_IG_USD",
+            tx_ts(190),
+            "DIVIDEND",
+            0,
+            0,
+            650,
+            "USD",
+        ),
+        _tx(
+            "DEMO_INCOME_CASH_IN_01",
+            "DEMO_INCOME_CHF_001",
+            "CASH",
+            "CASH_CHF",
+            tx_ts(190),
+            "BUY",
+            580,
+            1,
+            580,
+            "CHF",
+        ),
+        _tx(
+            "DEMO_BAL_DEP_01",
+            "DEMO_BALANCED_SGD_001",
+            "CASH",
+            "CASH_SGD",
+            tx_ts(1, 9),
+            "DEPOSIT",
+            700000,
+            1,
+            700000,
+            "SGD",
+        ),
+        _tx(
+            "DEMO_BAL_BUY_SONY_01",
+            "DEMO_BALANCED_SGD_001",
+            "SONY",
+            "SEC_SONY_JP",
+            tx_ts(3),
+            "BUY",
+            1200,
+            1750,
+            2100000,
+            "JPY",
+        ),
+        _tx(
+            "DEMO_BAL_CASH_OUT_01",
+            "DEMO_BALANCED_SGD_001",
+            "CASH",
+            "CASH_SGD",
+            tx_ts(3),
+            "SELL",
+            19800,
+            1,
+            19800,
+            "SGD",
+        ),
+        _tx(
+            "DEMO_BAL_BUY_GOLD_01",
+            "DEMO_BALANCED_SGD_001",
+            "GOLD_ETC",
+            "SEC_GOLD_ETC_USD",
+            tx_ts(30),
+            "BUY",
+            500,
+            210,
+            105000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_BAL_CASH_OUT_02",
+            "DEMO_BALANCED_SGD_001",
+            "CASH",
+            "CASH_SGD",
+            tx_ts(30),
+            "SELL",
+            141000,
+            1,
+            141000,
+            "SGD",
+        ),
+        _tx(
+            "DEMO_BAL_SELL_SONY_01",
+            "DEMO_BALANCED_SGD_001",
+            "SONY",
+            "SEC_SONY_JP",
+            tx_ts(280),
+            "SELL",
+            200,
+            1820,
+            364000,
+            "JPY",
+        ),
+        _tx(
+            "DEMO_BAL_CASH_IN_01",
+            "DEMO_BALANCED_SGD_001",
+            "CASH",
+            "CASH_SGD",
+            tx_ts(280),
+            "BUY",
+            3300,
+            1,
+            3300,
+            "SGD",
+        ),
+        _tx(
+            "DEMO_REBAL_DEP_01",
+            "DEMO_REBAL_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(1, 9),
+            "DEPOSIT",
+            300000,
+            1,
+            300000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_REBAL_BUY_FUND_01",
+            "DEMO_REBAL_USD_001",
+            "EM_FUND",
+            "SEC_FUND_EM_EQ",
+            tx_ts(10),
+            "BUY",
+            2000,
+            55,
+            110000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_REBAL_CASH_OUT_01",
+            "DEMO_REBAL_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(10),
+            "SELL",
+            110000,
+            1,
+            110000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_REBAL_BUY_BOND_01",
+            "DEMO_REBAL_USD_001",
+            "CORP_IG",
+            "SEC_CORP_IG_USD",
+            tx_ts(20),
+            "BUY",
+            60,
+            1012,
+            60720,
+            "USD",
+        ),
+        _tx(
+            "DEMO_REBAL_CASH_OUT_02",
+            "DEMO_REBAL_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(20),
+            "SELL",
+            60720,
+            1,
+            60720,
+            "USD",
+        ),
+        _tx(
+            "DEMO_REBAL_TRANSFER_OUT_01",
+            "DEMO_REBAL_USD_001",
+            "EM_FUND",
+            "SEC_FUND_EM_EQ",
+            tx_ts(240),
+            "TRANSFER_OUT",
+            200,
+            56,
+            11200,
+            "USD",
+        ),
+        _tx(
+            "DEMO_REBAL_CASH_IN_01",
+            "DEMO_REBAL_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(240),
+            "BUY",
+            11200,
+            1,
+            11200,
+            "USD",
+        ),
+        _tx(
+            "DEMO_REBAL_WITHDRAW_01",
+            "DEMO_REBAL_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(340),
+            "WITHDRAWAL",
+            15000,
+            1,
+            15000,
+            "USD",
+        ),
     ]
     price_paths = {
         "SEC_AAPL_US": (184, 194, "USD"),
@@ -507,7 +1049,9 @@ def build_demo_bundle() -> dict[str, Any]:
     for security_id, (start_px, end_px, ccy) in price_paths.items():
         for idx, d in enumerate(dates):
             px = round(start_px + ((end_px - start_px) * idx / (len(dates) - 1)), 2)
-            market_prices.append({"security_id": security_id, "price_date": d, "price": px, "currency": ccy})
+            market_prices.append(
+                {"security_id": security_id, "price_date": d, "price": px, "currency": ccy}
+            )
     fx_paths = {
         ("USD", "EUR"): (0.92, 0.90),
         ("EUR", "USD"): (1.09, 1.11),
@@ -524,8 +1068,17 @@ def build_demo_bundle() -> dict[str, Any]:
     for (from_ccy, to_ccy), (start_rate, end_rate) in fx_paths.items():
         for idx, d in enumerate(dates):
             rate = round(start_rate + ((end_rate - start_rate) * idx / (len(dates) - 1)), 6)
-            fx_rates.append({"from_currency": from_ccy, "to_currency": to_ccy, "rate_date": d, "rate": rate})
+            fx_rates.append(
+                {"from_currency": from_ccy, "to_currency": to_ccy, "rate_date": d, "rate": rate}
+            )
     benchmark_reference = _build_benchmark_reference_data(dates=dates, start_date=start_date)
+    risk_free_reference = build_risk_free_reference_data(
+        start_date=start_date,
+        end_date=end_date,
+        currency="USD",
+        source_vendor="LOTUS_DEMO",
+        source_prefix="demo_risk_free",
+    )
     return {
         "source_system": "LOTUS_CORE_DEMO_DATA_PACK",
         "mode": "UPSERT",
@@ -537,6 +1090,7 @@ def build_demo_bundle() -> dict[str, Any]:
         "fx_rates": fx_rates,
         "as_of_date": as_of,
         **benchmark_reference,
+        **risk_free_reference,
     }
 
 
@@ -559,10 +1113,23 @@ def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any])
         ("/ingest/indices", {"indices": bundle["indices"]}),
         ("/ingest/index-price-series", {"index_price_series": bundle["index_price_series"]}),
         ("/ingest/index-return-series", {"index_return_series": bundle["index_return_series"]}),
-        ("/ingest/benchmark-definitions", {"benchmark_definitions": bundle["benchmark_definitions"]}),
-        ("/ingest/benchmark-compositions", {"benchmark_compositions": bundle["benchmark_compositions"]}),
-        ("/ingest/benchmark-return-series", {"benchmark_return_series": bundle["benchmark_return_series"]}),
-        ("/ingest/benchmark-assignments", {"benchmark_assignments": bundle["benchmark_assignments"]}),
+        (
+            "/ingest/benchmark-definitions",
+            {"benchmark_definitions": bundle["benchmark_definitions"]},
+        ),
+        (
+            "/ingest/benchmark-compositions",
+            {"benchmark_compositions": bundle["benchmark_compositions"]},
+        ),
+        (
+            "/ingest/benchmark-return-series",
+            {"benchmark_return_series": bundle["benchmark_return_series"]},
+        ),
+        (
+            "/ingest/benchmark-assignments",
+            {"benchmark_assignments": bundle["benchmark_assignments"]},
+        ),
+        ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
     for endpoint, payload in reference_payloads:
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
@@ -618,15 +1185,21 @@ def _verify_portfolio(
     deadline = time.time() + wait_seconds
     while time.time() < deadline:
         try:
-            _, pos_payload = _request_json("GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/positions")
-            _, tx_payload = _request_json("GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/transactions?limit=200")
+            _, pos_payload = _request_json(
+                "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/positions"
+            )
+            _, tx_payload = _request_json(
+                "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/transactions?limit=200"
+            )
         except RuntimeError:
             time.sleep(poll_interval_seconds)
             continue
         positions = pos_payload.get("positions") or []
         valued = [
-            p for p in positions
-            if isinstance(p.get("valuation"), dict) and p["valuation"].get("market_value") is not None
+            p
+            for p in positions
+            if isinstance(p.get("valuation"), dict)
+            and p["valuation"].get("market_value") is not None
         ]
         total_transactions = int(tx_payload.get("total", 0))
         all_quantities_match = True
@@ -695,9 +1268,7 @@ def _verify_benchmark_reference(
 
         records = catalog_payload.get("records") if isinstance(catalog_payload, dict) else None
         segments = (
-            composition_payload.get("segments")
-            if isinstance(composition_payload, dict)
-            else None
+            composition_payload.get("segments") if isinstance(composition_payload, dict) else None
         )
         if (
             isinstance(records, list)
@@ -753,7 +1324,10 @@ def main() -> int:
         if args.force_ingest or not _all_demo_portfolios_exist(query_base_url):
             payload = _build_portfolio_bundle_payload(demo_bundle)
             LOGGER.info(
-                "Ingesting demo pack: portfolios=%d instruments=%d transactions=%d market_prices=%d fx_rates=%d",
+                (
+                    "Ingesting demo pack: portfolios=%d instruments=%d "
+                    "transactions=%d market_prices=%d fx_rates=%d"
+                ),
                 len(payload["portfolios"]),
                 len(payload["instruments"]),
                 len(payload["transactions"]),
@@ -780,7 +1354,10 @@ def main() -> int:
             )
             verification_results.append(result)
             LOGGER.info(
-                "Verified portfolio %s (positions=%d valued_positions=%d transactions=%d holdings_validated=%d)",
+                (
+                    "Verified portfolio %s (positions=%d valued_positions=%d "
+                    "transactions=%d holdings_validated=%d)"
+                ),
                 result["portfolio_id"],
                 result["positions"],
                 result["valued_positions"],

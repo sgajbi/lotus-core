@@ -318,7 +318,7 @@ class ReferenceDataRepository:
             .order_by(RiskFreeSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return self._canonicalize_risk_free_series_rows(list(result.scalars().all()))
 
     async def list_taxonomy(
         self,
@@ -429,6 +429,27 @@ class ReferenceDataRepository:
             "observed_end_date": observed_end,
             "quality_status_counts": dict(quality_counts),
         }
+
+    @staticmethod
+    def _canonicalize_risk_free_series_rows(rows: list[RiskFreeSeries]) -> list[RiskFreeSeries]:
+        if not rows:
+            return []
+
+        def sort_key(row: RiskFreeSeries) -> tuple[date, int, str, str, str]:
+            quality_status = getattr(row, "quality_status", "") or ""
+            source_timestamp = getattr(row, "source_timestamp", None)
+            return (
+                row.series_date,
+                0 if quality_status.lower() == "accepted" else 1,
+                source_timestamp.isoformat() if source_timestamp else "",
+                getattr(row, "risk_free_curve_id", "") or "",
+                getattr(row, "series_id", "") or "",
+            )
+
+        selected_by_date: dict[date, RiskFreeSeries] = {}
+        for row in sorted(rows, key=sort_key):
+            selected_by_date[row.series_date] = row
+        return [selected_by_date[current_date] for current_date in sorted(selected_by_date)]
 
     async def get_fx_rates(
         self,
