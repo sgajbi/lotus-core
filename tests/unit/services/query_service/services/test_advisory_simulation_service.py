@@ -1,6 +1,9 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.services.query_service.app.advisory_simulation.allocation_contract import (
+    ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS,
+)
 from src.services.query_service.app.advisory_simulation.models import ProposalSimulateRequest
 from src.services.query_service.app.services.advisory_simulation_service import (
     execute_advisory_simulation,
@@ -142,3 +145,23 @@ def test_noop_advisory_before_allocation_matches_shared_live_calculator():
 
     assert before == expected
     assert after == expected
+
+
+def test_advisory_simulation_exposes_allocation_lens_metadata_and_views():
+    result = execute_advisory_simulation(
+        request=_request(),
+        request_hash="sha256:allocation-lens",
+        idempotency_key=None,
+        correlation_id="corr-core-allocation-lens",
+        simulation_contract_version="advisory-simulation.v1",
+    )
+
+    assert result.allocation_lens.contract_version == "advisory-simulation.v1"
+    assert result.allocation_lens.source == "LOTUS_CORE"
+    assert tuple(result.allocation_lens.dimensions) == ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
+    assert [view.dimension for view in result.before.allocation_views] == list(
+        ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
+    )
+    assert [view.dimension for view in result.after_simulated.allocation_views] == list(
+        ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
+    )

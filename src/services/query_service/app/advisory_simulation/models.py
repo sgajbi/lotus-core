@@ -602,6 +602,69 @@ class AllocationMetric(BaseModel):
         return _quantize_ratio(value)
 
 
+ProposalAllocationDimension = Literal[
+    "asset_class",
+    "currency",
+    "sector",
+    "country",
+    "region",
+    "product_type",
+    "rating",
+]
+
+
+class ProposalAllocationBucket(BaseModel):
+    key: str = Field(description="Allocation bucket key for the requested dimension.")
+    weight: Decimal = Field(description="Bucket weight in total portfolio value.")
+    value: Money = Field(description="Bucket value in the portfolio reporting currency.")
+    position_count: int = Field(
+        ge=0,
+        description="Number of position or cash rows contributing to this bucket.",
+    )
+
+    @field_serializer("weight")
+    def serialize_weight(self, value: Decimal) -> Decimal:
+        return _quantize_ratio(value)
+
+
+class ProposalAllocationView(BaseModel):
+    dimension: ProposalAllocationDimension = Field(
+        description="Front-office allocation dimension used for proposal before/after review."
+    )
+    total_value: Money = Field(description="Total value used as the allocation denominator.")
+    buckets: List[ProposalAllocationBucket] = Field(
+        default_factory=list,
+        description="Sorted allocation buckets for this dimension.",
+    )
+
+
+class ProposalAllocationLens(BaseModel):
+    contract_version: str = Field(
+        default="advisory-simulation.v1",
+        description="Simulation contract version that governs the allocation lens.",
+    )
+    calculator_version: str = Field(
+        default="lotus-core.allocation-calculator.v1",
+        description="Internal calculator version for replay and audit evidence.",
+    )
+    dimensions: List[ProposalAllocationDimension] = Field(
+        default_factory=lambda: [
+            "asset_class",
+            "currency",
+            "sector",
+            "country",
+            "region",
+            "product_type",
+            "rating",
+        ],
+        description="Curated proposal allocation dimensions included in before/after states.",
+    )
+    source: Literal["LOTUS_CORE"] = Field(
+        default="LOTUS_CORE",
+        description="Authoritative service that computed the allocation lens.",
+    )
+
+
 class PositionSummary(BaseModel):
     instrument_id: str = Field(description="Instrument identifier.")
     quantity: Decimal = Field(description="Simulated quantity.")
@@ -640,6 +703,13 @@ class SimulatedState(BaseModel):
     allocation_by_attribute: Dict[str, List[AllocationMetric]] = Field(
         default_factory=dict,
         description="Allocation grouped by configured shelf attributes.",
+    )
+    allocation_views: List[ProposalAllocationView] = Field(
+        default_factory=list,
+        description=(
+            "Canonical proposal allocation views computed by the lotus-core allocation "
+            "calculator for curated front-office dimensions."
+        ),
     )
 
 
@@ -1422,5 +1492,9 @@ class ProposalResult(BaseModel):
     gate_decision: Optional[GateDecision] = Field(
         default=None,
         description="Deterministic workflow gate decision for advisory workflow routing.",
+    )
+    allocation_lens: ProposalAllocationLens = Field(
+        default_factory=ProposalAllocationLens,
+        description="Canonical allocation-lens metadata for proposal before/after states.",
     )
     lineage: LineageData = Field(description="Lineage identifiers and request hash.")

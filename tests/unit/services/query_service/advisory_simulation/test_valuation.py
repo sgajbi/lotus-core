@@ -1,6 +1,9 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.services.query_service.app.advisory_simulation.allocation_contract import (
+    ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS,
+)
 from src.services.query_service.app.advisory_simulation.models import (
     EngineOptions,
     Money,
@@ -190,3 +193,93 @@ def test_build_simulated_state_asset_class_matches_shared_allocation_calculator(
     }
 
     assert actual == expected
+
+
+def test_build_simulated_state_emits_curated_canonical_allocation_views() -> None:
+    portfolio = portfolio_snapshot(
+        base_currency="USD",
+        positions=[position("EQ_1", "2")],
+        cash_balances=[cash("USD", "50")],
+    )
+    market_data = market_data_snapshot(prices=[price("EQ_1", "100", "USD")])
+    shelf = [
+        shelf_entry("EQ_1", asset_class="EQUITY").model_copy(
+            update={
+                "attributes": {
+                    "sector": "TECHNOLOGY",
+                    "country": "US",
+                    "product_type": "EQUITY",
+                    "rating": "A",
+                }
+            }
+        )
+    ]
+
+    state = build_simulated_state(
+        portfolio,
+        market_data,
+        shelf,
+        {"price_missing": [], "fx_missing": [], "shelf_missing": []},
+        [],
+    )
+
+    views_by_dimension = {view.dimension: view for view in state.allocation_views}
+
+    assert tuple(views_by_dimension) == ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
+    assert {bucket.key for bucket in views_by_dimension["asset_class"].buckets} == {
+        "CASH",
+        "EQUITY",
+    }
+    assert {bucket.key for bucket in views_by_dimension["currency"].buckets} == {"USD"}
+    assert {bucket.key for bucket in views_by_dimension["sector"].buckets} == {
+        "TECHNOLOGY",
+        "UNCLASSIFIED",
+    }
+    assert {bucket.key for bucket in views_by_dimension["country"].buckets} == {
+        "US",
+        "UNCLASSIFIED",
+    }
+    assert {bucket.key for bucket in views_by_dimension["region"].buckets} == {
+        "North America",
+        "UNCLASSIFIED",
+    }
+    assert {bucket.key for bucket in views_by_dimension["product_type"].buckets} == {
+        "EQUITY",
+        "UNCLASSIFIED",
+    }
+    assert {bucket.key for bucket in views_by_dimension["rating"].buckets} == {
+        "A",
+        "UNCLASSIFIED",
+    }
+
+
+def test_legacy_asset_class_allocation_is_derived_from_canonical_lens() -> None:
+    portfolio = portfolio_snapshot(
+        base_currency="USD",
+        positions=[position("EQ_1", "2")],
+        cash_balances=[cash("USD", "50")],
+    )
+    market_data = market_data_snapshot(prices=[price("EQ_1", "100", "USD")])
+    shelf = [shelf_entry("EQ_1", asset_class="EQUITY")]
+
+    state = build_simulated_state(
+        portfolio,
+        market_data,
+        shelf,
+        {"price_missing": [], "fx_missing": [], "shelf_missing": []},
+        [],
+    )
+
+    canonical_asset_class = next(
+        view for view in state.allocation_views if view.dimension == "asset_class"
+    )
+    canonical = {
+        bucket.key: (bucket.value.amount, bucket.weight)
+        for bucket in canonical_asset_class.buckets
+    }
+    legacy = {
+        metric.key: (metric.value.amount, metric.weight)
+        for metric in state.allocation_by_asset_class
+    }
+
+    assert legacy == canonical

@@ -6,6 +6,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Dict, List, Optional
 
+from src.services.query_service.app.advisory_simulation.allocation_contract import (
+    ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS,
+)
 from src.services.query_service.app.advisory_simulation.models import (
     AllocationMetric,
     EngineOptions,
@@ -14,6 +17,7 @@ from src.services.query_service.app.advisory_simulation.models import (
     PortfolioSnapshot,
     Position,
     PositionSummary,
+    ProposalAllocationView,
     ShelfEntry,
     SimulatedState,
     ValuationMode,
@@ -155,6 +159,41 @@ def _asset_class_allocation_metrics(
     ]
 
 
+def _proposal_allocation_views(
+    *,
+    rows: List[AllocationInputRow],
+    base_ccy: str,
+) -> List[ProposalAllocationView]:
+    allocation = calculate_allocation_views(
+        rows=rows,
+        dimensions=list(ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS),
+    )
+    return [
+        ProposalAllocationView.model_validate(
+            {
+                "dimension": view.dimension,
+                "total_value": {
+                    "amount": view.total_market_value_reporting_currency,
+                    "currency": base_ccy,
+                },
+                "buckets": [
+                    {
+                        "key": bucket.dimension_value,
+                        "weight": bucket.weight,
+                        "value": {
+                            "amount": bucket.market_value_reporting_currency,
+                            "currency": base_ccy,
+                        },
+                        "position_count": bucket.position_count,
+                    }
+                    for bucket in view.buckets
+                ],
+            }
+        )
+        for view in allocation.views
+    ]
+
+
 def build_simulated_state(
     portfolio: PortfolioSnapshot,
     market_data: MarketDataSnapshot,
@@ -257,6 +296,7 @@ def build_simulated_state(
         )
     )
 
+    allocation_views = _proposal_allocation_views(rows=allocation_rows, base_ccy=base_ccy)
     alloc_asset_class = _asset_class_allocation_metrics(rows=allocation_rows, base_ccy=base_ccy)
 
     # Convert attribute map to model output
@@ -281,4 +321,5 @@ def build_simulated_state(
         allocation_by_instrument=alloc_instr,
         allocation=alloc_instr,
         allocation_by_attribute=alloc_by_attr,
+        allocation_views=allocation_views,
     )
