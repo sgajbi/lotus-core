@@ -250,6 +250,39 @@ This RFC is complete when:
 1. Should the long-term shared execution logic remain in `lotus-core` directly or later move into a dedicated shared simulation package owned by `lotus-core`?
 2. Should `lotus-risk` eventually consume the same advisory execution lineage metadata for scenario-linked analytics evidence?
 
+## RFC-0020 Allocation Lens Baseline
+
+RFC-0020 extends the implemented advisory simulation contract with canonical allocation-lens
+governance before the Lotus apps are live. Because all callers remain controlled, the allocation
+lens is additive to `advisory-simulation.v1`; RFC-0020 does not introduce
+`advisory-simulation.v2`.
+
+The proposal-facing allocation subset is intentionally front-office oriented:
+
+1. `asset_class`
+2. `currency`
+3. `sector`
+4. `country`
+5. `region`
+6. `product_type`
+7. `rating`
+
+Live reporting still supports issuer dimensions:
+
+1. `issuer_id`
+2. `issuer_name`
+3. `ultimate_parent_issuer_id`
+4. `ultimate_parent_issuer_name`
+
+Those issuer dimensions remain available to live reporting, `lotus-risk` concentration analytics,
+and future drill-down work. They are intentionally excluded from the RFC-0020 proposal allocation
+API surface to avoid cluttering the advisor-facing before/after view.
+
+Slice 1 of RFC-0020 adds a guarded contract map in code so changes to live reporting allocation
+dimensions cannot silently drift away from advisory proposal allocation expectations. Later slices
+must use the shared `lotus-core` allocation calculator for both live and projected state instead of
+maintaining advisory-specific bucket logic.
+
 ## Follow-on Work
 
 1. Continue the platform-level hardening program for canonical simulation governance and duplicate
