@@ -60,6 +60,32 @@ def test_value_position_uses_trust_snapshot_market_value_when_configured() -> No
     assert summary.value_in_base_ccy.amount == Decimal("333")
 
 
+def test_value_position_preserves_price_currency_when_trusted_value_is_in_base_currency() -> None:
+    market_data = market_data_snapshot(
+        prices=[price("EQ_EUR", "10", "EUR")],
+        fx_rates=[fx("EUR/USD", "1.2")],
+    )
+    portfolio = portfolio_snapshot(
+        positions=[
+            position("EQ_EUR", "10").model_copy(
+                update={"market_value": Money(amount=Decimal("120"), currency="USD")}
+            )
+        ]
+    )
+
+    summary = ValuationService.value_position(
+        portfolio.positions[0],
+        market_data,
+        "USD",
+        EngineOptions(valuation_mode=ValuationMode.TRUST_SNAPSHOT),
+        {"price_missing": [], "fx_missing": []},
+    )
+
+    assert summary.instrument_currency == "EUR"
+    assert summary.value_in_instrument_ccy.amount == Decimal("100")
+    assert summary.value_in_base_ccy.amount == Decimal("120")
+
+
 def test_value_position_uses_calculated_market_value_by_default() -> None:
     market_data = market_data_snapshot(prices=[price("EQ_1", "100", "USD")])
     portfolio = portfolio_snapshot(positions=[position("EQ_1", "2")])

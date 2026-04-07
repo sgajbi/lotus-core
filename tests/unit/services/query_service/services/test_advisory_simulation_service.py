@@ -158,6 +158,59 @@ def test_advisory_simulation_exposes_allocation_lens_metadata_and_views():
 
     assert result.allocation_lens.contract_version == "advisory-simulation.v1"
     assert result.allocation_lens.source == "LOTUS_CORE"
+
+
+def test_noop_advisory_after_reuses_trusted_before_state_for_snapshot_inputs():
+    request = ProposalSimulateRequest.model_validate(
+        {
+            "portfolio_snapshot": {
+                "portfolio_id": "pf_core_trust_noop",
+                "base_currency": "USD",
+                "positions": [
+                    {
+                        "instrument_id": "EQ_EUR",
+                        "quantity": "10",
+                        "market_value": {"amount": "120", "currency": "USD"},
+                    }
+                ],
+                "cash_balances": [],
+            },
+            "market_data_snapshot": {
+                "prices": [{"instrument_id": "EQ_EUR", "price": "10", "currency": "EUR"}],
+                "fx_rates": [{"pair": "EUR/USD", "rate": "1.5"}],
+            },
+            "shelf_entries": [
+                {
+                    "instrument_id": "EQ_EUR",
+                    "status": "APPROVED",
+                    "asset_class": "EQUITY",
+                    "attributes": {
+                        "country": "Germany",
+                        "product_type": "Equity",
+                        "sector": "Technology",
+                    },
+                }
+            ],
+            "options": {
+                "enable_proposal_simulation": True,
+                "valuation_mode": "TRUST_SNAPSHOT",
+            },
+            "proposed_cash_flows": [],
+            "proposed_trades": [],
+        }
+    )
+
+    result = execute_advisory_simulation(
+        request=request,
+        request_hash="sha256:trust-noop",
+        idempotency_key=None,
+        correlation_id="corr-core-trust-noop",
+        simulation_contract_version="advisory-simulation.v1",
+    )
+
+    assert result.before.total_value.amount == Decimal("120")
+    assert result.after_simulated.total_value.amount == Decimal("120")
+    assert result.before.model_dump(mode="json") == result.after_simulated.model_dump(mode="json")
     assert tuple(result.allocation_lens.dimensions) == ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
     assert [view.dimension for view in result.before.allocation_views] == list(
         ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
