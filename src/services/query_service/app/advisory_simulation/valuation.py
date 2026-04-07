@@ -3,6 +3,7 @@ FILE: src/core/valuation.py
 """
 
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Dict, List, Optional
 
 from src.services.query_service.app.advisory_simulation.models import (
@@ -16,6 +17,10 @@ from src.services.query_service.app.advisory_simulation.models import (
     ShelfEntry,
     SimulatedState,
     ValuationMode,
+)
+from src.services.query_service.app.services.allocation_calculator import (
+    AllocationInputRow,
+    calculate_allocation_views,
 )
 
 
@@ -31,12 +36,12 @@ def get_fx_rate(market_data: MarketDataSnapshot, from_ccy: str, to_ccy: str) -> 
     pair = f"{from_ccy}/{to_ccy}"
     direct = next((r.rate for r in market_data.fx_rates if r.pair == pair), None)
     if direct:
-        return direct
+        return Decimal(str(direct))
 
     pair_inv = f"{to_ccy}/{from_ccy}"
     inverse = next((r.rate for r in market_data.fx_rates if r.pair == pair_inv), None)
     if inverse:
-        return Decimal("1.0") / inverse
+        return Decimal("1.0") / Decimal(str(inverse))
 
     return None
 
@@ -94,6 +99,62 @@ class ValuationService:
         )
 
 
+def _shelf_by_instrument(shelf: List[ShelfEntry]) -> Dict[str, ShelfEntry]:
+    return {entry.instrument_id: entry for entry in shelf}
+
+
+def _allocation_instrument_from_summary(
+    summary: PositionSummary,
+    shelf_entry: ShelfEntry | None,
+) -> SimpleNamespace:
+    attributes = shelf_entry.attributes if shelf_entry else {}
+    return SimpleNamespace(
+        asset_class=summary.asset_class,
+        currency=summary.instrument_currency,
+        sector=attributes.get("sector"),
+        country_of_risk=attributes.get("country"),
+        product_type=attributes.get("product_type"),
+        rating=attributes.get("rating"),
+        issuer_id=shelf_entry.issuer_id if shelf_entry else None,
+        issuer_name=attributes.get("issuer_name"),
+        ultimate_parent_issuer_id=attributes.get("ultimate_parent_issuer_id"),
+        ultimate_parent_issuer_name=attributes.get("ultimate_parent_issuer_name"),
+    )
+
+
+def _cash_allocation_instrument(base_ccy: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        asset_class="CASH",
+        currency=base_ccy,
+        sector=None,
+        country_of_risk=None,
+        product_type=None,
+        rating=None,
+        issuer_id=None,
+        issuer_name=None,
+        ultimate_parent_issuer_id=None,
+        ultimate_parent_issuer_name=None,
+    )
+
+
+def _asset_class_allocation_metrics(
+    *,
+    rows: List[AllocationInputRow],
+    base_ccy: str,
+) -> List[AllocationMetric]:
+    allocation = calculate_allocation_views(rows=rows, dimensions=["asset_class"])
+    if not allocation.views:
+        return []
+    return [
+        AllocationMetric(
+            key=bucket.dimension_value,
+            weight=bucket.weight,
+            value=Money(amount=bucket.market_value_reporting_currency, currency=base_ccy),
+        )
+        for bucket in allocation.views[0].buckets
+    ]
+
+
 def build_simulated_state(
     portfolio: PortfolioSnapshot,
     market_data: MarketDataSnapshot,
@@ -145,14 +206,14 @@ def build_simulated_state(
         total_val_safe = total_val
 
     # Aggregation containers
-    alloc_class_map: Dict[str, Decimal] = {}
     alloc_attr_map: Dict[str, Dict[str, Decimal]] = {}
+    allocation_rows: List[AllocationInputRow] = []
+    shelf_by_id = _shelf_by_instrument(shelf)
 
     for p in pos_summaries:
         p.weight = p.value_in_base_ccy.amount / total_val_safe
-        shelf_entry = next((s for s in shelf if s.instrument_id == p.instrument_id), None)
+        shelf_entry = shelf_by_id.get(p.instrument_id)
 
-        # Asset Class Aggregation
         if shelf_entry:
             p.asset_class = shelf_entry.asset_class
             # Attribute Aggregation
@@ -164,8 +225,13 @@ def build_simulated_state(
                     + p.value_in_base_ccy.amount
                 )
 
-        ac = p.asset_class
-        alloc_class_map[ac] = alloc_class_map.get(ac, Decimal("0")) + p.value_in_base_ccy.amount
+        allocation_rows.append(
+            AllocationInputRow(
+                instrument=_allocation_instrument_from_summary(p, shelf_entry),
+                snapshot=SimpleNamespace(security_id=p.instrument_id),
+                market_value_reporting_currency=p.value_in_base_ccy.amount,
+            )
+        )
 
     alloc_instr = [
         AllocationMetric(key=p.instrument_id, weight=p.weight, value=p.value_in_base_ccy)
@@ -183,16 +249,15 @@ def build_simulated_state(
                 val = Decimal("0")
         total_cash_val += val
 
-    alloc_class_map["CASH"] = alloc_class_map.get("CASH", Decimal("0")) + total_cash_val
-
-    alloc_asset_class = [
-        AllocationMetric(
-            key=k,
-            weight=v / total_val_safe,
-            value=Money(amount=v, currency=base_ccy),
+    allocation_rows.append(
+        AllocationInputRow(
+            instrument=_cash_allocation_instrument(base_ccy),
+            snapshot=SimpleNamespace(security_id=f"CASH_{base_ccy}"),
+            market_value_reporting_currency=total_cash_val,
         )
-        for k, v in alloc_class_map.items()
-    ]
+    )
+
+    alloc_asset_class = _asset_class_allocation_metrics(rows=allocation_rows, base_ccy=base_ccy)
 
     # Convert attribute map to model output
     alloc_by_attr = {}

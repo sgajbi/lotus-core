@@ -1,4 +1,5 @@
 from decimal import Decimal
+from types import SimpleNamespace
 
 from src.services.query_service.app.advisory_simulation.models import (
     EngineOptions,
@@ -9,6 +10,10 @@ from src.services.query_service.app.advisory_simulation.valuation import (
     ValuationService,
     build_simulated_state,
     get_fx_rate,
+)
+from src.services.query_service.app.services.allocation_calculator import (
+    AllocationInputRow,
+    calculate_allocation_views,
 )
 from tests.shared.factories import (
     cash,
@@ -131,3 +136,57 @@ def test_build_simulated_state_aggregates_asset_classes_attributes_and_cash() ->
     assert asset_classes["CASH"] == Decimal("50") / Decimal("450")
     assert sectors["TECH"] == Decimal("200") / Decimal("450")
     assert sectors["GOVT"] == Decimal("200") / Decimal("450")
+
+
+def test_build_simulated_state_asset_class_matches_shared_allocation_calculator() -> None:
+    portfolio = portfolio_snapshot(
+        base_currency="USD",
+        positions=[position("EQ_1", "2"), position("BOND_1", "1")],
+        cash_balances=[cash("USD", "50")],
+    )
+    market_data = market_data_snapshot(
+        prices=[price("EQ_1", "100", "USD"), price("BOND_1", "200", "USD")],
+    )
+    shelf = [
+        shelf_entry("EQ_1", asset_class="EQUITY"),
+        shelf_entry("BOND_1", asset_class="FIXED_INCOME"),
+    ]
+
+    state = build_simulated_state(
+        portfolio,
+        market_data,
+        shelf,
+        {"price_missing": [], "fx_missing": [], "shelf_missing": []},
+        [],
+    )
+    expected_view = calculate_allocation_views(
+        rows=[
+            AllocationInputRow(
+                instrument=SimpleNamespace(asset_class="EQUITY"),
+                snapshot=SimpleNamespace(security_id="EQ_1"),
+                market_value_reporting_currency=Decimal("200"),
+            ),
+            AllocationInputRow(
+                instrument=SimpleNamespace(asset_class="FIXED_INCOME"),
+                snapshot=SimpleNamespace(security_id="BOND_1"),
+                market_value_reporting_currency=Decimal("200"),
+            ),
+            AllocationInputRow(
+                instrument=SimpleNamespace(asset_class="CASH"),
+                snapshot=SimpleNamespace(security_id="CASH_USD"),
+                market_value_reporting_currency=Decimal("50"),
+            ),
+        ],
+        dimensions=["asset_class"],
+    ).views[0]
+
+    actual = {
+        metric.key: (metric.value.amount, metric.weight)
+        for metric in state.allocation_by_asset_class
+    }
+    expected = {
+        bucket.dimension_value: (bucket.market_value_reporting_currency, bucket.weight)
+        for bucket in expected_view.buckets
+    }
+
+    assert actual == expected
