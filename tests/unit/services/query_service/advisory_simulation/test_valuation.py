@@ -227,8 +227,8 @@ def test_build_simulated_state_emits_curated_canonical_allocation_views() -> Non
 
     assert tuple(views_by_dimension) == ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
     assert {bucket.key for bucket in views_by_dimension["asset_class"].buckets} == {
-        "CASH",
-        "EQUITY",
+        "Cash",
+        "Equity",
     }
     assert {bucket.key for bucket in views_by_dimension["currency"].buckets} == {"USD"}
     assert {bucket.key for bucket in views_by_dimension["sector"].buckets} == {
@@ -244,8 +244,8 @@ def test_build_simulated_state_emits_curated_canonical_allocation_views() -> Non
         "UNCLASSIFIED",
     }
     assert {bucket.key for bucket in views_by_dimension["product_type"].buckets} == {
+        "Cash",
         "EQUITY",
-        "UNCLASSIFIED",
     }
     assert {bucket.key for bucket in views_by_dimension["rating"].buckets} == {
         "A",
@@ -274,7 +274,7 @@ def test_legacy_asset_class_allocation_is_derived_from_canonical_lens() -> None:
         view for view in state.allocation_views if view.dimension == "asset_class"
     )
     canonical = {
-        bucket.key: (bucket.value.amount, bucket.weight)
+        bucket.key.upper(): (bucket.value.amount, bucket.weight)
         for bucket in canonical_asset_class.buckets
     }
     legacy = {

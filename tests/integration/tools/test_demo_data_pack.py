@@ -20,8 +20,13 @@ def test_build_demo_bundle_contains_multi_product_coverage():
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
-    assert bundle["benchmark_verification"]["benchmark_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID
-    assert bundle["benchmark_verification"]["portfolio_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID
+    assert (
+        bundle["benchmark_verification"]["benchmark_id"] == demo_data_pack.DEFAULT_DEMO_BENCHMARK_ID
+    )
+    assert (
+        bundle["benchmark_verification"]["portfolio_id"]
+        == demo_data_pack.DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID
+    )
     assert len(bundle["benchmark_assignments"]) == 1
     assert len(bundle["benchmark_definitions"]) == 1
     assert len(bundle["benchmark_compositions"]) == 2
