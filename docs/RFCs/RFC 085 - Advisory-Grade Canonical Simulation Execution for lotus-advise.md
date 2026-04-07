@@ -279,9 +279,19 @@ and future drill-down work. They are intentionally excluded from the RFC-0020 pr
 API surface to avoid cluttering the advisor-facing before/after view.
 
 Slice 1 of RFC-0020 adds a guarded contract map in code so changes to live reporting allocation
-dimensions cannot silently drift away from advisory proposal allocation expectations. Later slices
-must use the shared `lotus-core` allocation calculator for both live and projected state instead of
-maintaining advisory-specific bucket logic.
+dimensions cannot silently drift away from advisory proposal allocation expectations.
+
+Slice 2 extracts a shared `lotus-core` allocation calculator and routes both live reporting and
+advisory simulation asset-class aggregation through it. Advisory simulation still retains
+compatibility fields such as instrument allocation and shelf-attribute allocation until the
+canonical allocation-lens response fields are introduced in RFC-0020 Slice 3.
+
+The Slice 2 test baseline covers:
+
+1. every live reporting allocation dimension in the shared calculator;
+2. live reporting regression behavior after the calculator extraction;
+3. advisory valuation parity against the shared calculator; and
+4. no-op advisory before/after allocation parity for the shared calculator path.
 
 ## Follow-on Work
 
