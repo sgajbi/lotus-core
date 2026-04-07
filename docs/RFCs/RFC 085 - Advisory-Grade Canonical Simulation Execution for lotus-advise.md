@@ -293,6 +293,17 @@ The Slice 2 test baseline covers:
 3. advisory valuation parity against the shared calculator; and
 4. no-op advisory before/after allocation parity for the shared calculator path.
 
+Slice 3 adds canonical allocation-lens fields to `advisory-simulation.v1` without creating
+`advisory-simulation.v2`:
+
+1. `before.allocation_views`
+2. `after_simulated.allocation_views`
+3. top-level `allocation_lens`
+
+The allocation views expose only the RFC-0020 proposal subset: `asset_class`, `currency`, `sector`,
+`country`, `region`, `product_type`, and `rating`. Legacy allocation fields remain present for
+compatibility while `lotus-advise` migrates callers to the canonical allocation-lens shape.
+
 ## Follow-on Work
 
 1. Continue the platform-level hardening program for canonical simulation governance and duplicate
