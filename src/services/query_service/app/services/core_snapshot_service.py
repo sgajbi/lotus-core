@@ -204,6 +204,7 @@ class CoreSnapshotService:
                     issuer_name=item["issuer_name"],
                     ultimate_parent_issuer_id=item["ultimate_parent_issuer_id"],
                     ultimate_parent_issuer_name=item["ultimate_parent_issuer_name"],
+                    liquidity_tier=item["liquidity_tier"],
                 )
                 for item in baseline_positions.values()
             ]
@@ -358,6 +359,7 @@ class CoreSnapshotService:
                 "ultimate_parent_issuer_name": (
                     instrument.ultimate_parent_issuer_name if instrument else None
                 ),
+                "liquidity_tier": instrument.liquidity_tier if instrument else None,
             }
 
         total_base = self._total_market_value_baseline(baseline)
@@ -416,6 +418,7 @@ class CoreSnapshotService:
                     "issuer_name": instrument.issuer_name,
                     "ultimate_parent_issuer_id": instrument.ultimate_parent_issuer_id,
                     "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
+                    "liquidity_tier": instrument.liquidity_tier,
                 }
 
         for change in changes:
@@ -480,11 +483,12 @@ class CoreSnapshotService:
 
     @staticmethod
     def _change_quantity_effect(change) -> Decimal:
-        return transaction_quantity_effect_decimal(
+        effect = transaction_quantity_effect_decimal(
             transaction_type=getattr(change, "transaction_type", None),
             quantity=getattr(change, "quantity", None),
             amount=getattr(change, "amount", None),
         )
+        return Decimal(str(effect))
 
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
@@ -510,6 +514,7 @@ class CoreSnapshotService:
                     ultimate_parent_issuer_name=(
                         instrument.ultimate_parent_issuer_name if instrument else None
                     ),
+                    liquidity_tier=(instrument.liquidity_tier if instrument else None),
                 )
             )
         return records
@@ -533,15 +538,19 @@ class CoreSnapshotService:
 
     @staticmethod
     def _total_market_value_baseline(items: dict[str, dict[str, Any]]) -> Decimal:
-        return sum(
-            (item["market_value_base"] or Decimal(0))
-            for item in items.values()
-            if item["market_value_base"] is not None
-        )
+        total = Decimal(0)
+        for item in items.values():
+            market_value = item.get("market_value_base")
+            if market_value is not None:
+                total += Decimal(str(market_value))
+        return total
 
     @staticmethod
     def _total_market_value_projected(items: dict[str, dict[str, Any]]) -> Decimal:
-        return sum((item["market_value_base"] or Decimal(0)) for item in items.values())
+        total = Decimal(0)
+        for item in items.values():
+            total += Decimal(str(item.get("market_value_base") or Decimal(0)))
+        return total
 
     @staticmethod
     def _assign_baseline_weights(items: dict[str, dict[str, Any]], total: Decimal) -> None:

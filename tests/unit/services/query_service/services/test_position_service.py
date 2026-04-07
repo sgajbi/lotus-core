@@ -45,6 +45,7 @@ def mock_position_repo() -> AsyncMock:
         sector="Technology",
         country_of_risk="US",
         rating="AA+",
+        liquidity_tier="L2",
     )
     mock_state = PositionState(status="CURRENT", epoch=1)
 
@@ -117,6 +118,7 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.positions[0].country_of_risk == "US"
         assert response.positions[0].product_type == "Equity"
         assert response.positions[0].rating == "AA+"
+        assert response.positions[0].liquidity_tier == "L2"
         assert response.positions[0].held_since_date == date(2024, 12, 31)
         assert response.positions[0].weight == Decimal("1")
 
@@ -144,6 +146,7 @@ async def test_get_latest_positions_falls_back_to_position_history(mock_position
             sector="N/A",
             country_of_risk="US",
             rating="A",
+            liquidity_tier="L3",
         )
         mock_state = PositionState(status="CURRENT", epoch=1)
         mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = [
@@ -176,6 +179,7 @@ async def test_get_latest_positions_falls_back_to_position_history(mock_position
         assert response.positions[0].instrument_name == "Fallback Instrument"
         assert response.positions[0].product_type == "Bond"
         assert response.positions[0].rating == "A"
+        assert response.positions[0].liquidity_tier == "L3"
         assert response.positions[0].asset_class == "Bond"
         assert response.positions[0].valuation is not None
         assert response.positions[0].valuation.market_value == Decimal("5582.5")

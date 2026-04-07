@@ -100,6 +100,11 @@ class Instrument(BaseModel):
         description="Credit rating for fixed-income instruments.",
         examples=["BB+"],
     )
+    liquidity_tier: Optional[str] = Field(
+        None,
+        description="Liquidity tier used by advisory suitability and risk workflows.",
+        examples=["L1", "L3"],
+    )
     maturity_date: Optional[date] = Field(
         None,
         description="Maturity date for instruments with contractual maturity.",
@@ -147,6 +152,7 @@ class Instrument(BaseModel):
                 "sector": "Financials",
                 "country_of_risk": "GB",
                 "rating": "BB+",
+                "liquidity_tier": "L2",
                 "maturity_date": None,
                 "issuer_id": "ISSUER_BARC",
                 "issuer_name": "Barclays PLC",
@@ -174,6 +180,7 @@ class InstrumentIngestionRequest(BaseModel):
                     "sector": "financials",
                     "country_of_risk": "GB",
                     "rating": "BB+",
+                    "liquidity_tier": "L2",
                     "issuer_id": "ISSUER_BARC",
                     "issuer_name": "Barclays PLC",
                     "ultimate_parent_issuer_id": "ULTIMATE_BARC",

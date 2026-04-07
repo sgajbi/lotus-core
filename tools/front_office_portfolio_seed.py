@@ -208,6 +208,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Custody Cash Ledger",
             "ultimate_parent_issuer_id": "CASH_LEDGER",
             "ultimate_parent_issuer_name": "Custody Cash Ledger",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "CASH_EUR_BOOK_OPERATING",
@@ -220,6 +221,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Custody Cash Ledger",
             "ultimate_parent_issuer_id": "CASH_LEDGER",
             "ultimate_parent_issuer_name": "Custody Cash Ledger",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_EQ_AAPL_US",
@@ -234,6 +236,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Apple Inc.",
             "ultimate_parent_issuer_id": "ISSUER_AAPL",
             "ultimate_parent_issuer_name": "Apple Inc.",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_EQ_MSFT_US",
@@ -248,6 +251,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Microsoft Corporation",
             "ultimate_parent_issuer_id": "ISSUER_MSFT",
             "ultimate_parent_issuer_name": "Microsoft Corporation",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_EQ_SAP_DE",
@@ -262,6 +266,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "SAP SE",
             "ultimate_parent_issuer_id": "ISSUER_SAP",
             "ultimate_parent_issuer_name": "SAP SE",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_ETF_MSCI_WORLD",
@@ -276,6 +281,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "BlackRock Asset Management Ireland Limited",
             "ultimate_parent_issuer_id": "ULTIMATE_BLACKROCK",
             "ultimate_parent_issuer_name": "BlackRock, Inc.",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_FUND_BLK_ALLOC",
@@ -290,6 +296,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "BlackRock Global Funds",
             "ultimate_parent_issuer_id": "ULTIMATE_BLACKROCK",
             "ultimate_parent_issuer_name": "BlackRock, Inc.",
+            "liquidity_tier": "L2",
         },
         {
             "security_id": "FO_FUND_PIMCO_INC",
@@ -304,6 +311,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "PIMCO Global Advisors (Ireland) Limited",
             "ultimate_parent_issuer_id": "ULTIMATE_PIMCO",
             "ultimate_parent_issuer_name": "Pacific Investment Management Company LLC",
+            "liquidity_tier": "L3",
         },
         {
             "security_id": "FO_BOND_UST_2030",
@@ -320,6 +328,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "United States Treasury",
             "ultimate_parent_issuer_id": "ISSUER_UST",
             "ultimate_parent_issuer_name": "United States Treasury",
+            "liquidity_tier": "L1",
         },
         {
             "security_id": "FO_BOND_SIEMENS_2031",
@@ -336,6 +345,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Siemens Financieringsmaatschappij NV",
             "ultimate_parent_issuer_id": "ULTIMATE_SIEMENS",
             "ultimate_parent_issuer_name": "Siemens AG",
+            "liquidity_tier": "L2",
         },
         {
             "security_id": "FO_PRIV_PRIVATE_CREDIT_A",
@@ -350,6 +360,7 @@ def build_front_office_portfolio_bundle(
             "issuer_name": "Private Credit Opportunities Platform",
             "ultimate_parent_issuer_id": "ULTIMATE_PRIVCREDIT",
             "ultimate_parent_issuer_name": "Private Credit Opportunities Platform",
+            "liquidity_tier": "L5",
         },
     ]
 

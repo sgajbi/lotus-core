@@ -381,6 +381,11 @@ class CoreSnapshotInstrumentEnrichmentRecord(BaseModel):
         description="Display name for ultimate parent issuer.",
         examples=["Apple Holdings PLC"],
     )
+    liquidity_tier: Optional[str] = Field(
+        None,
+        description="Liquidity tier used by suitability and concentration workflows.",
+        examples=["L1", "L5"],
+    )
 
 
 class CoreSnapshotPortfolioTotals(BaseModel):

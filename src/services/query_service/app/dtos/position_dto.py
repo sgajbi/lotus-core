@@ -46,6 +46,11 @@ class Position(BaseModel):
         description="Credit rating used for reporting and analytics.",
         examples=["AA+"],
     )
+    liquidity_tier: Optional[str] = Field(
+        None,
+        description="Liquidity tier used by advisory suitability and concentration workflows.",
+        examples=["L1", "L5"],
+    )
     cost_basis: Decimal = Field(
         ..., description="Cost basis in portfolio base currency.", examples=[15000.0]
     )

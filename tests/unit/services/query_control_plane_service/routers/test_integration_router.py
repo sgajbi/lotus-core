@@ -448,6 +448,7 @@ async def test_get_instrument_enrichment_bulk_router_function() -> None:
             "issuer_name": "Apple Inc.",
             "ultimate_parent_issuer_id": "ISSUER_APPLE_HOLDING",
             "ultimate_parent_issuer_name": "Apple Holdings PLC",
+            "liquidity_tier": "L1",
         }
     ]
 
@@ -457,6 +458,7 @@ async def test_get_instrument_enrichment_bulk_router_function() -> None:
     )
 
     assert response.records[0].security_id == "SEC_AAPL_US"
+    assert response.records[0].liquidity_tier == "L1"
     mock_service.get_instrument_enrichment_bulk.assert_called_once_with(["SEC_AAPL_US"])
 
 

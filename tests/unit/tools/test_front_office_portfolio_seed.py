@@ -45,10 +45,13 @@ def test_front_office_bundle_carries_meaningful_classification_metadata():
     assert by_security["FO_EQ_AAPL_US"]["issuer_name"] == "Apple Inc."
     assert by_security["FO_EQ_SAP_DE"]["country_of_risk"] == "Germany"
     assert by_security["FO_BOND_UST_2030"]["rating"] == "AA+"
+    assert by_security["FO_ETF_MSCI_WORLD"]["liquidity_tier"] == "L1"
+    assert by_security["FO_FUND_PIMCO_INC"]["liquidity_tier"] == "L3"
     assert (
         by_security["FO_BOND_SIEMENS_2031"]["ultimate_parent_issuer_name"]
         == "Siemens AG"
     )
+    assert by_security["FO_PRIV_PRIVATE_CREDIT_A"]["liquidity_tier"] == "L5"
     assert by_security["FO_PRIV_PRIVATE_CREDIT_A"]["sector"] == "Private Credit"
 
 

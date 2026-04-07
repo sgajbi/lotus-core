@@ -117,6 +117,14 @@ class InstrumentEnrichmentRecord(BaseModel):
         description="Display name for ultimate parent issuer, when available.",
         examples=["Apple Holdings PLC"],
     )
+    liquidity_tier: str | None = Field(
+        None,
+        description=(
+            "Liquidity tier used by suitability and concentration workflows, "
+            "when available."
+        ),
+        examples=["L1", "L5"],
+    )
 
     model_config = ConfigDict()
 
@@ -133,6 +141,7 @@ class InstrumentEnrichmentBulkResponse(BaseModel):
                     "issuer_name": "Apple Inc.",
                     "ultimate_parent_issuer_id": "ISSUER_APPLE_HOLDING",
                     "ultimate_parent_issuer_name": "Apple Holdings PLC",
+                    "liquidity_tier": "L1",
                 }
             ]
         ],
