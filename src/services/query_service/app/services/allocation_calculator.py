@@ -5,8 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Callable
 
-from src.services.query_service.app.dtos.reporting_dto import AllocationDimension
-
+from ..dtos.reporting_dto import AllocationDimension
 from .reporting_classification import resolve_region
 
 ZERO = Decimal("0")

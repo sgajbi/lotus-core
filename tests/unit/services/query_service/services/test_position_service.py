@@ -41,8 +41,10 @@ def mock_position_repo() -> AsyncMock:
         isin="ISIN123",
         currency="USD",
         asset_class="Equity",
+        product_type="Equity",
         sector="Technology",
         country_of_risk="US",
+        rating="AA+",
     )
     mock_state = PositionState(status="CURRENT", epoch=1)
 
@@ -113,6 +115,8 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.positions[0].currency == "USD"
         assert response.positions[0].sector == "Technology"
         assert response.positions[0].country_of_risk == "US"
+        assert response.positions[0].product_type == "Equity"
+        assert response.positions[0].rating == "AA+"
         assert response.positions[0].held_since_date == date(2024, 12, 31)
         assert response.positions[0].weight == Decimal("1")
 
@@ -136,8 +140,10 @@ async def test_get_latest_positions_falls_back_to_position_history(mock_position
             isin="ISIN456",
             currency="USD",
             asset_class="Bond",
+            product_type="Bond",
             sector="N/A",
             country_of_risk="US",
+            rating="A",
         )
         mock_state = PositionState(status="CURRENT", epoch=1)
         mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = [
@@ -168,6 +174,8 @@ async def test_get_latest_positions_falls_back_to_position_history(mock_position
         assert response.positions[0].security_id == "S2"
         assert response.positions[0].position_date == date(2025, 1, 2)
         assert response.positions[0].instrument_name == "Fallback Instrument"
+        assert response.positions[0].product_type == "Bond"
+        assert response.positions[0].rating == "A"
         assert response.positions[0].asset_class == "Bond"
         assert response.positions[0].valuation is not None
         assert response.positions[0].valuation.market_value == Decimal("5582.5")

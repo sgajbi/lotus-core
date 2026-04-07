@@ -32,7 +32,19 @@ class Position(BaseModel):
         None, description="Instrument sector classification.", examples=["Technology"]
     )
     country_of_risk: Optional[str] = Field(
-        None, description="Instrument country of risk (ISO 3166-1 alpha-2).", examples=["US"]
+        None,
+        description="Instrument country-of-risk classification.",
+        examples=["United States"],
+    )
+    product_type: Optional[str] = Field(
+        None,
+        description="Instrument product-type classification.",
+        examples=["ETF"],
+    )
+    rating: Optional[str] = Field(
+        None,
+        description="Credit rating used for reporting and analytics.",
+        examples=["AA+"],
     )
     cost_basis: Decimal = Field(
         ..., description="Cost basis in portfolio base currency.", examples=[15000.0]

@@ -24,6 +24,9 @@ def mock_instrument_repo() -> AsyncMock:
             isin="ISIN1",
             currency="USD",
             product_type="Equity",
+            sector="Information Technology",
+            country_of_risk="United States",
+            rating=None,
         ),
         Instrument(
             security_id="SEC2",
@@ -31,6 +34,9 @@ def mock_instrument_repo() -> AsyncMock:
             isin="ISIN2",
             currency="SGD",
             product_type="Bond",
+            sector="Industrials",
+            country_of_risk="Singapore",
+            rating="AA+",
         ),
     ]
     repo.get_by_security_ids.return_value = repo.get_instruments.return_value
@@ -99,7 +105,10 @@ async def test_get_instruments(mock_instrument_repo: AsyncMock):
 
         # 3. Assert the mapping from DB model to DTO is correct
         assert response_dto.instruments[0].security_id == "SEC1"
+        assert response_dto.instruments[0].sector == "Information Technology"
         assert response_dto.instruments[1].product_type == "Bond"
+        assert response_dto.instruments[1].country_of_risk == "Singapore"
+        assert response_dto.instruments[1].rating == "AA+"
 
 
 async def test_get_instruments_by_ids_returns_empty_when_ids_empty(mock_instrument_repo: AsyncMock):

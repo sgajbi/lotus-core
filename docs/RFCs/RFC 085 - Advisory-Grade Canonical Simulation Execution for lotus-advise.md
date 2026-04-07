@@ -304,6 +304,16 @@ The allocation views expose only the RFC-0020 proposal subset: `asset_class`, `c
 `country`, `region`, `product_type`, and `rating`. Legacy allocation fields remain present for
 compatibility while `lotus-advise` migrates callers to the canonical allocation-lens shape.
 
+RFC-0020 Slice 6 closes the remaining live parity gaps for this contract:
+
+1. stateful advisory requests now preserve the live classification metadata needed by the shared
+   allocation calculator instead of collapsing non-asset-class dimensions into `UNCLASSIFIED`;
+2. proposal cash allocation preserves per-currency rows instead of aggregating all cash into one
+   base-currency bucket;
+3. proposal allocation-view labels and weight precision now align with direct live reporting; and
+4. the cross-service live parity validator passes against seeded portfolios with `lotus-core`,
+   `lotus-risk`, and `lotus-advise` running together.
+
 ## Follow-on Work
 
 1. Continue the platform-level hardening program for canonical simulation governance and duplicate

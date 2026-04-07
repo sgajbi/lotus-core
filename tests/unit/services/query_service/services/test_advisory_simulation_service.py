@@ -165,3 +165,88 @@ def test_advisory_simulation_exposes_allocation_lens_metadata_and_views():
     assert [view.dimension for view in result.after_simulated.allocation_views] == list(
         ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS
     )
+
+
+def test_advisory_simulation_preserves_cash_currency_split_in_allocation_views() -> None:
+    request = ProposalSimulateRequest.model_validate(
+        {
+            "portfolio_snapshot": {
+                "portfolio_id": "pf_core_currency_split",
+                "base_currency": "USD",
+                "positions": [],
+                "cash_balances": [
+                    {"currency": "USD", "amount": "100"},
+                    {"currency": "EUR", "amount": "100"},
+                ],
+            },
+            "market_data_snapshot": {
+                "prices": [],
+                "fx_rates": [{"pair": "EUR/USD", "rate": "1.2"}],
+            },
+            "shelf_entries": [],
+            "options": {"enable_proposal_simulation": True},
+            "proposed_cash_flows": [],
+            "proposed_trades": [],
+        }
+    )
+
+    result = execute_advisory_simulation(
+        request=request,
+        request_hash="sha256:cash-currency-split",
+        idempotency_key=None,
+        correlation_id="corr-core-cash-currency-split",
+        simulation_contract_version="advisory-simulation.v1",
+    )
+
+    currency_view = next(
+        view for view in result.before.allocation_views if view.dimension == "currency"
+    )
+    product_type_view = next(
+        view for view in result.before.allocation_views if view.dimension == "product_type"
+    )
+
+    assert {bucket.key: bucket.value.amount for bucket in currency_view.buckets} == {
+        "EUR": Decimal("120.0"),
+        "USD": Decimal("100"),
+    }
+    assert {bucket.key: bucket.value.amount for bucket in product_type_view.buckets} == {
+        "Cash": Decimal("220.0")
+    }
+
+
+def test_advisory_simulation_uses_reporting_labels_for_asset_class_allocation_views() -> None:
+    request = ProposalSimulateRequest.model_validate(
+        {
+            "portfolio_snapshot": {
+                "portfolio_id": "pf_core_asset_class_labels",
+                "base_currency": "USD",
+                "positions": [{"instrument_id": "EQ_1", "quantity": "1"}],
+                "cash_balances": [{"currency": "USD", "amount": "50"}],
+            },
+            "market_data_snapshot": {
+                "prices": [{"instrument_id": "EQ_1", "price": "100", "currency": "USD"}],
+                "fx_rates": [],
+            },
+            "shelf_entries": [
+                {"instrument_id": "EQ_1", "status": "APPROVED", "asset_class": "EQUITY"}
+            ],
+            "options": {"enable_proposal_simulation": True},
+            "proposed_cash_flows": [],
+            "proposed_trades": [],
+        }
+    )
+
+    result = execute_advisory_simulation(
+        request=request,
+        request_hash="sha256:asset-class-view-labels",
+        idempotency_key=None,
+        correlation_id="corr-core-asset-class-view-labels",
+        simulation_contract_version="advisory-simulation.v1",
+    )
+
+    asset_class_view = next(
+        view for view in result.before.allocation_views if view.dimension == "asset_class"
+    )
+
+    assert [bucket.key for bucket in asset_class_view.buckets] == ["Cash", "Equity"]
+    assert asset_class_view.buckets[0].weight == Decimal("0.3333333333333333333333333333")

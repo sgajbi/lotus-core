@@ -132,13 +132,21 @@ def _cash_allocation_instrument(base_ccy: str) -> SimpleNamespace:
         currency=base_ccy,
         sector=None,
         country_of_risk=None,
-        product_type=None,
+        product_type="Cash",
         rating=None,
         issuer_id=None,
         issuer_name=None,
         ultimate_parent_issuer_id=None,
         ultimate_parent_issuer_name=None,
     )
+
+
+def _display_bucket_key(*, dimension: str, bucket_key: str) -> str:
+    if dimension == "asset_class":
+        if bucket_key == "CASH":
+            return "Cash"
+        return bucket_key.title()
+    return bucket_key
 
 
 def _asset_class_allocation_metrics(
@@ -178,7 +186,10 @@ def _proposal_allocation_views(
                 },
                 "buckets": [
                     {
-                        "key": bucket.dimension_value,
+                        "key": _display_bucket_key(
+                            dimension=view.dimension,
+                            bucket_key=bucket.dimension_value,
+                        ),
                         "weight": bucket.weight,
                         "value": {
                             "amount": bucket.market_value_reporting_currency,
@@ -277,7 +288,6 @@ def build_simulated_state(
         for p in pos_summaries
     ]
 
-    total_cash_val = Decimal("0")
     for cash in portfolio.cash_balances:
         val = cash.amount
         if cash.currency != base_ccy:
@@ -286,15 +296,13 @@ def build_simulated_state(
                 val = cash.amount * rate
             else:
                 val = Decimal("0")
-        total_cash_val += val
-
-    allocation_rows.append(
-        AllocationInputRow(
-            instrument=_cash_allocation_instrument(base_ccy),
-            snapshot=SimpleNamespace(security_id=f"CASH_{base_ccy}"),
-            market_value_reporting_currency=total_cash_val,
+        allocation_rows.append(
+            AllocationInputRow(
+                instrument=_cash_allocation_instrument(cash.currency),
+                snapshot=SimpleNamespace(security_id=f"CASH_{cash.currency}"),
+                market_value_reporting_currency=val,
+            )
         )
-    )
 
     allocation_views = _proposal_allocation_views(rows=allocation_rows, base_ccy=base_ccy)
     alloc_asset_class = _asset_class_allocation_metrics(rows=allocation_rows, base_ccy=base_ccy)

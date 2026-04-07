@@ -150,6 +150,8 @@ class PositionService:
                 currency=instrument.currency if instrument else None,
                 sector=instrument.sector if instrument else None,
                 country_of_risk=instrument.country_of_risk if instrument else None,
+                product_type=instrument.product_type if instrument else None,
+                rating=instrument.rating if instrument else None,
                 valuation=valuation_dto,
                 reprocessing_status=pos_state.status if pos_state else None,
             )
