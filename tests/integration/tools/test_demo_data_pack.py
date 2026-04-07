@@ -34,6 +34,17 @@ def test_build_demo_bundle_contains_benchmark_seed_data():
     } == {"0.6000000000", "0.4000000000"}
 
 
+def test_build_demo_bundle_contains_usd_risk_free_reference_series():
+    bundle = demo_data_pack.build_demo_bundle()
+
+    risk_free_series = bundle["risk_free_series"]
+    assert risk_free_series
+    assert risk_free_series[0]["series_currency"] == "USD"
+    assert risk_free_series[0]["risk_free_curve_id"] == "USD_SOFR_3M"
+    assert risk_free_series[0]["value_convention"] == "annualized_rate"
+    assert risk_free_series[-1]["series_date"] == bundle["as_of_date"]
+
+
 def test_expectations_cover_five_portfolios_with_terminal_holdings():
     expected_ids = {
         "DEMO_ADV_USD_001",

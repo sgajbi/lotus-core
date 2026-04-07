@@ -19,6 +19,7 @@ from tools.demo_data_pack import (  # noqa: E402
     _build_benchmark_reference_data,
     _request_json,
     _wait_ready,
+    build_risk_free_reference_data,
 )
 
 LOGGER = logging.getLogger("front_office_portfolio_seed")
@@ -885,6 +886,13 @@ def build_front_office_portfolio_bundle(
         }
         for assignment in benchmark_reference["benchmark_assignments"]
     ]
+    risk_free_reference = build_risk_free_reference_data(
+        start_date=start_date,
+        end_date=end_date + timedelta(days=30),
+        currency="USD",
+        source_vendor="LOTUS_FRONT_OFFICE_SEED",
+        source_prefix="front_office_risk_free",
+    )
 
     market_price_specs = {
         "FO_EQ_AAPL_US": (Decimal("184.00"), Decimal("212.00")),
@@ -979,6 +987,7 @@ def build_front_office_portfolio_bundle(
         "fx_rates": fx_rates,
         "as_of_date": as_of_date,
         **benchmark_reference,
+        **risk_free_reference,
     }
 
 
@@ -1023,6 +1032,7 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
             "/ingest/benchmark-assignments",
             {"benchmark_assignments": bundle["benchmark_assignments"]},
         ),
+        ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
     for endpoint, payload in reference_payloads:
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)

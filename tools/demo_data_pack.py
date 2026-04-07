@@ -349,6 +349,39 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
     }
 
 
+def build_risk_free_reference_data(
+    *,
+    start_date: date,
+    end_date: date,
+    currency: str = "USD",
+    curve_id: str | None = None,
+    annualized_rate: Decimal = Decimal("0.0435000000"),
+    source_vendor: str = "LOTUS_DEMO",
+    source_prefix: str = "risk_free",
+) -> dict[str, Any]:
+    normalized_currency = currency.upper()
+    normalized_curve_id = curve_id or f"{normalized_currency}_SOFR_3M"
+    risk_free_series: list[dict[str, Any]] = []
+    for current_date in _calendar_dates(start_date, end_date):
+        risk_free_series.append(
+            {
+                "series_id": f"{source_prefix}_{normalized_currency.lower()}_annualized_rate",
+                "risk_free_curve_id": normalized_curve_id,
+                "series_date": current_date,
+                "value": f"{annualized_rate:.10f}",
+                "value_convention": "annualized_rate",
+                "day_count_convention": "ACT_360",
+                "compounding_convention": "simple",
+                "series_currency": normalized_currency,
+                "source_timestamp": _iso_utc_timestamp(date.fromisoformat(current_date)),
+                "source_vendor": source_vendor,
+                "source_record_id": f"{source_prefix}_{normalized_currency.lower()}_{current_date}",
+                "quality_status": "accepted",
+            }
+        )
+    return {"risk_free_series": risk_free_series}
+
+
 def build_demo_bundle() -> dict[str, Any]:
     start_date = date.today() - timedelta(days=365)
     end_date = date.today()
@@ -526,6 +559,13 @@ def build_demo_bundle() -> dict[str, Any]:
             rate = round(start_rate + ((end_rate - start_rate) * idx / (len(dates) - 1)), 6)
             fx_rates.append({"from_currency": from_ccy, "to_currency": to_ccy, "rate_date": d, "rate": rate})
     benchmark_reference = _build_benchmark_reference_data(dates=dates, start_date=start_date)
+    risk_free_reference = build_risk_free_reference_data(
+        start_date=start_date,
+        end_date=end_date,
+        currency="USD",
+        source_vendor="LOTUS_DEMO",
+        source_prefix="demo_risk_free",
+    )
     return {
         "source_system": "LOTUS_CORE_DEMO_DATA_PACK",
         "mode": "UPSERT",
@@ -537,6 +577,7 @@ def build_demo_bundle() -> dict[str, Any]:
         "fx_rates": fx_rates,
         "as_of_date": as_of,
         **benchmark_reference,
+        **risk_free_reference,
     }
 
 
@@ -563,6 +604,7 @@ def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any])
         ("/ingest/benchmark-compositions", {"benchmark_compositions": bundle["benchmark_compositions"]}),
         ("/ingest/benchmark-return-series", {"benchmark_return_series": bundle["benchmark_return_series"]}),
         ("/ingest/benchmark-assignments", {"benchmark_assignments": bundle["benchmark_assignments"]}),
+        ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
     for endpoint, payload in reference_payloads:
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)

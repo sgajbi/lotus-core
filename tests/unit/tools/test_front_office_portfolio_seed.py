@@ -154,6 +154,17 @@ def test_front_office_bundle_extends_fx_coverage_through_forward_projection_wind
     assert eur_usd_rates[-1]["rate_date"] == "2026-04-27"
 
 
+def test_front_office_bundle_extends_usd_risk_free_coverage_through_forward_window():
+    bundle = _build_bundle()
+
+    risk_free_series = bundle["risk_free_series"]
+    assert risk_free_series
+    assert risk_free_series[0]["series_currency"] == "USD"
+    assert risk_free_series[0]["risk_free_curve_id"] == "USD_SOFR_3M"
+    assert risk_free_series[0]["source_vendor"] == "LOTUS_FRONT_OFFICE_SEED"
+    assert risk_free_series[-1]["series_date"] == "2026-04-27"
+
+
 def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_identity():
     bundle = _build_bundle()
 
