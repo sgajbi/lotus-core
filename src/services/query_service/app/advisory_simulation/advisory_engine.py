@@ -195,14 +195,17 @@ def run_proposal_simulation(
         cash_flow_intents + sell_intents + fx_intents + executable_buy_intents
     )
 
-    after = build_simulated_state(
-        after_portfolio,
-        market_data,
-        shelf,
-        diagnostics.data_quality,
-        diagnostics.warnings,
-        options.model_copy(update={"valuation_mode": ValuationMode.CALCULATED}),
-    )
+    if intents:
+        after = build_simulated_state(
+            after_portfolio,
+            market_data,
+            shelf,
+            diagnostics.data_quality,
+            diagnostics.warnings,
+            options.model_copy(update={"valuation_mode": ValuationMode.CALCULATED}),
+        )
+    else:
+        after = before.model_copy(deep=True)
     rule_results = RuleEngine.evaluate(after, options, diagnostics)
 
     if hard_failures:
