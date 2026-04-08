@@ -107,7 +107,7 @@ PARITY_SCENARIOS: tuple[dict[str, Any], ...] = (
             "status": "BLOCKED",
             "intents": [],
             "after_total": "10000",
-            "after_cash": [("SGD", "10000"), ("USD", "0")],
+            "after_cash": [("SGD", "10000")],
             "after_positions": [],
             "rule_results": [
                 ("CASH_BAND", "PASS", "OK"),
@@ -303,7 +303,7 @@ PARITY_SCENARIOS: tuple[dict[str, Any], ...] = (
             "status": "BLOCKED",
             "intents": [],
             "after_total": "100.0",
-            "after_cash": [("USD", "0")],
+            "after_cash": [],
             "after_positions": [("EQ_A", "10")],
             "rule_results": [
                 ("CASH_BAND", "PASS", "OK"),
