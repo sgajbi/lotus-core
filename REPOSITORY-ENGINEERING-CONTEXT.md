@@ -1,0 +1,139 @@
+# Repository Engineering Context
+
+This file provides repository-local engineering context for `lotus-core`.
+
+For platform-wide truth, read:
+
+1. `C:\Users\Sandeep\projects\lotus-platform\context\LOTUS-QUICKSTART-CONTEXT.md`
+2. `C:\Users\Sandeep\projects\lotus-platform\context\LOTUS-ENGINEERING-CONTEXT.md`
+3. `C:\Users\Sandeep\projects\lotus-platform\context\CONTEXT-REFERENCE-MAP.md`
+
+## Repository Role
+
+`lotus-core` is the authoritative portfolio, booking, account, and transaction platform for Lotus.
+
+It provides the foundational operational and analytical data used by multiple downstream services.
+
+## Business And Domain Responsibility
+
+This repository owns:
+
+1. portfolio and holding master data,
+2. booking and transaction data,
+3. ingestion and persistence,
+4. position, valuation, cashflow, and time-series generation foundations,
+5. query-service APIs for operational, integration, and reporting-oriented consumption.
+
+## Current-State Summary
+
+Current repository posture:
+
+1. `lotus-core` is the domain authority for portfolio-management and transaction data,
+2. the query-service is the primary downstream integration surface for other Lotus apps,
+3. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+4. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+
+## Architecture And Module Map
+
+Primary areas:
+
+1. `src/services/query_service/`
+   Primary read and integration API surface.
+2. `src/services/ingestion_service/`
+   Bundle and upload ingestion endpoints.
+3. `src/services/persistence_service/`
+   Persistence processing.
+4. `src/services/calculators/`
+   Position, valuation, and cashflow calculator services.
+5. `src/services/timeseries_generator_service/`
+   Position and portfolio time-series generation.
+6. `scripts/`
+   quality gates, performance and recovery gates, test-manifest orchestration, and operational tooling.
+7. `tests/`
+   unit, integration-lite, full integration, ops-contract, transaction-contract, e2e, Docker smoke, and performance-oriented coverage.
+
+## Runtime And Integration Boundaries
+
+Runtime model:
+
+1. multi-service, event-driven platform with Kafka and PostgreSQL,
+2. shared infrastructure can be owned centrally by `lotus-platform`,
+3. app-local compose remains available for isolated development.
+
+Boundary rules:
+
+1. `lotus-core` remains authoritative for portfolio-management and transaction domain data,
+2. downstream services should consume its governed APIs rather than duplicate foundational logic,
+3. integration and capability metadata are part of the supported contract,
+4. operational correctness and reprocessing reliability are first-class engineering concerns.
+
+## Repo-Native Commands
+
+Use these commands as the primary local contract:
+
+1. install
+   `make install`
+2. feature-lane parity
+   `make ci-local`
+3. PR merge gate parity
+   `make ci`
+4. main releasability parity
+   `make ci-main`
+5. targeted unit gate
+   `make test`
+6. database-backed unit gate
+   `make test-unit-db`
+7. integration-lite suite
+   `make test-integration-lite`
+8. E2E smoke
+   `make test-e2e-smoke`
+9. Docker smoke
+   `make test-docker-smoke`
+
+## Validation And CI Expectations
+
+`lotus-core` uses explicit CI lanes with a much heavier validation contract than most repos.
+
+Important validation expectations:
+
+1. architecture guards, OpenAPI gates, warning budget, vocabulary and contract gates are active,
+2. PR-grade validation includes runtime gates, Docker smoke, latency, and performance load checks,
+3. main releasability extends PR validation with heavier release-only gates,
+4. deterministic test-manifest orchestration is part of the repo truth and should not be bypassed casually.
+
+## Standards And RFCs That Govern This Repository
+
+Most relevant current governance:
+
+1. `C:\Users\Sandeep\projects\lotus-platform\rfcs\RFC-0041-platform-integration-architecture-bible-governance.md`
+2. `C:\Users\Sandeep\projects\lotus-platform\rfcs\RFC-0067-centralized-api-vocabulary-inventory-and-openapi-documentation-governance.md`
+3. `C:\Users\Sandeep\projects\lotus-platform\rfcs\RFC-0068-centralized-shared-infrastructure-ownership-and-migration.md`
+4. `C:\Users\Sandeep\projects\lotus-platform\rfcs\RFC-0071-centralized-environment-scoped-service-addressing-and-ingress-governance.md`
+5. `C:\Users\Sandeep\projects\lotus-platform\rfcs\RFC-0072-platform-wide-multi-lane-ci-validation-and-release-governance.md`
+6. `C:\Users\Sandeep\projects\lotus-platform\rfcs\RFC-0073-lotus-ecosystem-engineering-context-and-agent-guidance-system.md`
+7. `docs/architecture/lotus-core-target-architecture.md`
+8. `docs/standards/layering-boundaries.md`
+
+## Known Constraints And Implementation Notes
+
+1. this repository has the heaviest local gate set in the ecosystem, so targeted local proof plus GitHub-backed heavy execution is often the right working model,
+2. query-service contracts are highly consequential because many other apps depend on them,
+3. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+4. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+
+## Context Maintenance Rule
+
+Update this document when:
+
+1. service ownership or major service boundaries change,
+2. repo-native command contracts or test-manifest structure change,
+3. shared-infrastructure ownership assumptions change,
+4. integration contract posture or current-state architecture shifts materially,
+5. the repository's CI and runtime expectations change.
+
+## Cross-Links
+
+1. `C:\Users\Sandeep\projects\lotus-platform\context\LOTUS-QUICKSTART-CONTEXT.md`
+2. `C:\Users\Sandeep\projects\lotus-platform\context\LOTUS-ENGINEERING-CONTEXT.md`
+3. `C:\Users\Sandeep\projects\lotus-platform\context\CONTEXT-REFERENCE-MAP.md`
+4. `C:\Users\Sandeep\projects\lotus-platform\context\Repository-Engineering-Context-Contract.md`

@@ -5,6 +5,7 @@ This system provides a comprehensive suite of core portfolio services, including
 
 Platform architecture governance source:
 - `https://github.com/sgajbi/lotus-platform` (cross-cutting and multi-service decisions)
+- `REPOSITORY-ENGINEERING-CONTEXT.md` (repository-local engineering context and commands)
 
 Local architecture direction and restructuring plan:
 - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
