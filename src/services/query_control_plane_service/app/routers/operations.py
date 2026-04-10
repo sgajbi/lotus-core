@@ -2,7 +2,7 @@ import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, status as http_status
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,8 +129,7 @@ async def get_portfolio_readiness(
     as_of_date: Optional[str] = Query(
         None,
         description=(
-            "Optional as-of date in YYYY-MM-DD format used to scope booked-state "
-            "readiness."
+            "Optional as-of date in YYYY-MM-DD format used to scope booked-state readiness."
         ),
         examples=["2026-03-28"],
     ),
@@ -261,7 +260,7 @@ async def get_portfolio_control_stages(
     status_filter: Optional[str] = Query(
         None,
         description=(
-            "Optional control stage status filter " "(e.g., COMPLETED, FAILED, REQUIRES_REPLAY)."
+            "Optional control stage status filter (e.g., COMPLETED, FAILED, REQUIRES_REPLAY)."
         ),
         examples=["REQUIRES_REPLAY"],
     ),
@@ -468,9 +467,8 @@ async def get_valuation_jobs(
         description="Optional durable valuation correlation identifier filter.",
         examples=["corr-val-8801"],
     ),
-    job_status: Optional[str] = Query(
+    status: Optional[str] = Query(
         None,
-        alias="status",
         description="Optional job status filter (e.g., PENDING, PROCESSING).",
         examples=["PENDING"],
     ),
@@ -495,15 +493,15 @@ async def get_valuation_jobs(
             business_date=parsed_business_date,
             security_id=security_id,
             correlation_id=correlation_id,
-            status=job_status,
+            status=status,
             stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception:
         logger.exception("Failed to list valuation jobs for portfolio %s", portfolio_id)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while listing valuation jobs.",
         )
 
@@ -542,9 +540,8 @@ async def get_aggregation_jobs(
         description="Optional aggregation business date filter in YYYY-MM-DD format.",
         examples=["2025-08-31"],
     ),
-    job_status: Optional[str] = Query(
+    status: Optional[str] = Query(
         None,
-        alias="status",
         description="Optional job status filter (e.g., PENDING, PROCESSING).",
         examples=["PENDING"],
     ),
@@ -568,15 +565,15 @@ async def get_aggregation_jobs(
             job_id=job_id,
             business_date=parsed_business_date,
             correlation_id=correlation_id,
-            status=job_status,
+            status=status,
             stale_threshold_minutes=stale_threshold_minutes,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception:
         logger.exception("Failed to list aggregation jobs for portfolio %s", portfolio_id)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while listing aggregation jobs.",
         )
 

@@ -38,10 +38,19 @@ class ProfileResult:
     records_submitted: int
     batches_submitted: int
     throughput_records_per_second: float
+    baseline_backlog_jobs: int
     backlog_jobs_after_profile: int
+    backlog_jobs_growth_during_profile: int
+    baseline_backlog_age_seconds: float
     backlog_age_seconds_after_profile: float
-    dlq_pressure_ratio_after_profile: float
+    backlog_age_increase_seconds: float
+    baseline_dlq_events_in_window: int
+    dlq_events_in_window_after_profile: int
+    dlq_events_added_during_profile: int
+    dlq_pressure_ratio_added: float
+    baseline_replay_pressure_ratio: float
     replay_pressure_ratio_after_profile: float
+    replay_pressure_ratio_increase: float
     drain_seconds_to_zero_backlog: float | None
     checks_passed: bool
     failed_checks: list[str]
@@ -55,6 +64,14 @@ def _run(cmd: list[str], cwd: Path) -> None:
             f"stdout:\n{completed.stdout}\n"
             f"stderr:\n{completed.stderr}"
         )
+
+
+def _non_negative_delta(current: float, baseline: float) -> float:
+    return max(current - baseline, 0.0)
+
+
+def _non_negative_delta_int(current: int, baseline: int) -> int:
+    return max(current - baseline, 0)
 
 
 def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
@@ -201,20 +218,6 @@ def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[
     }
 
 
-def _get_backlog_jobs(*, event_replay_base_url: str, ops_token: str) -> int:
-    headers = {"X-Lotus-Ops-Token": ops_token}
-    response = requests.get(
-        f"{event_replay_base_url}/ingestion/health/summary",
-        headers=headers,
-        timeout=20,
-    )
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Backlog summary endpoint failed status={response.status_code}: {response.text[:200]}"
-        )
-    return int(response.json().get("backlog_jobs", 0))
-
-
 def _wait_drain_to_target_backlog(
     *,
     event_replay_base_url: str,
@@ -254,37 +257,56 @@ def _evaluate_profile(
     batches_submitted: int,
     started_at: float,
     ended_at: float,
+    baseline_health: dict[str, Any],
     health: dict[str, Any],
     drain_seconds: float | None,
     thresholds: dict[str, float],
 ) -> ProfileResult:
     duration = max(ended_at - started_at, 0.001)
     throughput = records_submitted / duration
+    baseline_summary = baseline_health["summary"]
+    baseline_slo = baseline_health["slo"]
+    baseline_error_budget = baseline_health["error_budget"]
     summary = health["summary"]
     slo = health["slo"]
     error_budget = health["error_budget"]
+    baseline_backlog_jobs = int(baseline_summary.get("backlog_jobs", 0))
     backlog_jobs = int(summary.get("backlog_jobs", 0))
+    backlog_jobs_growth = _non_negative_delta_int(backlog_jobs, baseline_backlog_jobs)
+    baseline_backlog_age = float(baseline_slo.get("backlog_age_seconds", 0.0))
     backlog_age = float(slo.get("backlog_age_seconds", 0.0))
-    dlq_pressure = float(error_budget.get("dlq_pressure_ratio", 0.0))
+    backlog_age_increase = _non_negative_delta(backlog_age, baseline_backlog_age)
+    baseline_dlq_events = int(baseline_error_budget.get("dlq_events_in_window", 0))
+    dlq_events = int(error_budget.get("dlq_events_in_window", 0))
+    dlq_events_added = _non_negative_delta_int(dlq_events, baseline_dlq_events)
+    dlq_budget_events = max(int(error_budget.get("dlq_budget_events_per_window", 1)), 1)
+    dlq_pressure_added = dlq_events_added / dlq_budget_events
+    baseline_replay_pressure = float(
+        baseline_error_budget.get("replay_backlog_pressure_ratio", 0.0)
+    )
     replay_pressure = float(error_budget.get("replay_backlog_pressure_ratio", 0.0))
+    replay_pressure_increase = _non_negative_delta(replay_pressure, baseline_replay_pressure)
 
     failed_checks: list[str] = []
     if throughput < thresholds["min_throughput_rps"]:
         failed_checks.append(
             f"throughput {throughput:.2f} < min {thresholds['min_throughput_rps']:.2f}"
         )
-    if backlog_age > thresholds["max_backlog_age_seconds"]:
+    if backlog_age_increase > thresholds["max_backlog_age_increase_seconds"]:
         failed_checks.append(
-            f"backlog_age {backlog_age:.2f} > max {thresholds['max_backlog_age_seconds']:.2f}"
+            "backlog_age_increase "
+            f"{backlog_age_increase:.2f} > max {thresholds['max_backlog_age_increase_seconds']:.2f}"
         )
-    if dlq_pressure > thresholds["max_dlq_pressure_ratio"]:
+    if dlq_pressure_added > thresholds["max_dlq_pressure_ratio_added"]:
         failed_checks.append(
-            f"dlq_pressure {dlq_pressure:.4f} > max {thresholds['max_dlq_pressure_ratio']:.4f}"
+            "dlq_pressure_added "
+            f"{dlq_pressure_added:.4f} > max {thresholds['max_dlq_pressure_ratio_added']:.4f}"
         )
-    if replay_pressure > thresholds["max_replay_pressure_ratio"]:
+    if replay_pressure_increase > thresholds["max_replay_pressure_ratio_increase"]:
         failed_checks.append(
-            f"replay_pressure {replay_pressure:.4f} > max "
-            f"{thresholds['max_replay_pressure_ratio']:.4f}"
+            "replay_pressure_increase "
+            f"{replay_pressure_increase:.4f} > max "
+            f"{thresholds['max_replay_pressure_ratio_increase']:.4f}"
         )
     max_drain = thresholds.get("max_drain_seconds")
     if max_drain is not None and (drain_seconds is None or drain_seconds > max_drain):
@@ -302,10 +324,19 @@ def _evaluate_profile(
         records_submitted=records_submitted,
         batches_submitted=batches_submitted,
         throughput_records_per_second=round(throughput, 3),
+        baseline_backlog_jobs=baseline_backlog_jobs,
         backlog_jobs_after_profile=backlog_jobs,
+        backlog_jobs_growth_during_profile=backlog_jobs_growth,
+        baseline_backlog_age_seconds=round(baseline_backlog_age, 3),
         backlog_age_seconds_after_profile=round(backlog_age, 3),
-        dlq_pressure_ratio_after_profile=round(dlq_pressure, 6),
+        backlog_age_increase_seconds=round(backlog_age_increase, 3),
+        baseline_dlq_events_in_window=baseline_dlq_events,
+        dlq_events_in_window_after_profile=dlq_events,
+        dlq_events_added_during_profile=dlq_events_added,
+        dlq_pressure_ratio_added=round(dlq_pressure_added, 6),
+        baseline_replay_pressure_ratio=round(baseline_replay_pressure, 6),
         replay_pressure_ratio_after_profile=round(replay_pressure, 6),
+        replay_pressure_ratio_increase=round(replay_pressure_increase, 6),
         drain_seconds_to_zero_backlog=drain_seconds,
         checks_passed=not failed_checks,
         failed_checks=failed_checks,
@@ -339,8 +370,8 @@ def _write_report(
         f"- Enforce mode: {enforce}",
         "",
         (
-            "| Profile | Passed | Throughput rps | Backlog age sec | "
-            "DLQ pressure | Replay pressure | Drain sec |"
+            "| Profile | Passed | Throughput rps | Backlog age increase sec | "
+            "DLQ added ratio | Replay pressure increase | Drain sec |"
         ),
         "|---|---|---:|---:|---:|---:|---:|",
     ]
@@ -353,9 +384,9 @@ def _write_report(
                 profile=item.profile_name,
                 passed="yes" if item.checks_passed else "no",
                 throughput=item.throughput_records_per_second,
-                backlog_age=item.backlog_age_seconds_after_profile,
-                dlq=item.dlq_pressure_ratio_after_profile,
-                replay=item.replay_pressure_ratio_after_profile,
+                backlog_age=item.backlog_age_increase_seconds,
+                dlq=item.dlq_pressure_ratio_added,
+                replay=item.replay_pressure_ratio_increase,
                 drain=(
                     f"{item.drain_seconds_to_zero_backlog:.3f}"
                     if item.drain_seconds_to_zero_backlog is not None
@@ -425,9 +456,9 @@ def main() -> int:
                 "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 5.0,
-                    "max_backlog_age_seconds": 1800.0,
-                    "max_dlq_pressure_ratio": 5.0,
-                    "max_replay_pressure_ratio": 5.0,
+                    "max_backlog_age_increase_seconds": 1800.0,
+                    "max_dlq_pressure_ratio_added": 5.0,
+                    "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
                 },
             },
@@ -439,9 +470,9 @@ def main() -> int:
                 "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 10.0,
-                    "max_backlog_age_seconds": 2400.0,
-                    "max_dlq_pressure_ratio": 5.0,
-                    "max_replay_pressure_ratio": 5.0,
+                    "max_backlog_age_increase_seconds": 2400.0,
+                    "max_dlq_pressure_ratio_added": 5.0,
+                    "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
                 },
             },
@@ -456,9 +487,9 @@ def main() -> int:
                 "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 10.0,
-                    "max_backlog_age_seconds": 1200.0,
-                    "max_dlq_pressure_ratio": 5.0,
-                    "max_replay_pressure_ratio": 5.0,
+                    "max_backlog_age_increase_seconds": 1200.0,
+                    "max_dlq_pressure_ratio_added": 5.0,
+                    "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
                 },
             },
@@ -470,21 +501,22 @@ def main() -> int:
                 "wait_for_drain": False,
                 "thresholds": {
                     "min_throughput_rps": 20.0,
-                    "max_backlog_age_seconds": 1800.0,
-                    "max_dlq_pressure_ratio": 10.0,
-                    "max_replay_pressure_ratio": 5.0,
+                    "max_backlog_age_increase_seconds": 1800.0,
+                    "max_dlq_pressure_ratio_added": 10.0,
+                    "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
                 },
             },
         ]
 
     for profile in profiles:
+        baseline_health = _get_health_snapshot(
+            event_replay_base_url=args.event_replay_base_url,
+            ops_token=args.ops_token,
+        )
         baseline_backlog = 0
         if profile["wait_for_drain"]:
-            baseline_backlog = _get_backlog_jobs(
-                event_replay_base_url=args.event_replay_base_url,
-                ops_token=args.ops_token,
-            )
+            baseline_backlog = int(baseline_health["summary"].get("backlog_jobs", 0))
         started = time.time()
         records_submitted, batches_submitted = _ingest_transactions(
             ingestion_base_url=args.ingestion_base_url,
@@ -517,19 +549,21 @@ def main() -> int:
                 batches_submitted=batches_submitted,
                 started_at=started,
                 ended_at=ended,
+                baseline_health=baseline_health,
                 health=health,
                 drain_seconds=drain_seconds,
                 thresholds=profile["thresholds"],
             )
         )
 
+    replay_baseline_health = _get_health_snapshot(
+        event_replay_base_url=args.event_replay_base_url,
+        ops_token=args.ops_token,
+    )
     replay_baseline_backlog = 0
     replay_wait_for_drain = False
     if replay_wait_for_drain:
-        replay_baseline_backlog = _get_backlog_jobs(
-            event_replay_base_url=args.event_replay_base_url,
-            ops_token=args.ops_token,
-        )
+        replay_baseline_backlog = int(replay_baseline_health["summary"].get("backlog_jobs", 0))
     replay_started = time.time()
     replay_source_transactions = _build_transaction_batch(
         portfolio_id=portfolio_id,
@@ -579,13 +613,16 @@ def main() -> int:
             batches_submitted=1 + replay_bursts,
             started_at=replay_started,
             ended_at=replay_ended,
+            baseline_health=replay_baseline_health,
             health=replay_health,
             drain_seconds=replay_drain_seconds,
             thresholds={
                 "min_throughput_rps": 8.0 if args.profile_tier == "full" else 4.0,
-                "max_backlog_age_seconds": 2400.0 if args.profile_tier == "full" else 3600.0,
-                "max_dlq_pressure_ratio": 25.0 if args.profile_tier == "full" else 5.0,
-                "max_replay_pressure_ratio": 5.0,
+                "max_backlog_age_increase_seconds": (
+                    2400.0 if args.profile_tier == "full" else 3600.0
+                ),
+                "max_dlq_pressure_ratio_added": 25.0 if args.profile_tier == "full" else 5.0,
+                "max_replay_pressure_ratio_increase": 5.0,
                 "max_drain_seconds": None,
             },
         )

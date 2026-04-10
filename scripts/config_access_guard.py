@@ -17,10 +17,22 @@ ALLOWED_OS_GETENV_PATHS = {
     Path("src/services/query_service/app/settings.py"),
 }
 
+IGNORED_GENERATED_PATH_PARTS = (
+    "/build/",
+    "/dist/",
+)
+
+
+def _is_generated_artifact(path: Path) -> bool:
+    normalized = f"/{path.as_posix().strip('/')}/"
+    return any(path_part in normalized for path_part in IGNORED_GENERATED_PATH_PARTS)
+
 
 def main() -> int:
     violations: list[str] = []
     for path in ROOT.glob("src/**/*.py"):
+        if _is_generated_artifact(path.relative_to(ROOT)):
+            continue
         content = path.read_text(encoding="utf-8")
         if "os.getenv(" not in content:
             continue

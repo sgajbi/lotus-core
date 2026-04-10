@@ -15,9 +15,7 @@ from ..services import ReconciliationService
 
 router = APIRouter(tags=["financial-reconciliation"])
 
-NOT_FOUND_RESPONSE_EXAMPLE = {
-    "detail": "Reconciliation run 'FRR-20260306-0001' was not found."
-}
+NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Reconciliation run 'FRR-20260306-0001' was not found."}
 
 RECONCILIATION_RUN_REQUEST_EXAMPLES = {
     "portfolio_day_scope": {
@@ -116,10 +114,8 @@ async def run_transaction_cashflow_reconciliation(
     db_session: AsyncSession = Depends(get_async_db_session),
     x_correlation_id: str | None = Header(
         default=None,
-        alias="X-Correlation-ID",
         description=(
-            "Optional correlation identifier propagated into the recorded "
-            "reconciliation run."
+            "Optional correlation identifier propagated into the recorded reconciliation run."
         ),
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
@@ -152,10 +148,8 @@ async def run_position_valuation_reconciliation(
     db_session: AsyncSession = Depends(get_async_db_session),
     x_correlation_id: str | None = Header(
         default=None,
-        alias="X-Correlation-ID",
         description=(
-            "Optional correlation identifier propagated into the recorded "
-            "reconciliation run."
+            "Optional correlation identifier propagated into the recorded reconciliation run."
         ),
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
@@ -190,10 +184,8 @@ async def run_timeseries_integrity_reconciliation(
     db_session: AsyncSession = Depends(get_async_db_session),
     x_correlation_id: str | None = Header(
         default=None,
-        alias="X-Correlation-ID",
         description=(
-            "Optional correlation identifier propagated into the recorded "
-            "reconciliation run."
+            "Optional correlation identifier propagated into the recorded reconciliation run."
         ),
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),

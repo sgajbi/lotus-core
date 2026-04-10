@@ -1,7 +1,13 @@
-.PHONY: install compile-runtime-lock lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack security-audit check coverage-gate ci ci-local docker-build docker-prebuild-ci clean
+.PHONY: install install-ci verify-dependencies compile-runtime-lock lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci clean
 
 install:
 	python scripts/bootstrap_dev.py
+
+install-ci:
+	python scripts/bootstrap_dev.py
+
+verify-dependencies:
+	python scripts/dependency_health_check.py --skip-audit
 
 compile-runtime-lock:
 	python scripts/update_shared_runtime_lock.py
@@ -42,7 +48,7 @@ migration-smoke:
 	python scripts/migration_contract_check.py --mode alembic-sql
 
 migration-apply:
-	alembic upgrade head
+	python -m alembic upgrade head
 
 test:
 	$(MAKE) test-unit
@@ -121,7 +127,7 @@ test-latency-gate:
 	python scripts/latency_profile.py --build --enforce
 
 test-performance-load-gate:
-	python scripts/performance_load_gate.py --profile-tier fast --enforce
+	python scripts/performance_load_gate.py --build --profile-tier fast --enforce
 
 test-performance-load-gate-full:
 	python scripts/performance_load_gate.py --build --profile-tier full --enforce
@@ -132,17 +138,44 @@ test-failure-recovery-gate:
 test-institutional-signoff-pack:
 	python scripts/institutional_signoff_pack.py --require-all --max-age-hours 24
 
+test-pr-suites:
+	$(MAKE) test-unit-db
+	$(MAKE) test-integration-lite
+	$(MAKE) test-ops-contract
+	$(MAKE) test-transaction-buy-contract
+	$(MAKE) test-transaction-sell-contract
+	$(MAKE) test-transaction-dividend-contract
+	$(MAKE) test-transaction-interest-contract
+	$(MAKE) test-transaction-fx-contract
+	$(MAKE) test-transaction-portfolio-flow-bundle-contract
+
+test-pr-runtime-gates:
+	$(MAKE) docker-build
+	$(MAKE) test-e2e-smoke
+	$(MAKE) test-docker-smoke
+	$(MAKE) test-latency-gate
+	$(MAKE) test-performance-load-gate
+
+test-release-gates:
+	$(MAKE) test-integration-all
+	$(MAKE) test-e2e-all
+	$(MAKE) test-performance-load-gate-full
+	$(MAKE) test-failure-recovery-gate
+	$(MAKE) test-institutional-signoff-pack
+
 security-audit:
-	python -m pip_audit -r tests/requirements.txt
+	python scripts/dependency_health_check.py
 
 check: lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate test
 
 coverage-gate:
 	python scripts/coverage_gate.py
 
-ci: lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate migration-smoke test-unit-db test-integration-lite coverage-gate security-audit
+ci: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate migration-smoke test-pr-suites coverage-gate security-audit test-pr-runtime-gates
 
-ci-local: lint typecheck coverage-gate
+ci-main: ci test-release-gates
+
+ci-local: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate test-unit-db test-integration-lite coverage-gate
 
 docker-build:
 	docker build -f src/services/query_service/Dockerfile -t portfolio-analytics-query-service:ci .
@@ -151,4 +184,4 @@ docker-prebuild-ci:
 	python scripts/prebuild_ci_images.py
 
 clean:
-	python -c "import shutil, pathlib; [shutil.rmtree(p, ignore_errors=True) for p in ['.pytest_cache', '.ruff_cache', '.mypy_cache']]; pathlib.Path('.coverage').unlink(missing_ok=True)"
+	python -c "import shutil, pathlib; [shutil.rmtree(p, ignore_errors=True) for p in ['.pytest_cache', '.ruff_cache', '.mypy_cache', 'src/services/query_service/build']]; [pathlib.Path(p).unlink(missing_ok=True) for p in ['.coverage', '.coverage.unit', '.coverage.integration_lite']]"

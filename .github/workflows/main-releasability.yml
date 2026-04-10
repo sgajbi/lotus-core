@@ -1,0 +1,453 @@
+name: Main Releasability Gate
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+  PYTHON_VERSION: "3.12"
+  DOCKER_BUILDKIT: "1"
+  COMPOSE_DOCKER_CLI_BUILD: "1"
+
+jobs:
+  workflow-lint:
+    name: Main Releasability / Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: reviewdog/action-actionlint@v1
+
+  lint-typecheck-contracts-security:
+    name: Main Releasability / Lint Typecheck Contracts Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Verify Dependencies
+        run: make verify-dependencies
+      - name: Lint
+        run: make lint
+      - name: No-Alias Contract Guard
+        run: make no-alias-gate
+      - name: Typecheck
+        run: make typecheck
+      - name: Architecture Guard
+        run: make architecture-guard
+      - name: OpenAPI Gate
+        run: make openapi-gate
+      - name: API Vocabulary Gate
+        run: make api-vocabulary-gate
+      - name: Migration Contract Smoke
+        run: make migration-smoke
+      - name: Security Audit
+        run: make security-audit
+      - name: Warning Gate
+        run: make warning-gate
+
+  test-suites:
+    name: Main Releasability / Tests (${{ matrix.suite }})
+    needs: [lint-typecheck-contracts-security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            target: test-unit
+          - suite: unit-db
+            target: test-unit-db
+          - suite: integration-lite
+            target: test-integration-lite
+          - suite: ops-contract
+            target: test-ops-contract
+          - suite: transaction-buy-contract
+            target: test-transaction-buy-contract
+          - suite: transaction-sell-contract
+            target: test-transaction-sell-contract
+          - suite: transaction-dividend-contract
+            target: test-transaction-dividend-contract
+          - suite: transaction-interest-contract
+            target: test-transaction-interest-contract
+          - suite: transaction-fx-contract
+            target: test-transaction-fx-contract
+          - suite: transaction-portfolio-flow-bundle-contract
+            target: test-transaction-portfolio-flow-bundle-contract
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Run ${{ matrix.suite }}
+        run: make ${{ matrix.target }}
+
+  coverage-gate:
+    name: Main Releasability / Coverage Gate (Combined)
+    needs: [test-suites]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Enforce combined coverage threshold
+        run: make coverage-gate
+
+  docker-build:
+    name: Main Releasability / Validate Docker Build
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install CI tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/ci-tooling.lock.txt
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Prebuild query-service image with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --services query_service
+      - name: Generate runtime SBOM
+        run: |
+          mkdir -p output/build-evidence
+          python -m pip_audit -r requirements/shared-runtime.lock.txt --format cyclonedx-json -o output/build-evidence/shared-runtime-sbom.cdx.json
+      - name: Write build provenance manifest
+        run: |
+          python scripts/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
+      - name: Upload build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-docker-build-evidence
+          path: output/build-evidence/*
+          if-no-files-found: error
+          retention-days: 30
+
+  docker-smoke-contract:
+    name: Main Releasability / Docker Smoke Contract
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
+      - name: Run deterministic docker endpoint smoke
+        run: make test-docker-smoke
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > docker-smoke-logs.txt
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-docker-smoke-artifacts
+          path: |
+            output/task-runs/*.json
+            output/task-runs/*.md
+            docker-smoke-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  latency-gate:
+    name: Main Releasability / Latency Gate
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group latency-gate
+      - name: Run endpoint latency gate
+        run: make test-latency-gate
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > latency-gate-logs.txt
+      - name: Upload latency artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-latency-artifacts
+          path: |
+            output/task-runs/*latency-profile*.json
+            output/task-runs/*latency-profile*.md
+            latency-gate-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  performance-load-gate:
+    name: Main Releasability / Performance Load Gate (Fast)
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group performance-gate
+      - name: Run deterministic performance load gate
+        run: make test-performance-load-gate
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > performance-load-gate-logs.txt
+      - name: Upload performance load artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-performance-load-artifacts
+          path: |
+            output/task-runs/*performance-load-gate*.json
+            output/task-runs/*performance-load-gate*.md
+            performance-load-gate-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  integration-all:
+    name: Main Releasability / Integration Full
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Run full integration suite
+        run: make test-integration-all
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > integration-all-logs.txt
+      - name: Upload integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-integration-all-artifacts
+          path: integration-all-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  e2e-all:
+    name: Main Releasability / E2E Full
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Run full E2E suite
+        env:
+          LOTUS_TEST_ENV_PROFILE: e2e
+          E2E_INGESTION_URL: http://localhost:8400
+          E2E_QUERY_URL: http://localhost:8401
+          HOST_DATABASE_URL: postgresql://user:password@localhost:57432/portfolio_db
+        run: make test-e2e-all
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > e2e-all-logs.txt
+      - name: Upload E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-e2e-diagnostics
+          path: e2e-all-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  performance-load-gate-full:
+    name: Main Releasability / Performance Load Gate (Full)
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group performance-gate
+      - name: Run deterministic full performance load gate
+        run: make test-performance-load-gate-full
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > performance-load-gate-full-logs.txt
+      - name: Upload full performance load artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-performance-load-full-artifacts
+          path: |
+            output/task-runs/*performance-load-gate*.json
+            output/task-runs/*performance-load-gate*.md
+            performance-load-gate-full-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  failure-recovery-gate:
+    name: Main Releasability / Failure Recovery Gate
+    needs: [coverage-gate, performance-load-gate-full]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group failure-recovery-gate
+      - name: Run deterministic failure recovery gate
+        run: make test-failure-recovery-gate
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > failure-recovery-gate-logs.txt
+      - name: Upload failure recovery artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-failure-recovery-artifacts
+          path: |
+            output/task-runs/*failure-recovery-gate*.json
+            output/task-runs/*failure-recovery-gate*.md
+            failure-recovery-gate-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  institutional-signoff-pack:
+    name: Main Releasability / Institutional Sign-Off Pack
+    needs:
+      [docker-smoke-contract, latency-gate, performance-load-gate, failure-recovery-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Download sign-off artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-artifacts"
+          merge-multiple: true
+          path: output/task-runs
+      - name: Generate institutional sign-off pack
+        run: make test-institutional-signoff-pack
+      - name: Upload institutional sign-off artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-institutional-signoff-artifacts
+          path: |
+            output/task-runs/*-institutional-signoff-pack.json
+            output/task-runs/*-institutional-signoff-pack.md
+          if-no-files-found: error
+          retention-days: 30

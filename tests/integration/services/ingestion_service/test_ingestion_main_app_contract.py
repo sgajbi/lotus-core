@@ -323,6 +323,7 @@ async def test_openapi_describes_instrument_shared_schema(async_test_client):
                 "sector": "financials",
                 "country_of_risk": "GB",
                 "rating": "BB+",
+                "liquidity_tier": "L2",
                 "issuer_id": "ISSUER_BARC",
                 "issuer_name": "Barclays PLC",
                 "ultimate_parent_issuer_id": "ULTIMATE_BARC",
@@ -370,7 +371,7 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
                 "trade_fee": "5.0",
                 "settlement_date": "2023-01-17T10:00:00Z",
             }
-        ]
+        ],
     ]
 
 
@@ -428,8 +429,7 @@ async def test_openapi_describes_transaction_fx_fields(async_test_client):
         "settlement components of the same FX swap."
     )
     assert properties["fx_realized_pnl_mode"]["description"] == (
-        "Policy-driven mode for realized FX P&L population, for example "
-        "NONE or UPSTREAM_PROVIDED."
+        "Policy-driven mode for realized FX P&L population, for example NONE or UPSTREAM_PROVIDED."
     )
     assert properties["realized_total_pnl_base"]["description"] == (
         "Total realized P&L translated into portfolio base currency."
@@ -575,6 +575,5 @@ async def test_ingestion_service_logs_shutdown_flush_timeout_truth(monkeypatch):
 
     logger_error.assert_called_once()
     assert (
-        logger_error.call_args.args[0]
-        == "Kafka producer shutdown flush left undelivered messages."
+        logger_error.call_args.args[0] == "Kafka producer shutdown flush left undelivered messages."
     )

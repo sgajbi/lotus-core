@@ -24,8 +24,10 @@ from tests.test_support.docker_stack import (
 )
 from tests.test_support.output_control import emit_test_output
 from tests.test_support.pipeline_quiescence import (
+    has_only_reprocessing_activity,
     read_pipeline_activity_snapshot,
     read_pipeline_last_activity_at,
+    recover_reprocessing_activity_for_test_cleanup,
     wait_for_pipeline_quiescence,
 )
 from tests.test_support.runtime_env import build_test_runtime_env, infer_test_profile
@@ -109,11 +111,7 @@ def pytest_collection_modifyitems(config, items):
 
     for item in items:
         runtime_mode = next(
-            (
-                mode
-                for mode, nodeids in runtime_modes.items()
-                if item.nodeid in nodeids
-            ),
+            (mode for mode, nodeids in runtime_modes.items() if item.nodeid in nodeids),
             None,
         )
         if runtime_mode == "live_worker":
@@ -347,6 +345,29 @@ def _wait_for_pipeline_idle(db_engine) -> None:
     )
 
 
+def _wait_for_pipeline_idle_with_recovery(db_engine, *, scope_label: str) -> None:
+    try:
+        _wait_for_pipeline_idle(db_engine)
+        return
+    except TimeoutError as exc:
+        snapshot = read_pipeline_activity_snapshot(db_engine)
+        if not has_only_reprocessing_activity(snapshot):
+            raise
+        emit_test_output(
+            "\n--- Pipeline quiescence timed out during "
+            f"{scope_label} cleanup with recoverable replay-only activity: "
+            f"{snapshot} ---"
+        )
+        recovered_snapshot = recover_reprocessing_activity_for_test_cleanup(db_engine)
+        emit_test_output(
+            f"\n--- Reset replay-only pipeline activity for cleanup: {recovered_snapshot} ---"
+        )
+        try:
+            _wait_for_pipeline_idle(db_engine)
+        except TimeoutError:
+            raise exc
+
+
 @pytest.fixture(scope="function")
 def clean_db(db_engine):
     """
@@ -385,7 +406,7 @@ def clean_db_module(db_engine):
     emit_test_output("\n--- Cleaning database tables (module scope) ---", verbose_only=True)
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
     terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
-    _wait_for_pipeline_idle(db_engine)
+    _wait_for_pipeline_idle_with_recovery(db_engine, scope_label="module")
 
     def _terminate_for_deadlock_retry() -> None:
         with db_engine.begin() as connection:
