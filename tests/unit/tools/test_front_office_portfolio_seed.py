@@ -2,6 +2,7 @@ from datetime import date
 
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
+    build_portfolio_seed_cleanup_sql,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
 )
@@ -210,3 +211,13 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "delete from benchmark_definitions" in sql
     assert "PB_SG_GLOBAL_BAL_001" in sql
     assert DEFAULT_BENCHMARK_ID in sql
+
+
+def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed():
+    sql = build_portfolio_seed_cleanup_sql(portfolio_id="PB_SG_GLOBAL_BAL_001")
+
+    assert "delete from transactions where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from position_timeseries where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from transaction_costs where transaction_id in" in sql

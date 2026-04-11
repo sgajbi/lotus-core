@@ -47,13 +47,49 @@ FRONT_OFFICE_EXPECTATION = FrontOfficePortfolioExpectation(
 )
 
 
-def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     return "\n".join(
         [
             (
-                "delete from portfolio_benchmark_assignments "
-                f"where portfolio_id = '{portfolio_id}' and benchmark_id = '{benchmark_id}';"
+                "delete from financial_reconciliation_findings "
+                f"where portfolio_id = '{portfolio_id}';"
             ),
+            (
+                "delete from financial_reconciliation_runs "
+                f"where portfolio_id = '{portfolio_id}';"
+            ),
+            f"delete from simulation_changes where portfolio_id = '{portfolio_id}';",
+            f"delete from simulation_sessions where portfolio_id = '{portfolio_id}';",
+            f"delete from analytics_export_jobs where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_aggregation_jobs where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_valuation_jobs where portfolio_id = '{portfolio_id}';",
+            f"delete from daily_position_snapshots where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_timeseries where portfolio_id = '{portfolio_id}';",
+            f"delete from position_timeseries where portfolio_id = '{portfolio_id}';",
+            f"delete from position_history where portfolio_id = '{portfolio_id}';",
+            f"delete from position_state where portfolio_id = '{portfolio_id}';",
+            f"delete from position_lot_state where portfolio_id = '{portfolio_id}';",
+            f"delete from accrued_income_offset_state where portfolio_id = '{portfolio_id}';",
+            f"delete from cashflows where portfolio_id = '{portfolio_id}';",
+            (
+                "delete from transaction_costs where transaction_id in "
+                f"(select transaction_id from transactions where portfolio_id = '{portfolio_id}');"
+            ),
+            f"delete from pipeline_stage_state where portfolio_id = '{portfolio_id}';",
+            f"delete from processed_events where portfolio_id = '{portfolio_id}';",
+            f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
+            f"delete from transactions where portfolio_id = '{portfolio_id}';",
+            f"delete from instruments where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolios where portfolio_id = '{portfolio_id}';",
+        ]
+    )
+
+
+def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+    return "\n".join(
+        [
+            build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             f"delete from benchmark_composition_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_return_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_definitions where benchmark_id = '{benchmark_id}';",
@@ -1263,7 +1299,10 @@ def main() -> int:
                 portfolio_id=args.portfolio_id,
                 benchmark_id=args.benchmark_id,
             )
-        if args.force_ingest or not _portfolio_exists(query_base_url, args.portfolio_id):
+        should_ingest = args.force_ingest or not args.skip_cleanup
+        if not should_ingest:
+            should_ingest = not _portfolio_exists(query_base_url, args.portfolio_id)
+        if should_ingest:
             payload = _build_portfolio_bundle_payload(bundle)
             _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
         _ingest_reference_data(ingestion_base_url, bundle)
