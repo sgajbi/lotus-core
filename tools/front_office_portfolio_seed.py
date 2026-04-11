@@ -21,11 +21,15 @@ from tools.demo_data_pack import (  # noqa: E402
     _wait_ready,
     build_risk_free_reference_data,
 )
+from tools.front_office_seed_contract import (  # noqa: E402
+    FrontOfficeSeedContract,
+    load_front_office_seed_contract,
+)
 
 LOGGER = logging.getLogger("front_office_portfolio_seed")
-
-DEFAULT_PORTFOLIO_ID = "PB_SG_GLOBAL_BAL_001"
-DEFAULT_BENCHMARK_ID = "BMK_PB_GLOBAL_BALANCED_60_40"
+FRONT_OFFICE_SEED_CONTRACT = load_front_office_seed_contract()
+DEFAULT_PORTFOLIO_ID = FRONT_OFFICE_SEED_CONTRACT.portfolio_id
+DEFAULT_BENCHMARK_ID = FRONT_OFFICE_SEED_CONTRACT.benchmark_id
 DEFAULT_POSTGRES_CONTAINER = "lotus-core-app-local-postgres-1"
 
 
@@ -36,15 +40,25 @@ class FrontOfficePortfolioExpectation:
     min_valued_positions: int
     min_transactions: int
     min_cash_accounts: int
+    min_allocation_views: int
+    min_projected_cashflow_points: int
 
 
-FRONT_OFFICE_EXPECTATION = FrontOfficePortfolioExpectation(
-    portfolio_id=DEFAULT_PORTFOLIO_ID,
-    min_positions=10,
-    min_valued_positions=10,
-    min_transactions=26,
-    min_cash_accounts=2,
-)
+def _build_front_office_expectation(
+    contract: FrontOfficeSeedContract,
+) -> FrontOfficePortfolioExpectation:
+    return FrontOfficePortfolioExpectation(
+        portfolio_id=contract.portfolio_id,
+        min_positions=contract.min_positions,
+        min_valued_positions=contract.min_valued_positions,
+        min_transactions=contract.min_transactions,
+        min_cash_accounts=contract.min_cash_accounts,
+        min_allocation_views=contract.min_allocation_views,
+        min_projected_cashflow_points=contract.min_projected_cashflow_points,
+    )
+
+
+FRONT_OFFICE_EXPECTATION = _build_front_office_expectation(FRONT_OFFICE_SEED_CONTRACT)
 
 
 def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
@@ -1133,6 +1147,108 @@ def _front_office_analytics_are_fresh(
     )
 
 
+def _extract_readiness_summary(readiness_payload: dict[str, Any]) -> dict[str, Any]:
+    blocking_reasons = readiness_payload.get("blocking_reasons") or []
+    return {
+        "resolved_as_of_date": readiness_payload.get("resolved_as_of_date"),
+        "holdings_status": (readiness_payload.get("holdings") or {}).get("status"),
+        "pricing_status": (readiness_payload.get("pricing") or {}).get("status"),
+        "transactions_status": (readiness_payload.get("transactions") or {}).get("status"),
+        "reporting_status": (readiness_payload.get("reporting") or {}).get("status"),
+        "blocking_reason_codes": [
+            reason.get("code")
+            for reason in blocking_reasons
+            if isinstance(reason, dict) and reason.get("code")
+        ],
+        "latest_booked_transaction_date": readiness_payload.get("latest_booked_transaction_date"),
+        "latest_booked_position_snapshot_date": readiness_payload.get(
+            "latest_booked_position_snapshot_date"
+        ),
+        "snapshot_valuation_total_positions": readiness_payload.get(
+            "snapshot_valuation_total_positions"
+        ),
+        "snapshot_valuation_valued_positions": readiness_payload.get(
+            "snapshot_valuation_valued_positions"
+        ),
+        "snapshot_valuation_unvalued_positions": readiness_payload.get(
+            "snapshot_valuation_unvalued_positions"
+        ),
+        "missing_historical_fx_dependencies": (
+            (readiness_payload.get("missing_historical_fx_dependencies") or {}).get("missing_count")
+        ),
+    }
+
+
+def _extract_support_overview_summary(overview_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "pending_aggregation_jobs": overview_payload.get("pending_aggregation_jobs"),
+        "processing_aggregation_jobs": overview_payload.get("processing_aggregation_jobs"),
+        "stale_processing_aggregation_jobs": overview_payload.get(
+            "stale_processing_aggregation_jobs"
+        ),
+        "failed_aggregation_jobs": overview_payload.get("failed_aggregation_jobs"),
+        "oldest_pending_aggregation_date": overview_payload.get(
+            "oldest_pending_aggregation_date"
+        ),
+        "latest_booked_transaction_date": overview_payload.get("latest_booked_transaction_date"),
+        "latest_booked_position_snapshot_date": overview_payload.get(
+            "latest_booked_position_snapshot_date"
+        ),
+    }
+
+
+def _collect_front_office_readiness_diagnostics(
+    *,
+    query_control_plane_base_url: str,
+    portfolio_id: str,
+    as_of_date: str,
+) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {}
+
+    try:
+        _, readiness_payload = _request_json(
+            "GET",
+            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/readiness"
+            f"?as_of_date={as_of_date}",
+        )
+        diagnostics["readiness"] = _extract_readiness_summary(readiness_payload)
+    except RuntimeError as exc:
+        diagnostics["readiness_error"] = str(exc)
+
+    try:
+        _, overview_payload = _request_json(
+            "GET",
+            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/overview",
+        )
+        diagnostics["support_overview"] = _extract_support_overview_summary(overview_payload)
+    except RuntimeError as exc:
+        diagnostics["support_overview_error"] = str(exc)
+
+    try:
+        _, aggregation_jobs_payload = _request_json(
+            "GET",
+            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/aggregation-jobs"
+            f"?business_date={as_of_date}&limit=5",
+        )
+        diagnostics["aggregation_jobs"] = {
+            "total": aggregation_jobs_payload.get("total"),
+            "job_ids": [
+                row.get("job_id")
+                for row in aggregation_jobs_payload.get("items") or []
+                if isinstance(row, dict) and row.get("job_id") is not None
+            ],
+            "statuses": [
+                row.get("status")
+                for row in aggregation_jobs_payload.get("items") or []
+                if isinstance(row, dict) and row.get("status")
+            ],
+        }
+    except RuntimeError as exc:
+        diagnostics["aggregation_jobs_error"] = str(exc)
+
+    return diagnostics
+
+
 def _cleanup_existing_front_office_seed(
     *,
     postgres_container: str,
@@ -1172,6 +1288,7 @@ def _verify_front_office_portfolio(
     poll_interval_seconds: int,
 ) -> dict[str, Any]:
     deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    last_observation: dict[str, Any] | None = None
     while datetime.now(tz=UTC) < deadline:
         try:
             _, positions_payload = _request_json(
@@ -1260,15 +1377,35 @@ def _verify_front_office_portfolio(
             for point in projected_cashflow_points
             if isinstance(point, dict)
         )
+        last_observation = {
+            "positions": len(positions),
+            "valued_positions": len(valued),
+            "transactions": total_transactions,
+            "cash_accounts": len(cash_accounts),
+            "allocation_views": len(allocation_views),
+            "income_types": len(income_rows),
+            "activity_buckets": len(activity_rows),
+            "projected_cashflow_points": len(projected_cashflow_points),
+            "has_non_zero_projection": has_non_zero_projection,
+            "benchmark_code": performance_summary.get("benchmark_code"),
+            "analytics_performance_end_date": analytics_reference.get("performance_end_date"),
+            "performance_report_end_date": performance_summary.get("report_end_date"),
+            "return_path_latest_available_date": (
+                performance_summary.get("capabilities", {})
+                .get("return_path", {})
+                .get("latest_available_date")
+            ),
+        }
 
         if (
             len(positions) >= expected.min_positions
             and len(valued) >= expected.min_valued_positions
             and total_transactions >= expected.min_transactions
             and len(cash_accounts) >= expected.min_cash_accounts
-            and allocation_views
+            and len(allocation_views) >= expected.min_allocation_views
             and income_rows
             and activity_rows
+            and len(projected_cashflow_points) >= expected.min_projected_cashflow_points
             and has_non_zero_projection
             and benchmark_assignment.get("benchmark_id")
             and performance_summary.get("benchmark_code")
@@ -1300,8 +1437,22 @@ def _verify_front_office_portfolio(
                 ),
             }
 
+        LOGGER.info(
+            "Front-office verification waiting on readiness for %s: %s",
+            expected.portfolio_id,
+            last_observation,
+        )
+
+    readiness_diagnostics = _collect_front_office_readiness_diagnostics(
+        query_control_plane_base_url=query_control_plane_base_url,
+        portfolio_id=expected.portfolio_id,
+        as_of_date=as_of_date,
+    )
     raise TimeoutError(
-        f"Timed out verifying front-office portfolio seed for {expected.portfolio_id}."
+        "Timed out verifying front-office portfolio seed for "
+        f"{expected.portfolio_id}. "
+        f"Last observation: {last_observation}. "
+        f"Readiness diagnostics: {readiness_diagnostics}"
     )
 
 
@@ -1309,11 +1460,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Seed a realistic front-office portfolio scenario."
     )
-    parser.add_argument("--portfolio-id", default=DEFAULT_PORTFOLIO_ID)
-    parser.add_argument("--start-date", default="2025-03-31")
-    parser.add_argument("--end-date", default="2026-04-10")
-    parser.add_argument("--benchmark-start-date", default="2025-01-06")
-    parser.add_argument("--benchmark-id", default=DEFAULT_BENCHMARK_ID)
+    parser.add_argument("--portfolio-id", default=FRONT_OFFICE_SEED_CONTRACT.portfolio_id)
+    parser.add_argument("--start-date", default=FRONT_OFFICE_SEED_CONTRACT.seed_start_date)
+    parser.add_argument("--end-date", default=FRONT_OFFICE_SEED_CONTRACT.canonical_as_of_date)
+    parser.add_argument(
+        "--benchmark-start-date",
+        default=FRONT_OFFICE_SEED_CONTRACT.benchmark_start_date,
+    )
+    parser.add_argument("--benchmark-id", default=FRONT_OFFICE_SEED_CONTRACT.benchmark_id)
     parser.add_argument("--ingestion-base-url", default="http://127.0.0.1:8200")
     parser.add_argument("--query-base-url", default="http://127.0.0.1:8201")
     parser.add_argument("--query-control-plane-base-url", default="http://127.0.0.1:8202")

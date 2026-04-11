@@ -4,6 +4,11 @@ import sys
 
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
+    FRONT_OFFICE_EXPECTATION,
+    FRONT_OFFICE_SEED_CONTRACT,
+    _collect_front_office_readiness_diagnostics,
+    _extract_readiness_summary,
+    _extract_support_overview_summary,
     _front_office_analytics_are_fresh,
     _reprocess_front_office_transactions,
     build_portfolio_seed_cleanup_sql,
@@ -11,6 +16,8 @@ from tools.front_office_portfolio_seed import (
     build_front_office_seed_cleanup_sql,
     parse_args,
 )
+from tools.front_office_seed_contract import load_front_office_seed_contract
+import tools.front_office_seed_contract as front_office_seed_contract_module
 
 
 def _build_bundle():
@@ -281,6 +288,48 @@ def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeyp
     assert args.end_date == "2026-04-10"
 
 
+def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
+    contract = load_front_office_seed_contract()
+
+    assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
+    assert contract.canonical_as_of_date == "2026-04-10"
+    assert contract.seed_start_date == "2025-03-31"
+    assert contract.benchmark_start_date == "2025-01-06"
+    assert contract.min_transactions >= 30
+    assert contract.min_risk_rolling_windows >= 4
+    assert FRONT_OFFICE_SEED_CONTRACT == contract
+
+
+def test_front_office_runtime_expectation_is_derived_from_contract() -> None:
+    assert FRONT_OFFICE_EXPECTATION.portfolio_id == FRONT_OFFICE_SEED_CONTRACT.portfolio_id
+    assert FRONT_OFFICE_EXPECTATION.min_transactions == FRONT_OFFICE_SEED_CONTRACT.min_transactions
+    assert FRONT_OFFICE_EXPECTATION.min_cash_accounts == FRONT_OFFICE_SEED_CONTRACT.min_cash_accounts
+    assert FRONT_OFFICE_EXPECTATION.min_allocation_views == FRONT_OFFICE_SEED_CONTRACT.min_allocation_views
+    assert (
+        FRONT_OFFICE_EXPECTATION.min_projected_cashflow_points
+        == FRONT_OFFICE_SEED_CONTRACT.min_projected_cashflow_points
+    )
+
+
+def test_front_office_seed_contract_has_governed_fallback_when_platform_contract_is_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("LOTUS_PLATFORM_REPO", raising=False)
+    monkeypatch.setattr(
+        front_office_seed_contract_module,
+        "DEFAULT_PLATFORM_REPO",
+        front_office_seed_contract_module.REPO_ROOT / "missing-platform-repo",
+    )
+
+    contract = load_front_office_seed_contract()
+
+    assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
+    assert contract.canonical_as_of_date == "2026-04-10"
+    assert contract.min_transactions == 30
+
+
 def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
     bundle = _build_bundle()
     calls = []
@@ -344,3 +393,114 @@ def test_front_office_seed_accepts_current_derived_analytics_state():
         performance_summary=fresh_summary,
         expected_end_date="2026-04-10",
     )
+
+
+def test_extract_readiness_summary_surfaces_contract_relevant_state() -> None:
+    payload = {
+        "resolved_as_of_date": "2026-04-10",
+        "holdings": {"status": "PENDING"},
+        "pricing": {"status": "PENDING"},
+        "transactions": {"status": "READY"},
+        "reporting": {"status": "BLOCKED"},
+        "blocking_reasons": [
+            {"code": "SNAPSHOT_BEHIND_TRANSACTION_LEDGER"},
+            {"code": "UNVALUED_POSITIONS_REMAIN"},
+        ],
+        "latest_booked_transaction_date": "2026-04-10",
+        "latest_booked_position_snapshot_date": "2026-04-09",
+        "snapshot_valuation_total_positions": 11,
+        "snapshot_valuation_valued_positions": 10,
+        "snapshot_valuation_unvalued_positions": 1,
+        "missing_historical_fx_dependencies": {"missing_count": 0},
+    }
+
+    summary = _extract_readiness_summary(payload)
+
+    assert summary["resolved_as_of_date"] == "2026-04-10"
+    assert summary["holdings_status"] == "PENDING"
+    assert summary["pricing_status"] == "PENDING"
+    assert summary["reporting_status"] == "BLOCKED"
+    assert summary["blocking_reason_codes"] == [
+        "SNAPSHOT_BEHIND_TRANSACTION_LEDGER",
+        "UNVALUED_POSITIONS_REMAIN",
+    ]
+    assert summary["snapshot_valuation_unvalued_positions"] == 1
+
+
+def test_extract_support_overview_summary_surfaces_aggregation_backlog_signal() -> None:
+    payload = {
+        "pending_aggregation_jobs": 2,
+        "processing_aggregation_jobs": 1,
+        "stale_processing_aggregation_jobs": 0,
+        "failed_aggregation_jobs": 0,
+        "oldest_pending_aggregation_date": "2026-04-10",
+        "latest_booked_transaction_date": "2026-04-10",
+        "latest_booked_position_snapshot_date": "2026-04-09",
+    }
+
+    summary = _extract_support_overview_summary(payload)
+
+    assert summary["pending_aggregation_jobs"] == 2
+    assert summary["processing_aggregation_jobs"] == 1
+    assert summary["oldest_pending_aggregation_date"] == "2026-04-10"
+    assert summary["latest_booked_position_snapshot_date"] == "2026-04-09"
+
+
+def test_collect_front_office_readiness_diagnostics_queries_support_endpoints(monkeypatch) -> None:
+    responses = {
+        "http://cp.dev/support/portfolios/P1/readiness?as_of_date=2026-04-10": (
+            200,
+            {
+                "resolved_as_of_date": "2026-04-10",
+                "holdings": {"status": "READY"},
+                "pricing": {"status": "PENDING"},
+                "transactions": {"status": "READY"},
+                "reporting": {"status": "PENDING"},
+                "blocking_reasons": [{"code": "UNVALUED_POSITIONS_REMAIN"}],
+                "latest_booked_transaction_date": "2026-04-10",
+                "latest_booked_position_snapshot_date": "2026-04-10",
+                "snapshot_valuation_total_positions": 11,
+                "snapshot_valuation_valued_positions": 10,
+                "snapshot_valuation_unvalued_positions": 1,
+                "missing_historical_fx_dependencies": {"missing_count": 0},
+            },
+        ),
+        "http://cp.dev/support/portfolios/P1/overview": (
+            200,
+            {
+                "pending_aggregation_jobs": 1,
+                "processing_aggregation_jobs": 0,
+                "stale_processing_aggregation_jobs": 0,
+                "failed_aggregation_jobs": 0,
+                "oldest_pending_aggregation_date": "2026-04-10",
+                "latest_booked_transaction_date": "2026-04-10",
+                "latest_booked_position_snapshot_date": "2026-04-09",
+            },
+        ),
+        "http://cp.dev/support/portfolios/P1/aggregation-jobs?business_date=2026-04-10&limit=5": (
+            200,
+            {
+                "total": 1,
+                "items": [{"job_id": 4402, "status": "PENDING"}],
+            },
+        ),
+    }
+
+    def fake_request(method, url, *, payload=None):
+        assert method == "GET"
+        assert payload is None
+        return responses[url]
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", fake_request)
+
+    diagnostics = _collect_front_office_readiness_diagnostics(
+        query_control_plane_base_url="http://cp.dev",
+        portfolio_id="P1",
+        as_of_date="2026-04-10",
+    )
+
+    assert diagnostics["readiness"]["pricing_status"] == "PENDING"
+    assert diagnostics["readiness"]["blocking_reason_codes"] == ["UNVALUED_POSITIONS_REMAIN"]
+    assert diagnostics["support_overview"]["pending_aggregation_jobs"] == 1
+    assert diagnostics["aggregation_jobs"]["job_ids"] == [4402]
+    assert diagnostics["aggregation_jobs"]["statuses"] == ["PENDING"]
