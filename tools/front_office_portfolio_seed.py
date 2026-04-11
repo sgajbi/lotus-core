@@ -40,6 +40,8 @@ class FrontOfficePortfolioExpectation:
     min_valued_positions: int
     min_transactions: int
     min_cash_accounts: int
+    min_allocation_views: int
+    min_projected_cashflow_points: int
 
 
 def _build_front_office_expectation(
@@ -51,6 +53,8 @@ def _build_front_office_expectation(
         min_valued_positions=contract.min_valued_positions,
         min_transactions=contract.min_transactions,
         min_cash_accounts=contract.min_cash_accounts,
+        min_allocation_views=contract.min_allocation_views,
+        min_projected_cashflow_points=contract.min_projected_cashflow_points,
     )
 
 
@@ -1276,9 +1280,10 @@ def _verify_front_office_portfolio(
             and len(valued) >= expected.min_valued_positions
             and total_transactions >= expected.min_transactions
             and len(cash_accounts) >= expected.min_cash_accounts
-            and allocation_views
+            and len(allocation_views) >= expected.min_allocation_views
             and income_rows
             and activity_rows
+            and len(projected_cashflow_points) >= expected.min_projected_cashflow_points
             and has_non_zero_projection
             and benchmark_assignment.get("benchmark_id")
             and performance_summary.get("benchmark_code")

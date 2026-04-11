@@ -302,6 +302,11 @@ def test_front_office_runtime_expectation_is_derived_from_contract() -> None:
     assert FRONT_OFFICE_EXPECTATION.portfolio_id == FRONT_OFFICE_SEED_CONTRACT.portfolio_id
     assert FRONT_OFFICE_EXPECTATION.min_transactions == FRONT_OFFICE_SEED_CONTRACT.min_transactions
     assert FRONT_OFFICE_EXPECTATION.min_cash_accounts == FRONT_OFFICE_SEED_CONTRACT.min_cash_accounts
+    assert FRONT_OFFICE_EXPECTATION.min_allocation_views == FRONT_OFFICE_SEED_CONTRACT.min_allocation_views
+    assert (
+        FRONT_OFFICE_EXPECTATION.min_projected_cashflow_points
+        == FRONT_OFFICE_SEED_CONTRACT.min_projected_cashflow_points
+    )
 
 
 def test_front_office_seed_contract_has_governed_fallback_when_platform_contract_is_unavailable(
