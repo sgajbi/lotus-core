@@ -1,10 +1,12 @@
 from datetime import date
+import sys
 
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
     build_portfolio_seed_cleanup_sql,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
+    parse_args,
 )
 
 
@@ -221,3 +223,11 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
+
+
+def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["front_office_portfolio_seed.py"])
+
+    args = parse_args()
+
+    assert args.gateway_base_url == "http://gateway.dev.lotus"
