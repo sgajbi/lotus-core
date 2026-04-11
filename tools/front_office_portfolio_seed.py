@@ -189,9 +189,22 @@ def build_front_office_portfolio_bundle(
     calendar_dates = _calendar_dates(start_date, end_date)
     fx_calendar_dates = _calendar_dates(start_date, end_date + timedelta(days=30))
     as_of_date = end_date.isoformat()
+    forward_withdrawal_date = end_date + timedelta(days=7)
+    forward_withdrawal_settlement_date = end_date + timedelta(days=10)
 
     def tx_dt(day_offset: int, hour: int = 10) -> datetime:
         current = start_date + timedelta(days=day_offset)
+        return datetime(
+            current.year,
+            current.month,
+            current.day,
+            hour,
+            0,
+            0,
+            tzinfo=UTC,
+        )
+
+    def date_dt(current: date, hour: int = 10) -> datetime:
         return datetime(
             current.year,
             current.month,
@@ -862,8 +875,8 @@ def build_front_office_portfolio_bundle(
             portfolio_id=portfolio_id,
             instrument_id="USD-CASH",
             security_id="CASH_USD_BOOK_OPERATING",
-            when=tx_dt(372),
-            settlement_date=settle(372, 3),
+            when=date_dt(forward_withdrawal_date),
+            settlement_date=date_dt(forward_withdrawal_settlement_date, 16),
             tx_type="WITHDRAWAL",
             quantity="18000",
             price="1",
@@ -1259,7 +1272,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--portfolio-id", default=DEFAULT_PORTFOLIO_ID)
     parser.add_argument("--start-date", default="2025-03-31")
-    parser.add_argument("--end-date", default="2026-03-28")
+    parser.add_argument("--end-date", default="2026-04-10")
     parser.add_argument("--benchmark-start-date", default="2025-01-06")
     parser.add_argument("--benchmark-id", default=DEFAULT_BENCHMARK_ID)
     parser.add_argument("--ingestion-base-url", default="http://127.0.0.1:8200")
