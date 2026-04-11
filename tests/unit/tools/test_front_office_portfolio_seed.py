@@ -4,6 +4,8 @@ import sys
 
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
+    FRONT_OFFICE_EXPECTATION,
+    FRONT_OFFICE_SEED_CONTRACT,
     _front_office_analytics_are_fresh,
     _reprocess_front_office_transactions,
     build_portfolio_seed_cleanup_sql,
@@ -11,6 +13,8 @@ from tools.front_office_portfolio_seed import (
     build_front_office_seed_cleanup_sql,
     parse_args,
 )
+from tools.front_office_seed_contract import load_front_office_seed_contract
+import tools.front_office_seed_contract as front_office_seed_contract_module
 
 
 def _build_bundle():
@@ -279,6 +283,43 @@ def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeyp
 
     assert args.gateway_base_url == "http://gateway.dev.lotus"
     assert args.end_date == "2026-04-10"
+
+
+def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
+    contract = load_front_office_seed_contract()
+
+    assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
+    assert contract.canonical_as_of_date == "2026-04-10"
+    assert contract.seed_start_date == "2025-03-31"
+    assert contract.benchmark_start_date == "2025-01-06"
+    assert contract.min_transactions >= 30
+    assert contract.min_risk_rolling_windows >= 4
+    assert FRONT_OFFICE_SEED_CONTRACT == contract
+
+
+def test_front_office_runtime_expectation_is_derived_from_contract() -> None:
+    assert FRONT_OFFICE_EXPECTATION.portfolio_id == FRONT_OFFICE_SEED_CONTRACT.portfolio_id
+    assert FRONT_OFFICE_EXPECTATION.min_transactions == FRONT_OFFICE_SEED_CONTRACT.min_transactions
+    assert FRONT_OFFICE_EXPECTATION.min_cash_accounts == FRONT_OFFICE_SEED_CONTRACT.min_cash_accounts
+
+
+def test_front_office_seed_contract_has_governed_fallback_when_platform_contract_is_unavailable(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("LOTUS_PLATFORM_REPO", raising=False)
+    monkeypatch.setattr(
+        front_office_seed_contract_module,
+        "DEFAULT_PLATFORM_REPO",
+        front_office_seed_contract_module.REPO_ROOT / "missing-platform-repo",
+    )
+
+    contract = load_front_office_seed_contract()
+
+    assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
+    assert contract.canonical_as_of_date == "2026-04-10"
+    assert contract.min_transactions == 30
 
 
 def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):

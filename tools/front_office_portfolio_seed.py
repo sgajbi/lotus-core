@@ -21,11 +21,15 @@ from tools.demo_data_pack import (  # noqa: E402
     _wait_ready,
     build_risk_free_reference_data,
 )
+from tools.front_office_seed_contract import (  # noqa: E402
+    FrontOfficeSeedContract,
+    load_front_office_seed_contract,
+)
 
 LOGGER = logging.getLogger("front_office_portfolio_seed")
-
-DEFAULT_PORTFOLIO_ID = "PB_SG_GLOBAL_BAL_001"
-DEFAULT_BENCHMARK_ID = "BMK_PB_GLOBAL_BALANCED_60_40"
+FRONT_OFFICE_SEED_CONTRACT = load_front_office_seed_contract()
+DEFAULT_PORTFOLIO_ID = FRONT_OFFICE_SEED_CONTRACT.portfolio_id
+DEFAULT_BENCHMARK_ID = FRONT_OFFICE_SEED_CONTRACT.benchmark_id
 DEFAULT_POSTGRES_CONTAINER = "lotus-core-app-local-postgres-1"
 
 
@@ -38,13 +42,19 @@ class FrontOfficePortfolioExpectation:
     min_cash_accounts: int
 
 
-FRONT_OFFICE_EXPECTATION = FrontOfficePortfolioExpectation(
-    portfolio_id=DEFAULT_PORTFOLIO_ID,
-    min_positions=10,
-    min_valued_positions=10,
-    min_transactions=26,
-    min_cash_accounts=2,
-)
+def _build_front_office_expectation(
+    contract: FrontOfficeSeedContract,
+) -> FrontOfficePortfolioExpectation:
+    return FrontOfficePortfolioExpectation(
+        portfolio_id=contract.portfolio_id,
+        min_positions=contract.min_positions,
+        min_valued_positions=contract.min_valued_positions,
+        min_transactions=contract.min_transactions,
+        min_cash_accounts=contract.min_cash_accounts,
+    )
+
+
+FRONT_OFFICE_EXPECTATION = _build_front_office_expectation(FRONT_OFFICE_SEED_CONTRACT)
 
 
 def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
@@ -1309,11 +1319,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Seed a realistic front-office portfolio scenario."
     )
-    parser.add_argument("--portfolio-id", default=DEFAULT_PORTFOLIO_ID)
-    parser.add_argument("--start-date", default="2025-03-31")
-    parser.add_argument("--end-date", default="2026-04-10")
-    parser.add_argument("--benchmark-start-date", default="2025-01-06")
-    parser.add_argument("--benchmark-id", default=DEFAULT_BENCHMARK_ID)
+    parser.add_argument("--portfolio-id", default=FRONT_OFFICE_SEED_CONTRACT.portfolio_id)
+    parser.add_argument("--start-date", default=FRONT_OFFICE_SEED_CONTRACT.seed_start_date)
+    parser.add_argument("--end-date", default=FRONT_OFFICE_SEED_CONTRACT.canonical_as_of_date)
+    parser.add_argument(
+        "--benchmark-start-date",
+        default=FRONT_OFFICE_SEED_CONTRACT.benchmark_start_date,
+    )
+    parser.add_argument("--benchmark-id", default=FRONT_OFFICE_SEED_CONTRACT.benchmark_id)
     parser.add_argument("--ingestion-base-url", default="http://127.0.0.1:8200")
     parser.add_argument("--query-base-url", default="http://127.0.0.1:8201")
     parser.add_argument("--query-control-plane-base-url", default="http://127.0.0.1:8202")
