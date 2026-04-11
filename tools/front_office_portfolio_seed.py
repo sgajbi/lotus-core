@@ -1085,6 +1085,21 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
 
 
+def _reprocess_front_office_transactions(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
+    transaction_ids = [
+        transaction["transaction_id"]
+        for transaction in bundle["transactions"]
+        if isinstance(transaction.get("transaction_id"), str)
+    ]
+    if not transaction_ids:
+        return
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/reprocess/transactions",
+        payload={"transaction_ids": transaction_ids},
+    )
+
+
 def _cleanup_existing_front_office_seed(
     *,
     postgres_container: str,
@@ -1258,6 +1273,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--verify-only", action="store_true")
     parser.add_argument("--ingest-only", action="store_true")
     parser.add_argument("--force-ingest", action="store_true")
+    parser.add_argument(
+        "--skip-reprocess",
+        action="store_true",
+        help="Do not queue transaction reprocessing after bundle ingest.",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
@@ -1306,6 +1326,8 @@ def main() -> int:
             payload = _build_portfolio_bundle_payload(bundle)
             _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
         _ingest_reference_data(ingestion_base_url, bundle)
+        if should_ingest and not args.skip_reprocess:
+            _reprocess_front_office_transactions(ingestion_base_url, bundle)
 
     if not args.ingest_only:
         verification = _verify_front_office_portfolio(

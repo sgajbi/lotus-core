@@ -3,6 +3,7 @@ import sys
 
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
+    _reprocess_front_office_transactions,
     build_portfolio_seed_cleanup_sql,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
@@ -231,3 +232,32 @@ def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeyp
     args = parse_args()
 
     assert args.gateway_base_url == "http://gateway.dev.lotus"
+
+
+def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
+    bundle = _build_bundle()
+    calls = []
+
+    def capture_request(method, url, *, payload=None):
+        calls.append((method, url, payload))
+        return 202, {"accepted_count": len(payload["transaction_ids"])}
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._request_json",
+        capture_request,
+    )
+
+    _reprocess_front_office_transactions("http://ingestion.dev.lotus", bundle)
+
+    assert calls == [
+        (
+            "POST",
+            "http://ingestion.dev.lotus/reprocess/transactions",
+            {
+                "transaction_ids": [
+                    transaction["transaction_id"]
+                    for transaction in bundle["transactions"]
+                ]
+            },
+        )
+    ]
