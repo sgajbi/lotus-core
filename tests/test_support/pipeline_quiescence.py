@@ -40,6 +40,14 @@ BLOCKING_ACTIVITY_KEYS = frozenset(
     }
 )
 
+REPROCESSING_ACTIVITY_KEYS = frozenset(
+    {
+        "reprocessing_jobs_active",
+        "position_state_reprocessing",
+        "instrument_reprocessing_active",
+    }
+)
+
 ACTIVITY_TIMESTAMP_CANDIDATES = ("updated_at", "created_at")
 
 
@@ -120,6 +128,53 @@ def is_pipeline_quiescent(snapshot: dict[str, int]) -> bool:
 
 def format_pipeline_activity_snapshot(snapshot: dict[str, int]) -> str:
     return ", ".join(f"{key}={value}" for key, value in sorted(snapshot.items()))
+
+
+def has_only_reprocessing_activity(snapshot: dict[str, int]) -> bool:
+    active_keys = {
+        key for key, value in snapshot.items() if key in BLOCKING_ACTIVITY_KEYS and value > 0
+    }
+    return bool(active_keys) and active_keys.issubset(REPROCESSING_ACTIVITY_KEYS)
+
+
+def recover_reprocessing_activity_for_test_cleanup(engine: Engine) -> dict[str, int]:
+    snapshot = read_pipeline_activity_snapshot(engine)
+    if not has_only_reprocessing_activity(snapshot):
+        return snapshot
+
+    with engine.begin() as connection:
+        existing_tables = {
+            row[0]
+            for row in connection.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+            ).fetchall()
+        }
+        if "reprocessing_jobs" in existing_tables:
+            connection.execute(
+                text(
+                    """
+                    UPDATE reprocessing_jobs
+                    SET status = 'FAILED',
+                        failure_reason = 'Reset by pytest cleanup after quiescence timeout',
+                        updated_at = now()
+                    WHERE status IN ('PENDING', 'PROCESSING')
+                    """
+                )
+            )
+        if "position_state" in existing_tables:
+            connection.execute(
+                text(
+                    """
+                    UPDATE position_state
+                    SET status = 'CURRENT',
+                        updated_at = now()
+                    WHERE status = 'REPROCESSING'
+                    """
+                )
+            )
+        if "instrument_reprocessing_state" in existing_tables:
+            connection.execute(text("DELETE FROM instrument_reprocessing_state"))
+    return snapshot
 
 
 def wait_for_pipeline_quiescence(

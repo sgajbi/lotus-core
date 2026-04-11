@@ -20,6 +20,7 @@ remain active but are not fully closed.
 ## RFC-0030 - CI Coverage Gate and lotus-manage Pipeline Parity Phase 2
 
 - Coverage gate and CI parity evidence:
-  - `.github/workflows/ci.yml`
+  - `.github/workflows/pr-merge-gate.yml`
+  - `.github/workflows/main-releasability.yml`
   - `Makefile`
   - `pyproject.toml`

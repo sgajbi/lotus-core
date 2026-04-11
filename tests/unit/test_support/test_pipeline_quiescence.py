@@ -8,8 +8,10 @@ import pytest
 
 from tests.test_support.pipeline_quiescence import (
     format_pipeline_activity_snapshot,
+    has_only_reprocessing_activity,
     is_pipeline_quiescent,
     read_pipeline_last_activity_at,
+    recover_reprocessing_activity_for_test_cleanup,
     wait_for_pipeline_quiescence,
 )
 
@@ -42,10 +44,27 @@ def test_is_pipeline_quiescent_requires_all_zero_counts() -> None:
 
 
 def test_format_pipeline_activity_snapshot_is_stable() -> None:
-    assert (
-        format_pipeline_activity_snapshot({"b": 2, "a": 1})
-        == "a=1, b=2"
+    assert format_pipeline_activity_snapshot({"b": 2, "a": 1}) == "a=1, b=2"
+
+
+def test_has_only_reprocessing_activity_identifies_recoverable_snapshot() -> None:
+    assert has_only_reprocessing_activity(
+        {
+            "reprocessing_jobs_active": 1,
+            "position_state_reprocessing": 0,
+            "instrument_reprocessing_active": 0,
+            "outbox_pending": 0,
+        }
     )
+    assert not has_only_reprocessing_activity(
+        {
+            "reprocessing_jobs_active": 1,
+            "position_state_reprocessing": 0,
+            "instrument_reprocessing_active": 0,
+            "outbox_pending": 2,
+        }
+    )
+    assert not has_only_reprocessing_activity({"outbox_pending": 0, "ingestion_backlog": 0})
 
 
 def test_wait_for_pipeline_quiescence_requires_stable_zero_snapshots(monkeypatch) -> None:
@@ -173,3 +192,76 @@ def test_read_pipeline_last_activity_at_ignores_non_blocking_tables() -> None:
     assert "portfolio_aggregation_jobs" not in union_sql
     assert "position_state" in union_sql
     assert "status = 'PENDING'" in union_sql or "status = 'REPROCESSING'" in union_sql
+
+
+def test_recover_reprocessing_activity_for_test_cleanup_resets_only_replay_tables() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    engine.connect.return_value.__enter__.return_value = connection
+    engine.begin.return_value.__enter__.return_value = connection
+    connection.execute.side_effect = [
+        MagicMock(
+            fetchall=MagicMock(
+                return_value=[
+                    ("reprocessing_jobs",),
+                    ("position_state",),
+                    ("instrument_reprocessing_state",),
+                ]
+            )
+        ),
+        MagicMock(
+            scalar=MagicMock(return_value=1),
+        ),
+        MagicMock(
+            scalar=MagicMock(return_value=0),
+        ),
+        MagicMock(
+            scalar=MagicMock(return_value=0),
+        ),
+        MagicMock(
+            fetchall=MagicMock(
+                return_value=[
+                    ("reprocessing_jobs",),
+                    ("position_state",),
+                    ("instrument_reprocessing_state",),
+                ]
+            )
+        ),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    ]
+
+    snapshot = recover_reprocessing_activity_for_test_cleanup(engine)
+
+    assert snapshot["reprocessing_jobs_active"] == 1
+    executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
+    assert any("UPDATE reprocessing_jobs" in sql for sql in executed_sql)
+    assert any("UPDATE position_state" in sql for sql in executed_sql)
+    assert any("DELETE FROM instrument_reprocessing_state" in sql for sql in executed_sql)
+
+
+def test_recover_reprocessing_activity_for_test_cleanup_is_noop_for_nonrecoverable_snapshot() -> (
+    None
+):
+    engine = MagicMock()
+    connection = MagicMock()
+    engine.connect.return_value.__enter__.return_value = connection
+    connection.execute.side_effect = [
+        MagicMock(
+            fetchall=MagicMock(
+                return_value=[
+                    ("reprocessing_jobs",),
+                    ("outbox_events",),
+                ]
+            )
+        ),
+        MagicMock(scalar=MagicMock(return_value=2)),
+        MagicMock(scalar=MagicMock(return_value=1)),
+    ]
+
+    snapshot = recover_reprocessing_activity_for_test_cleanup(engine)
+
+    assert snapshot["reprocessing_jobs_active"] == 1
+    assert snapshot["outbox_pending"] == 2
+    assert not engine.begin.called

@@ -1,0 +1,85 @@
+name: Remote Feature Lane
+
+on:
+  push:
+    branches-ignore:
+      - "main"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  workflow-lint:
+    name: Feature Lane / Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: reviewdog/action-actionlint@v1
+
+  lint-typecheck-contracts-security:
+    name: Feature Lane / Lint Typecheck Contracts Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Verify Dependencies
+        run: make verify-dependencies
+      - name: Lint
+        run: make lint
+      - name: No-Alias Contract Guard
+        run: make no-alias-gate
+      - name: Typecheck
+        run: make typecheck
+      - name: Architecture Guard
+        run: make architecture-guard
+      - name: OpenAPI Gate
+        run: make openapi-gate
+      - name: API Vocabulary Gate
+        run: make api-vocabulary-gate
+      - name: Migration Contract Smoke
+        run: make migration-smoke
+      - name: Security Audit
+        run: make security-audit
+      - name: Warning Gate
+        run: make warning-gate
+
+  test-suites:
+    name: Feature Lane / Tests (${{ matrix.suite }})
+    needs: [lint-typecheck-contracts-security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit-db
+            target: test-unit-db
+          - suite: integration-lite
+            target: test-integration-lite
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Run ${{ matrix.suite }}
+        run: make ${{ matrix.target }}

@@ -5,6 +5,7 @@ This system provides a comprehensive suite of core portfolio services, including
 
 Platform architecture governance source:
 - `https://github.com/sgajbi/lotus-platform` (cross-cutting and multi-service decisions)
+- `REPOSITORY-ENGINEERING-CONTEXT.md` (repository-local engineering context and commands)
 
 Local architecture direction and restructuring plan:
 - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
@@ -185,10 +186,22 @@ To run the query-service unit suite directly:
 pytest tests/unit/services/query_service -q
 ```
 
-To run the full local quality gate (lint + mypy + combined coverage gate):
+To run the fast local feature-lane parity gate:
 
 ```bash
 make ci-local
+```
+
+To run the full pull-request merge gate locally:
+
+```bash
+make ci
+```
+
+To run the full main releasability gate locally:
+
+```bash
+make ci-main
 ```
 
 To enforce ingestion endpoint documentation contract (`What/How/When` in OpenAPI descriptions):
@@ -358,6 +371,8 @@ make warning-gate
 make check
 make coverage-gate
 make ci-local
+make ci
+make ci-main
 ```
 
 `make check` enforces OpenAPI documentation quality for query-service endpoints:
@@ -368,14 +383,23 @@ make ci-local
 
 `make warning-gate` enforces warning-free unit execution (warning budget = `0`).
 
-CI workflow shape:
+Active CI lane shape:
 
-- `Workflow Lint`
-- `Lint, Typecheck, Unit Fast`
-- `Tests (unit)` + `Tests (unit-db)` + `Tests (integration-lite)` coverage data jobs
-- `Coverage Gate (Combined)` with `--fail-under=99`
-- `Validate Docker Build`
-- `E2E Smoke (Manual)` on `workflow_dispatch`
+- `Remote Feature Lane`
+- `Pull Request Merge Gate`
+- `Main Releasability Gate`
+
+`make ci` is the repository-native source of truth for the pull-request merge gate.
+It includes dependency verification, contract guards, migration smoke, PR-grade
+suite coverage, and the Docker-backed runtime gates that remain required before merge.
+
+`make ci-main` extends `make ci` with the releasability-only gates:
+
+- `Integration Full`
+- `E2E Full`
+- `Performance Load Gate (Full)`
+- `Failure Recovery Gate`
+- `Institutional Sign-Off Pack`
 
 ## Tools
 

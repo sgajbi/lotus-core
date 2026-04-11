@@ -18,7 +18,7 @@ PATTERNS = {
 }
 
 # Exempt this script and generated artifacts if any are introduced later.
-EXEMPT_PATH_PARTS: tuple[str, ...] = ()
+EXEMPT_PATH_PARTS: tuple[str, ...] = ("/build/", "/dist/")
 
 
 def _is_exempt(path: Path) -> bool:

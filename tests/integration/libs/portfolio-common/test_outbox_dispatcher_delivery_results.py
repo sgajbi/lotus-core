@@ -8,9 +8,13 @@ from portfolio_common.database_models import OutboxEvent
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.asyncio
+
+
+def _build_test_session_factory(db_engine):
+    return sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
 
 
 @pytest.fixture
@@ -47,8 +51,9 @@ async def test_marks_only_success_on_delivery(db_engine, clean_db, mock_kafka_pr
     THEN only successes are PROCESSED; failure remains PENDING with retry_count incremented.
     """
     # ARRANGE
+    test_session_factory = _build_test_session_factory(db_engine)
     ids = []
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         with session.begin():
             for i in range(3):
                 aggregate_id = f"agg-{uuid.uuid4()}"
@@ -67,13 +72,16 @@ async def test_marks_only_success_on_delivery(db_engine, clean_db, mock_kafka_pr
 
     # ACT
     dispatcher = OutboxDispatcher(
-        kafka_producer=mock_kafka_producer, poll_interval=1, batch_size=10
+        kafka_producer=mock_kafka_producer,
+        poll_interval=1,
+        batch_size=10,
+        db_session_factory=test_session_factory,
     )
     # run one deterministic synchronous cycle
     dispatcher._process_batch_sync()
 
     # ASSERT
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         rows = session.execute(
             text(
                 "SELECT id, status, retry_count FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
@@ -96,6 +104,7 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
     THEN the retry_count should be correctly updated to 1, not NULL.
     """
     # ARRANGE
+    test_session_factory = _build_test_session_factory(db_engine)
     mock_producer = MagicMock(spec=KafkaProducer)
 
     def _failing_flush(timeout=10):
@@ -110,7 +119,7 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
     mock_producer.flush.side_effect = _failing_flush
 
     event_id = None
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         with session.begin():
             evt = OutboxEvent(
                 aggregate_type="NullRetryTest",
@@ -126,11 +135,16 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
             event_id = evt.id
 
     # ACT
-    dispatcher = OutboxDispatcher(kafka_producer=mock_producer, poll_interval=0.1, batch_size=5)
+    dispatcher = OutboxDispatcher(
+        kafka_producer=mock_producer,
+        poll_interval=0.1,
+        batch_size=5,
+        db_session_factory=test_session_factory,
+    )
     dispatcher._process_batch_sync()
 
     # ASSERT
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         result = session.execute(
             text("SELECT retry_count FROM outbox_events WHERE id = :id"), {"id": event_id}
         ).scalar_one_or_none()
@@ -145,10 +159,11 @@ async def test_synchronous_publish_failure_does_not_abort_accounted_batch(db_eng
     THEN already-queued rows are still flushed and accounted for, while the failing row is retried.
     """
     mock_producer = MagicMock(spec=KafkaProducer)
+    test_session_factory = _build_test_session_factory(db_engine)
     published_outbox_ids: list[str] = []
     failing_outbox_id: str | None = None
 
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         with session.begin():
             for i in range(3):
                 evt = OutboxEvent(
@@ -181,10 +196,15 @@ async def test_synchronous_publish_failure_does_not_abort_accounted_batch(db_eng
     mock_producer.publish_message.side_effect = _publish_message
     mock_producer.flush.side_effect = _flush
 
-    dispatcher = OutboxDispatcher(kafka_producer=mock_producer, poll_interval=0.1, batch_size=5)
+    dispatcher = OutboxDispatcher(
+        kafka_producer=mock_producer,
+        poll_interval=0.1,
+        batch_size=5,
+        db_session_factory=test_session_factory,
+    )
     dispatcher._process_batch_sync()
 
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         rows = session.execute(
             text(
                 "SELECT id, status, retry_count FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
@@ -203,8 +223,9 @@ async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, 
     THEN callback-less rows are kept PENDING with retry accounting instead of disappearing.
     """
     mock_producer = MagicMock(spec=KafkaProducer)
+    test_session_factory = _build_test_session_factory(db_engine)
 
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         with session.begin():
             for i in range(2):
                 evt = OutboxEvent(
@@ -227,10 +248,15 @@ async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, 
 
     mock_producer.flush.side_effect = _flush
 
-    dispatcher = OutboxDispatcher(kafka_producer=mock_producer, poll_interval=0.1, batch_size=5)
+    dispatcher = OutboxDispatcher(
+        kafka_producer=mock_producer,
+        poll_interval=0.1,
+        batch_size=5,
+        db_session_factory=test_session_factory,
+    )
     dispatcher._process_batch_sync()
 
-    with Session(db_engine) as session:
+    with test_session_factory() as session:
         rows = session.execute(
             text(
                 "SELECT id, status, retry_count FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
