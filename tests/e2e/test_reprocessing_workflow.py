@@ -102,17 +102,35 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
     ]
     e2e_api_client.ingest("/ingest/transactions", {"transactions": transactions})
 
-    # 3. FIX: Poll until the snapshot for the latest day is fully valued.
-    # This is the definitive indicator that the initial state is ready for the test.
-    poll_db_until(
-        query="SELECT valuation_status FROM daily_position_snapshots WHERE portfolio_id = :pid AND security_id = :sid AND date = :date AND epoch = 0",  # noqa: E501
-        params={"pid": portfolio_id, "sid": security_id, "date": day3},
-        validation_func=lambda r: r is not None and r.valuation_status == "VALUED_CURRENT",
+    # 3. Wait for the business state to converge, then verify the query-facing
+    # baseline. The initial two-date load can legitimately settle at a non-zero
+    # epoch, so readiness must be based on the current position state rather
+    # than a hard-coded snapshot epoch.
+    initial_state = poll_db_until(
+        query="SELECT epoch, status FROM position_state WHERE portfolio_id = :pid AND security_id = :sid",  # noqa: E501
+        params={"pid": portfolio_id, "sid": security_id},
+        validation_func=lambda r: r is not None and r.status == "CURRENT",
         timeout=120,
-        fail_message="Initial snapshot for Day 3 was not created and valued in epoch 0.",
+        fail_message="Initial position state did not converge to CURRENT.",
+    )
+    assert_positions_state(
+        e2e_api_client,
+        portfolio_id=portfolio_id,
+        as_of_date=day3,
+        expected_positions={
+            security_id: {
+                "quantity": Decimal("150"),
+                "cost_basis": Decimal("31000"),
+                "market_value": Decimal("33000"),
+            }
+        },
     )
 
-    return {"portfolio_id": portfolio_id, "security_id": security_id}
+    return {
+        "portfolio_id": portfolio_id,
+        "security_id": security_id,
+        "initial_epoch": int(initial_state.epoch),
+    }
 
 
 def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
@@ -125,6 +143,7 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     # ARRANGE
     portfolio_id = setup_reprocessing_data["portfolio_id"]
     security_id = setup_reprocessing_data["security_id"]
+    initial_epoch = setup_reprocessing_data["initial_epoch"]
     day2 = "2025-09-02"
 
     # Initial state (from fixture): BUY 100 @ $200 (Day 1), BUY 50 @ $220 (Day 3)
@@ -154,9 +173,11 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     poll_db_until(
         query="SELECT epoch, status FROM position_state WHERE portfolio_id = :pid AND security_id = :sid",  # noqa: E501
         params={"pid": portfolio_id, "sid": security_id},
-        validation_func=lambda r: r is not None and r.epoch == 1 and r.status == "CURRENT",
+        validation_func=lambda r: (
+            r is not None and r.epoch >= initial_epoch + 1 and r.status == "CURRENT"
+        ),
         timeout=120,
-        fail_message="Reprocessing did not complete and increment epoch to 1.",
+        fail_message="Reprocessing did not complete and advance the epoch.",
     )
 
     # ASSERT 2: The realized P&L on the SELL transaction must be correct based on FIFO.
@@ -164,8 +185,9 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     poll_db_until(
         query="SELECT realized_gain_loss FROM transactions WHERE transaction_id = 'REPRO_SELL_DAY2'",  # noqa: E501
         params={},
-        validation_func=lambda r: r is not None
-        and r.realized_gain_loss == Decimal("600.0000000000"),
+        validation_func=lambda r: (
+            r is not None and r.realized_gain_loss == Decimal("600.0000000000")
+        ),
         timeout=30,
         fail_message="Realized P&L was not calculated correctly after reprocessing.",
     )
