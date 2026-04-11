@@ -1113,6 +1113,26 @@ def _reprocess_front_office_transactions(ingestion_base_url: str, bundle: dict[s
     )
 
 
+def _date_at_or_after(actual: str | None, expected: str) -> bool:
+    if not actual:
+        return False
+    return date.fromisoformat(actual) >= date.fromisoformat(expected)
+
+
+def _front_office_analytics_are_fresh(
+    *,
+    analytics_reference: dict[str, Any],
+    performance_summary: dict[str, Any],
+    expected_end_date: str,
+) -> bool:
+    return_path = (performance_summary.get("capabilities") or {}).get("return_path") or {}
+    return (
+        _date_at_or_after(analytics_reference.get("performance_end_date"), expected_end_date)
+        and _date_at_or_after(performance_summary.get("report_end_date"), expected_end_date)
+        and _date_at_or_after(return_path.get("latest_available_date"), expected_end_date)
+    )
+
+
 def _cleanup_existing_front_office_seed(
     *,
     postgres_container: str,
@@ -1202,6 +1222,11 @@ def _verify_front_office_portfolio(
                 f"{query_control_plane_base_url}/integration/portfolios/{expected.portfolio_id}/benchmark-assignment",
                 payload={"as_of_date": as_of_date, "consumer_system": "lotus-performance"},
             )
+            _, analytics_reference = _request_json(
+                "POST",
+                f"{query_control_plane_base_url}/integration/portfolios/{expected.portfolio_id}/analytics/reference",
+                payload={"as_of_date": as_of_date, "consumer_system": "lotus-performance"},
+            )
             _, cashflow_projection = _request_json(
                 "GET",
                 f"{query_base_url}/portfolios/{expected.portfolio_id}/cashflow-projection"
@@ -1247,6 +1272,11 @@ def _verify_front_office_portfolio(
             and has_non_zero_projection
             and benchmark_assignment.get("benchmark_id")
             and performance_summary.get("benchmark_code")
+            and _front_office_analytics_are_fresh(
+                analytics_reference=analytics_reference,
+                performance_summary=performance_summary,
+                expected_end_date=end_date,
+            )
         ):
             return {
                 "portfolio_id": expected.portfolio_id,
@@ -1259,6 +1289,15 @@ def _verify_front_office_portfolio(
                 "activity_buckets": len(activity_rows),
                 "projected_cashflow_points": len(projected_cashflow_points),
                 "benchmark_code": performance_summary.get("benchmark_code"),
+                "analytics_performance_end_date": analytics_reference.get(
+                    "performance_end_date"
+                ),
+                "performance_report_end_date": performance_summary.get("report_end_date"),
+                "return_path_latest_available_date": (
+                    performance_summary.get("capabilities", {})
+                    .get("return_path", {})
+                    .get("latest_available_date")
+                ),
             }
 
     raise TimeoutError(

@@ -172,7 +172,7 @@ async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
     assert "daily_position_snapshots.epoch = anon_1.epoch" in compiled_query
 
 
-async def test_find_and_claim_eligible_jobs_prior_day_gate_does_not_require_current_epoch_match(
+async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
     await repository.find_and_claim_eligible_jobs(batch_size=5)
@@ -183,10 +183,10 @@ async def test_find_and_claim_eligible_jobs_prior_day_gate_does_not_require_curr
     )
 
     assert (
-        "portfolio_timeseries.date = portfolio_aggregation_jobs.aggregation_date -"
-        in compiled_query
+        "portfolio_timeseries.date = portfolio_aggregation_jobs.aggregation_date"
+        not in compiled_query
     )
-    assert "portfolio_timeseries.epoch =" not in compiled_query
+    assert "date < portfolio_aggregation_jobs.aggregation_date" not in compiled_query
 
 
 async def test_find_and_claim_eligible_jobs_increments_attempt_count(
@@ -204,7 +204,7 @@ async def test_find_and_claim_eligible_jobs_increments_attempt_count(
     assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
 
 
-async def test_find_and_claim_eligible_jobs_first_day_gate_is_directly_correlated(
+async def test_find_and_claim_eligible_jobs_has_no_legacy_first_day_gate(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
     await repository.find_and_claim_eligible_jobs(batch_size=5)
@@ -214,11 +214,8 @@ async def test_find_and_claim_eligible_jobs_first_day_gate_is_directly_correlate
         executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
     )
 
-    assert (
-        "portfolio_aggregation_jobs_1.portfolio_id = portfolio_aggregation_jobs.portfolio_id"
-        in compiled_query
-    )
-    assert "NOT (EXISTS" in compiled_query
+    assert "portfolio_aggregation_jobs_1.portfolio_id" not in compiled_query
+    assert "NOT (EXISTS" not in compiled_query
     assert "FROM portfolio_timeseries, portfolio_aggregation_jobs" not in compiled_query
 
 

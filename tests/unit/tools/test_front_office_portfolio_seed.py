@@ -4,6 +4,7 @@ import sys
 
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
+    _front_office_analytics_are_fresh,
     _reprocess_front_office_transactions,
     build_portfolio_seed_cleanup_sql,
     build_front_office_portfolio_bundle,
@@ -307,3 +308,39 @@ def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
             },
         )
     ]
+
+
+def test_front_office_seed_rejects_stale_derived_analytics_state():
+    stale_reference = {"performance_end_date": "2025-08-05"}
+    fresh_summary = {
+        "report_end_date": "2026-04-11",
+        "capabilities": {
+            "return_path": {
+                "latest_available_date": "2026-04-11",
+            }
+        },
+    }
+
+    assert not _front_office_analytics_are_fresh(
+        analytics_reference=stale_reference,
+        performance_summary=fresh_summary,
+        expected_end_date="2026-04-10",
+    )
+
+
+def test_front_office_seed_accepts_current_derived_analytics_state():
+    fresh_reference = {"performance_end_date": "2026-04-10"}
+    fresh_summary = {
+        "report_end_date": "2026-04-11",
+        "capabilities": {
+            "return_path": {
+                "latest_available_date": "2026-04-11",
+            }
+        },
+    }
+
+    assert _front_office_analytics_are_fresh(
+        analytics_reference=fresh_reference,
+        performance_summary=fresh_summary,
+        expected_end_date="2026-04-10",
+    )
