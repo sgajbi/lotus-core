@@ -11,6 +11,13 @@ def test_config_access_guard_ignores_generated_build_artifacts() -> None:
     assert config_access_guard._is_generated_artifact(source_path) is False
 
 
+def test_config_access_guard_allows_typed_service_settings_modules() -> None:
+    assert (
+        Path("src/services/query_control_plane_service/app/settings.py")
+        in config_access_guard.ALLOWED_OS_GETENV_PATHS
+    )
+
+
 def test_no_alias_contract_guard_ignores_generated_build_artifacts() -> None:
     generated_path = Path("src/services/query_service/build/lib/app/contracts.py")
     source_path = Path("src/services/query_service/app/contracts.py")
