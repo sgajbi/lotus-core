@@ -135,8 +135,9 @@ def setup_sequential_jobs_with_snapshot_completeness(db_engine, clean_db):
                 _position_ts(portfolio_id, "SEC_A", day1),
             ]
         )
-        # Day2 inputs: provide a complete latest-per-security input set so the
-        # prior-day gate is the only remaining blocker once day1 completes.
+        # Day2 inputs: complete latest-per-security input set. Portfolio aggregation
+        # no longer depends on a previous portfolio row, so complete days can be
+        # claimed in the same batch and processed in parallel by Kafka consumers.
         session.add_all(
             [
                 _snapshot(portfolio_id, "SEC_A", day2),
@@ -160,10 +161,12 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
     day1 = setup_sequential_jobs_with_snapshot_completeness["day1"]
     day2 = setup_sequential_jobs_with_snapshot_completeness["day2"]
 
-    # Day1 should not claim while input set is incomplete (2 expected snapshots vs 1 position-timeseries).  # noqa: E501
+    # Day1 should not claim while input set is incomplete, but complete later
+    # dates are independently eligible because portfolio aggregation does not
+    # carry prior portfolio rows forward.
     claimed_jobs_1 = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
-    assert claimed_jobs_1 == []
+    assert [job.aggregation_date for job in claimed_jobs_1] == [day2]
 
     # Complete day1 input set.
     with Session(db_engine) as session:
@@ -173,36 +176,7 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
 
     claimed_jobs_2 = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
-    assert len(claimed_jobs_2) == 1
-    assert claimed_jobs_2[0].aggregation_date == day1
-
-    # Simulate day1 aggregation completion; day2 should now claim (prior-day + completeness satisfied).  # noqa: E501
-    with Session(db_engine) as session:
-        session.add(
-            PortfolioTimeseries(
-                portfolio_id=portfolio_id,
-                date=day1,
-                epoch=0,
-                bod_market_value=Decimal("0"),
-                bod_cashflow=Decimal("0"),
-                eod_cashflow=Decimal("0"),
-                eod_market_value=Decimal("0"),
-                fees=Decimal("0"),
-            )
-        )
-        job = (
-            session.query(PortfolioAggregationJob)
-            .filter_by(portfolio_id=portfolio_id, aggregation_date=day1)
-            .one()
-        )
-        job.status = "COMPLETE"
-        session.commit()
-    await async_db_session.rollback()
-
-    claimed_jobs_3 = await repo.find_and_claim_eligible_jobs(batch_size=5)
-    await async_db_session.commit()
-    assert len(claimed_jobs_3) == 1
-    assert claimed_jobs_3[0].aggregation_date == day2
+    assert [job.aggregation_date for job in claimed_jobs_2] == [day1]
 
 
 async def test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_history(
@@ -352,7 +326,7 @@ async def test_find_and_claim_eligible_jobs_accepts_mixed_latest_epochs_per_secu
     assert claimed_jobs[0].aggregation_date == a_date
 
 
-async def test_find_and_claim_eligible_jobs_bootstraps_earliest_pending_day_before_existing_history(
+async def test_find_and_claim_eligible_jobs_claims_all_complete_days_without_history_dependency(
     db_engine, clean_db, async_db_session: AsyncSession
 ):
     portfolio_id = "STRANDED_BOOTSTRAP_PORT"
@@ -429,11 +403,10 @@ async def test_find_and_claim_eligible_jobs_bootstraps_earliest_pending_day_befo
     claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
 
-    assert len(claimed_jobs) == 1
-    assert claimed_jobs[0].aggregation_date == early_day
+    assert [job.aggregation_date for job in claimed_jobs] == [early_day, later_day]
 
 
-async def test_find_and_claim_eligible_jobs_uses_prior_day_portfolio_row_even_when_current_epoch_has_advanced(  # noqa: E501
+async def test_find_and_claim_eligible_jobs_does_not_need_prior_day_when_current_epoch_has_advanced(
     db_engine, clean_db, async_db_session: AsyncSession
 ):
     portfolio_id = "PRIOR_DAY_MIXED_EPOCH"

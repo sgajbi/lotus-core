@@ -5,7 +5,6 @@ from typing import List, Optional
 from sqlalchemy import and_, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from .database_models import (
     Cashflow,
@@ -109,33 +108,8 @@ class TimeseriesRepositoryBase:
     @async_timed(repository="TimeseriesRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioAggregationJob]:
         p1 = PortfolioAggregationJob
-        p2 = aliased(PortfolioAggregationJob)
-        pts = PortfolioTimeseries
-        p1_pts = aliased(PortfolioTimeseries)
         dps = DailyPositionSnapshot
         position_ts = PositionTimeseries
-
-        prior_day_exists_subq = exists(
-            select(1).where(
-                pts.portfolio_id == p1.portfolio_id,
-                pts.date == p1.aggregation_date - timedelta(days=1),
-            )
-        ).correlate(p1)
-
-        no_prior_portfolio_history_subq = ~exists(
-            select(1).where(
-                p1_pts.portfolio_id == p1.portfolio_id,
-                p1_pts.date < p1.aggregation_date,
-            )
-        ).correlate(p1)
-        no_earlier_pending_job_subq = ~exists(
-            select(1).where(
-                p2.portfolio_id == p1.portfolio_id,
-                p2.status == "PENDING",
-                p2.aggregation_date < p1.aggregation_date,
-            )
-        ).correlate(p1)
-        is_first_job_subq = no_prior_portfolio_history_subq & no_earlier_pending_job_subq
 
         latest_snapshot_epochs = (
             select(
@@ -179,7 +153,6 @@ class TimeseriesRepositoryBase:
             select(p1.id)
             .where(
                 p1.status == "PENDING",
-                (prior_day_exists_subq | is_first_job_subq),
                 completeness_ready_subq,
             )
             .order_by(p1.portfolio_id, p1.aggregation_date)

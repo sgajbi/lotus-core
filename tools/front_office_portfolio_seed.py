@@ -47,13 +47,49 @@ FRONT_OFFICE_EXPECTATION = FrontOfficePortfolioExpectation(
 )
 
 
-def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     return "\n".join(
         [
             (
-                "delete from portfolio_benchmark_assignments "
-                f"where portfolio_id = '{portfolio_id}' and benchmark_id = '{benchmark_id}';"
+                "delete from financial_reconciliation_findings "
+                f"where portfolio_id = '{portfolio_id}';"
             ),
+            (
+                "delete from financial_reconciliation_runs "
+                f"where portfolio_id = '{portfolio_id}';"
+            ),
+            f"delete from simulation_changes where portfolio_id = '{portfolio_id}';",
+            f"delete from simulation_sessions where portfolio_id = '{portfolio_id}';",
+            f"delete from analytics_export_jobs where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_aggregation_jobs where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_valuation_jobs where portfolio_id = '{portfolio_id}';",
+            f"delete from daily_position_snapshots where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_timeseries where portfolio_id = '{portfolio_id}';",
+            f"delete from position_timeseries where portfolio_id = '{portfolio_id}';",
+            f"delete from position_history where portfolio_id = '{portfolio_id}';",
+            f"delete from position_state where portfolio_id = '{portfolio_id}';",
+            f"delete from position_lot_state where portfolio_id = '{portfolio_id}';",
+            f"delete from accrued_income_offset_state where portfolio_id = '{portfolio_id}';",
+            f"delete from cashflows where portfolio_id = '{portfolio_id}';",
+            (
+                "delete from transaction_costs where transaction_id in "
+                f"(select transaction_id from transactions where portfolio_id = '{portfolio_id}');"
+            ),
+            f"delete from pipeline_stage_state where portfolio_id = '{portfolio_id}';",
+            f"delete from processed_events where portfolio_id = '{portfolio_id}';",
+            f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
+            f"delete from transactions where portfolio_id = '{portfolio_id}';",
+            f"delete from instruments where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolios where portfolio_id = '{portfolio_id}';",
+        ]
+    )
+
+
+def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+    return "\n".join(
+        [
+            build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             f"delete from benchmark_composition_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_return_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_definitions where benchmark_id = '{benchmark_id}';",
@@ -153,9 +189,22 @@ def build_front_office_portfolio_bundle(
     calendar_dates = _calendar_dates(start_date, end_date)
     fx_calendar_dates = _calendar_dates(start_date, end_date + timedelta(days=30))
     as_of_date = end_date.isoformat()
+    forward_withdrawal_date = end_date + timedelta(days=7)
+    forward_withdrawal_settlement_date = end_date + timedelta(days=10)
 
     def tx_dt(day_offset: int, hour: int = 10) -> datetime:
         current = start_date + timedelta(days=day_offset)
+        return datetime(
+            current.year,
+            current.month,
+            current.day,
+            hour,
+            0,
+            0,
+            tzinfo=UTC,
+        )
+
+    def date_dt(current: date, hour: int = 10) -> datetime:
         return datetime(
             current.year,
             current.month,
@@ -826,8 +875,8 @@ def build_front_office_portfolio_bundle(
             portfolio_id=portfolio_id,
             instrument_id="USD-CASH",
             security_id="CASH_USD_BOOK_OPERATING",
-            when=tx_dt(372),
-            settlement_date=settle(372, 3),
+            when=date_dt(forward_withdrawal_date),
+            settlement_date=date_dt(forward_withdrawal_settlement_date, 16),
             tx_type="WITHDRAWAL",
             quantity="18000",
             price="1",
@@ -1049,6 +1098,41 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
 
 
+def _reprocess_front_office_transactions(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
+    transaction_ids = [
+        transaction["transaction_id"]
+        for transaction in bundle["transactions"]
+        if isinstance(transaction.get("transaction_id"), str)
+    ]
+    if not transaction_ids:
+        return
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/reprocess/transactions",
+        payload={"transaction_ids": transaction_ids},
+    )
+
+
+def _date_at_or_after(actual: str | None, expected: str) -> bool:
+    if not actual:
+        return False
+    return date.fromisoformat(actual) >= date.fromisoformat(expected)
+
+
+def _front_office_analytics_are_fresh(
+    *,
+    analytics_reference: dict[str, Any],
+    performance_summary: dict[str, Any],
+    expected_end_date: str,
+) -> bool:
+    return_path = (performance_summary.get("capabilities") or {}).get("return_path") or {}
+    return (
+        _date_at_or_after(analytics_reference.get("performance_end_date"), expected_end_date)
+        and _date_at_or_after(performance_summary.get("report_end_date"), expected_end_date)
+        and _date_at_or_after(return_path.get("latest_available_date"), expected_end_date)
+    )
+
+
 def _cleanup_existing_front_office_seed(
     *,
     postgres_container: str,
@@ -1138,6 +1222,11 @@ def _verify_front_office_portfolio(
                 f"{query_control_plane_base_url}/integration/portfolios/{expected.portfolio_id}/benchmark-assignment",
                 payload={"as_of_date": as_of_date, "consumer_system": "lotus-performance"},
             )
+            _, analytics_reference = _request_json(
+                "POST",
+                f"{query_control_plane_base_url}/integration/portfolios/{expected.portfolio_id}/analytics/reference",
+                payload={"as_of_date": as_of_date, "consumer_system": "lotus-performance"},
+            )
             _, cashflow_projection = _request_json(
                 "GET",
                 f"{query_base_url}/portfolios/{expected.portfolio_id}/cashflow-projection"
@@ -1183,6 +1272,11 @@ def _verify_front_office_portfolio(
             and has_non_zero_projection
             and benchmark_assignment.get("benchmark_id")
             and performance_summary.get("benchmark_code")
+            and _front_office_analytics_are_fresh(
+                analytics_reference=analytics_reference,
+                performance_summary=performance_summary,
+                expected_end_date=end_date,
+            )
         ):
             return {
                 "portfolio_id": expected.portfolio_id,
@@ -1195,6 +1289,15 @@ def _verify_front_office_portfolio(
                 "activity_buckets": len(activity_rows),
                 "projected_cashflow_points": len(projected_cashflow_points),
                 "benchmark_code": performance_summary.get("benchmark_code"),
+                "analytics_performance_end_date": analytics_reference.get(
+                    "performance_end_date"
+                ),
+                "performance_report_end_date": performance_summary.get("report_end_date"),
+                "return_path_latest_available_date": (
+                    performance_summary.get("capabilities", {})
+                    .get("return_path", {})
+                    .get("latest_available_date")
+                ),
             }
 
     raise TimeoutError(
@@ -1208,13 +1311,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--portfolio-id", default=DEFAULT_PORTFOLIO_ID)
     parser.add_argument("--start-date", default="2025-03-31")
-    parser.add_argument("--end-date", default="2026-03-28")
+    parser.add_argument("--end-date", default="2026-04-10")
     parser.add_argument("--benchmark-start-date", default="2025-01-06")
     parser.add_argument("--benchmark-id", default=DEFAULT_BENCHMARK_ID)
     parser.add_argument("--ingestion-base-url", default="http://127.0.0.1:8200")
     parser.add_argument("--query-base-url", default="http://127.0.0.1:8201")
     parser.add_argument("--query-control-plane-base-url", default="http://127.0.0.1:8202")
-    parser.add_argument("--gateway-base-url", default="http://127.0.0.1:8100")
+    parser.add_argument("--gateway-base-url", default="http://gateway.dev.lotus")
     parser.add_argument("--wait-seconds", type=int, default=300)
     parser.add_argument("--poll-interval-seconds", type=int, default=3)
     parser.add_argument("--postgres-container", default=DEFAULT_POSTGRES_CONTAINER)
@@ -1222,6 +1325,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--verify-only", action="store_true")
     parser.add_argument("--ingest-only", action="store_true")
     parser.add_argument("--force-ingest", action="store_true")
+    parser.add_argument(
+        "--skip-reprocess",
+        action="store_true",
+        help="Do not queue transaction reprocessing after bundle ingest.",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
@@ -1263,10 +1371,15 @@ def main() -> int:
                 portfolio_id=args.portfolio_id,
                 benchmark_id=args.benchmark_id,
             )
-        if args.force_ingest or not _portfolio_exists(query_base_url, args.portfolio_id):
+        should_ingest = args.force_ingest or not args.skip_cleanup
+        if not should_ingest:
+            should_ingest = not _portfolio_exists(query_base_url, args.portfolio_id)
+        if should_ingest:
             payload = _build_portfolio_bundle_payload(bundle)
             _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
         _ingest_reference_data(ingestion_base_url, bundle)
+        if should_ingest and not args.skip_reprocess:
+            _reprocess_front_office_transactions(ingestion_base_url, bundle)
 
     if not args.ingest_only:
         verification = _verify_front_office_portfolio(

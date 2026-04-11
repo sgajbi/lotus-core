@@ -28,7 +28,7 @@ def repository(mock_db_session: AsyncMock) -> TimeseriesRepository:
     return TimeseriesRepository(mock_db_session)
 
 
-async def test_find_and_claim_eligible_jobs_prior_day_gate_does_not_require_current_epoch_match(
+async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
     await repository.find_and_claim_eligible_jobs(batch_size=5)
@@ -39,27 +39,10 @@ async def test_find_and_claim_eligible_jobs_prior_day_gate_does_not_require_curr
     )
 
     assert (
-        "portfolio_timeseries.date = portfolio_aggregation_jobs.aggregation_date -"
-        in compiled_query
+        "portfolio_timeseries.date = portfolio_aggregation_jobs.aggregation_date"
+        not in compiled_query
     )
-    assert "portfolio_timeseries.epoch =" not in compiled_query
-
-
-async def test_find_and_claim_eligible_jobs_first_day_gate_is_directly_correlated(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
-):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
-
-    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
-    compiled_query = str(
-        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
-    )
-
-    assert (
-        "portfolio_aggregation_jobs_1.portfolio_id = portfolio_aggregation_jobs.portfolio_id"
-        in compiled_query
-    )
-    assert "date < portfolio_aggregation_jobs.aggregation_date" in compiled_query
+    assert "date < portfolio_aggregation_jobs.aggregation_date" not in compiled_query
     assert "FROM portfolio_timeseries, portfolio_aggregation_jobs" not in compiled_query
 
 

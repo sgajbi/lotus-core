@@ -1,9 +1,15 @@
 from datetime import date
+from decimal import Decimal
+import sys
 
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
+    _front_office_analytics_are_fresh,
+    _reprocess_front_office_transactions,
+    build_portfolio_seed_cleanup_sql,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
+    parse_args,
 )
 
 
@@ -11,7 +17,7 @@ def _build_bundle():
     return build_front_office_portfolio_bundle(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         start_date=date(2025, 3, 31),
-        end_date=date(2026, 3, 28),
+        end_date=date(2026, 4, 10),
         benchmark_start_date=date(2025, 1, 6),
         benchmark_id=DEFAULT_BENCHMARK_ID,
     )
@@ -76,8 +82,8 @@ def test_front_office_bundle_includes_income_and_paired_cash_transactions():
     assert planned_withdrawal["settlement_date"] > planned_withdrawal["transaction_date"]
     future_withdrawal = by_txn["TXN-WITHDRAWAL-FUTURE-001"]
     assert future_withdrawal["transaction_type"] == "WITHDRAWAL"
-    assert future_withdrawal["transaction_date"].startswith("2026-04-07")
-    assert future_withdrawal["settlement_date"].startswith("2026-04-10")
+    assert future_withdrawal["transaction_date"].startswith("2026-04-17")
+    assert future_withdrawal["settlement_date"].startswith("2026-04-20")
 
     assert by_txn["TXN-CASH-BUY-AAPL-001"]["transaction_type"] == "SELL"
     assert by_txn["TXN-CASH-SELL-AAPL-001"]["transaction_type"] == "BUY"
@@ -125,7 +131,8 @@ def test_front_office_bundle_includes_forward_cashflow_event_inside_projection_w
     assert {transaction["transaction_id"] for transaction in future_txns} == {
         "TXN-WITHDRAWAL-FUTURE-001"
     }
-    assert future_txns[0]["settlement_date"].startswith("2026-04-10")
+    assert future_txns[0]["transaction_date"].startswith("2026-04-17")
+    assert future_txns[0]["settlement_date"].startswith("2026-04-20")
 
 
 def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
@@ -144,6 +151,49 @@ def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
     assert benchmark_assignment["benchmark_id"] == DEFAULT_BENCHMARK_ID
     assert benchmark_assignment["assignment_source"] == "front_office_portfolio_seed"
 
+    non_cash_security_ids = {
+        instrument["security_id"]
+        for instrument in bundle["instruments"]
+        if instrument["asset_class"] != "Cash"
+    }
+    last_price_by_security = {
+        security_id: max(
+            row["price_date"]
+            for row in bundle["market_prices"]
+            if row["security_id"] == security_id
+        )
+        for security_id in non_cash_security_ids
+    }
+    assert last_price_by_security
+    assert set(last_price_by_security) == non_cash_security_ids
+    assert all(price_date == bundle["as_of_date"] for price_date in last_price_by_security.values())
+
+
+def test_front_office_bundle_cash_economics_are_plausible_by_currency():
+    bundle = _build_bundle()
+    cash_security_ids = {
+        account["security_id"]: account["account_currency"]
+        for account in bundle["cash_accounts"]
+    }
+    cash_balance_by_currency = {currency: Decimal("0") for currency in cash_security_ids.values()}
+
+    for transaction in bundle["transactions"]:
+        currency = cash_security_ids.get(transaction["security_id"])
+        if currency is None:
+            continue
+        amount = Decimal(transaction["gross_transaction_amount"])
+        if transaction["transaction_type"] in {"DEPOSIT", "BUY"}:
+            cash_balance_by_currency[currency] += amount
+        elif transaction["transaction_type"] in {"SELL", "FEE", "WITHDRAWAL"}:
+            cash_balance_by_currency[currency] -= amount
+        else:
+            raise AssertionError(f"Unexpected cash transaction type: {transaction['transaction_type']}")
+
+    assert cash_balance_by_currency["USD"] > Decimal("0")
+    assert cash_balance_by_currency["EUR"] > Decimal("0")
+    assert cash_balance_by_currency["USD"] == Decimal("101347.00")
+    assert cash_balance_by_currency["EUR"] == Decimal("19805.50")
+
 
 def test_front_office_bundle_extends_fx_coverage_through_forward_projection_window():
     bundle = _build_bundle()
@@ -154,7 +204,7 @@ def test_front_office_bundle_extends_fx_coverage_through_forward_projection_wind
         if row["from_currency"] == "EUR" and row["to_currency"] == "USD"
     ]
     assert eur_usd_rates
-    assert eur_usd_rates[-1]["rate_date"] == "2026-04-27"
+    assert eur_usd_rates[-1]["rate_date"] == "2026-05-10"
 
 
 def test_front_office_bundle_extends_usd_risk_free_coverage_through_forward_window():
@@ -165,7 +215,7 @@ def test_front_office_bundle_extends_usd_risk_free_coverage_through_forward_wind
     assert risk_free_series[0]["series_currency"] == "USD"
     assert risk_free_series[0]["risk_free_curve_id"] == "USD_SOFR_3M"
     assert risk_free_series[0]["source_vendor"] == "LOTUS_FRONT_OFFICE_SEED"
-    assert risk_free_series[-1]["series_date"] == "2026-04-27"
+    assert risk_free_series[-1]["series_date"] == "2026-05-10"
 
 
 def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_identity():
@@ -195,7 +245,7 @@ def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_
     assert bundle["benchmark_return_series"][0]["source_record_id"].startswith(
         DEFAULT_BENCHMARK_ID.lower()
     )
-    assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-04-27"
+    assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-05-10"
 
 
 def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically():
@@ -210,3 +260,87 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "delete from benchmark_definitions" in sql
     assert "PB_SG_GLOBAL_BAL_001" in sql
     assert DEFAULT_BENCHMARK_ID in sql
+
+
+def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed():
+    sql = build_portfolio_seed_cleanup_sql(portfolio_id="PB_SG_GLOBAL_BAL_001")
+
+    assert "delete from transactions where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from position_timeseries where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from transaction_costs where transaction_id in" in sql
+
+
+def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["front_office_portfolio_seed.py"])
+
+    args = parse_args()
+
+    assert args.gateway_base_url == "http://gateway.dev.lotus"
+    assert args.end_date == "2026-04-10"
+
+
+def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
+    bundle = _build_bundle()
+    calls = []
+
+    def capture_request(method, url, *, payload=None):
+        calls.append((method, url, payload))
+        return 202, {"accepted_count": len(payload["transaction_ids"])}
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._request_json",
+        capture_request,
+    )
+
+    _reprocess_front_office_transactions("http://ingestion.dev.lotus", bundle)
+
+    assert calls == [
+        (
+            "POST",
+            "http://ingestion.dev.lotus/reprocess/transactions",
+            {
+                "transaction_ids": [
+                    transaction["transaction_id"]
+                    for transaction in bundle["transactions"]
+                ]
+            },
+        )
+    ]
+
+
+def test_front_office_seed_rejects_stale_derived_analytics_state():
+    stale_reference = {"performance_end_date": "2025-08-05"}
+    fresh_summary = {
+        "report_end_date": "2026-04-11",
+        "capabilities": {
+            "return_path": {
+                "latest_available_date": "2026-04-11",
+            }
+        },
+    }
+
+    assert not _front_office_analytics_are_fresh(
+        analytics_reference=stale_reference,
+        performance_summary=fresh_summary,
+        expected_end_date="2026-04-10",
+    )
+
+
+def test_front_office_seed_accepts_current_derived_analytics_state():
+    fresh_reference = {"performance_end_date": "2026-04-10"}
+    fresh_summary = {
+        "report_end_date": "2026-04-11",
+        "capabilities": {
+            "return_path": {
+                "latest_available_date": "2026-04-11",
+            }
+        },
+    }
+
+    assert _front_office_analytics_are_fresh(
+        analytics_reference=fresh_reference,
+        performance_summary=fresh_summary,
+        expected_end_date="2026-04-10",
+    )

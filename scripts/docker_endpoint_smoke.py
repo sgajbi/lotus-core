@@ -38,6 +38,16 @@ class CheckResult:
     response: Any
 
 
+SMOKE_PORTFOLIO_ID = "PORT_SMOKE_CANONICAL"
+SMOKE_SECURITY_ID = "SEC_SMOKE_CANONICAL"
+SMOKE_INSTRUMENT_ID = "INST_SMOKE_CANONICAL"
+SMOKE_TRANSACTION_ID = "TX_SMOKE_CANONICAL"
+SMOKE_TRANSACTION_ID_2 = "TX2_SMOKE_CANONICAL"
+SMOKE_CSV_TRANSACTION_ID = "TXUP_SMOKE_CANONICAL"
+SMOKE_ISIN = "US000SMOKE01"
+DEFAULT_POSTGRES_SERVICE = "postgres"
+
+
 def _run(cmd: list[str], cwd: Path) -> None:
     completed = subprocess.run(
         cmd,
@@ -57,6 +67,26 @@ def _run(cmd: list[str], cwd: Path) -> None:
         raise RuntimeError("command failed")
 
 
+def _run_capture(cmd: list[str], cwd: Path) -> str:
+    completed = subprocess.run(
+        cmd,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if completed.returncode != 0:
+        print(f"Command failed ({completed.returncode}): {' '.join(cmd)}", file=sys.stderr)
+        if completed.stdout:
+            print(completed.stdout, file=sys.stderr)
+        if completed.stderr:
+            print(completed.stderr, file=sys.stderr)
+        raise RuntimeError("command failed")
+    return completed.stdout.strip()
+
+
 def _compose_up_with_retry(*, compose_file: str, repo_root: Path, build: bool) -> None:
     up_cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
     if build:
@@ -74,6 +104,82 @@ def _compose_up_with_retry(*, compose_file: str, repo_root: Path, build: bool) -
             # Handle transient Kafka/ZK startup races by recycling containers once.
             _run(["docker", "compose", "-f", compose_file, "down"], cwd=repo_root)
             time.sleep(5)
+
+
+def build_smoke_cleanup_sql() -> str:
+    return "\n".join(
+        [
+            "delete from financial_reconciliation_findings where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from financial_reconciliation_runs where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from simulation_changes where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from simulation_sessions where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from analytics_export_jobs where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from portfolio_aggregation_jobs where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from portfolio_valuation_jobs where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from daily_position_snapshots where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from portfolio_timeseries where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from position_timeseries where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from position_history where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from position_state where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from position_lot_state where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from accrued_income_offset_state where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from cashflows where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from transaction_costs where transaction_id like 'TX%_SMOKE_%';",
+            "delete from pipeline_stage_state where portfolio_id like 'PORT_SMOKE_%' or security_id like 'SEC_SMOKE_%' or transaction_id like 'TX%_SMOKE_%';",
+            "delete from processed_events where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from cash_account_masters where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from portfolio_benchmark_assignments where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from transactions where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from market_prices where security_id like 'SEC_SMOKE_%';",
+            "delete from instruments where portfolio_id like 'PORT_SMOKE_%' or security_id like 'SEC_SMOKE_%';",
+            "delete from portfolios where portfolio_id like 'PORT_SMOKE_%';",
+        ]
+    )
+
+
+def _resolve_postgres_container(
+    *,
+    repo_root: Path,
+    compose_file: str,
+    postgres_service: str,
+) -> str:
+    container_id = _run_capture(
+        ["docker", "compose", "-f", compose_file, "ps", "-q", postgres_service],
+        cwd=repo_root,
+    )
+    if not container_id:
+        raise RuntimeError(
+            f"Unable to resolve docker compose service '{postgres_service}' for smoke cleanup."
+        )
+    return container_id
+
+
+def _cleanup_existing_smoke_state(
+    *,
+    repo_root: Path,
+    compose_file: str,
+    postgres_service: str,
+) -> None:
+    postgres_container = _resolve_postgres_container(
+        repo_root=repo_root,
+        compose_file=compose_file,
+        postgres_service=postgres_service,
+    )
+    _run(
+        [
+            "docker",
+            "exec",
+            postgres_container,
+            "psql",
+            "-U",
+            "user",
+            "-d",
+            "portfolio_db",
+            "-c",
+            build_smoke_cleanup_sql(),
+        ],
+        cwd=repo_root,
+    )
 
 
 def _call(
@@ -255,6 +361,11 @@ def main() -> int:
     )
     parser.add_argument("--ready-timeout-seconds", type=int, default=180)
     parser.add_argument("--query-visible-timeout-seconds", type=int, default=120)
+    parser.add_argument(
+        "--postgres-service",
+        default=DEFAULT_POSTGRES_SERVICE,
+        help="Docker compose postgres service name used for deterministic smoke cleanup.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
@@ -264,6 +375,11 @@ def main() -> int:
         if args.reset_volumes:
             _run(["docker", "compose", "-f", compose_file, "down", "-v"], cwd=repo_root)
         _compose_up_with_retry(compose_file=compose_file, repo_root=repo_root, build=args.build)
+    _cleanup_existing_smoke_state(
+        repo_root=repo_root,
+        compose_file=compose_file,
+        postgres_service=args.postgres_service,
+    )
 
     _wait_ready(args.ingestion_base_url, args.ready_timeout_seconds)
     _wait_ready(args.event_replay_base_url, args.ready_timeout_seconds)
@@ -271,13 +387,13 @@ def main() -> int:
     _wait_ready(args.query_control_plane_base_url, args.ready_timeout_seconds)
 
     run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    portfolio_id = f"PORT_SMOKE_{run_id}"
-    security_id = f"SEC_SMOKE_{run_id}"
-    instrument_id = f"INST_SMOKE_{run_id}"
-    transaction_id = f"TX_SMOKE_{run_id}"
-    transaction_id_2 = f"TX2_SMOKE_{run_id}"
-    csv_transaction_id = f"TXUP_SMOKE_{run_id}"
-    isin = f"US{run_id.replace('-', '')[-10:]}"
+    portfolio_id = SMOKE_PORTFOLIO_ID
+    security_id = SMOKE_SECURITY_ID
+    instrument_id = SMOKE_INSTRUMENT_ID
+    transaction_id = SMOKE_TRANSACTION_ID
+    transaction_id_2 = SMOKE_TRANSACTION_ID_2
+    csv_transaction_id = SMOKE_CSV_TRANSACTION_ID
+    isin = SMOKE_ISIN
     now_utc = datetime.now(UTC).replace(microsecond=0)
     trade_timestamp = now_utc.isoformat().replace("+00:00", "Z")
     trade_date = trade_timestamp[:10]
