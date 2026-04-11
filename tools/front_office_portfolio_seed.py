@@ -1147,6 +1147,108 @@ def _front_office_analytics_are_fresh(
     )
 
 
+def _extract_readiness_summary(readiness_payload: dict[str, Any]) -> dict[str, Any]:
+    blocking_reasons = readiness_payload.get("blocking_reasons") or []
+    return {
+        "resolved_as_of_date": readiness_payload.get("resolved_as_of_date"),
+        "holdings_status": (readiness_payload.get("holdings") or {}).get("status"),
+        "pricing_status": (readiness_payload.get("pricing") or {}).get("status"),
+        "transactions_status": (readiness_payload.get("transactions") or {}).get("status"),
+        "reporting_status": (readiness_payload.get("reporting") or {}).get("status"),
+        "blocking_reason_codes": [
+            reason.get("code")
+            for reason in blocking_reasons
+            if isinstance(reason, dict) and reason.get("code")
+        ],
+        "latest_booked_transaction_date": readiness_payload.get("latest_booked_transaction_date"),
+        "latest_booked_position_snapshot_date": readiness_payload.get(
+            "latest_booked_position_snapshot_date"
+        ),
+        "snapshot_valuation_total_positions": readiness_payload.get(
+            "snapshot_valuation_total_positions"
+        ),
+        "snapshot_valuation_valued_positions": readiness_payload.get(
+            "snapshot_valuation_valued_positions"
+        ),
+        "snapshot_valuation_unvalued_positions": readiness_payload.get(
+            "snapshot_valuation_unvalued_positions"
+        ),
+        "missing_historical_fx_dependencies": (
+            (readiness_payload.get("missing_historical_fx_dependencies") or {}).get("missing_count")
+        ),
+    }
+
+
+def _extract_support_overview_summary(overview_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "pending_aggregation_jobs": overview_payload.get("pending_aggregation_jobs"),
+        "processing_aggregation_jobs": overview_payload.get("processing_aggregation_jobs"),
+        "stale_processing_aggregation_jobs": overview_payload.get(
+            "stale_processing_aggregation_jobs"
+        ),
+        "failed_aggregation_jobs": overview_payload.get("failed_aggregation_jobs"),
+        "oldest_pending_aggregation_date": overview_payload.get(
+            "oldest_pending_aggregation_date"
+        ),
+        "latest_booked_transaction_date": overview_payload.get("latest_booked_transaction_date"),
+        "latest_booked_position_snapshot_date": overview_payload.get(
+            "latest_booked_position_snapshot_date"
+        ),
+    }
+
+
+def _collect_front_office_readiness_diagnostics(
+    *,
+    query_control_plane_base_url: str,
+    portfolio_id: str,
+    as_of_date: str,
+) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {}
+
+    try:
+        _, readiness_payload = _request_json(
+            "GET",
+            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/readiness"
+            f"?as_of_date={as_of_date}",
+        )
+        diagnostics["readiness"] = _extract_readiness_summary(readiness_payload)
+    except RuntimeError as exc:
+        diagnostics["readiness_error"] = str(exc)
+
+    try:
+        _, overview_payload = _request_json(
+            "GET",
+            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/overview",
+        )
+        diagnostics["support_overview"] = _extract_support_overview_summary(overview_payload)
+    except RuntimeError as exc:
+        diagnostics["support_overview_error"] = str(exc)
+
+    try:
+        _, aggregation_jobs_payload = _request_json(
+            "GET",
+            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/aggregation-jobs"
+            f"?business_date={as_of_date}&limit=5",
+        )
+        diagnostics["aggregation_jobs"] = {
+            "total": aggregation_jobs_payload.get("total"),
+            "job_ids": [
+                row.get("job_id")
+                for row in aggregation_jobs_payload.get("items") or []
+                if isinstance(row, dict) and row.get("job_id") is not None
+            ],
+            "statuses": [
+                row.get("status")
+                for row in aggregation_jobs_payload.get("items") or []
+                if isinstance(row, dict) and row.get("status")
+            ],
+        }
+    except RuntimeError as exc:
+        diagnostics["aggregation_jobs_error"] = str(exc)
+
+    return diagnostics
+
+
 def _cleanup_existing_front_office_seed(
     *,
     postgres_container: str,
@@ -1186,6 +1288,7 @@ def _verify_front_office_portfolio(
     poll_interval_seconds: int,
 ) -> dict[str, Any]:
     deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    last_observation: dict[str, Any] | None = None
     while datetime.now(tz=UTC) < deadline:
         try:
             _, positions_payload = _request_json(
@@ -1274,6 +1377,25 @@ def _verify_front_office_portfolio(
             for point in projected_cashflow_points
             if isinstance(point, dict)
         )
+        last_observation = {
+            "positions": len(positions),
+            "valued_positions": len(valued),
+            "transactions": total_transactions,
+            "cash_accounts": len(cash_accounts),
+            "allocation_views": len(allocation_views),
+            "income_types": len(income_rows),
+            "activity_buckets": len(activity_rows),
+            "projected_cashflow_points": len(projected_cashflow_points),
+            "has_non_zero_projection": has_non_zero_projection,
+            "benchmark_code": performance_summary.get("benchmark_code"),
+            "analytics_performance_end_date": analytics_reference.get("performance_end_date"),
+            "performance_report_end_date": performance_summary.get("report_end_date"),
+            "return_path_latest_available_date": (
+                performance_summary.get("capabilities", {})
+                .get("return_path", {})
+                .get("latest_available_date")
+            ),
+        }
 
         if (
             len(positions) >= expected.min_positions
@@ -1315,8 +1437,22 @@ def _verify_front_office_portfolio(
                 ),
             }
 
+        LOGGER.info(
+            "Front-office verification waiting on readiness for %s: %s",
+            expected.portfolio_id,
+            last_observation,
+        )
+
+    readiness_diagnostics = _collect_front_office_readiness_diagnostics(
+        query_control_plane_base_url=query_control_plane_base_url,
+        portfolio_id=expected.portfolio_id,
+        as_of_date=as_of_date,
+    )
     raise TimeoutError(
-        f"Timed out verifying front-office portfolio seed for {expected.portfolio_id}."
+        "Timed out verifying front-office portfolio seed for "
+        f"{expected.portfolio_id}. "
+        f"Last observation: {last_observation}. "
+        f"Readiness diagnostics: {readiness_diagnostics}"
     )
 
 
