@@ -68,15 +68,18 @@ verifies:
 - projected cashflow contains at least one non-zero future point
 - benchmark assignment resolves
 - gateway performance summary resolves with benchmark-linked content
+- core analytics reference `performance_end_date` is at or after the seed end date
+- gateway performance `report_end_date` and return-path latest available date are
+  at or after the seed end date
 
 ## Validation Evidence
 
 The current seeded scenario was validated directly against the local stack after
-the RFC-0075 Slice 3 as-of-date alignment with these outcomes:
+the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
 
 - `lotus-core query_service`
-  - positions: `10`
-  - valued positions: `10`
+  - positions: `11`
+  - valued positions: `11`
   - transactions: `29`, including future transaction
     `TXN-WITHDRAWAL-FUTURE-001`
   - cash accounts: `2`
@@ -88,10 +91,21 @@ the RFC-0075 Slice 3 as-of-date alignment with these outcomes:
   - no `PORT_SMOKE_%` portfolio rows remained after the clean seed
 - `lotus-core query_control_plane`
   - benchmark assignment resolves to `BMK_PB_GLOBAL_BALANCED_60_40`
+  - analytics reference `performance_end_date` resolves to `2026-04-10`
+- `lotus-core portfolio_aggregation_service`
+  - portfolio aggregation backlog for `PB_SG_GLOBAL_BAL_001`: `0` pending,
+    `0` processing, `382` complete
+  - portfolio timeseries max date: `2026-04-17`
 - `lotus-gateway`
   - performance and risk summary endpoints return `200`
-  - derived performance window freshness remains a separate RFC-0075 Slice 4
-    readiness item and must not be treated as complete seed evidence
+  - performance summary `report_end_date`: `2026-04-11`
+  - return-path `latest_available_date`: `2026-04-11`
+
+If the seed verifier times out after positions and position timeseries are
+available, check `portfolio_aggregation_jobs` for a pending backlog and
+`portfolio_timeseries` for a stale max date. The canonical readiness path
+requires portfolio aggregation to catch up before workbench validation or demo
+screenshots are accepted.
 
 ## Related Documents
 
