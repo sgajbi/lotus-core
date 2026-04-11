@@ -1,9 +1,28 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from .api_client import E2EApiClient
 from .assertions import as_decimal
+
+
+def _matches_decimal(value: Any, expected: Decimal) -> bool:
+    try:
+        return as_decimal(value) == expected
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+
+
+def _position_matches_expected(row: dict[str, Any], expected: dict[str, Decimal]) -> bool:
+    valuation = row.get("valuation")
+    if not isinstance(valuation, dict):
+        return False
+    return (
+        _matches_decimal(row.get("quantity"), expected["quantity"])
+        and _matches_decimal(row.get("cost_basis"), expected["cost_basis"])
+        and _matches_decimal(valuation.get("market_value"), expected["market_value"])
+    )
 
 
 def assert_positions_state(
@@ -21,12 +40,7 @@ def assert_positions_state(
         if set(by_security) != set(expected_positions):
             return False
         for security_id, expected in expected_positions.items():
-            row = by_security[security_id]
-            if as_decimal(row["quantity"]) != expected["quantity"]:
-                return False
-            if as_decimal(row["cost_basis"]) != expected["cost_basis"]:
-                return False
-            if as_decimal(row["valuation"]["market_value"]) != expected["market_value"]:
+            if not _position_matches_expected(by_security[security_id], expected):
                 return False
         return True
 
