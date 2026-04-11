@@ -7,11 +7,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 
-from src.services.query_service.app.settings import (
-    env_bool,
-    env_int,
-    load_query_service_settings,
-)
+from .settings import env_bool, env_int, load_query_control_plane_settings
 
 logger = logging.getLogger("enterprise_readiness")
 MiddlewareNext = Callable[[Request], Awaitable[Response]]
@@ -40,19 +36,14 @@ def _env_enabled(name: str, default: str = "true") -> bool:
 
 
 def _load_json_map(name: str) -> dict[str, Any]:
-    settings = load_query_service_settings()
+    settings = load_query_control_plane_settings()
     if name == "ENTERPRISE_FEATURE_FLAGS_JSON":
         parsed = settings.enterprise_feature_flags
         return parsed if isinstance(parsed, dict) else {}
     if name == "ENTERPRISE_CAPABILITY_RULES_JSON":
         parsed = settings.enterprise_capability_rules
         return parsed if isinstance(parsed, dict) else {}
-    raw = "{}"
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 def _env_int(name: str, default: int) -> int:
@@ -60,7 +51,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 def enterprise_policy_version() -> str:
-    return load_query_service_settings().enterprise_policy_version
+    return load_query_control_plane_settings().enterprise_policy_version
 
 
 def validate_enterprise_runtime_config() -> list[str]:
@@ -74,7 +65,7 @@ def validate_enterprise_runtime_config() -> list[str]:
 
     if (
         _env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false")
-        and not load_query_service_settings().enterprise_primary_key_id.strip()
+        and not load_query_control_plane_settings().enterprise_primary_key_id.strip()
     ):
         issues.append("missing_primary_key_id")
 
