@@ -190,6 +190,67 @@ def _tx(
     return payload
 
 
+def _cash_tx(
+    tx_id: str,
+    *,
+    portfolio_id: str,
+    instrument_id: str,
+    security_id: str,
+    when: datetime,
+    tx_type: str,
+    gross: str,
+    trade_currency: str,
+    settlement_date: datetime | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    return _tx(
+        tx_id,
+        portfolio_id=portfolio_id,
+        instrument_id=instrument_id,
+        security_id=security_id,
+        when=when,
+        tx_type=tx_type,
+        quantity=gross,
+        price="1",
+        gross=gross,
+        trade_currency=trade_currency,
+        settlement_date=settlement_date,
+        **extra,
+    )
+
+
+def _validate_front_office_cash_transactions(transactions: list[dict[str, Any]]) -> None:
+    for transaction in transactions:
+        if not str(transaction.get("security_id", "")).startswith("CASH_"):
+            continue
+
+        tx_type = str(transaction.get("transaction_type", "")).upper()
+        if tx_type not in {"BUY", "SELL", "DEPOSIT", "WITHDRAWAL", "FEE"}:
+            continue
+
+        transaction_id = str(transaction["transaction_id"])
+        quantity = Decimal(str(transaction["quantity"]))
+        price = Decimal(str(transaction["price"]))
+        gross = Decimal(str(transaction["gross_transaction_amount"]))
+        currency = str(transaction["currency"])
+        trade_currency = str(transaction["trade_currency"])
+
+        if price != Decimal("1"):
+            raise ValueError(
+                f"{transaction_id} must use price=1 for cash-book transaction rows."
+            )
+        if quantity != gross:
+            raise ValueError(
+                f"{transaction_id} must use quantity equal to gross_transaction_amount "
+                "for cash-book transaction rows."
+            )
+        if currency != trade_currency:
+            raise ValueError(
+                f"{transaction_id} must use matching currency and trade_currency "
+                "for cash-book transaction rows."
+            )
+
+
 def build_front_office_portfolio_bundle(
     *,
     portfolio_id: str,
@@ -823,7 +884,7 @@ def build_front_office_portfolio_bundle(
             movement_direction="INFLOW",
             source_system="LOTUS_FRONT_OFFICE_SEED",
         ),
-        _tx(
+        _cash_tx(
             "TXN-FEE-ADVISORY-001",
             portfolio_id=portfolio_id,
             instrument_id="USD-CASH",
@@ -831,8 +892,6 @@ def build_front_office_portfolio_bundle(
             when=tx_dt(346),
             settlement_date=settle(346, 0),
             tx_type="FEE",
-            quantity="1",
-            price="275.00",
             gross="275.00",
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
@@ -901,6 +960,8 @@ def build_front_office_portfolio_bundle(
             source_system="LOTUS_FRONT_OFFICE_SEED",
         ),
     ]
+
+    _validate_front_office_cash_transactions(transactions)
 
     benchmark_reference = _build_benchmark_reference_data(
         dates=fx_calendar_dates,

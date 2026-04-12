@@ -2,10 +2,13 @@ from datetime import date
 from decimal import Decimal
 import sys
 
+import pytest
+
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_SEED_CONTRACT,
+    _validate_front_office_cash_transactions,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
     _extract_support_overview_summary,
@@ -94,6 +97,23 @@ def test_front_office_bundle_includes_income_and_paired_cash_transactions():
 
     assert by_txn["TXN-CASH-BUY-AAPL-001"]["transaction_type"] == "SELL"
     assert by_txn["TXN-CASH-SELL-AAPL-001"]["transaction_type"] == "BUY"
+    assert by_txn["TXN-FEE-ADVISORY-001"]["transaction_type"] == "FEE"
+    assert by_txn["TXN-FEE-ADVISORY-001"]["quantity"] == "275.00"
+    assert by_txn["TXN-FEE-ADVISORY-001"]["price"] == "1"
+
+
+def test_front_office_bundle_normalizes_cash_book_transaction_shape():
+    bundle = _build_bundle()
+
+    for transaction in bundle["transactions"]:
+        if not transaction["security_id"].startswith("CASH_"):
+            continue
+        if transaction["transaction_type"] not in {"BUY", "SELL", "DEPOSIT", "WITHDRAWAL", "FEE"}:
+            continue
+
+        assert Decimal(transaction["price"]) == Decimal("1")
+        assert Decimal(transaction["quantity"]) == Decimal(transaction["gross_transaction_amount"])
+        assert transaction["currency"] == transaction["trade_currency"]
 
 
 def test_front_office_bundle_keeps_eur_sleeve_funded():
@@ -200,6 +220,22 @@ def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     assert cash_balance_by_currency["EUR"] > Decimal("0")
     assert cash_balance_by_currency["USD"] == Decimal("101347.00")
     assert cash_balance_by_currency["EUR"] == Decimal("19805.50")
+
+
+def test_front_office_cash_transaction_validator_rejects_non_normalized_cash_rows():
+    bundle = _build_bundle()
+    advisory_fee = next(
+        transaction
+        for transaction in bundle["transactions"]
+        if transaction["transaction_id"] == "TXN-FEE-ADVISORY-001"
+    )
+    broken_fee = dict(advisory_fee, quantity="1", price="275.00")
+
+    with pytest.raises(
+        ValueError,
+        match="TXN-FEE-ADVISORY-001 must use price=1 for cash-book transaction rows.",
+    ):
+        _validate_front_office_cash_transactions([broken_fee])
 
 
 def test_front_office_bundle_extends_fx_coverage_through_forward_projection_window():

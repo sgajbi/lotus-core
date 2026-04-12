@@ -36,6 +36,8 @@ This runbook is local-only and does not depend on `lotus-manage`.
 - income, fee, tax, sell, and withdrawal activity
 - one future-dated withdrawal inside the forward cashflow horizon
 - canonical paired product-and-cash transactions aligned with the core demo ingest pattern
+- normalized cash-book transaction rows with `price = 1` and
+  `quantity = gross_transaction_amount`
 - full valuation coverage through the report end date so performance analytics remain valid
 - FX and benchmark component coverage through the forward validation window so
   next-day analytics requests remain valid
@@ -80,7 +82,7 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
 - `lotus-core query_service`
   - positions: `11`
   - valued positions: `11`
-  - transactions: `29`, including future transaction
+  - transactions: `30`, including future transaction
     `TXN-WITHDRAWAL-FUTURE-001`
   - cash accounts: `2`
   - cashflow projection: `31` points with one non-zero point on `2026-04-17`
