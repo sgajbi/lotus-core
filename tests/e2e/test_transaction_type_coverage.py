@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -13,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 def _iso_z(ts: datetime) -> str:
@@ -156,7 +156,7 @@ def _expected_cashflow_sign(payload: dict, classification: str) -> int:
 
 @pytest.fixture(scope="module")
 def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApiClient):
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_TX_COVER_{suffix}"
     security_id = f"SEC_COVER_{suffix}"
     cash_security_id = f"CASH_USD_COVER_{suffix}"
@@ -231,7 +231,7 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
     Upstream provides both product leg (BUY) and cash leg (ADJUSTMENT) with linkage.
     Cashflow generation should treat ADJUSTMENT leg as authoritative cash movement.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_DUAL_LEG_{suffix}"
     buy_txn_id = f"{portfolio_id}_BUY_01"
     cash_txn_id = f"{portfolio_id}_ADJ_01"

@@ -1,13 +1,12 @@
-import uuid
-
 import pytest
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
 def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_FX_{suffix}"
     final_business_date = "2026-01-09"
     cash_usd = f"CASH_USD_FX_{suffix}"

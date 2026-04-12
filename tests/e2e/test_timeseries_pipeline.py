@@ -1,4 +1,3 @@
-import uuid
 from collections import Counter
 from decimal import Decimal
 
@@ -6,6 +5,7 @@ import pytest
 
 from .api_client import E2EApiClient
 from .assertions import as_decimal
+from .data_factory import unique_suffix
 
 EXPECTED_TIMESERIES_ROWS = {
     "2025-08-28": {
@@ -227,7 +227,7 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
     """
     Seed a deterministic 2-day scenario used by analytics input timeseries contracts.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_TS_{suffix}"
     stock_security_id = f"SEC_EUR_STOCK_{suffix}"
     cash_security_id = f"CASH_{suffix}"
@@ -608,7 +608,7 @@ def test_cash_only_staged_external_flows_are_not_doubled(
     # This scenario advances the global business-date horizon into 2026, so it
     # must run against a freshly truncated database rather than the module-shared
     # 2025 two-day fixture above.
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_CASH_STAGE_{suffix}"
     cash_security_id = f"CASH_USD_{suffix}"
 
@@ -799,7 +799,7 @@ def test_cash_only_staged_external_flows_are_not_doubled(
 def test_price_before_position_history_still_converges_to_full_day_2_timeseries(
     clean_db, e2e_api_client: E2EApiClient
 ):
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_TS_RACE_{suffix}"
     stock_security_id = f"SEC_EUR_STOCK_{suffix}"
     cash_security_id = f"CASH_{suffix}"
