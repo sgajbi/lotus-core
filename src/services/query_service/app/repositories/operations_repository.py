@@ -629,10 +629,21 @@ class OperationsRepository:
                 PositionHistory.epoch,
                 func.max(PositionHistory.position_date).label("latest_history_date"),
             )
+            .join(
+                PositionState,
+                and_(
+                    PositionHistory.portfolio_id == PositionState.portfolio_id,
+                    PositionHistory.security_id == PositionState.security_id,
+                    PositionHistory.epoch == PositionState.epoch,
+                ),
+            )
             .where(PositionHistory.portfolio_id == portfolio_id)
         )
         if as_of is not None:
-            latest_history = latest_history.where(PositionHistory.created_at <= as_of)
+            latest_history = latest_history.where(
+                PositionHistory.created_at <= as_of,
+                PositionState.updated_at <= as_of,
+            )
         latest_history = latest_history.group_by(
             PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
         ).subquery()
@@ -643,10 +654,21 @@ class OperationsRepository:
                 DailyPositionSnapshot.epoch,
                 func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
             )
+            .join(
+                PositionState,
+                and_(
+                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
+                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    DailyPositionSnapshot.epoch == PositionState.epoch,
+                ),
+            )
             .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
         )
         if as_of is not None:
-            latest_snapshot = latest_snapshot.where(DailyPositionSnapshot.created_at <= as_of)
+            latest_snapshot = latest_snapshot.where(
+                DailyPositionSnapshot.created_at <= as_of,
+                PositionState.updated_at <= as_of,
+            )
         latest_snapshot = latest_snapshot.group_by(
             DailyPositionSnapshot.portfolio_id,
             DailyPositionSnapshot.security_id,

@@ -525,6 +525,7 @@ async def test_get_position_snapshot_history_mismatch_count(
     assert "from (select position_history.portfolio_id" in compiled.lower()
     assert "left outer join" in compiled.lower()
     assert "daily_position_snapshots" in compiled.lower()
+    assert "position_state" in compiled.lower()
 
 
 async def test_get_position_snapshot_history_mismatch_count_honors_as_of(
@@ -542,6 +543,7 @@ async def test_get_position_snapshot_history_mismatch_count_honors_as_of(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_history.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
     assert "daily_position_snapshots.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "position_state.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
 async def test_get_position_state(repository: OperationsRepository, mock_db_session: AsyncMock):
