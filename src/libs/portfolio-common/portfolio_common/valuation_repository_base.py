@@ -48,6 +48,19 @@ class ValuationRepositoryBase:
     def _observe_stale_resets(self, reset_count: int) -> None:
         """Hook for service-local metrics."""
 
+    @staticmethod
+    def _newer_epoch_exists(current_job, newer_job):
+        return (
+            select(newer_job.id)
+            .where(
+                newer_job.portfolio_id == current_job.portfolio_id,
+                newer_job.security_id == current_job.security_id,
+                newer_job.valuation_date == current_job.valuation_date,
+                newer_job.epoch > current_job.epoch,
+            )
+            .exists()
+        )
+
     @async_timed(
         repository="ValuationRepository", method="find_open_position_keys_for_security_on_date"
     )
@@ -388,14 +401,7 @@ class ValuationRepositoryBase:
             select(PortfolioValuationJob.id)
             .where(
                 PortfolioValuationJob.status == "PENDING",
-                ~select(newer_epoch.id)
-                .where(
-                    newer_epoch.portfolio_id == PortfolioValuationJob.portfolio_id,
-                    newer_epoch.security_id == PortfolioValuationJob.security_id,
-                    newer_epoch.valuation_date == PortfolioValuationJob.valuation_date,
-                    newer_epoch.epoch > PortfolioValuationJob.epoch,
-                )
-                .exists(),
+                ~self._newer_epoch_exists(PortfolioValuationJob, newer_epoch),
             )
             .order_by(
                 PortfolioValuationJob.portfolio_id.asc(),
@@ -430,11 +436,16 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_job_queue_stats")
     async def get_job_queue_stats(self) -> Dict[str, Any]:
+        newer_epoch = aliased(PortfolioValuationJob)
+        actionable_pending = (
+            (PortfolioValuationJob.status == "PENDING")
+            & ~self._newer_epoch_exists(PortfolioValuationJob, newer_epoch)
+        )
         stmt = select(
-            func.count().filter(PortfolioValuationJob.status == "PENDING").label("pending_count"),
+            func.count().filter(actionable_pending).label("pending_count"),
             func.count().filter(PortfolioValuationJob.status == "FAILED").label("failed_count"),
             func.min(PortfolioValuationJob.created_at)
-            .filter(PortfolioValuationJob.status == "PENDING")
+            .filter(actionable_pending)
             .label("oldest_pending_created_at"),
         )
         row = (await self.db.execute(stmt)).one()

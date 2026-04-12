@@ -144,3 +144,6 @@ async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
         "failed_count": 2,
         "oldest_pending_created_at": oldest_pending,
     }
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query

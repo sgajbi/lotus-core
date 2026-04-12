@@ -1237,6 +1237,46 @@ async def test_find_and_claim_eligible_jobs_skips_superseded_pending_epochs(
     ]
 
 
+async def test_get_job_queue_stats_ignores_superseded_pending_epochs(
+    async_db_session: AsyncSession, clean_db
+):
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-STATS",
+                security_id="S-VAL-STATS",
+                valuation_date=date(2025, 8, 15),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-old",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-STATS",
+                security_id="S-VAL-STATS",
+                valuation_date=date(2025, 8, 15),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-new",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-STATS",
+                security_id="S-VAL-STATS-FAILED",
+                valuation_date=date(2025, 8, 16),
+                epoch=1,
+                status="FAILED",
+                correlation_id="corr-failed",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    stats = await repo.get_job_queue_stats()
+
+    assert stats["pending_count"] == 1
+    assert stats["failed_count"] == 1
+
+
 async def test_get_latest_business_date_falls_back_to_processing_dates_when_calendar_is_empty(
     clean_db, async_db_session: AsyncSession
 ):
