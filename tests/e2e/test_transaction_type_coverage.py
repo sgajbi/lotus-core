@@ -58,7 +58,9 @@ BUNDLE_A_IN_TYPES = set(CA_BUNDLE_A_TARGET_IN_TYPES)
 MIN_E2E_CASHFLOW_DISTINCT_TYPES = 5
 
 
-def _build_transaction_payloads(portfolio_id: str) -> list[dict]:
+def _build_transaction_payloads(
+    portfolio_id: str, *, security_id: str, cash_security_id: str
+) -> list[dict]:
     """
     Generate one canonical payload per supported transaction type.
     This fixture is intentionally deduplicated (one transaction_type per item).
@@ -69,7 +71,9 @@ def _build_transaction_payloads(portfolio_id: str) -> list[dict]:
     for idx, tx_type in enumerate(sorted(SUPPORTED_TRANSACTION_TYPES)):
         ts = base_ts + timedelta(minutes=idx)
         tx_id = f"{portfolio_id}_{tx_type}_{idx:02d}"
-        security_id = "CASH_USD_COVER" if tx_type in CASH_INSTRUMENT_TYPES else "SEC_COVER"
+        resolved_security_id = (
+            cash_security_id if tx_type in CASH_INSTRUMENT_TYPES else security_id
+        )
         quantity = Decimal("1")
         price = Decimal("10")
         gross = Decimal("100")
@@ -87,8 +91,8 @@ def _build_transaction_payloads(portfolio_id: str) -> list[dict]:
         event = {
             "transaction_id": tx_id,
             "portfolio_id": portfolio_id,
-            "instrument_id": security_id,
-            "security_id": security_id,
+            "instrument_id": resolved_security_id,
+            "security_id": resolved_security_id,
             "transaction_date": _iso_z(ts),
             "transaction_type": tx_type,
             "quantity": str(quantity),
@@ -108,9 +112,9 @@ def _build_transaction_payloads(portfolio_id: str) -> list[dict]:
         if tx_type == "INTEREST":
             event["interest_direction"] = "INCOME"
         if tx_type in BUNDLE_A_OUT_TYPES:
-            event["source_instrument_id"] = security_id
+            event["source_instrument_id"] = resolved_security_id
         if tx_type in BUNDLE_A_IN_TYPES:
-            event["target_instrument_id"] = security_id
+            event["target_instrument_id"] = resolved_security_id
         if tx_type == CA_BUNDLE_A_CASH_CONSIDERATION_TYPE:
             link_ref = f"{portfolio_id}_ADJ_LINK_00"
             event["linked_cash_transaction_id"] = link_ref
@@ -152,7 +156,10 @@ def _expected_cashflow_sign(payload: dict, classification: str) -> int:
 
 @pytest.fixture(scope="module")
 def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApiClient):
-    portfolio_id = f"E2E_TX_COVER_{uuid.uuid4().hex[:8].upper()}"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_TX_COVER_{suffix}"
+    security_id = f"SEC_COVER_{suffix}"
+    cash_security_id = f"CASH_USD_COVER_{suffix}"
 
     e2e_api_client.ingest(
         "/ingest/portfolios",
@@ -162,7 +169,7 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
                     "portfolioId": portfolio_id,
                     "baseCurrency": "USD",
                     "openDate": "2026-01-01",
-                    "cifId": "E2E_TX_COVER_CIF",
+                    "cifId": f"E2E_TX_COVER_CIF_{suffix}",
                     "status": "ACTIVE",
                     "riskExposure": "a",
                     "investmentTimeHorizon": "b",
@@ -177,17 +184,17 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
         {
             "instruments": [
                 {
-                    "securityId": "SEC_COVER",
+                    "securityId": security_id,
                     "name": "Coverage Security",
-                    "isin": "COVER_SEC_001",
+                    "isin": f"COVER_SEC_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                     "assetClass": "Equity",
                 },
                 {
-                    "securityId": "CASH_USD_COVER",
+                    "securityId": cash_security_id,
                     "name": "Coverage Cash",
-                    "isin": "COVER_CASH_001",
+                    "isin": f"COVER_CASH_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Cash",
                     "assetClass": "Cash",
@@ -196,7 +203,9 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
         },
     )
 
-    payloads = _build_transaction_payloads(portfolio_id)
+    payloads = _build_transaction_payloads(
+        portfolio_id, security_id=security_id, cash_security_id=cash_security_id
+    )
     e2e_api_client.ingest("/ingest/transactions", {"transactions": payloads})
 
     query_url = f"/portfolios/{portfolio_id}/transactions"
@@ -207,7 +216,12 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
         fail_message="Transaction type coverage transactions were not fully queryable in time.",
     )
 
-    return {"portfolio_id": portfolio_id, "payloads": payloads}
+    return {
+        "portfolio_id": portfolio_id,
+        "payloads": payloads,
+        "security_id": security_id,
+        "cash_security_id": cash_security_id,
+    }
 
 
 @pytest.fixture(scope="module")
@@ -217,9 +231,12 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
     Upstream provides both product leg (BUY) and cash leg (ADJUSTMENT) with linkage.
     Cashflow generation should treat ADJUSTMENT leg as authoritative cash movement.
     """
-    portfolio_id = f"E2E_DUAL_LEG_{uuid.uuid4().hex[:8].upper()}"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_DUAL_LEG_{suffix}"
     buy_txn_id = f"{portfolio_id}_BUY_01"
     cash_txn_id = f"{portfolio_id}_ADJ_01"
+    security_id = f"SEC_DUAL_{suffix}"
+    cash_security_id = f"CASH_USD_DUAL_{suffix}"
 
     e2e_api_client.ingest(
         "/ingest/portfolios",
@@ -229,7 +246,7 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
                     "portfolioId": portfolio_id,
                     "baseCurrency": "USD",
                     "openDate": "2026-01-01",
-                    "cifId": "E2E_DUAL_CIF",
+                    "cifId": f"E2E_DUAL_CIF_{suffix}",
                     "status": "ACTIVE",
                     "riskExposure": "a",
                     "investmentTimeHorizon": "b",
@@ -244,17 +261,17 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
         {
             "instruments": [
                 {
-                    "securityId": "SEC_DUAL",
+                    "securityId": security_id,
                     "name": "Dual Leg Security",
-                    "isin": "DUAL_SEC_001",
+                    "isin": f"DUAL_SEC_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                     "assetClass": "Equity",
                 },
                 {
-                    "securityId": "CASH_USD_DUAL",
+                    "securityId": cash_security_id,
                     "name": "Dual Leg Cash",
-                    "isin": "DUAL_CASH_001",
+                    "isin": f"DUAL_CASH_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Cash",
                     "assetClass": "Cash",
@@ -269,8 +286,8 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
                 {
                     "transaction_id": buy_txn_id,
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "SEC_DUAL",
-                    "security_id": "SEC_DUAL",
+                    "instrument_id": security_id,
+                    "security_id": security_id,
                     "transaction_date": "2026-03-02T09:00:00Z",
                     "transaction_type": "BUY",
                     "quantity": "10",
@@ -286,8 +303,8 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
                 {
                     "transaction_id": cash_txn_id,
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "CASH_USD_DUAL",
-                    "security_id": "CASH_USD_DUAL",
+                    "instrument_id": cash_security_id,
+                    "security_id": cash_security_id,
                     "transaction_date": "2026-03-02T09:00:00Z",
                     "transaction_type": "ADJUSTMENT",
                     "quantity": "0",
@@ -314,11 +331,21 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
         fail_message="Dual-leg scenario transactions not queryable in time.",
     )
 
-    return {"portfolio_id": portfolio_id, "buy_txn_id": buy_txn_id, "cash_txn_id": cash_txn_id}
+    return {
+        "portfolio_id": portfolio_id,
+        "buy_txn_id": buy_txn_id,
+        "cash_txn_id": cash_txn_id,
+        "security_id": security_id,
+        "cash_security_id": cash_security_id,
+    }
 
 
 def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
-    tx_payloads = _build_transaction_payloads("E2E_TX_COVER_DRYRUN")
+    tx_payloads = _build_transaction_payloads(
+        "E2E_TX_COVER_DRYRUN",
+        security_id="SEC_COVER_DRYRUN",
+        cash_security_id="CASH_USD_COVER_DRYRUN",
+    )
 
     tx_ids = [item["transaction_id"] for item in tx_payloads]
     tx_types = [item["transaction_type"] for item in tx_payloads]
@@ -434,6 +461,8 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
     setup_dual_leg_settlement_scenario, e2e_api_client: E2EApiClient
 ):
     portfolio_id = setup_dual_leg_settlement_scenario["portfolio_id"]
+    security_id = setup_dual_leg_settlement_scenario["security_id"]
+    cash_security_id = setup_dual_leg_settlement_scenario["cash_security_id"]
 
     e2e_api_client.ingest(
         "/ingest/business-dates",
@@ -444,13 +473,13 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
         {
             "market_prices": [
                 {
-                    "security_id": "SEC_DUAL",
+                    "security_id": security_id,
                     "price_date": "2026-03-02",
                     "price": "100",
                     "currency": "USD",
                 },
                 {
-                    "security_id": "CASH_USD_DUAL",
+                    "security_id": cash_security_id,
                     "price_date": "2026-03-02",
                     "price": "1",
                     "currency": "USD",
@@ -479,7 +508,7 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
             for row in data.get("rows", [])
             if row.get("valuation_date") == "2026-03-02"
         }
-        >= {"SEC_DUAL", "CASH_USD_DUAL"},
+        >= {security_id, cash_security_id},
         timeout=240,
         fail_message=(
             "Dual-leg position-timeseries rows were not available for acquisition-day validation."
@@ -487,8 +516,8 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
     )
 
     row_by_security = {row["security_id"]: row for row in response_payload["rows"]}
-    stock_row = row_by_security["SEC_DUAL"]
-    cash_row = row_by_security["CASH_USD_DUAL"]
+    stock_row = row_by_security[security_id]
+    cash_row = row_by_security[cash_security_id]
 
     stock_flow_total = sum(Decimal(str(flow["amount"])) for flow in stock_row["cash_flows"])
     cash_flow_total = sum(Decimal(str(flow["amount"])) for flow in cash_row["cash_flows"])

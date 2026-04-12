@@ -7,11 +7,12 @@ from .api_client import E2EApiClient
 
 @pytest.fixture(scope="module")
 def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
-    portfolio_id = f"E2E_FX_{uuid.uuid4().hex[:8].upper()}"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_FX_{suffix}"
     final_business_date = "2026-01-09"
-    cash_usd = "CASH_USD_FX"
-    cash_eur = "CASH_EUR_FX"
-    cash_gbp = "CASH_GBP_FX"
+    cash_usd = f"CASH_USD_FX_{suffix}"
+    cash_eur = f"CASH_EUR_FX_{suffix}"
+    cash_gbp = f"CASH_GBP_FX_{suffix}"
 
     forward_contract_id = f"FXC-{portfolio_id}-FWD-001"
     swap_event_id = f"FXSWAP-{portfolio_id}-001"
@@ -29,7 +30,7 @@ def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
                 "investment_time_horizon": "Medium",
                 "portfolio_type": "Discretionary",
                 "booking_center_code": "SG",
-                "client_id": "E2E_FX_CIF",
+                "client_id": f"E2E_FX_CIF_{suffix}",
                 "status": "ACTIVE",
             }
         ]
@@ -39,7 +40,7 @@ def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
             {
                 "security_id": cash_usd,
                 "name": "US Dollar Cash",
-                "isin": "CASH_USD_FX_E2E",
+                "isin": f"CASH_USD_FX_E2E_{suffix}",
                 "currency": "USD",
                 "product_type": "Cash",
                 "asset_class": "Cash",
@@ -47,7 +48,7 @@ def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
             {
                 "security_id": cash_eur,
                 "name": "Euro Cash",
-                "isin": "CASH_EUR_FX_E2E",
+                "isin": f"CASH_EUR_FX_E2E_{suffix}",
                 "currency": "EUR",
                 "product_type": "Cash",
                 "asset_class": "Cash",
@@ -55,7 +56,7 @@ def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
             {
                 "security_id": cash_gbp,
                 "name": "British Pound Cash",
-                "isin": "CASH_GBP_FX_E2E",
+                "isin": f"CASH_GBP_FX_E2E_{suffix}",
                 "currency": "GBP",
                 "product_type": "Cash",
                 "asset_class": "Cash",
