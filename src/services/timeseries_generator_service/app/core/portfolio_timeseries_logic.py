@@ -44,13 +44,14 @@ class PortfolioTimeseriesLogic:
         total_eod_mv = Decimal(0)
         total_fees = Decimal(0)
 
-        portfolio_currency = portfolio.base_currency
+        portfolio_currency = PortfolioTimeseriesLogic._normalize_currency(portfolio.base_currency)
+        fx_rate_cache: dict[tuple[str, str, date], Decimal] = {}
 
         # 1. Aggregate market values and portfolio-level cashflows directly from the
         # same position-timeseries rows. This keeps portfolio BOD/EOD aligned with
         # the summed position-timeseries contract instead of relying on a separate
         # previous-portfolio carry-forward path.
-        security_ids = [pt.security_id for pt in position_timeseries_list]
+        security_ids = list(dict.fromkeys(pt.security_id for pt in position_timeseries_list))
         instruments_list = await repo.get_instruments_by_ids(security_ids)
         instruments = {inst.security_id: inst for inst in instruments_list}
 
@@ -62,24 +63,14 @@ class PortfolioTimeseriesLogic:
                 )
                 continue
 
-            instrument_currency = instrument.currency
-            rate = Decimal(1.0)
-
-            # --- THIS IS THE FIX ---
-            # Defensively cast to string before calling .strip() to prevent AttributeError
-            if str(instrument_currency).strip() != str(portfolio_currency).strip():
-                # --- END FIX ---
-                fx_rate = await repo.get_fx_rate(
-                    instrument_currency, portfolio_currency, pos_ts.date
-                )
-                if not fx_rate:
-                    error_msg = (
-                        f"Missing FX rate from {instrument_currency} "
-                        f"to {portfolio_currency} for date {pos_ts.date}."
-                    )
-                    logger.error(error_msg)
-                    raise FxRateNotFoundError(error_msg)
-                rate = fx_rate.rate
+            instrument_currency = PortfolioTimeseriesLogic._normalize_currency(instrument.currency)
+            rate = await PortfolioTimeseriesLogic._resolve_fx_rate(
+                repo=repo,
+                instrument_currency=instrument_currency,
+                portfolio_currency=portfolio_currency,
+                valuation_date=pos_ts.date,
+                fx_rate_cache=fx_rate_cache,
+            )
 
             total_bod_mv += (pos_ts.bod_market_value or Decimal(0)) * rate
             total_bod_cf += (pos_ts.bod_cashflow_portfolio or Decimal(0)) * rate
@@ -101,3 +92,35 @@ class PortfolioTimeseriesLogic:
             eod_market_value=total_eod_mv,
             fees=total_fees,
         )
+
+    @staticmethod
+    def _normalize_currency(currency: object) -> str:
+        return str(currency).strip().upper()
+
+    @staticmethod
+    async def _resolve_fx_rate(
+        repo: TimeseriesRepository,
+        instrument_currency: str,
+        portfolio_currency: str,
+        valuation_date: date,
+        fx_rate_cache: dict[tuple[str, str, date], Decimal],
+    ) -> Decimal:
+        if instrument_currency == portfolio_currency:
+            return Decimal("1")
+
+        cache_key = (instrument_currency, portfolio_currency, valuation_date)
+        cached_rate = fx_rate_cache.get(cache_key)
+        if cached_rate is not None:
+            return cached_rate
+
+        fx_rate = await repo.get_fx_rate(instrument_currency, portfolio_currency, valuation_date)
+        if not fx_rate:
+            error_msg = (
+                f"Missing FX rate from {instrument_currency} "
+                f"to {portfolio_currency} for date {valuation_date}."
+            )
+            logger.error(error_msg)
+            raise FxRateNotFoundError(error_msg)
+
+        fx_rate_cache[cache_key] = fx_rate.rate
+        return fx_rate.rate
