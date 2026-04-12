@@ -8,16 +8,9 @@ from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_SOURCE_OUT_TYPES,
     CA_BUNDLE_A_TARGET_IN_TYPES,
 )
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 from .api_client import E2EApiClient
 from .data_factory import unique_suffix
-
-
-def _iso_z(ts: datetime) -> str:
-    return ts.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
 
 SUPPORTED_TRANSACTION_TYPES = set(TransactionType.list())
 
@@ -58,7 +51,11 @@ BUNDLE_A_IN_TYPES = set(CA_BUNDLE_A_TARGET_IN_TYPES)
 MIN_E2E_CASHFLOW_DISTINCT_TYPES = 5
 
 
-def _build_transaction_payloads(
+def iso_z(ts: datetime) -> str:
+    return ts.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def build_transaction_payloads(
     portfolio_id: str, *, security_id: str, cash_security_id: str
 ) -> list[dict]:
     """
@@ -93,7 +90,7 @@ def _build_transaction_payloads(
             "portfolio_id": portfolio_id,
             "instrument_id": resolved_security_id,
             "security_id": resolved_security_id,
-            "transaction_date": _iso_z(ts),
+            "transaction_date": iso_z(ts),
             "transaction_type": tx_type,
             "quantity": str(quantity),
             "price": str(price),
@@ -125,7 +122,7 @@ def _build_transaction_payloads(
     return payloads
 
 
-def _expected_cashflow_sign(payload: dict, classification: str) -> int:
+def expected_cashflow_sign(payload: dict, classification: str) -> int:
     tx_type = payload["transaction_type"]
     gross = Decimal(str(payload["gross_transaction_amount"]))
     fee = Decimal(str(payload.get("trade_fee", "0")))
@@ -150,7 +147,6 @@ def _expected_cashflow_sign(payload: dict, classification: str) -> int:
             return -1
         return 1 if quantity > 0 else -1
 
-    # Keep "OTHER"/future classes deterministic for this fixture.
     return 1 if net >= 0 else -1
 
 
@@ -203,7 +199,7 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
         },
     )
 
-    payloads = _build_transaction_payloads(
+    payloads = build_transaction_payloads(
         portfolio_id, security_id=security_id, cash_security_id=cash_security_id
     )
     e2e_api_client.ingest("/ingest/transactions", {"transactions": payloads})
@@ -226,11 +222,6 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
 
 @pytest.fixture(scope="module")
 def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiClient):
-    """
-    Business scenario:
-    Upstream provides both product leg (BUY) and cash leg (ADJUSTMENT) with linkage.
-    Cashflow generation should treat ADJUSTMENT leg as authoritative cash movement.
-    """
     suffix = unique_suffix()
     portfolio_id = f"E2E_DUAL_LEG_{suffix}"
     buy_txn_id = f"{portfolio_id}_BUY_01"
@@ -338,198 +329,3 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
         "security_id": security_id,
         "cash_security_id": cash_security_id,
     }
-
-
-def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
-    tx_payloads = _build_transaction_payloads(
-        "E2E_TX_COVER_DRYRUN",
-        security_id="SEC_COVER_DRYRUN",
-        cash_security_id="CASH_USD_COVER_DRYRUN",
-    )
-
-    tx_ids = [item["transaction_id"] for item in tx_payloads]
-    tx_types = [item["transaction_type"] for item in tx_payloads]
-
-    # No duplicate test records.
-    assert len(tx_ids) == len(set(tx_ids))
-    # Exactly one payload per supported type.
-    assert len(tx_types) == len(set(tx_types))
-    assert set(tx_types) == SUPPORTED_TRANSACTION_TYPES
-
-
-def test_cashflow_rules_cover_every_supported_transaction_type(db_engine):
-    with Session(db_engine) as session:
-        rows = session.execute(text("SELECT transaction_type FROM cashflow_rules")).fetchall()
-
-    rule_types = {row[0] for row in rows}
-    missing = (SUPPORTED_TRANSACTION_TYPES - TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE) - rule_types
-    assert not missing, f"Missing cashflow rules for transaction types: {sorted(missing)}"
-
-
-def test_all_supported_transaction_types_are_ingestable_queryable_and_cashflowed(
-    setup_transaction_type_coverage_data, e2e_api_client: E2EApiClient, db_engine, poll_db_until
-):
-    portfolio_id = setup_transaction_type_coverage_data["portfolio_id"]
-    expected_payloads = setup_transaction_type_coverage_data["payloads"]
-    expected_by_id = {item["transaction_id"]: item for item in expected_payloads}
-    expected_ids = set(expected_by_id)
-    expected_types = {item["transaction_type"] for item in expected_payloads}
-
-    response = e2e_api_client.query(f"/portfolios/{portfolio_id}/transactions?limit=500")
-    body = response.json()
-    transactions = body.get("transactions", [])
-
-    returned_ids = {item["transaction_id"] for item in transactions}
-    returned_types = {item["transaction_type"] for item in transactions}
-
-    assert expected_ids.issubset(returned_ids)
-    assert expected_types.issubset(returned_types)
-    assert body["total"] >= len(expected_payloads)
-
-    # Meaningful API-side quality checks on returned records.
-    for item in transactions:
-        if item["transaction_id"] in expected_ids:
-            assert body["portfolio_id"] == portfolio_id
-            assert Decimal(str(item["gross_transaction_amount"])) > 0
-            assert item["transaction_type"] in SUPPORTED_TRANSACTION_TYPES
-            assert "cashflow" in item
-
-    # DB-side checks ensure all transaction types completed cashflow pipeline.
-    poll_db_until(
-        query="""
-            SELECT count(DISTINCT t.transaction_type)
-            FROM transactions t
-            JOIN cashflows c ON c.transaction_id = t.transaction_id
-            WHERE t.portfolio_id = :portfolio_id
-        """,
-        params={"portfolio_id": portfolio_id},
-        validation_func=lambda row: row is not None and row[0] >= MIN_E2E_CASHFLOW_DISTINCT_TYPES,
-        timeout=180,
-        fail_message="Cashflow generation did not complete for baseline transaction types",
-    )
-
-    with Session(db_engine) as session:
-        rows = session.execute(
-            text(
-                """
-                SELECT t.transaction_id, t.transaction_type, c.amount, c.classification,
-                       c.is_position_flow, c.is_portfolio_flow
-                FROM transactions t
-                JOIN cashflows c ON c.transaction_id = t.transaction_id
-                WHERE t.portfolio_id = :portfolio_id
-                """
-            ),
-            {"portfolio_id": portfolio_id},
-        ).fetchall()
-
-    produced_types = {row[1] for row in rows}
-    assert len(produced_types) >= MIN_E2E_CASHFLOW_DISTINCT_TYPES
-
-    for tx_id, tx_type, amount, classification, is_position_flow, is_portfolio_flow in rows:
-        payload = expected_by_id[tx_id]
-        assert payload["transaction_type"] == tx_type
-        assert bool(is_position_flow) or bool(is_portfolio_flow)
-
-        observed_sign = 1 if Decimal(str(amount)) > 0 else -1
-        expected_sign = _expected_cashflow_sign(payload, classification)
-        assert observed_sign == expected_sign, (
-            f"Unexpected cashflow sign for {tx_id} ({tx_type}): "
-            f"class={classification}, amount={amount}, expected_sign={expected_sign}"
-        )
-
-
-def test_dual_leg_upstream_settlement_cashflow_authority(
-    setup_dual_leg_settlement_scenario, e2e_api_client: E2EApiClient
-):
-    portfolio_id = setup_dual_leg_settlement_scenario["portfolio_id"]
-    buy_txn_id = setup_dual_leg_settlement_scenario["buy_txn_id"]
-    cash_txn_id = setup_dual_leg_settlement_scenario["cash_txn_id"]
-
-    response = e2e_api_client.query(f"/portfolios/{portfolio_id}/transactions?limit=50")
-    body = response.json()
-    tx_by_id = {tx["transaction_id"]: tx for tx in body["transactions"]}
-
-    assert buy_txn_id in tx_by_id
-    assert cash_txn_id in tx_by_id
-    assert tx_by_id[buy_txn_id]["external_cash_transaction_id"] == cash_txn_id
-    assert tx_by_id[cash_txn_id]["originating_transaction_id"] == buy_txn_id
-    assert tx_by_id[buy_txn_id]["cash_entry_mode"] == "UPSTREAM_PROVIDED"
-    assert tx_by_id[cash_txn_id]["transaction_type"] == "ADJUSTMENT"
-
-
-def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
-    setup_dual_leg_settlement_scenario, e2e_api_client: E2EApiClient
-):
-    portfolio_id = setup_dual_leg_settlement_scenario["portfolio_id"]
-    security_id = setup_dual_leg_settlement_scenario["security_id"]
-    cash_security_id = setup_dual_leg_settlement_scenario["cash_security_id"]
-
-    e2e_api_client.ingest(
-        "/ingest/business-dates",
-        {"business_dates": [{"business_date": "2026-03-02"}]},
-    )
-    e2e_api_client.ingest(
-        "/ingest/market-prices",
-        {
-            "market_prices": [
-                {
-                    "security_id": security_id,
-                    "price_date": "2026-03-02",
-                    "price": "100",
-                    "currency": "USD",
-                },
-                {
-                    "security_id": cash_security_id,
-                    "price_date": "2026-03-02",
-                    "price": "1",
-                    "currency": "USD",
-                },
-            ]
-        },
-    )
-
-    payload = {
-        "as_of_date": "2026-03-02",
-        "window": {"start_date": "2026-03-02", "end_date": "2026-03-02"},
-        "consumer_system": "lotus-performance",
-        "frequency": "daily",
-        "dimensions": [],
-        "include_cash_flows": True,
-        "filters": {},
-        "page": {"page_size": 50},
-    }
-
-    response_payload = e2e_api_client.poll_for_post_query_data(
-        f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
-        payload,
-        lambda data: len(data.get("rows", [])) >= 2
-        and {
-            row.get("security_id")
-            for row in data.get("rows", [])
-            if row.get("valuation_date") == "2026-03-02"
-        }
-        >= {security_id, cash_security_id},
-        timeout=240,
-        fail_message=(
-            "Dual-leg position-timeseries rows were not available for acquisition-day validation."
-        ),
-    )
-
-    row_by_security = {row["security_id"]: row for row in response_payload["rows"]}
-    stock_row = row_by_security[security_id]
-    cash_row = row_by_security[cash_security_id]
-
-    stock_flow_total = sum(Decimal(str(flow["amount"])) for flow in stock_row["cash_flows"])
-    cash_flow_total = sum(Decimal(str(flow["amount"])) for flow in cash_row["cash_flows"])
-
-    assert Decimal(str(stock_row["beginning_market_value_position_currency"])) == Decimal("0")
-    assert Decimal(str(stock_row["ending_market_value_position_currency"])) == Decimal("1000")
-    assert stock_flow_total == Decimal("1000")
-    assert cash_flow_total == Decimal("-1000")
-    assert stock_flow_total + cash_flow_total == Decimal("0")
-    assert [(flow["cash_flow_type"], flow["flow_scope"]) for flow in stock_row["cash_flows"]] == [
-        ("internal_trade_flow", "internal")
-    ]
-    assert [(flow["cash_flow_type"], flow["flow_scope"]) for flow in cash_row["cash_flows"]] == [
-        ("internal_trade_flow", "internal")
-    ]
