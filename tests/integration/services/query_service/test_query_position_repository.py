@@ -323,3 +323,110 @@ async def test_get_latest_positions_prefers_latest_business_date_over_latest_id(
     latest_snapshot, _, _ = latest_positions[0]
     assert latest_snapshot.date == setup_snapshot_id_order_mismatch_data["newer_date"]
     assert latest_snapshot.quantity == Decimal("200")
+
+
+@pytest.fixture(scope="function")
+def setup_as_of_positive_filter_data(db_engine):
+    portfolio_id = "POS_REPO_TEST_03"
+    positive_security = "SEC_POS_POSITIVE"
+    negative_security = "SEC_POS_NEGATIVE"
+    as_of_date = date(2025, 1, 10)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.add_all(
+            [
+                Instrument(
+                    security_id=positive_security,
+                    name="Positive",
+                    isin="XS0000000011",
+                    currency="USD",
+                    product_type="Stock",
+                    asset_class="Equity",
+                    sector="Tech",
+                    country_of_risk="US",
+                ),
+                Instrument(
+                    security_id=negative_security,
+                    name="Negative",
+                    isin="XS0000000012",
+                    currency="USD",
+                    product_type="Cash",
+                    asset_class="Cash",
+                    sector=None,
+                    country_of_risk="US",
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id=positive_security,
+                    epoch=0,
+                    watermark_date=date(2024, 1, 1),
+                    status="CURRENT",
+                ),
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id=negative_security,
+                    epoch=1,
+                    watermark_date=date(2024, 1, 1),
+                    status="REPROCESSING",
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                DailyPositionSnapshot(
+                    portfolio_id=portfolio_id,
+                    security_id=positive_security,
+                    date=as_of_date,
+                    quantity=Decimal("25"),
+                    cost_basis=Decimal("2500"),
+                    epoch=0,
+                ),
+                DailyPositionSnapshot(
+                    portfolio_id=portfolio_id,
+                    security_id=negative_security,
+                    date=as_of_date,
+                    quantity=Decimal("-10"),
+                    cost_basis=Decimal("-10"),
+                    epoch=1,
+                ),
+            ]
+        )
+        session.commit()
+
+    return {"portfolio_id": portfolio_id, "as_of_date": as_of_date}
+
+
+async def test_get_latest_positions_by_portfolio_as_of_date_filters_non_positive_rows(
+    clean_db, setup_as_of_positive_filter_data, async_db_session: AsyncSession
+):
+    repo = PositionRepository(async_db_session)
+
+    latest_positions = await repo.get_latest_positions_by_portfolio_as_of_date(
+        setup_as_of_positive_filter_data["portfolio_id"],
+        setup_as_of_positive_filter_data["as_of_date"],
+    )
+
+    assert len(latest_positions) == 1
+    latest_snapshot, instrument, pos_state = latest_positions[0]
+    assert latest_snapshot.security_id == "SEC_POS_POSITIVE"
+    assert latest_snapshot.quantity == Decimal("25")
+    assert instrument.name == "Positive"
+    assert pos_state.status == "CURRENT"

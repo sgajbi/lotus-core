@@ -87,27 +87,44 @@ class PositionService:
             effective_as_of_date = await self.repo.get_latest_business_date() or date.today()
 
         if effective_as_of_date is not None:
-            db_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(
+            snapshot_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(
+                portfolio_id, effective_as_of_date
+            )
+            history_results = await self.repo.get_latest_position_history_by_portfolio_as_of_date(
                 portfolio_id, effective_as_of_date
             )
         else:
-            db_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
-        using_snapshot_data = True
+            snapshot_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
+            history_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
+
+        snapshot_results_by_security = {
+            str(position_row.security_id): (position_row, instrument, pos_state)
+            for position_row, instrument, pos_state in snapshot_results
+        }
+        db_results = list(snapshot_results_by_security.values())
+        history_supplements = [
+            (position_row, instrument, pos_state)
+            for position_row, instrument, pos_state in history_results
+            if str(position_row.security_id) not in snapshot_results_by_security
+        ]
+        db_results.extend(history_supplements)
+
+        snapshot_security_ids = set(snapshot_results_by_security.keys())
         fallback_valuation_map: dict[str, dict[str, float | None]] = {}
-        if not db_results:
-            if effective_as_of_date is not None:
-                db_results = await self.repo.get_latest_position_history_by_portfolio_as_of_date(
+        if history_supplements or (db_results and not snapshot_security_ids):
+            fallback_valuation_map = (
+                await self.repo.get_latest_snapshot_valuation_map_as_of_date(
                     portfolio_id, effective_as_of_date
                 )
-            else:
-                db_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
-            using_snapshot_data = False
-            fallback_valuation_map = await self.repo.get_latest_snapshot_valuation_map(portfolio_id)
+                if effective_as_of_date is not None
+                else await self.repo.get_latest_snapshot_valuation_map(portfolio_id)
+            )
 
         positions = []
         for position_row, instrument, pos_state in db_results:
+            is_snapshot_row = str(position_row.security_id) in snapshot_security_ids
             valuation_dto = None
-            if using_snapshot_data:
+            if is_snapshot_row:
                 valuation_dto = ValuationData(
                     market_price=position_row.market_price,
                     market_value=position_row.market_value,
@@ -142,9 +159,7 @@ class PositionService:
                 cost_basis=position_row.cost_basis,
                 cost_basis_local=position_row.cost_basis_local,
                 instrument_name=instrument.name if instrument else "N/A",
-                position_date=(
-                    position_row.date if using_snapshot_data else position_row.position_date
-                ),
+                position_date=(position_row.date if is_snapshot_row else position_row.position_date),
                 asset_class=instrument.asset_class if instrument else None,
                 isin=instrument.isin if instrument else None,
                 currency=instrument.currency if instrument else None,
