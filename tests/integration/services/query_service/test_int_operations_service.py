@@ -336,6 +336,64 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
     assert response.reprocessing.backlog_age_days == 12
 
 
+async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P2Q",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P2Q",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add_all(
+        [
+            BusinessDate(
+                date=date(2025, 8, 30),
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P2Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-val-superseded",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P2Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-val-actionable",
+                created_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_calculator_slos("P2Q")
+
+    assert response.valuation.pending_jobs == 1
+    assert response.valuation.processing_jobs == 0
+    assert response.valuation.oldest_open_job_date == date(2025, 8, 20)
+    assert response.valuation.oldest_open_job_correlation_id == "corr-val-actionable"
+
+
 async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
     clean_db, async_db_session: AsyncSession
 ):

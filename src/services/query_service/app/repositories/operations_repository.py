@@ -318,7 +318,10 @@ class OperationsRepository:
             PortfolioValuationJob.id.label("id"),
             PortfolioValuationJob.correlation_id.label("correlation_id"),
             PortfolioValuationJob.security_id.label("security_id"),
-        ).where(PortfolioValuationJob.portfolio_id == portfolio_id)
+        ).where(
+            PortfolioValuationJob.portfolio_id == portfolio_id,
+            self._is_actionable_valuation_job(as_of=as_of),
+        )
         if as_of is not None:
             base_stmt = base_stmt.where(PortfolioValuationJob.updated_at <= as_of)
         base_subq = base_stmt.subquery()

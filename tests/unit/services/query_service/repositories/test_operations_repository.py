@@ -153,6 +153,7 @@ async def test_get_valuation_job_health_summary(
         "updated_at >= '2025-08-30 12:00:00+00:00'"
         in compiled
     )
+    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
     assert "order by" in compiled.lower()
     assert "valuation_date asc" in compiled.lower()
     assert "correlation_id" in compiled.lower()
