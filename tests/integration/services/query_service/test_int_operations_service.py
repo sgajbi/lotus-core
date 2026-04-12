@@ -1194,6 +1194,63 @@ async def test_valuation_jobs_expose_skipped_operational_state(
     assert response.items[0].operational_state == "SKIPPED"
 
 
+async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P9Q",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P9Q",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P9Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-valuation-epoch-old",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P9Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-valuation-epoch-new",
+                created_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_valuation_jobs("P9Q", skip=0, limit=20)
+
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].security_id == "SEC-VAL-EPOCH"
+    assert response.items[0].epoch == 2
+    assert response.items[0].correlation_id == "corr-valuation-epoch-new"
+
+
 async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):

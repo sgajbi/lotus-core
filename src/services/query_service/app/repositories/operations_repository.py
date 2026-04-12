@@ -20,6 +20,7 @@ from portfolio_common.database_models import (
 )
 from sqlalchemy import Date, and_, case, cast, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,31 @@ class MissingHistoricalFxDependencySummary:
 class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
+        superseding_job = aliased(PortfolioValuationJob)
+        superseded_pending_exists = (
+            select(superseding_job.id)
+            .where(
+                superseding_job.portfolio_id == PortfolioValuationJob.portfolio_id,
+                superseding_job.security_id == PortfolioValuationJob.security_id,
+                superseding_job.valuation_date == PortfolioValuationJob.valuation_date,
+                superseding_job.epoch > PortfolioValuationJob.epoch,
+            )
+        )
+        if as_of is not None:
+            superseded_pending_exists = superseded_pending_exists.where(
+                superseding_job.updated_at <= as_of
+            )
+
+        return case(
+            (
+                PortfolioValuationJob.status == "PENDING",
+                ~superseded_pending_exists.exists(),
+            ),
+            else_=true(),
+        )
 
     @staticmethod
     def _reprocessing_job_portfolio_scope_exists(
@@ -1120,6 +1146,8 @@ class OperationsRepository:
             .select_from(PortfolioValuationJob)
             .where(PortfolioValuationJob.portfolio_id == portfolio_id)
         )
+        if job_id is None and correlation_id is None:
+            stmt = stmt.where(self._is_actionable_valuation_job(as_of=as_of))
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
@@ -1153,6 +1181,8 @@ class OperationsRepository:
         stmt = select(PortfolioValuationJob).where(
             PortfolioValuationJob.portfolio_id == portfolio_id
         )
+        if job_id is None and correlation_id is None:
+            stmt = stmt.where(self._is_actionable_valuation_job(as_of=as_of))
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
