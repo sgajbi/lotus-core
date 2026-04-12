@@ -1,10 +1,10 @@
 # tests/e2e/test_concentration_pipeline.py
-import uuid
 
 import pytest
 
 from .api_client import E2EApiClient
 from .assertions import assert_legacy_endpoint_status
+from .data_factory import unique_suffix
 
 AS_OF_DATE = "2025-08-31"
 
@@ -14,7 +14,7 @@ def setup_concentration_data(clean_db_module, e2e_api_client: E2EApiClient, poll
     A module-scoped fixture that ingests all necessary data for the full
     concentration E2E test and waits for the pipeline to complete.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_CONC_{suffix}"
     sec_a_id = f"SEC_CONC_A_{suffix}"
     sec_b_id = f"SEC_CONC_B_{suffix}"

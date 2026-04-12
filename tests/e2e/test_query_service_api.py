@@ -1,9 +1,9 @@
 # tests/e2e/test_query_service_api.py
-import uuid
 
 import pytest
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -12,7 +12,7 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture to ingest a consistent set of data for testing
     API features like sorting, filtering, and pagination.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_API_TEST_{suffix}"
     security_1 = f"S1_{suffix}"
     security_2 = f"S2_{suffix}"

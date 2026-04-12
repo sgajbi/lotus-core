@@ -1,9 +1,9 @@
 # tests/e2e/test_persistence_query_pipeline.py
-import uuid
 
 import pytest
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -12,7 +12,7 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture that ingests a comprehensive set of data and waits
     for it all to be queryable.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     # Define all identifiers
     portfolio_id = f"E2E_PQ_PORT_{suffix}"
     security_id = f"SEC_PQ_INST_{suffix}"

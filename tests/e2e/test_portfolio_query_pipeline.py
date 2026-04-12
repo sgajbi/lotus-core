@@ -1,10 +1,10 @@
 # tests/e2e/test_portfolio_query_pipeline.py
-import uuid
 
 import pytest
 import requests
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -13,7 +13,7 @@ def setup_portfolio_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture that ingests a set of portfolios,
     and waits for them to be available via the query API.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_1 = f"E2E_QUERY_{suffix}_01"
     portfolio_2 = f"E2E_QUERY_{suffix}_02"
     portfolio_3 = f"E2E_QUERY_{suffix}_03"

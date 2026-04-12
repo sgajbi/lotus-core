@@ -1,5 +1,4 @@
 # tests/e2e/test_cashflow_pipeline.py
-import uuid
 from decimal import Decimal
 
 import pytest
@@ -7,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -15,7 +15,7 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture that ingests data for a simple cashflow scenario
     and waits for the calculation to be available via the query API.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_CASHFLOW_PORT_{suffix}"
     security_id = f"SEC_CSHFLW_{suffix}"
     transaction_id = f"{portfolio_id}_BUY_01"

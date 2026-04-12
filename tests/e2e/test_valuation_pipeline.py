@@ -1,5 +1,4 @@
 # tests/e2e/test_valuation_pipeline.py
-import uuid
 from decimal import Decimal
 from typing import Callable
 
@@ -7,6 +6,7 @@ import pytest
 
 from .api_client import E2EApiClient
 from .assertions import as_decimal
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -15,7 +15,7 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
     A module-scoped fixture that ingests data for a simple valuation scenario,
     and waits for the calculation to complete by polling the database for the final state.
     """
-    suffix = uuid.uuid4().hex[:8].upper()
+    suffix = unique_suffix()
     portfolio_id = f"E2E_VAL_PORT_{suffix}"
     security_id = f"SEC_E2E_VAL_{suffix}"
     tx_date = "2025-07-27"
