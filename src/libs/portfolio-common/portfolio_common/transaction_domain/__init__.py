@@ -6,6 +6,11 @@ from .adjustment_cash_leg import (
     build_auto_generated_adjustment_cash_leg,
     should_auto_generate_cash_leg,
 )
+from .buy_linkage import (
+    BUY_DEFAULT_POLICY_ID,
+    BUY_DEFAULT_POLICY_VERSION,
+    enrich_buy_transaction_metadata,
+)
 from .buy_models import BuyCanonicalTransaction
 from .buy_reason_codes import BuyValidationReasonCode
 from .buy_validation import (
@@ -119,6 +124,9 @@ __all__ = [
     "BuyValidationIssue",
     "BuyValidationReasonCode",
     "validate_buy_transaction",
+    "BUY_DEFAULT_POLICY_ID",
+    "BUY_DEFAULT_POLICY_VERSION",
+    "enrich_buy_transaction_metadata",
     "CA_BUNDLE_A_TRANSACTION_TYPES",
     "DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE",
     "CaBundleAReconciliationResult",

@@ -27,6 +27,7 @@ from portfolio_common.transaction_domain import (
     assert_upstream_cash_leg_pairing,
     build_auto_generated_adjustment_cash_leg,
     build_fx_contract_instrument_event,
+    enrich_buy_transaction_metadata,
     build_fx_processed_event,
     enrich_dividend_transaction_metadata,
     enrich_fx_transaction_metadata,
@@ -225,6 +226,7 @@ class CostCalculatorConsumer(BaseConsumer):
                         instrument = await repo.get_instrument(event.security_id)
 
                         cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
+                        event = enrich_buy_transaction_metadata(event)
                         event = enrich_sell_transaction_metadata(
                             event, cost_basis_method=cost_basis_method
                         )

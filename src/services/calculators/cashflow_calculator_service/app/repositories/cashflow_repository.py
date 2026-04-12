@@ -39,8 +39,9 @@ class CashflowRepository:
         Saves a new Cashflow record to the database within a managed transaction.
         """
         try:
-            self.db.add(cashflow)
-            await self.db.flush()
+            async with self.db.begin_nested():
+                self.db.add(cashflow)
+                await self.db.flush()
             await self.db.refresh(cashflow)
             logger.info(
                 "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
@@ -49,13 +50,21 @@ class CashflowRepository:
             )
             return cashflow
         except IntegrityError:
-            logger.warning(
-                "A cashflow for transaction_id '%s' in epoch %s may already exist. "
-                "The transaction will be rolled back.",
+            logger.info(
+                "Cashflow for transaction_id '%s' in epoch %s already exists. Reusing persisted row.",
                 cashflow.transaction_id,
                 cashflow.epoch,
             )
-            raise
+            result = await self.db.execute(
+                select(Cashflow).where(
+                    Cashflow.transaction_id == cashflow.transaction_id,
+                    Cashflow.epoch == cashflow.epoch,
+                )
+            )
+            existing_cashflow = result.scalars().first()
+            if existing_cashflow is None:
+                raise
+            return existing_cashflow
         except Exception as e:
             logger.error(
                 "An unexpected error occurred while staging cashflow for txn "
