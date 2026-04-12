@@ -119,7 +119,7 @@ async def test_scheduler_creates_position_aware_backfill_jobs(
         mock_gauge_labels.return_value.set.assert_called_once_with(expected_lag)
 
 
-async def test_scheduler_skips_jobs_for_keys_with_no_position_history(
+async def test_scheduler_normalizes_non_reprocessing_keys_with_no_position_history(
     scheduler: ValuationScheduler,
     mock_dependencies: dict,
 ):
@@ -155,6 +155,35 @@ async def test_scheduler_skips_jobs_for_keys_with_no_position_history(
             }
         ]
     )
+
+
+async def test_scheduler_defers_reprocessing_keys_with_no_position_history(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+
+    latest_business_date = date(2025, 8, 12)
+    states_to_backfill = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 8, 10),
+            epoch=1,
+            status="REPROCESSING",
+        )
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_states_needing_backfill.return_value = states_to_backfill
+    mock_repo.get_first_open_dates_for_keys.return_value = {}
+
+    await scheduler._create_backfill_jobs(AsyncMock())
+
+    mock_job_repo.upsert_job.assert_not_called()
+    mock_state_repo.bulk_update_states.assert_not_awaited()
 
 
 async def test_scheduler_advances_watermarks(
