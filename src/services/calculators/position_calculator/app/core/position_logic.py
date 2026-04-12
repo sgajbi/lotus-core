@@ -374,18 +374,20 @@ class PositionCalculator:
         transaction: TransactionEvent, txn_type: str
     ) -> tuple[Decimal, Decimal, Decimal]:
         quantity_delta = PositionCalculator._cash_position_amount_delta(transaction, txn_type)
-        use_signed_fallback = txn_type == "ADJUSTMENT"
+        use_quantity_fallback = txn_type == "ADJUSTMENT" or txn_type in (
+            CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
+        )
         cost_basis_delta = (
             Decimal(str(transaction.net_cost))
             if transaction.net_cost is not None
-            and not (use_signed_fallback and Decimal(str(transaction.net_cost)) == Decimal(0))
+            and not (use_quantity_fallback and Decimal(str(transaction.net_cost)) == Decimal(0))
             else quantity_delta
         )
         cost_basis_local_delta = (
             Decimal(str(transaction.net_cost_local))
             if transaction.net_cost_local is not None
             and not (
-                use_signed_fallback and Decimal(str(transaction.net_cost_local)) == Decimal(0)
+                use_quantity_fallback and Decimal(str(transaction.net_cost_local)) == Decimal(0)
             )
             else quantity_delta
         )

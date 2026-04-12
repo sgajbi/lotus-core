@@ -43,7 +43,9 @@ async def test_upsert_job_builds_correct_statement(
     latest_epoch_result.all.return_value = []
     insert_result = MagicMock()
     insert_result.all.return_value = [("PORT_VJR_01", "SEC_VJR_01", date(2025, 8, 11), 1)]
-    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result]
+    skip_result = MagicMock()
+    skip_result.fetchall.return_value = []
+    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result, skip_result]
 
     job_details = {
         "portfolio_id": "PORT_VJR_01",
@@ -70,9 +72,9 @@ async def test_upsert_job_builds_correct_statement(
         where=ANY,
     )
 
-    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_count == 3
     assert mock_final_statement.returning.call_count == 1
-    assert mock_db_session.execute.await_args_list[-1].args[0] == mock_returning_statement
+    assert mock_db_session.execute.await_args_list[1].args[0] == mock_returning_statement
 
 
 @patch("portfolio_common.valuation_job_repository.pg_insert")
@@ -103,7 +105,9 @@ async def test_upsert_job_normalizes_sentinel_correlation(
     latest_epoch_result.all.return_value = []
     insert_result = MagicMock()
     insert_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 1)]
-    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result]
+    skip_result = MagicMock()
+    skip_result.fetchall.return_value = []
+    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result, skip_result]
 
     await repository.upsert_job(
         portfolio_id="P1",
@@ -115,6 +119,39 @@ async def test_upsert_job_normalizes_sentinel_correlation(
 
     values_args = mock_pg_insert.return_value.values.call_args.args[0]
     assert values_args[0]["correlation_id"] is None
+
+
+@patch("portfolio_common.valuation_job_repository.pg_insert")
+async def test_upsert_job_marks_prior_pending_epochs_as_superseded(
+    mock_pg_insert, repository: ValuationJobRepository, mock_db_session: AsyncMock
+):
+    mock_final_statement = MagicMock()
+    mock_returning_statement = MagicMock()
+    (
+        mock_pg_insert.return_value.values.return_value.on_conflict_do_update.return_value
+    ) = mock_final_statement
+    mock_final_statement.returning.return_value = mock_returning_statement
+    latest_epoch_result = MagicMock()
+    latest_epoch_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 1)]
+    insert_result = MagicMock()
+    insert_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 2)]
+    skip_result = MagicMock()
+    skip_result.fetchall.return_value = [(101,)]
+    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result, skip_result]
+
+    await repository.upsert_job(
+        portfolio_id="P1",
+        security_id="S1",
+        valuation_date=date(2025, 8, 10),
+        epoch=2,
+        correlation_id="corr-vjr-002",
+    )
+
+    skip_stmt = mock_db_session.execute.await_args_list[-1].args[0]
+    compiled_query = str(skip_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SKIPPED_SUPERSEDED" in compiled_query
+    assert "Superseded by newer valuation epoch." in compiled_query
+    assert "portfolio_valuation_jobs.epoch < 2" in compiled_query
 
 
 async def test_upsert_jobs_deduplicates_duplicate_requests(repository: ValuationJobRepository):
