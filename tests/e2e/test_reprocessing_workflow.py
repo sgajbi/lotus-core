@@ -1,4 +1,5 @@
 # tests/e2e/test_reprocessing_workflow.py
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -13,8 +14,10 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
     A module-scoped fixture that sets up an initial state for a position,
     in preparation for a back-dated transaction.
     """
-    portfolio_id = "E2E_REPRO_01"
-    security_id = "SEC_REPRO_AAPL"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_REPRO_{suffix}"
+    security_id = f"SEC_REPRO_AAPL_{suffix}"
+    instrument_id = f"AAPL_{suffix}"
     day1, day2, day3 = "2025-09-01", "2025-09-02", "2025-09-03"
 
     # 1. Ingest prerequisites
@@ -26,7 +29,7 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
                     "portfolioId": portfolio_id,
                     "baseCurrency": "USD",
                     "openDate": "2025-01-01",
-                    "cifId": "REPRO_CIF",
+                    "cifId": f"REPRO_CIF_{suffix}",
                     "status": "ACTIVE",
                     "riskExposure": "a",
                     "investmentTimeHorizon": "b",
@@ -43,7 +46,7 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
                 {
                     "securityId": security_id,
                     "name": "Apple Repro",
-                    "isin": "US0378331005_REPRO",
+                    "isin": f"US0378331005_REPRO_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                 }
@@ -74,9 +77,9 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
     # 2. Ingest initial transactions on Day 1 and Day 3
     transactions = [
         {
-            "transaction_id": "REPRO_BUY_DAY1",
+            "transaction_id": f"{portfolio_id}_BUY_DAY1",
             "portfolio_id": portfolio_id,
-            "instrument_id": "AAPL",
+            "instrument_id": instrument_id,
             "security_id": security_id,
             "transaction_date": f"{day1}T10:00:00Z",
             "transaction_type": "BUY",
@@ -87,9 +90,9 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
             "currency": "USD",
         },
         {
-            "transaction_id": "REPRO_BUY_DAY3",
+            "transaction_id": f"{portfolio_id}_BUY_DAY3",
             "portfolio_id": portfolio_id,
-            "instrument_id": "AAPL",
+            "instrument_id": instrument_id,
             "security_id": security_id,
             "transaction_date": f"{day3}T10:00:00Z",
             "transaction_type": "BUY",
@@ -129,6 +132,7 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
     return {
         "portfolio_id": portfolio_id,
         "security_id": security_id,
+        "instrument_id": instrument_id,
         "initial_epoch": int(initial_state.epoch),
     }
 
@@ -144,6 +148,7 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     portfolio_id = setup_reprocessing_data["portfolio_id"]
     security_id = setup_reprocessing_data["security_id"]
     initial_epoch = setup_reprocessing_data["initial_epoch"]
+    instrument_id = setup_reprocessing_data["instrument_id"]
     day2 = "2025-09-02"
 
     # Initial state (from fixture): BUY 100 @ $200 (Day 1), BUY 50 @ $220 (Day 3)
@@ -151,9 +156,9 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     back_dated_payload = {
         "transactions": [
             {
-                "transaction_id": "REPRO_SELL_DAY2",
+                "transaction_id": f"{portfolio_id}_SELL_DAY2",
                 "portfolio_id": portfolio_id,
-                "instrument_id": "AAPL",
+                "instrument_id": instrument_id,
                 "security_id": security_id,
                 "transaction_date": f"{day2}T11:00:00Z",
                 "transaction_type": "SELL",
@@ -183,8 +188,8 @@ def test_back_dated_transaction_triggers_reprocessing_and_corrects_state(
     # ASSERT 2: The realized P&L on the SELL transaction must be correct based on FIFO.
     # P&L = (40 * 215) - (40 * 200) = 8600 - 8000 = 600
     poll_db_until(
-        query="SELECT realized_gain_loss FROM transactions WHERE transaction_id = 'REPRO_SELL_DAY2'",  # noqa: E501
-        params={},
+        query="SELECT realized_gain_loss FROM transactions WHERE transaction_id = :transaction_id",
+        params={"transaction_id": f"{portfolio_id}_SELL_DAY2"},
         validation_func=lambda r: (
             r is not None and r.realized_gain_loss == Decimal("600.0000000000")
         ),

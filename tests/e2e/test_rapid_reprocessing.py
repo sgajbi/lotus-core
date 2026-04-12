@@ -1,4 +1,5 @@
 # tests/e2e/test_rapid_reprocessing.py
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -13,8 +14,10 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     Sets up an initial multi-day state for a position, in preparation for
     receiving multiple back-dated transactions.
     """
-    portfolio_id = "E2E_RAPID_REPRO_01"
-    security_id = "SEC_RAPID_REPRO_01"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_RAPID_REPRO_{suffix}"
+    security_id = f"SEC_RAPID_REPRO_{suffix}"
+    instrument_id = f"RRS_{suffix}"
     day1, day4 = "2025-09-11", "2025-09-14"
 
     # 1. Ingest prerequisites
@@ -26,7 +29,7 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
                     "portfolioId": portfolio_id,
                     "baseCurrency": "USD",
                     "openDate": "2025-01-01",
-                    "cifId": "RAPID_REPRO_CIF",
+                    "cifId": f"RAPID_REPRO_CIF_{suffix}",
                     "status": "ACTIVE",
                     "riskExposure": "a",
                     "investmentTimeHorizon": "b",
@@ -43,7 +46,7 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
                 {
                     "securityId": security_id,
                     "name": "Rapid Repro Stock",
-                    "isin": "US_RAPID_REPRO",
+                    "isin": f"US_RAPID_REPRO_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                 }
@@ -73,9 +76,9 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     # 2. Ingest initial transactions on Day 1 and Day 4
     transactions = [
         {
-            "transaction_id": "RAPID_BUY_D1",
+            "transaction_id": f"{portfolio_id}_BUY_D1",
             "portfolio_id": portfolio_id,
-            "instrument_id": "RRS",
+            "instrument_id": instrument_id,
             "security_id": security_id,
             "transaction_date": f"{day1}T10:00:00Z",
             "transaction_type": "BUY",
@@ -86,9 +89,9 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
             "currency": "USD",
         },
         {
-            "transaction_id": "RAPID_BUY_D4",
+            "transaction_id": f"{portfolio_id}_BUY_D4",
             "portfolio_id": portfolio_id,
-            "instrument_id": "RRS",
+            "instrument_id": instrument_id,
             "security_id": security_id,
             "transaction_date": f"{day4}T10:00:00Z",
             "transaction_type": "BUY",
@@ -128,6 +131,7 @@ def setup_rapid_repro_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
     return {
         "portfolio_id": portfolio_id,
         "security_id": security_id,
+        "instrument_id": instrument_id,
         "initial_epoch": int(initial_state.epoch),
     }
 
@@ -144,14 +148,15 @@ def test_rapid_back_to_back_reprocessing(
     portfolio_id = setup_rapid_repro_data["portfolio_id"]
     security_id = setup_rapid_repro_data["security_id"]
     initial_epoch = setup_rapid_repro_data["initial_epoch"]
+    instrument_id = setup_rapid_repro_data["instrument_id"]
     day2, day3, day4 = "2025-09-12", "2025-09-13", "2025-09-14"
 
     back_dated_payload_1 = {
         "transactions": [
             {
-                "transaction_id": "RAPID_SELL_D2",
+                "transaction_id": f"{portfolio_id}_SELL_D2",
                 "portfolio_id": portfolio_id,
-                "instrument_id": "RRS",
+                "instrument_id": instrument_id,
                 "security_id": security_id,
                 "transaction_date": f"{day2}T11:00:00Z",
                 "transaction_type": "SELL",
@@ -166,9 +171,9 @@ def test_rapid_back_to_back_reprocessing(
     back_dated_payload_2 = {
         "transactions": [
             {
-                "transaction_id": "RAPID_SELL_D3",
+                "transaction_id": f"{portfolio_id}_SELL_D3",
                 "portfolio_id": portfolio_id,
-                "instrument_id": "RRS",
+                "instrument_id": instrument_id,
                 "security_id": security_id,
                 "transaction_date": f"{day3}T11:00:00Z",
                 "transaction_type": "SELL",

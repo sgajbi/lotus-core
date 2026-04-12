@@ -493,24 +493,6 @@ def test_analytics_input_timeseries_contract_day_1_returns_expected_rows(
     )
 
 
-def test_analytics_input_timeseries_contract_day_2_returns_expected_rows(
-    setup_timeseries_data, e2e_api_client: E2EApiClient
-):
-    portfolio_id = setup_timeseries_data["portfolio_id"]
-    response = e2e_api_client.post_query(
-        f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
-        _position_timeseries_request("2025-08-29"),
-    )
-    payload = response.json()
-    _assert_timeseries_payload(
-        payload,
-        valuation_date="2025-08-29",
-        portfolio_id=portfolio_id,
-        stock_security_id=setup_timeseries_data["stock_security_id"],
-        cash_security_id=setup_timeseries_data["cash_security_id"],
-    )
-
-
 def test_analytics_input_position_timeseries_contract_day_2_returns_expected_rows(
     setup_timeseries_data, e2e_api_client: E2EApiClient
 ):
