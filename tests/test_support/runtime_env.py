@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 _PROFILE_SEED_PORTS: dict[str, dict[str, str]] = {
     "unit": {
+        "LOTUS_PROMETHEUS_HOST_PORT": "9190",
+        "LOTUS_GRAFANA_HOST_PORT": "3300",
         "LOTUS_ZOOKEEPER_PORT": "2181",
         "LOTUS_KAFKA_EXTERNAL_PORT": "9092",
         "LOTUS_KAFKA_INTERNAL_PORT": "9093",
@@ -28,6 +30,8 @@ _PROFILE_SEED_PORTS: dict[str, dict[str, str]] = {
         "LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT": "8088",
     },
     "integration": {
+        "LOTUS_PROMETHEUS_HOST_PORT": "9290",
+        "LOTUS_GRAFANA_HOST_PORT": "3400",
         "LOTUS_ZOOKEEPER_PORT": "2281",
         "LOTUS_KAFKA_EXTERNAL_PORT": "9192",
         "LOTUS_KAFKA_INTERNAL_PORT": "9193",
@@ -48,6 +52,8 @@ _PROFILE_SEED_PORTS: dict[str, dict[str, str]] = {
         "LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT": "8188",
     },
     "e2e": {
+        "LOTUS_PROMETHEUS_HOST_PORT": "9390",
+        "LOTUS_GRAFANA_HOST_PORT": "3500",
         "LOTUS_ZOOKEEPER_PORT": "2381",
         "LOTUS_KAFKA_EXTERNAL_PORT": "9292",
         "LOTUS_KAFKA_INTERNAL_PORT": "9293",
