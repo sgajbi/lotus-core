@@ -16,7 +16,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
-from portfolio_common.valuation_job_repository import ValuationJobRepository
+from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
@@ -1032,6 +1032,59 @@ async def test_upsert_job_deduplicates_concurrent_duplicate_scheduler_pressure(
     assert jobs[0].epoch == 4
     assert jobs[0].status == "PENDING"
     assert jobs[0].correlation_id == "corr-val-conc"
+
+
+async def test_upsert_jobs_bulk_skips_stale_rows_and_stages_eligible_rows(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = ValuationJobRepository(async_db_session)
+
+    await repo.upsert_job(
+        portfolio_id="P-BULK-1",
+        security_id="S-BULK-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=3,
+        correlation_id="corr-existing",
+    )
+    await async_db_session.commit()
+
+    staged_count = await repo.upsert_jobs(
+        [
+            ValuationJobUpsert(
+                portfolio_id="P-BULK-1",
+                security_id="S-BULK-1",
+                valuation_date=date(2025, 8, 11),
+                epoch=2,
+                correlation_id="corr-stale",
+            ),
+            ValuationJobUpsert(
+                portfolio_id="P-BULK-1",
+                security_id="S-BULK-1",
+                valuation_date=date(2025, 8, 12),
+                epoch=3,
+                correlation_id="corr-fresh",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .where(PortfolioValuationJob.portfolio_id == "P-BULK-1")
+                .order_by(PortfolioValuationJob.valuation_date.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert staged_count == 1
+    assert [(job.valuation_date, job.epoch, job.correlation_id) for job in jobs] == [
+        (date(2025, 8, 11), 3, "corr-existing"),
+        (date(2025, 8, 12), 3, "corr-fresh"),
+    ]
 
 
 async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurrency(

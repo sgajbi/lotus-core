@@ -3,7 +3,7 @@ from datetime import date
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.valuation_job_repository import ValuationJobRepository
+from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 
 pytestmark = pytest.mark.asyncio
 
@@ -34,12 +34,16 @@ async def test_upsert_job_builds_correct_statement(
     """
     # Arrange
     mock_final_statement = MagicMock()
-    mock_pg_insert.return_value.values.return_value.on_conflict_do_update.return_value = (
-        mock_final_statement
-    )
+    mock_returning_statement = MagicMock()
+    (
+        mock_pg_insert.return_value.values.return_value.on_conflict_do_update.return_value
+    ) = mock_final_statement
+    mock_final_statement.returning.return_value = mock_returning_statement
     latest_epoch_result = MagicMock()
-    latest_epoch_result.scalar_one_or_none.return_value = None
-    mock_db_session.execute.side_effect = [latest_epoch_result, None]
+    latest_epoch_result.all.return_value = []
+    insert_result = MagicMock()
+    insert_result.all.return_value = [("PORT_VJR_01", "SEC_VJR_01", date(2025, 8, 11), 1)]
+    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result]
 
     job_details = {
         "portfolio_id": "PORT_VJR_01",
@@ -54,10 +58,11 @@ async def test_upsert_job_builds_correct_statement(
 
     # Assert
     mock_pg_insert.return_value.values.assert_called_once()
-    called_values = mock_pg_insert.return_value.values.call_args.kwargs
-    assert called_values["portfolio_id"] == job_details["portfolio_id"]
-    assert called_values["epoch"] == job_details["epoch"]
-    assert called_values["status"] == "PENDING"
+    called_values = mock_pg_insert.return_value.values.call_args.args[0]
+    assert len(called_values) == 1
+    assert called_values[0]["portfolio_id"] == job_details["portfolio_id"]
+    assert called_values[0]["epoch"] == job_details["epoch"]
+    assert called_values[0]["status"] == "PENDING"
 
     mock_pg_insert.return_value.values.return_value.on_conflict_do_update.assert_called_once_with(
         index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
@@ -66,7 +71,8 @@ async def test_upsert_job_builds_correct_statement(
     )
 
     assert mock_db_session.execute.await_count == 2
-    assert mock_db_session.execute.await_args_list[-1].args[0] == mock_final_statement
+    assert mock_final_statement.returning.call_count == 1
+    assert mock_db_session.execute.await_args_list[-1].args[0] == mock_returning_statement
 
 
 @patch("portfolio_common.valuation_job_repository.pg_insert")
@@ -74,7 +80,7 @@ async def test_upsert_job_skips_when_newer_epoch_already_exists(
     mock_pg_insert, repository: ValuationJobRepository, mock_db_session: AsyncMock
 ):
     latest_epoch_result = MagicMock()
-    latest_epoch_result.scalar_one_or_none.return_value = 3
+    latest_epoch_result.all.return_value = [("PORT_VJR_02", "SEC_VJR_02", date(2025, 8, 12), 3)]
     mock_db_session.execute.return_value = latest_epoch_result
 
     await repository.upsert_job(
@@ -94,8 +100,10 @@ async def test_upsert_job_normalizes_sentinel_correlation(
     mock_pg_insert, repository: ValuationJobRepository, mock_db_session: AsyncMock
 ):
     latest_epoch_result = MagicMock()
-    latest_epoch_result.scalar_one_or_none.return_value = None
-    mock_db_session.execute.side_effect = [latest_epoch_result, None]
+    latest_epoch_result.all.return_value = []
+    insert_result = MagicMock()
+    insert_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 1)]
+    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result]
 
     await repository.upsert_job(
         portfolio_id="P1",
@@ -105,5 +113,36 @@ async def test_upsert_job_normalizes_sentinel_correlation(
         correlation_id="<not-set>",
     )
 
-    values_kwargs = mock_pg_insert.return_value.values.call_args.kwargs
-    assert values_kwargs["correlation_id"] is None
+    values_args = mock_pg_insert.return_value.values.call_args.args[0]
+    assert values_args[0]["correlation_id"] is None
+
+
+async def test_upsert_jobs_deduplicates_duplicate_requests(repository: ValuationJobRepository):
+    jobs = [
+        ValuationJobUpsert(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 10),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        ValuationJobUpsert(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 10),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+
+    normalized_jobs = repository._normalize_jobs(jobs)
+
+    assert normalized_jobs == [
+        ValuationJobUpsert(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 10),
+            epoch=1,
+            correlation_id="corr-2",
+        )
+    ]

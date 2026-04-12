@@ -23,7 +23,7 @@ from portfolio_common.monitoring import (
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
-from portfolio_common.valuation_job_repository import ValuationJobRepository
+from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
@@ -347,32 +347,34 @@ class ValuationScheduler:
 
             start_date = max(state.watermark_date, first_open_date - timedelta(days=1))
 
-            job_count = 0
+            job_requests: list[ValuationJobUpsert] = []
             current_date = start_date + timedelta(days=1)
 
             while current_date <= latest_business_date:
-                await job_repo.upsert_job(
-                    portfolio_id=state.portfolio_id,
-                    security_id=state.security_id,
-                    valuation_date=current_date,
-                    epoch=state.epoch,
-                    correlation_id=self._build_backfill_correlation_id(
-                        state.portfolio_id,
-                        state.security_id,
-                        state.epoch,
-                        current_date,
-                    ),
+                job_requests.append(
+                    ValuationJobUpsert(
+                        portfolio_id=state.portfolio_id,
+                        security_id=state.security_id,
+                        valuation_date=current_date,
+                        epoch=state.epoch,
+                        correlation_id=self._build_backfill_correlation_id(
+                            state.portfolio_id,
+                            state.security_id,
+                            state.epoch,
+                            current_date,
+                        ),
+                    )
                 )
-                job_count += 1
                 current_date += timedelta(days=1)
 
-            if job_count > 0:
+            if job_requests:
+                staged_count = await job_repo.upsert_jobs(job_requests)
                 VALUATION_JOBS_CREATED_TOTAL.labels(
                     portfolio_id=state.portfolio_id, security_id=state.security_id
-                ).inc(job_count)
+                ).inc(staged_count)
                 logger.info(
                     "Scheduler: Created "
-                    f"{job_count} backfill valuation jobs for "
+                    f"{staged_count}/{len(job_requests)} backfill valuation jobs for "
                     f"{state.security_id} in {state.portfolio_id} "
                     f"for epoch {state.epoch}."
                 )
