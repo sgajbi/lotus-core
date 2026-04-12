@@ -21,6 +21,27 @@ class CashflowRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _latest_cashflows_subquery():
+        ranked_cashflows = (
+            select(
+                Cashflow.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=Cashflow.transaction_id,
+                    order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
+                )
+                .label("rn"),
+            )
+            .subquery()
+        )
+        return (
+            select(Cashflow)
+            .join(ranked_cashflows, ranked_cashflows.c.id == Cashflow.id)
+            .where(ranked_cashflows.c.rn == 1)
+            .subquery()
+        )
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -36,15 +57,19 @@ class CashflowRepository:
         self, portfolio_id: str, start_date: date, end_date: date
     ) -> List[Tuple[date, Decimal]]:
         """Returns daily aggregated portfolio cashflows for projection windows."""
+        latest_cashflows = self._latest_cashflows_subquery()
         stmt = (
-            select(Cashflow.cashflow_date, func.sum(Cashflow.amount).label("net_amount"))
-            .where(
-                Cashflow.portfolio_id == portfolio_id,
-                Cashflow.cashflow_date.between(start_date, end_date),
-                Cashflow.is_portfolio_flow,
+            select(
+                latest_cashflows.c.cashflow_date,
+                func.sum(latest_cashflows.c.amount).label("net_amount"),
             )
-            .group_by(Cashflow.cashflow_date)
-            .order_by(Cashflow.cashflow_date.asc())
+            .where(
+                latest_cashflows.c.portfolio_id == portfolio_id,
+                latest_cashflows.c.cashflow_date.between(start_date, end_date),
+                latest_cashflows.c.is_portfolio_flow,
+            )
+            .group_by(latest_cashflows.c.cashflow_date)
+            .order_by(latest_cashflows.c.cashflow_date.asc())
         )
         return (await self.db.execute(stmt)).all()
 
@@ -56,15 +81,16 @@ class CashflowRepository:
         Fetches only the external investor cashflows for a portfolio within a date range.
         These are used for MWR (IRR) calculations.
         """
+        latest_cashflows = self._latest_cashflows_subquery()
         stmt = (
-            select(Cashflow.cashflow_date, Cashflow.amount)
+            select(latest_cashflows.c.cashflow_date, latest_cashflows.c.amount)
             .where(
-                Cashflow.portfolio_id == portfolio_id,
-                Cashflow.cashflow_date.between(start_date, end_date),
-                Cashflow.is_portfolio_flow,
-                Cashflow.classification.in_(["CASHFLOW_IN", "CASHFLOW_OUT"]),
+                latest_cashflows.c.portfolio_id == portfolio_id,
+                latest_cashflows.c.cashflow_date.between(start_date, end_date),
+                latest_cashflows.c.is_portfolio_flow,
+                latest_cashflows.c.classification.in_(["CASHFLOW_IN", "CASHFLOW_OUT"]),
             )
-            .order_by(Cashflow.cashflow_date.asc())
+            .order_by(latest_cashflows.c.cashflow_date.asc())
         )
         result = await self.db.execute(stmt)
         return result.all()

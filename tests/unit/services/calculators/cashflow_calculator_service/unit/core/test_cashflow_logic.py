@@ -149,6 +149,38 @@ def test_calculate_interest_income_transaction(
 @patch(
     "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
 )
+def test_calculate_interest_income_uses_net_interest_when_present(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    """INTEREST should use settled net cash when withholding/deductions are supplied."""
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "INTEREST",
+            "gross_transaction_amount": Decimal("1280.75"),
+            "withholding_tax_amount": Decimal("81.75"),
+            "other_interest_deductions_amount": Decimal("12.00"),
+            "net_interest_amount": Decimal("1187.00"),
+            "interest_direction": "INCOME",
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INCOME,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == Decimal("1187.00")
+    assert cashflow.amount > 0
+    mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
 def test_calculate_interest_expense_transaction(
     mock_metric, base_transaction_event: TransactionEvent
 ):

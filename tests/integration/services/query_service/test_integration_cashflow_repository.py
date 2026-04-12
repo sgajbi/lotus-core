@@ -227,6 +227,162 @@ async def test_get_external_flows(setup_cashflow_data, async_db_session: AsyncSe
     assert results[1][1] == Decimal("-2000")
 
 
+async def test_get_external_flows_uses_latest_cashflow_epoch(clean_db, async_db_session):
+    """
+    GIVEN a replayed external cashflow persisted in multiple epochs
+    WHEN get_external_flows is called
+    THEN it should return only the latest cashflow version for the transaction.
+    """
+    portfolio_id = "MWR_EPOCH_FILTER_PORT_01"
+    transaction_id = "EXT_FLOW_TXN_01"
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="f",
+        )
+    )
+    async_db_session.add(
+        Transaction(
+            transaction_id=transaction_id,
+            portfolio_id=portfolio_id,
+            instrument_id="I-EXT-1",
+            security_id="CASH_USD",
+            transaction_date=date(2025, 1, 15),
+            transaction_type="DEPOSIT",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=100,
+            trade_currency="USD",
+            currency="USD",
+        )
+    )
+    await async_db_session.flush()
+    async_db_session.add_all(
+        [
+            Cashflow(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                security_id="CASH_USD",
+                cashflow_date=date(2025, 1, 15),
+                amount=Decimal("100"),
+                currency="USD",
+                classification="CASHFLOW_IN",
+                timing="BOD",
+                calculation_type="NET",
+                is_portfolio_flow=True,
+                epoch=0,
+            ),
+            Cashflow(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                security_id="CASH_USD",
+                cashflow_date=date(2025, 1, 15),
+                amount=Decimal("100"),
+                currency="USD",
+                classification="CASHFLOW_IN",
+                timing="BOD",
+                calculation_type="NET",
+                is_portfolio_flow=True,
+                epoch=2,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = CashflowRepository(async_db_session)
+    results = await repo.get_external_flows(portfolio_id, date(2025, 1, 1), date(2025, 1, 31))
+
+    assert results == [(date(2025, 1, 15), Decimal("100"))]
+
+
+async def test_get_portfolio_cashflow_series_uses_latest_cashflow_epoch(
+    clean_db, async_db_session: AsyncSession
+):
+    """
+    GIVEN replayed portfolio-flow cashflows for the same transaction
+    WHEN get_portfolio_cashflow_series is called
+    THEN the daily total should reflect only the latest transaction epoch.
+    """
+    portfolio_id = "PORT_CF_SERIES_EPOCH_01"
+    transaction_id = "PORT_CF_SERIES_TXN_01"
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="f",
+        )
+    )
+    async_db_session.add(
+        Transaction(
+            transaction_id=transaction_id,
+            portfolio_id=portfolio_id,
+            instrument_id="I-SER-1",
+            security_id="CASH_USD",
+            transaction_date=date(2025, 2, 1),
+            transaction_type="WITHDRAWAL",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=50,
+            trade_currency="USD",
+            currency="USD",
+        )
+    )
+    await async_db_session.flush()
+    async_db_session.add_all(
+        [
+            Cashflow(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                security_id="CASH_USD",
+                cashflow_date=date(2025, 2, 1),
+                amount=Decimal("-50"),
+                currency="USD",
+                classification="CASHFLOW_OUT",
+                timing="EOD",
+                calculation_type="NET",
+                is_portfolio_flow=True,
+                epoch=0,
+            ),
+            Cashflow(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                security_id="CASH_USD",
+                cashflow_date=date(2025, 2, 1),
+                amount=Decimal("-50"),
+                currency="USD",
+                classification="CASHFLOW_OUT",
+                timing="EOD",
+                calculation_type="NET",
+                is_portfolio_flow=True,
+                epoch=4,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = CashflowRepository(async_db_session)
+    results = await repo.get_portfolio_cashflow_series(
+        portfolio_id, date(2025, 2, 1), date(2025, 2, 1)
+    )
+
+    assert results == [(date(2025, 2, 1), Decimal("-50"))]
+
+
 async def test_get_income_cashflows_is_epoch_aware(
     setup_cashflow_data, async_db_session: AsyncSession
 ):
