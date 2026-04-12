@@ -414,7 +414,7 @@ def setup_as_of_positive_filter_data(db_engine):
     return {"portfolio_id": portfolio_id, "as_of_date": as_of_date}
 
 
-async def test_get_latest_positions_by_portfolio_as_of_date_filters_non_positive_rows(
+async def test_get_latest_positions_by_portfolio_as_of_date_keeps_negative_open_positions(
     clean_db, setup_as_of_positive_filter_data, async_db_session: AsyncSession
 ):
     repo = PositionRepository(async_db_session)
@@ -424,9 +424,18 @@ async def test_get_latest_positions_by_portfolio_as_of_date_filters_non_positive
         setup_as_of_positive_filter_data["as_of_date"],
     )
 
-    assert len(latest_positions) == 1
-    latest_snapshot, instrument, pos_state = latest_positions[0]
-    assert latest_snapshot.security_id == "SEC_POS_POSITIVE"
-    assert latest_snapshot.quantity == Decimal("25")
-    assert instrument.name == "Positive"
-    assert pos_state.status == "CURRENT"
+    assert len(latest_positions) == 2
+    by_security = {
+        snapshot.security_id: (snapshot, instrument, pos_state)
+        for snapshot, instrument, pos_state in latest_positions
+    }
+
+    positive_snapshot, positive_instrument, positive_state = by_security["SEC_POS_POSITIVE"]
+    assert positive_snapshot.quantity == Decimal("25")
+    assert positive_instrument.name == "Positive"
+    assert positive_state.status == "CURRENT"
+
+    negative_snapshot, negative_instrument, negative_state = by_security["SEC_POS_NEGATIVE"]
+    assert negative_snapshot.quantity == Decimal("-10")
+    assert negative_instrument.name == "Negative"
+    assert negative_state.status == "REPROCESSING"

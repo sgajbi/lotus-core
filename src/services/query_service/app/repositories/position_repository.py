@@ -233,7 +233,7 @@ class PositionRepository:
                 & (PositionState.security_id == DailyPositionSnapshot.security_id)
                 & (PositionState.epoch == DailyPositionSnapshot.epoch),
             )
-            .filter(DailyPositionSnapshot.quantity > 0)
+            .filter(DailyPositionSnapshot.quantity != 0)
         )
 
         results = await self.db.execute(stmt)
@@ -284,7 +284,7 @@ class PositionRepository:
                 & (PositionState.security_id == PositionHistory.security_id)
                 & (PositionState.epoch == PositionHistory.epoch),
             )
-            .filter(PositionHistory.quantity > 0)
+            .filter(PositionHistory.quantity != 0)
         )
 
         results = await self.db.execute(stmt)
@@ -344,7 +344,7 @@ class PositionRepository:
                     PositionState.epoch == DailyPositionSnapshot.epoch,
                 ),
             )
-            .filter(DailyPositionSnapshot.quantity > 0)
+            .filter(DailyPositionSnapshot.quantity != 0)
         )
 
         results = await self.db.execute(stmt)
@@ -407,7 +407,7 @@ class PositionRepository:
                     PositionState.epoch == PositionHistory.epoch,
                 ),
             )
-            .filter(PositionHistory.quantity > 0)
+            .filter(PositionHistory.quantity != 0)
         )
 
         results = await self.db.execute(stmt)

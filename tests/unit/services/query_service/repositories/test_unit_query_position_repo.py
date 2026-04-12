@@ -234,6 +234,7 @@ async def test_get_latest_positions_by_portfolio_as_of_date_builds_expected_quer
     assert "daily_position_snapshots.date <= '2025-01-31'" in compiled_query
     assert "row_number() OVER (PARTITION BY daily_position_snapshots.security_id" in compiled_query
     assert "daily_position_snapshots.epoch = position_state.epoch" in compiled_query
+    assert "daily_position_snapshots.quantity != 0" in compiled_query
 
 
 async def test_get_latest_position_history_by_portfolio_as_of_date_builds_expected_query(
@@ -246,3 +247,4 @@ async def test_get_latest_position_history_by_portfolio_as_of_date_builds_expect
     assert "position_history.position_date <= '2025-01-31'" in compiled_query
     assert "row_number() OVER (PARTITION BY position_history.security_id" in compiled_query
     assert "position_history.epoch = position_state.epoch" in compiled_query
+    assert "position_history.quantity != 0" in compiled_query
