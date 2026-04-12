@@ -3,6 +3,7 @@ import os
 import subprocess
 import time
 import uuid
+from collections.abc import Callable
 
 import pytest
 import requests
@@ -33,36 +34,80 @@ def _core_service_health_urls() -> list[str]:
     ]
 
 
+def _poll_until(
+    predicate: Callable[[], bool],
+    *,
+    timeout: int,
+    interval: float,
+    failure_message: str,
+):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(interval)
+    pytest.fail(failure_message)
+
+
 def wait_for_postgres_ready(db_engine, timeout=30):
     """Waits for the PostgreSQL container to be ready for connections."""
-    start_time = time.time()
-    while time.time() - start_time < timeout:
+
+    def _is_ready() -> bool:
         try:
             with db_engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
-            emit_test_output("\n--- PostgreSQL is ready ---", verbose_only=True)
-            return
+            return True
         except (exc.OperationalError, exc.DBAPIError):
-            time.sleep(1)
-    pytest.fail(f"PostgreSQL did not become ready within {timeout} seconds.")
+            return False
+
+    _poll_until(
+        _is_ready,
+        timeout=timeout,
+        interval=1,
+        failure_message=f"PostgreSQL did not become ready within {timeout} seconds.",
+    )
+    emit_test_output("\n--- PostgreSQL is ready ---", verbose_only=True)
+
+
+def wait_for_postgres_unavailable(db_engine, timeout=30):
+    """Waits for PostgreSQL to stop accepting connections after an outage starts."""
+
+    def _is_unavailable() -> bool:
+        try:
+            with db_engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except (exc.OperationalError, exc.DBAPIError):
+            return True
+        return False
+
+    _poll_until(
+        _is_unavailable,
+        timeout=timeout,
+        interval=0.5,
+        failure_message=f"PostgreSQL did not become unavailable within {timeout} seconds.",
+    )
+    emit_test_output("\n--- PostgreSQL outage confirmed ---", verbose_only=True)
 
 
 def wait_for_service_ready(service_url: str, timeout: int = 60):
     """Polls a service's /health/ready endpoint until it returns 200 OK."""
-    start_time = time.time()
-    while time.time() - start_time < timeout:
+
+    def _is_ready() -> bool:
         try:
             response = requests.get(service_url, timeout=2)
-            if response.status_code == 200:
-                emit_test_output(
-                    f"\n--- Service at {service_url} is healthy ---",
-                    verbose_only=True,
-                )
-                return
+            return response.status_code == 200
         except requests.ConnectionError:
-            pass  # Service is not up yet, ignore and retry
-        time.sleep(2)
-    pytest.fail(f"Service at {service_url} did not become healthy within {timeout} seconds.")
+            return False
+
+    _poll_until(
+        _is_ready,
+        timeout=timeout,
+        interval=2,
+        failure_message=(
+            f"Service at {service_url} did not become healthy within {timeout} seconds."
+        ),
+    )
+    emit_test_output(f"\n--- Service at {service_url} is healthy ---", verbose_only=True)
 
 
 def test_db_outage_recovery(
@@ -74,9 +119,12 @@ def test_db_outage_recovery(
     message to the DLQ.
     """
     # 1. ARRANGE: Define test data
-    portfolio_id = f"E2E_FAIL_PORT_{uuid.uuid4()}"
-    transaction_id_before = f"E2E_FAIL_TXN_BEFORE_{uuid.uuid4()}"
-    transaction_id_after = f"E2E_FAIL_TXN_AFTER_{uuid.uuid4()}"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_FAIL_PORT_{suffix}"
+    security_id = f"SEC_FAIL_{suffix}"
+    instrument_id = f"FAIL_INST_{suffix}"
+    transaction_id_before = f"{portfolio_id}_TXN_BEFORE"
+    transaction_id_after = f"{portfolio_id}_TXN_AFTER"
 
     # 2. ARRANGE: Set up a Kafka consumer for the DLQ topic
     dlq_consumer_conf = {
@@ -94,7 +142,7 @@ def test_db_outage_recovery(
                 "portfolio_id": portfolio_id,
                 "base_currency": "USD",
                 "open_date": "2025-01-01",
-                "client_id": "FAIL_CIF",
+                "client_id": f"FAIL_CIF_{suffix}",
                 "status": "ACTIVE",
                 "risk_exposure": "a",
                 "investment_time_horizon": "b",
@@ -111,8 +159,8 @@ def test_db_outage_recovery(
             {
                 "transaction_id": transaction_id_before,
                 "portfolio_id": portfolio_id,
-                "instrument_id": "FAIL_INST",
-                "security_id": "SEC_FAIL",
+                "instrument_id": instrument_id,
+                "security_id": security_id,
                 "transaction_date": "2025-08-05T10:00:00Z",
                 "transaction_type": "BUY",
                 "quantity": 1,
@@ -135,9 +183,7 @@ def test_db_outage_recovery(
     # 5. ACT: Simulate database outage.
     emit_test_output("\n--- Stopping PostgreSQL container ---")
     subprocess.run(_compose_args("stop", "postgres"), check=True, capture_output=True)
-
-    # Give a moment for persistence-service to observe the outage.
-    time.sleep(5)
+    wait_for_postgres_unavailable(db_engine)
 
     emit_test_output("\n--- Starting PostgreSQL container ---")
     subprocess.run(_compose_args("start", "postgres"), check=True, capture_output=True)
@@ -157,8 +203,8 @@ def test_db_outage_recovery(
             {
                 "transaction_id": transaction_id_after,
                 "portfolio_id": portfolio_id,
-                "instrument_id": "FAIL_INST",
-                "security_id": "SEC_FAIL",
+                "instrument_id": instrument_id,
+                "security_id": security_id,
                 "transaction_date": "2025-08-05T10:05:00Z",
                 "transaction_type": "BUY",
                 "quantity": 1,
