@@ -220,10 +220,14 @@ class PositionCalculator:
         elif txn_type in (
             CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
         ):
-            signed = PositionCalculator._cash_position_amount_delta(transaction, txn_type)
-            quantity += signed
-            cost_basis += signed
-            cost_basis_local += signed
+            (
+                quantity_delta,
+                cost_basis_delta,
+                cost_basis_local_delta,
+            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
+            quantity += quantity_delta
+            cost_basis += cost_basis_delta
+            cost_basis_local += cost_basis_local_delta
 
         elif txn_type in [
             "TRANSFER_IN",
@@ -304,24 +308,34 @@ class PositionCalculator:
                 cost_basis_local -= transaction.gross_transaction_amount
 
         elif txn_type == "ADJUSTMENT":
-            movement_direction = str(transaction.movement_direction or "INFLOW").upper()
-            magnitude = abs(transaction.gross_transaction_amount)
-            signed = -magnitude if movement_direction == "OUTFLOW" else magnitude
-            quantity += signed
-            cost_basis += signed
-            cost_basis_local += signed
+            (
+                quantity_delta,
+                cost_basis_delta,
+                cost_basis_local_delta,
+            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
+            quantity += quantity_delta
+            cost_basis += cost_basis_delta
+            cost_basis_local += cost_basis_local_delta
 
         elif txn_type == "FX_CASH_SETTLEMENT_BUY":
-            signed = abs(transaction.gross_transaction_amount)
-            quantity += signed
-            cost_basis += signed
-            cost_basis_local += signed
+            (
+                quantity_delta,
+                cost_basis_delta,
+                cost_basis_local_delta,
+            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
+            quantity += quantity_delta
+            cost_basis += cost_basis_delta
+            cost_basis_local += cost_basis_local_delta
 
         elif txn_type == "FX_CASH_SETTLEMENT_SELL":
-            signed = -abs(transaction.gross_transaction_amount)
-            quantity += signed
-            cost_basis += signed
-            cost_basis_local += signed
+            (
+                quantity_delta,
+                cost_basis_delta,
+                cost_basis_local_delta,
+            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
+            quantity += quantity_delta
+            cost_basis += cost_basis_delta
+            cost_basis_local += cost_basis_local_delta
 
         elif txn_type == "FX_CONTRACT_OPEN":
             quantity += Decimal(1)
@@ -345,6 +359,34 @@ class PositionCalculator:
     @staticmethod
     def _cash_position_amount_delta(transaction: TransactionEvent, txn_type: str) -> Decimal:
         magnitude = abs(Decimal(str(transaction.gross_transaction_amount or 0)))
-        if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES:
+        if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {
+            "ADJUSTMENT",
+            "FX_CASH_SETTLEMENT_BUY",
+        }:
+            if txn_type == "ADJUSTMENT":
+                movement_direction = str(transaction.movement_direction or "INFLOW").upper()
+                return -magnitude if movement_direction == "OUTFLOW" else magnitude
             return magnitude
         return -magnitude
+
+    @staticmethod
+    def _cash_position_deltas(
+        transaction: TransactionEvent, txn_type: str
+    ) -> tuple[Decimal, Decimal, Decimal]:
+        quantity_delta = PositionCalculator._cash_position_amount_delta(transaction, txn_type)
+        use_signed_fallback = txn_type == "ADJUSTMENT"
+        cost_basis_delta = (
+            Decimal(str(transaction.net_cost))
+            if transaction.net_cost is not None
+            and not (use_signed_fallback and Decimal(str(transaction.net_cost)) == Decimal(0))
+            else quantity_delta
+        )
+        cost_basis_local_delta = (
+            Decimal(str(transaction.net_cost_local))
+            if transaction.net_cost_local is not None
+            and not (
+                use_signed_fallback and Decimal(str(transaction.net_cost_local)) == Decimal(0)
+            )
+            else quantity_delta
+        )
+        return quantity_delta, cost_basis_delta, cost_basis_local_delta

@@ -623,6 +623,60 @@ def test_calculate_next_position_for_cash_portfolio_flows_updates_cash_balance(
     assert next_state.cost_basis_local == expected_cost
 
 
+def test_calculate_next_position_for_foreign_currency_cash_flow_uses_booked_base_and_local_costs() -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("335000"),
+        cost_basis=Decimal("359349.475"),
+        cost_basis_local=Decimal("335000"),
+    )
+    event = TransactionEvent(
+        transaction_id="TXN-CASH-BUY-SAP-001",
+        transaction_type="SELL",
+        quantity=Decimal("82552"),
+        portfolio_id="P1",
+        instrument_id="EUR-CASH",
+        security_id="CASH_EUR_BOOK_OPERATING",
+        transaction_date=datetime.now(),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("82552"),
+        trade_currency="EUR",
+        currency="EUR",
+        net_cost=Decimal("-88689.906304"),
+        net_cost_local=Decimal("-82552"),
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+
+    assert next_state.quantity == Decimal("252448")
+    assert next_state.cost_basis == Decimal("270659.568696")
+    assert next_state.cost_basis_local == Decimal("252448")
+
+
+def test_calculate_next_position_for_foreign_currency_cash_deposit_preserves_base_fx_basis() -> None:
+    initial_state = PositionStateDTO()
+    event = TransactionEvent(
+        transaction_id="TXN-DEP-EUR-001",
+        transaction_type="DEPOSIT",
+        quantity=Decimal("335000"),
+        portfolio_id="P1",
+        instrument_id="EUR-CASH",
+        security_id="CASH_EUR_BOOK_OPERATING",
+        transaction_date=datetime.now(),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("335000"),
+        trade_currency="EUR",
+        currency="EUR",
+        net_cost=Decimal("359349.475"),
+        net_cost_local=Decimal("335000"),
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+
+    assert next_state.quantity == Decimal("335000")
+    assert next_state.cost_basis == Decimal("359349.475")
+    assert next_state.cost_basis_local == Decimal("335000")
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "quantity", "gross_amount", "expected_quantity", "expected_cost"),
     [
