@@ -1251,6 +1251,53 @@ async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
     assert response.items[0].correlation_id == "corr-valuation-epoch-new"
 
 
+async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P9R",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P9R",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    skipped_job = PortfolioValuationJob(
+        portfolio_id="P9R",
+        security_id="SEC-VAL-SUPERSEDED",
+        valuation_date=date(2025, 8, 20),
+        epoch=1,
+        status="SKIPPED_SUPERSEDED",
+        correlation_id="corr-valuation-superseded",
+        failure_reason="Superseded by newer valuation epoch.",
+        created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+    )
+    async_db_session.add(skipped_job)
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_valuation_jobs(
+            "P9R", skip=0, limit=20, job_id=skipped_job.id
+        )
+
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].job_id == skipped_job.id
+    assert response.items[0].status == "SKIPPED_SUPERSEDED"
+    assert response.items[0].operational_state == "SKIPPED"
+
+
 async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):

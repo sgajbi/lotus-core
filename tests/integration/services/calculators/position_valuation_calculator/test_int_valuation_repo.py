@@ -1087,6 +1087,51 @@ async def test_upsert_jobs_bulk_skips_stale_rows_and_stages_eligible_rows(
     ]
 
 
+async def test_upsert_job_marks_older_pending_epoch_skipped_when_newer_epoch_arrives(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = ValuationJobRepository(async_db_session)
+
+    await repo.upsert_job(
+        portfolio_id="P-SUPERSEDE-1",
+        security_id="S-SUPERSEDE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=1,
+        correlation_id="corr-old",
+    )
+    await async_db_session.commit()
+
+    await repo.upsert_job(
+        portfolio_id="P-SUPERSEDE-1",
+        security_id="S-SUPERSEDE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=2,
+        correlation_id="corr-new",
+    )
+    await async_db_session.commit()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .where(
+                    PortfolioValuationJob.portfolio_id == "P-SUPERSEDE-1",
+                    PortfolioValuationJob.security_id == "S-SUPERSEDE-1",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 11),
+                )
+                .order_by(PortfolioValuationJob.epoch.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert [(job.epoch, job.status, job.failure_reason) for job in jobs] == [
+        (1, "SKIPPED_SUPERSEDED", "Superseded by newer valuation epoch."),
+        (2, "PENDING", None),
+    ]
+
+
 async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     async_db_session: AsyncSession, clean_db
 ):

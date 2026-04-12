@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Iterable, Optional
 
-from sqlalchemy import and_, func, not_, select, tuple_
+from sqlalchemy import and_, func, not_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,12 +117,17 @@ class ValuationJobRepository:
                 )
             )
             staged_count = len(result.all())
+            superseded_count = await self._skip_superseded_pending_jobs(
+                normalized_jobs=normalized_jobs,
+                latest_epochs_by_scope=latest_epochs_by_scope,
+            )
             logger.debug(
                 "Staged valuation job upserts",
                 extra={
                     "requested_count": len(normalized_jobs),
                     "eligible_count": len(eligible_jobs),
                     "staged_count": staged_count,
+                    "superseded_count": superseded_count,
                 },
             )
             return staged_count
@@ -231,3 +236,44 @@ class ValuationJobRepository:
             (portfolio_id, security_id, valuation_date): latest_epoch
             for portfolio_id, security_id, valuation_date, latest_epoch in result.all()
         }
+
+    async def _skip_superseded_pending_jobs(
+        self,
+        *,
+        normalized_jobs: list[ValuationJobUpsert],
+        latest_epochs_by_scope: dict[tuple[str, str, date], int],
+    ) -> int:
+        latest_epoch_targets: dict[tuple[str, str, date], int] = {}
+        for job in normalized_jobs:
+            scope = (job.portfolio_id, job.security_id, job.valuation_date)
+            latest_epoch_targets[scope] = max(
+                latest_epochs_by_scope.get(scope, job.epoch),
+                latest_epoch_targets.get(scope, job.epoch),
+                job.epoch,
+            )
+
+        skipped_count = 0
+        for (
+            portfolio_id,
+            security_id,
+            valuation_date,
+        ), latest_epoch in latest_epoch_targets.items():
+            stmt = (
+                update(PortfolioValuationJob)
+                .where(
+                    PortfolioValuationJob.portfolio_id == portfolio_id,
+                    PortfolioValuationJob.security_id == security_id,
+                    PortfolioValuationJob.valuation_date == valuation_date,
+                    PortfolioValuationJob.status == "PENDING",
+                    PortfolioValuationJob.epoch < latest_epoch,
+                )
+                .values(
+                    status="SKIPPED_SUPERSEDED",
+                    failure_reason="Superseded by newer valuation epoch.",
+                    updated_at=func.now(),
+                )
+                .returning(PortfolioValuationJob.id)
+            )
+            result = await self.db.execute(stmt)
+            skipped_count += len(result.fetchall())
+        return skipped_count
