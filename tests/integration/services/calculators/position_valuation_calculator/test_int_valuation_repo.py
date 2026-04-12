@@ -1137,6 +1137,61 @@ async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurre
     assert jobs[0].attempt_count == 1
 
 
+async def test_find_and_claim_eligible_jobs_skips_superseded_pending_epochs(
+    async_db_session: AsyncSession, clean_db
+):
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-EPOCH",
+                security_id="S-VAL-EPOCH",
+                valuation_date=date(2025, 8, 15),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-old",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-EPOCH",
+                security_id="S-VAL-EPOCH",
+                valuation_date=date(2025, 8, 15),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-new",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=10)
+    await async_db_session.commit()
+
+    assert [(job.valuation_date, job.epoch, job.status) for job in claimed_jobs] == [
+        (date(2025, 8, 15), 2, "PROCESSING")
+    ]
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .where(
+                    PortfolioValuationJob.portfolio_id == "P-VAL-EPOCH",
+                    PortfolioValuationJob.security_id == "S-VAL-EPOCH",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 15),
+                )
+                .order_by(PortfolioValuationJob.epoch.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert [(job.epoch, job.status, job.attempt_count) for job in jobs] == [
+        (1, "PENDING", 0),
+        (2, "PROCESSING", 1),
+    ]
+
+
 async def test_get_latest_business_date_falls_back_to_processing_dates_when_calendar_is_empty(
     clean_db, async_db_session: AsyncSession
 ):

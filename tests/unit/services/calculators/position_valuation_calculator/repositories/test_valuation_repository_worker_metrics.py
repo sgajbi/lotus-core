@@ -24,33 +24,19 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     repo = ValuationRepository(mock_db_session)
 
     mock_result = MagicMock()
-    mock_result.mappings.return_value.all.return_value = [
-        {
-            "id": 1,
-            "portfolio_id": "PORT_001",
-            "security_id": "AAPL_US",
-            "valuation_date": date(2026, 3, 3),
-            "epoch": 0,
-            "status": "PROCESSING",
-            "correlation_id": None,
-            "failure_reason": None,
-            "attempt_count": 1,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
-        },
-        {
-            "id": 2,
-            "portfolio_id": "PORT_001",
-            "security_id": "MSFT_US",
-            "valuation_date": date(2026, 3, 3),
-            "epoch": 0,
-            "status": "PROCESSING",
-            "correlation_id": None,
-            "failure_reason": None,
-            "attempt_count": 1,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
-        },
+    mock_result.scalars.return_value.all.return_value = [
+        MagicMock(
+            portfolio_id="PORT_001",
+            security_id="AAPL_US",
+            valuation_date=date(2026, 3, 3),
+            epoch=0,
+        ),
+        MagicMock(
+            portfolio_id="PORT_001",
+            security_id="MSFT_US",
+            valuation_date=date(2026, 3, 3),
+            epoch=0,
+        ),
     ]
     mock_db_session.execute.return_value = mock_result
 
@@ -61,6 +47,13 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
 
     assert len(claimed_jobs) == 2
     claimed_metric.assert_called_once_with(2)
+
+    claim_stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(
+        claim_stmt.compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "NOT (EXISTS" in compiled_query
+    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
 
 
 async def test_find_and_reset_stale_jobs_emits_reset_metric(

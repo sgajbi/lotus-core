@@ -10,7 +10,6 @@ from sqlalchemy import (
     column,
     func,
     select,
-    text,
     tuple_,
     update,
     values,
@@ -384,26 +383,50 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioValuationJob]:
-        query = text("""
-            UPDATE portfolio_valuation_jobs
-            SET status = 'PROCESSING', updated_at = now(), attempt_count = attempt_count + 1
-            WHERE id IN (
-                SELECT id
-                FROM portfolio_valuation_jobs
-                WHERE status = 'PENDING'
-                ORDER BY portfolio_id, security_id, valuation_date
-                LIMIT :batch_size
-                FOR UPDATE SKIP LOCKED
+        newer_epoch = aliased(PortfolioValuationJob)
+        eligible_ids = (
+            select(PortfolioValuationJob.id)
+            .where(
+                PortfolioValuationJob.status == "PENDING",
+                ~select(newer_epoch.id)
+                .where(
+                    newer_epoch.portfolio_id == PortfolioValuationJob.portfolio_id,
+                    newer_epoch.security_id == PortfolioValuationJob.security_id,
+                    newer_epoch.valuation_date == PortfolioValuationJob.valuation_date,
+                    newer_epoch.epoch > PortfolioValuationJob.epoch,
+                )
+                .exists(),
             )
-            RETURNING *;
-        """)
+            .order_by(
+                PortfolioValuationJob.portfolio_id.asc(),
+                PortfolioValuationJob.security_id.asc(),
+                PortfolioValuationJob.valuation_date.asc(),
+                PortfolioValuationJob.epoch.desc(),
+            )
+            .limit(batch_size)
+            .with_for_update(skip_locked=True)
+        )
 
-        result = await self.db.execute(query, {"batch_size": batch_size})
-        claimed_jobs = result.mappings().all()
-        if claimed_jobs:
-            logger.info("Found and claimed %s eligible valuation jobs.", len(claimed_jobs))
-            self._observe_jobs_claimed(len(claimed_jobs))
-        return [PortfolioValuationJob(**job) for job in claimed_jobs]
+        query = (
+            update(PortfolioValuationJob)
+            .where(PortfolioValuationJob.id.in_(eligible_ids))
+            .values(
+                status="PROCESSING",
+                updated_at=func.now(),
+                attempt_count=PortfolioValuationJob.attempt_count + 1,
+            )
+            .returning(PortfolioValuationJob)
+        )
+
+        result = await self.db.execute(query)
+        claimed_models = list(result.scalars().all())
+        if claimed_models:
+            logger.info("Found and claimed %s eligible valuation jobs.", len(claimed_models))
+            self._observe_jobs_claimed(len(claimed_models))
+        claimed_models.sort(
+            key=lambda job: (job.portfolio_id, job.security_id, job.valuation_date, -job.epoch)
+        )
+        return claimed_models
 
     @async_timed(repository="ValuationRepository", method="get_job_queue_stats")
     async def get_job_queue_stats(self) -> Dict[str, Any]:
