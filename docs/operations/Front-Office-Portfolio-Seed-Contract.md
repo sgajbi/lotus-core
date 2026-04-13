@@ -307,6 +307,14 @@ downstream surfaces, including where supported:
 - taxes / withholding
 - narrative or reference
 
+A cash-book transaction row in this seed must use one normalized operating-cash
+shape:
+
+- `security_id` is the cash instrument
+- `price = 1`
+- `quantity = gross_transaction_amount`
+- `currency = trade_currency`
+
 Avoid ambiguous paired fake cash rows if a clearer cash-movement contract is
 available in the current ingest model.
 

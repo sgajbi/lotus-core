@@ -191,6 +191,7 @@ class ValuationConsumer(BaseConsumer):
                                         price_currency=price.currency,
                                         instrument_currency=instrument.currency,
                                         portfolio_currency=portfolio.base_currency,
+                                        product_type=instrument.product_type,
                                         price_to_instrument_fx_rate=None,
                                         instrument_to_portfolio_fx_rate=fx_rate.rate
                                         if fx_rate

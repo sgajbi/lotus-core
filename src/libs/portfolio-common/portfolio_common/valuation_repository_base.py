@@ -10,7 +10,6 @@ from sqlalchemy import (
     column,
     func,
     select,
-    text,
     tuple_,
     update,
     values,
@@ -48,6 +47,19 @@ class ValuationRepositoryBase:
 
     def _observe_stale_resets(self, reset_count: int) -> None:
         """Hook for service-local metrics."""
+
+    @staticmethod
+    def _newer_epoch_exists(current_job, newer_job):
+        return (
+            select(newer_job.id)
+            .where(
+                newer_job.portfolio_id == current_job.portfolio_id,
+                newer_job.security_id == current_job.security_id,
+                newer_job.valuation_date == current_job.valuation_date,
+                newer_job.epoch > current_job.epoch,
+            )
+            .exists()
+        )
 
     @async_timed(
         repository="ValuationRepository", method="find_open_position_keys_for_security_on_date"
@@ -384,34 +396,56 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioValuationJob]:
-        query = text("""
-            UPDATE portfolio_valuation_jobs
-            SET status = 'PROCESSING', updated_at = now(), attempt_count = attempt_count + 1
-            WHERE id IN (
-                SELECT id
-                FROM portfolio_valuation_jobs
-                WHERE status = 'PENDING'
-                ORDER BY portfolio_id, security_id, valuation_date
-                LIMIT :batch_size
-                FOR UPDATE SKIP LOCKED
+        newer_epoch = aliased(PortfolioValuationJob)
+        eligible_ids = (
+            select(PortfolioValuationJob.id)
+            .where(
+                PortfolioValuationJob.status == "PENDING",
+                ~self._newer_epoch_exists(PortfolioValuationJob, newer_epoch),
             )
-            RETURNING *;
-        """)
+            .order_by(
+                PortfolioValuationJob.portfolio_id.asc(),
+                PortfolioValuationJob.security_id.asc(),
+                PortfolioValuationJob.valuation_date.asc(),
+                PortfolioValuationJob.epoch.desc(),
+            )
+            .limit(batch_size)
+            .with_for_update(skip_locked=True)
+        )
 
-        result = await self.db.execute(query, {"batch_size": batch_size})
-        claimed_jobs = result.mappings().all()
-        if claimed_jobs:
-            logger.info("Found and claimed %s eligible valuation jobs.", len(claimed_jobs))
-            self._observe_jobs_claimed(len(claimed_jobs))
-        return [PortfolioValuationJob(**job) for job in claimed_jobs]
+        query = (
+            update(PortfolioValuationJob)
+            .where(PortfolioValuationJob.id.in_(eligible_ids))
+            .values(
+                status="PROCESSING",
+                updated_at=func.now(),
+                attempt_count=PortfolioValuationJob.attempt_count + 1,
+            )
+            .returning(PortfolioValuationJob)
+        )
+
+        result = await self.db.execute(query)
+        claimed_models = list(result.scalars().all())
+        if claimed_models:
+            logger.info("Found and claimed %s eligible valuation jobs.", len(claimed_models))
+            self._observe_jobs_claimed(len(claimed_models))
+        claimed_models.sort(
+            key=lambda job: (job.portfolio_id, job.security_id, job.valuation_date, -job.epoch)
+        )
+        return claimed_models
 
     @async_timed(repository="ValuationRepository", method="get_job_queue_stats")
     async def get_job_queue_stats(self) -> Dict[str, Any]:
+        newer_epoch = aliased(PortfolioValuationJob)
+        actionable_pending = (
+            (PortfolioValuationJob.status == "PENDING")
+            & ~self._newer_epoch_exists(PortfolioValuationJob, newer_epoch)
+        )
         stmt = select(
-            func.count().filter(PortfolioValuationJob.status == "PENDING").label("pending_count"),
+            func.count().filter(actionable_pending).label("pending_count"),
             func.count().filter(PortfolioValuationJob.status == "FAILED").label("failed_count"),
             func.min(PortfolioValuationJob.created_at)
-            .filter(PortfolioValuationJob.status == "PENDING")
+            .filter(actionable_pending)
             .label("oldest_pending_created_at"),
         )
         row = (await self.db.execute(stmt)).one()

@@ -1,9 +1,9 @@
 # tests/e2e/test_persistence_query_pipeline.py
-from datetime import date
 
 import pytest
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -12,11 +12,13 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture that ingests a comprehensive set of data and waits
     for it all to be queryable.
     """
+    suffix = unique_suffix()
     # Define all identifiers
-    portfolio_id = "E2E_PQ_PORT_01"
-    security_id = "SEC_PQ_INST_01"
-    transaction_id = "TXN_PQ_01"
-    price_date = date.today().isoformat()
+    portfolio_id = f"E2E_PQ_PORT_{suffix}"
+    security_id = f"SEC_PQ_INST_{suffix}"
+    transaction_id = f"TXN_PQ_{suffix}"
+    unpriced_security_id = f"SEC_NO_PRICE_{suffix}"
+    price_date = "2025-08-15"
 
     # Ingest one of each entity type using the new client
     e2e_api_client.ingest(
@@ -49,9 +51,9 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
                     "productType": "Equity",
                 },
                 {
-                    "securityId": "SEC_NO_PRICE",
+                    "securityId": unpriced_security_id,
                     "name": "Unpriced Instrument",
-                    "isin": "ISIN_NO_PRICE",
+                    "isin": f"ISIN_NO_PRICE_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                 },
@@ -127,6 +129,7 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
         "portfolio_id": portfolio_id,
         "security_id": security_id,
         "transaction_id": transaction_id,
+        "unpriced_security_id": unpriced_security_id,
         "price_date": price_date,
     }
 
@@ -186,7 +189,7 @@ def test_query_prices_for_unpriced_security_returns_empty_list(
     Tests that querying the /prices endpoint for a valid security that has
     no price data results in a 200 OK with an empty list.
     """
-    security_id_with_no_price = "SEC_NO_PRICE"
+    security_id_with_no_price = setup_persistence_data["unpriced_security_id"]
     api_response = e2e_api_client.query(f"/prices?security_id={security_id_with_no_price}")
     data = api_response.json()
     assert data["security_id"] == security_id_with_no_price

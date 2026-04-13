@@ -190,6 +190,158 @@ def _tx(
     return payload
 
 
+def _cash_tx(
+    tx_id: str,
+    *,
+    portfolio_id: str,
+    instrument_id: str,
+    security_id: str,
+    when: datetime,
+    tx_type: str,
+    gross: str,
+    trade_currency: str,
+    settlement_date: datetime | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    return _tx(
+        tx_id,
+        portfolio_id=portfolio_id,
+        instrument_id=instrument_id,
+        security_id=security_id,
+        when=when,
+        tx_type=tx_type,
+        quantity=gross,
+        price="1",
+        gross=gross,
+        trade_currency=trade_currency,
+        settlement_date=settlement_date,
+        **extra,
+    )
+
+
+def _paired_internal_leg_metadata(
+    *, portfolio_id: str, event_code: str
+) -> dict[str, str]:
+    normalized_code = event_code.strip().upper().replace(" ", "-")
+    return {
+        "economic_event_id": f"EVT-{portfolio_id}-{normalized_code}",
+        "linked_transaction_group_id": f"LTG-{portfolio_id}-{normalized_code}",
+    }
+
+
+def _expected_internal_pair_net_amount(product_leg: dict[str, Any]) -> Decimal:
+    tx_type = str(product_leg["transaction_type"]).upper()
+    gross_amount = Decimal(str(product_leg["gross_transaction_amount"]))
+
+    if tx_type == "BUY":
+        return gross_amount
+    if tx_type in {"SELL", "DIVIDEND"}:
+        return -gross_amount
+    if tx_type == "INTEREST":
+        net_interest_amount = product_leg.get("net_interest_amount")
+        if net_interest_amount is not None:
+            return -Decimal(str(net_interest_amount))
+        withholding_tax_amount = Decimal(str(product_leg.get("withholding_tax_amount", "0")))
+        other_deductions_amount = Decimal(
+            str(product_leg.get("other_interest_deductions_amount", "0"))
+        )
+        return -(gross_amount - withholding_tax_amount - other_deductions_amount)
+    raise ValueError(f"Unsupported paired product transaction type: {tx_type}")
+
+
+def _cash_leg_signed_amount(cash_leg: dict[str, Any]) -> Decimal:
+    tx_type = str(cash_leg["transaction_type"]).upper()
+    gross_amount = Decimal(str(cash_leg["gross_transaction_amount"]))
+    if tx_type == "BUY":
+        return gross_amount
+    if tx_type == "SELL":
+        return -gross_amount
+    raise ValueError(f"Unsupported paired cash transaction type: {tx_type}")
+
+
+def _validate_front_office_cash_transactions(transactions: list[dict[str, Any]]) -> None:
+    for transaction in transactions:
+        if not str(transaction.get("security_id", "")).startswith("CASH_"):
+            continue
+
+        tx_type = str(transaction.get("transaction_type", "")).upper()
+        if tx_type not in {"BUY", "SELL", "DEPOSIT", "WITHDRAWAL", "FEE"}:
+            continue
+
+        transaction_id = str(transaction["transaction_id"])
+        quantity = Decimal(str(transaction["quantity"]))
+        price = Decimal(str(transaction["price"]))
+        gross = Decimal(str(transaction["gross_transaction_amount"]))
+        currency = str(transaction["currency"])
+        trade_currency = str(transaction["trade_currency"])
+
+        if price != Decimal("1"):
+            raise ValueError(
+                f"{transaction_id} must use price=1 for cash-book transaction rows."
+            )
+        if quantity != gross:
+            raise ValueError(
+                f"{transaction_id} must use quantity equal to gross_transaction_amount "
+                "for cash-book transaction rows."
+            )
+        if currency != trade_currency:
+            raise ValueError(
+                f"{transaction_id} must use matching currency and trade_currency "
+                "for cash-book transaction rows."
+            )
+
+
+def _validate_front_office_internal_transaction_pairs(
+    transactions: list[dict[str, Any]],
+) -> None:
+    paired_transaction_ids = (
+        ("TXN-BUY-AAPL-001", "TXN-CASH-BUY-AAPL-001"),
+        ("TXN-BUY-MSFT-001", "TXN-CASH-BUY-MSFT-001"),
+        ("TXN-BUY-SAP-001", "TXN-CASH-BUY-SAP-001"),
+        ("TXN-BUY-WORLD-ETF-001", "TXN-CASH-BUY-WORLD-ETF-001"),
+        ("TXN-BUY-BLK-ALLOC-001", "TXN-CASH-BUY-BLK-ALLOC-001"),
+        ("TXN-BUY-PIMCO-INC-001", "TXN-CASH-BUY-PIMCO-INC-001"),
+        ("TXN-BUY-UST-001", "TXN-CASH-BUY-UST-001"),
+        ("TXN-BUY-SIEMENS-BOND-001", "TXN-CASH-BUY-SIEMENS-BOND-001"),
+        ("TXN-BUY-PRIVCREDIT-001", "TXN-CASH-BUY-PRIVCREDIT-001"),
+        ("TXN-SELL-AAPL-001", "TXN-CASH-SELL-AAPL-001"),
+        ("TXN-DIV-AAPL-001", "TXN-CASH-DIV-AAPL-001"),
+        ("TXN-INT-UST-001", "TXN-CASH-INT-UST-001"),
+    )
+    transactions_by_id = {
+        str(transaction["transaction_id"]): transaction for transaction in transactions
+    }
+
+    for product_transaction_id, cash_transaction_id in paired_transaction_ids:
+        product_leg = transactions_by_id[product_transaction_id]
+        cash_leg = transactions_by_id[cash_transaction_id]
+
+        if product_leg.get("economic_event_id") != cash_leg.get("economic_event_id"):
+            raise ValueError(
+                f"{product_transaction_id} and {cash_transaction_id} must share "
+                "economic_event_id."
+            )
+        if product_leg.get("linked_transaction_group_id") != cash_leg.get(
+            "linked_transaction_group_id"
+        ):
+            raise ValueError(
+                f"{product_transaction_id} and {cash_transaction_id} must share "
+                "linked_transaction_group_id."
+            )
+        if str(product_leg["trade_currency"]) != str(cash_leg["trade_currency"]):
+            raise ValueError(
+                f"{product_transaction_id} and {cash_transaction_id} must share trade_currency."
+            )
+
+        product_signed_amount = _expected_internal_pair_net_amount(product_leg)
+        cash_signed_amount = _cash_leg_signed_amount(cash_leg)
+        if product_signed_amount + cash_signed_amount != Decimal("0"):
+            raise ValueError(
+                f"{product_transaction_id} and {cash_transaction_id} must economically net to "
+                "zero across product and cash legs."
+            )
+
+
 def build_front_office_portfolio_bundle(
     *,
     portfolio_id: str,
@@ -498,6 +650,9 @@ def build_front_office_portfolio_bundle(
             gross="77490.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-AAPL-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-AAPL-001",
@@ -513,6 +668,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-AAPL-001"
+            ),
         ),
         _tx(
             "TXN-BUY-MSFT-001",
@@ -527,6 +685,9 @@ def build_front_office_portfolio_bundle(
             gross="104325.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-MSFT-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-MSFT-001",
@@ -542,6 +703,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-MSFT-001"
+            ),
         ),
         _tx(
             "TXN-BUY-SAP-001",
@@ -556,6 +720,9 @@ def build_front_office_portfolio_bundle(
             gross="82552.00",
             trade_currency="EUR",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-SAP-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-SAP-001",
@@ -571,6 +738,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="EUR",
             settlement_cash_account_id="CASH-ACC-EUR-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-SAP-001"
+            ),
         ),
         _tx(
             "TXN-BUY-WORLD-ETF-001",
@@ -585,6 +755,9 @@ def build_front_office_portfolio_bundle(
             gross="90390.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-WORLD-ETF-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-WORLD-ETF-001",
@@ -600,6 +773,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-WORLD-ETF-001"
+            ),
         ),
         _tx(
             "TXN-BUY-BLK-ALLOC-001",
@@ -614,6 +790,9 @@ def build_front_office_portfolio_bundle(
             gross="158730.00",
             trade_currency="EUR",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-BLK-ALLOC-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-BLK-ALLOC-001",
@@ -629,6 +808,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="EUR",
             settlement_cash_account_id="CASH-ACC-EUR-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-BLK-ALLOC-001"
+            ),
         ),
         _tx(
             "TXN-BUY-PIMCO-INC-001",
@@ -643,6 +825,9 @@ def build_front_office_portfolio_bundle(
             gross="244320.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-PIMCO-INC-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-PIMCO-INC-001",
@@ -658,6 +843,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-PIMCO-INC-001"
+            ),
         ),
         _tx(
             "TXN-BUY-UST-001",
@@ -672,6 +860,9 @@ def build_front_office_portfolio_bundle(
             gross="178704.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-UST-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-UST-001",
@@ -687,6 +878,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-UST-001"
+            ),
         ),
         _tx(
             "TXN-BUY-SIEMENS-BOND-001",
@@ -701,6 +895,9 @@ def build_front_office_portfolio_bundle(
             gross="73912.50",
             trade_currency="EUR",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-SIEMENS-BOND-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-SIEMENS-BOND-001",
@@ -716,6 +913,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="EUR",
             settlement_cash_account_id="CASH-ACC-EUR-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-SIEMENS-BOND-001"
+            ),
         ),
         _tx(
             "TXN-BUY-PRIVCREDIT-001",
@@ -730,6 +930,9 @@ def build_front_office_portfolio_bundle(
             gross="125000.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-PRIVCREDIT-001"
+            ),
         ),
         _tx(
             "TXN-CASH-BUY-PRIVCREDIT-001",
@@ -745,6 +948,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="BUY-PRIVCREDIT-001"
+            ),
         ),
         _tx(
             "TXN-DIV-AAPL-001",
@@ -759,6 +965,9 @@ def build_front_office_portfolio_bundle(
             gross="850.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="DIV-AAPL-001"
+            ),
         ),
         _tx(
             "TXN-CASH-DIV-AAPL-001",
@@ -774,6 +983,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="DIV-AAPL-001"
+            ),
         ),
         _tx(
             "TXN-INT-UST-001",
@@ -792,6 +1004,9 @@ def build_front_office_portfolio_bundle(
             other_interest_deductions_amount="12.00",
             net_interest_amount="1187.00",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="INT-UST-001"
+            ),
         ),
         _tx(
             "TXN-CASH-INT-UST-001",
@@ -807,6 +1022,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="INT-UST-001"
+            ),
         ),
         _tx(
             "TXN-DEP-USD-TOPUP-001",
@@ -823,7 +1041,7 @@ def build_front_office_portfolio_bundle(
             movement_direction="INFLOW",
             source_system="LOTUS_FRONT_OFFICE_SEED",
         ),
-        _tx(
+        _cash_tx(
             "TXN-FEE-ADVISORY-001",
             portfolio_id=portfolio_id,
             instrument_id="USD-CASH",
@@ -831,8 +1049,6 @@ def build_front_office_portfolio_bundle(
             when=tx_dt(346),
             settlement_date=settle(346, 0),
             tx_type="FEE",
-            quantity="1",
-            price="275.00",
             gross="275.00",
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
@@ -852,6 +1068,9 @@ def build_front_office_portfolio_bundle(
             gross="22814.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="SELL-AAPL-001"
+            ),
         ),
         _tx(
             "TXN-CASH-SELL-AAPL-001",
@@ -867,6 +1086,9 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
+            **_paired_internal_leg_metadata(
+                portfolio_id=portfolio_id, event_code="SELL-AAPL-001"
+            ),
         ),
         _tx(
             "TXN-WITHDRAWAL-PLANNED-001",
@@ -901,6 +1123,9 @@ def build_front_office_portfolio_bundle(
             source_system="LOTUS_FRONT_OFFICE_SEED",
         ),
     ]
+
+    _validate_front_office_cash_transactions(transactions)
+    _validate_front_office_internal_transaction_pairs(transactions)
 
     benchmark_reference = _build_benchmark_reference_data(
         dates=fx_calendar_dates,
@@ -1295,7 +1520,9 @@ def _verify_front_office_portfolio(
                 "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/positions"
             )
             _, transactions_payload = _request_json(
-                "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/transactions?limit=300"
+                "GET",
+                f"{query_base_url}/portfolios/{expected.portfolio_id}/transactions"
+                "?limit=300&include_projected=true",
             )
             _, allocation_payload = _request_json(
                 "POST",

@@ -1,14 +1,11 @@
 # tests/e2e/test_summary_pipeline.py
+import uuid
+
 import pytest
 
 from .api_client import E2EApiClient
 from .assertions import assert_legacy_endpoint_status
 
-# --- Test Data Constants ---
-PORTFOLIO_ID = "E2E_SUM_PORT_01"
-MSFT_ID = "SEC_MSFT_SUM"
-IBM_ID = "SEC_IBM_SUM"
-CASH_ID = "CASH_USD"
 AS_OF_DATE = "2025-08-29"
 PERIOD_START = "2025-08-01"
 
@@ -18,16 +15,22 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
     """
     A module-scoped fixture that ingests all necessary data for the summary E2E test.
     """
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_SUM_PORT_{suffix}"
+    msft_id = f"SEC_MSFT_SUM_{suffix}"
+    ibm_id = f"SEC_IBM_SUM_{suffix}"
+    cash_id = f"CASH_USD_{suffix}"
+
     # 1. Ingest prerequisite data
     e2e_api_client.ingest(
         "/ingest/portfolios",
         {
             "portfolios": [
                 {
-                    "portfolioId": PORTFOLIO_ID,
+                    "portfolioId": portfolio_id,
                     "baseCurrency": "USD",
                     "openDate": "2025-01-01",
-                    "cifId": "SUM_CIF",
+                    "cifId": f"SUM_CIF_{suffix}",
                     "status": "ACTIVE",
                     "riskExposure": "a",
                     "investmentTimeHorizon": "b",
@@ -42,17 +45,17 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
         {
             "instruments": [
                 {
-                    "securityId": CASH_ID,
+                    "securityId": cash_id,
                     "name": "US Dollar",
-                    "isin": "CASH_USD_ISIN",
+                    "isin": f"CASH_USD_ISIN_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Cash",
                     "assetClass": "Cash",
                 },
                 {
-                    "securityId": MSFT_ID,
+                    "securityId": msft_id,
                     "name": "Microsoft",
-                    "isin": "US_MSFT_SUM",
+                    "isin": f"US_MSFT_SUM_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                     "assetClass": "Equity",
@@ -60,9 +63,9 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
                     "countryOfRisk": "US",
                 },
                 {
-                    "securityId": IBM_ID,
+                    "securityId": ibm_id,
                     "name": "IBM",
-                    "isin": "US_IBM_SUM",
+                    "isin": f"US_IBM_SUM_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                     "assetClass": "Equity",
@@ -91,10 +94,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
     # 2. Ingest a comprehensive list of transactions
     transactions = [
         {
-            "transaction_id": "SUM_DEPOSIT_01",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_DEPOSIT_01",
+            "portfolio_id": portfolio_id,
             "instrument_id": "CASH",
-            "security_id": CASH_ID,
+            "security_id": cash_id,
             "transaction_date": f"{PERIOD_START}T09:00:00Z",
             "transaction_type": "DEPOSIT",
             "quantity": 1000000,
@@ -104,10 +107,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_BUY_MSFT",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_BUY_MSFT",
+            "portfolio_id": portfolio_id,
             "instrument_id": "MSFT",
-            "security_id": MSFT_ID,
+            "security_id": msft_id,
             "transaction_date": "2025-08-05T10:00:00Z",
             "transaction_type": "BUY",
             "quantity": 1000,
@@ -117,10 +120,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_CASH_SETTLE_1",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_CASH_SETTLE_1",
+            "portfolio_id": portfolio_id,
             "instrument_id": "CASH",
-            "security_id": CASH_ID,
+            "security_id": cash_id,
             "transaction_date": "2025-08-05T10:00:00Z",
             "transaction_type": "SELL",
             "quantity": 300000,
@@ -130,10 +133,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_TRANSFER_IN_IBM",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_TRANSFER_IN_IBM",
+            "portfolio_id": portfolio_id,
             "instrument_id": "IBM",
-            "security_id": IBM_ID,
+            "security_id": ibm_id,
             "transaction_date": "2025-08-10T10:00:00Z",
             "transaction_type": "TRANSFER_IN",
             "quantity": 100,
@@ -143,10 +146,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_SELL_MSFT",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_SELL_MSFT",
+            "portfolio_id": portfolio_id,
             "instrument_id": "MSFT",
-            "security_id": MSFT_ID,
+            "security_id": msft_id,
             "transaction_date": "2025-08-15T10:00:00Z",
             "transaction_type": "SELL",
             "quantity": 200,
@@ -156,10 +159,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_CASH_SETTLE_2",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_CASH_SETTLE_2",
+            "portfolio_id": portfolio_id,
             "instrument_id": "CASH",
-            "security_id": CASH_ID,
+            "security_id": cash_id,
             "transaction_date": "2025-08-15T10:00:00Z",
             "transaction_type": "BUY",
             "quantity": 64000,
@@ -169,10 +172,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_FEE_01",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_FEE_01",
+            "portfolio_id": portfolio_id,
             "instrument_id": "CASH",
-            "security_id": CASH_ID,
+            "security_id": cash_id,
             "transaction_date": "2025-08-20T10:00:00Z",
             "transaction_type": "FEE",
             "quantity": 1,
@@ -182,10 +185,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_DIVIDEND_MSFT",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_DIVIDEND_MSFT",
+            "portfolio_id": portfolio_id,
             "instrument_id": "MSFT",
-            "security_id": MSFT_ID,
+            "security_id": msft_id,
             "transaction_date": "2025-08-22T10:00:00Z",
             "transaction_type": "DIVIDEND",
             "quantity": 0,
@@ -195,10 +198,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_CASH_SETTLE_3",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_CASH_SETTLE_3",
+            "portfolio_id": portfolio_id,
             "instrument_id": "CASH",
-            "security_id": CASH_ID,
+            "security_id": cash_id,
             "transaction_date": "2025-08-22T10:00:00Z",
             "transaction_type": "BUY",
             "quantity": 400,
@@ -208,10 +211,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_WITHDRAWAL_01",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_WITHDRAWAL_01",
+            "portfolio_id": portfolio_id,
             "instrument_id": "CASH",
-            "security_id": CASH_ID,
+            "security_id": cash_id,
             "transaction_date": "2025-08-26T10:00:00Z",
             "transaction_type": "WITHDRAWAL",
             "quantity": 10000,
@@ -221,10 +224,10 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "currency": "USD",
         },
         {
-            "transaction_id": "SUM_TRANSFER_OUT_MSFT",
-            "portfolio_id": PORTFOLIO_ID,
+            "transaction_id": f"{portfolio_id}_TRANSFER_OUT_MSFT",
+            "portfolio_id": portfolio_id,
             "instrument_id": "MSFT",
-            "security_id": MSFT_ID,
+            "security_id": msft_id,
             "transaction_date": "2025-08-27T10:00:00Z",
             "transaction_type": "TRANSFER_OUT",
             "quantity": 50,
@@ -241,9 +244,9 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
         "/ingest/market-prices",
         {
             "market_prices": [
-                {"securityId": MSFT_ID, "priceDate": AS_OF_DATE, "price": 340.0, "currency": "USD"},
-                {"securityId": IBM_ID, "priceDate": AS_OF_DATE, "price": 155.0, "currency": "USD"},
-                {"securityId": CASH_ID, "priceDate": AS_OF_DATE, "price": 1.0, "currency": "USD"},
+                {"securityId": msft_id, "priceDate": AS_OF_DATE, "price": 340.0, "currency": "USD"},
+                {"securityId": ibm_id, "priceDate": AS_OF_DATE, "price": 155.0, "currency": "USD"},
+                {"securityId": cash_id, "priceDate": AS_OF_DATE, "price": 1.0, "currency": "USD"},
             ]
         },
     )
@@ -251,12 +254,12 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
     # 4. Poll until the final snapshot is valued
     poll_db_until(
         query="SELECT count(*) FROM daily_position_snapshots WHERE portfolio_id = :pid AND date = :date AND valuation_status = 'VALUED_CURRENT'",  # noqa: E501
-        params={"pid": PORTFOLIO_ID, "date": AS_OF_DATE},
+        params={"pid": portfolio_id, "date": AS_OF_DATE},
         validation_func=lambda r: r is not None and r[0] >= 3,
         timeout=180,
         fail_message=f"Pipeline did not value all 3 positions for {AS_OF_DATE}.",
     )
-    return {"portfolio_id": PORTFOLIO_ID}
+    return {"portfolio_id": portfolio_id}
 
 
 def test_portfolio_summary_endpoint(setup_summary_data, e2e_api_client: E2EApiClient):

@@ -54,9 +54,20 @@ class CashflowLogic:
         Applies the calculation rule to a transaction to generate a cashflow.
         """
         amount = Decimal(0)
+        interest_direction = str(getattr(transaction, "interest_direction", "INCOME")).upper()
 
-        # For NET, we adjust the gross amount by the fee.
-        if transaction.transaction_type in ["BUY", "FEE"]:
+        # For NET, we adjust the gross amount by the fee and honor net-settled
+        # interest when withholding/deductions are provided.
+        if transaction.transaction_type == "INTEREST":
+            deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
+                transaction.other_interest_deductions_amount or Decimal(0)
+            )
+            amount = transaction.net_interest_amount
+            if amount is None:
+                amount = transaction.gross_transaction_amount - deductions - (
+                    transaction.trade_fee or 0
+                )
+        elif transaction.transaction_type in ["BUY", "FEE"]:
             amount = transaction.gross_transaction_amount + (transaction.trade_fee or 0)
         else:  # SELL, DIVIDEND, INTEREST, etc.
             amount = transaction.gross_transaction_amount - (transaction.trade_fee or 0)
@@ -70,7 +81,6 @@ class CashflowLogic:
         ]
 
         # INTEREST direction baseline: default INCOME (inflow), EXPENSE (outflow).
-        interest_direction = str(getattr(transaction, "interest_direction", "INCOME")).upper()
         if transaction.transaction_type == "INTEREST":
             if interest_direction == "EXPENSE":
                 amount = -abs(amount)

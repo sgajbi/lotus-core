@@ -36,9 +36,10 @@ async def test_get_external_flows_query(repository: CashflowRepository, mock_db_
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "FROM cashflows" in compiled_query
-    assert "cashflows.portfolio_id = 'P1'" in compiled_query
-    assert "cashflows.classification IN ('CASHFLOW_IN', 'CASHFLOW_OUT')" in compiled_query
-    assert "cashflows.is_portfolio_flow" in compiled_query
+    assert "partition by cashflows.transaction_id" in compiled_query.lower()
+    assert "anon_1.portfolio_id = 'P1'" in compiled_query
+    assert "anon_1.classification IN ('CASHFLOW_IN', 'CASHFLOW_OUT')" in compiled_query
+    assert "anon_1.is_portfolio_flow" in compiled_query
 
 
 async def test_get_income_cashflows_for_position_query(
@@ -100,5 +101,7 @@ async def test_get_portfolio_cashflow_series_query(
     assert result[0][0] == date(2025, 1, 15)
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "sum(cashflows.amount)" in compiled_query.lower()
-    assert "cashflows.is_portfolio_flow" in compiled_query
+    assert "sum(anon_1.amount)" in compiled_query.lower()
+    assert "partition by cashflows.transaction_id" in compiled_query.lower()
+    assert "anon_1.is_portfolio_flow" in compiled_query
+    assert "row_number()" in compiled_query.lower()

@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -14,9 +15,10 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture that ingests data for a simple cashflow scenario
     and waits for the calculation to be available via the query API.
     """
-    portfolio_id = "E2E_CASHFLOW_PORT_01"
-    security_id = "SEC_CSHFLW"
-    transaction_id = "E2E_CASHFLOW_BUY_01"
+    suffix = unique_suffix()
+    portfolio_id = f"E2E_CASHFLOW_PORT_{suffix}"
+    security_id = f"SEC_CSHFLW_{suffix}"
+    transaction_id = f"{portfolio_id}_BUY_01"
 
     # 1. Ingest prerequisite data (Portfolio and Instrument)
     e2e_api_client.ingest(
@@ -31,7 +33,7 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
                     "investmentTimeHorizon": "Long",
                     "portfolioType": "Discretionary",
                     "bookingCenter": "SG",
-                    "cifId": "CASHFLOW_CIF",
+                    "cifId": f"CASHFLOW_CIF_{suffix}",
                     "status": "Active",
                 }
             ]
@@ -44,7 +46,7 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
                 {
                     "securityId": security_id,
                     "name": "Cashflow Test Stock",
-                    "isin": "CSHFLW123",
+                    "isin": f"CSHFLW123_{suffix}",
                     "instrumentCurrency": "USD",
                     "productType": "Equity",
                 }
@@ -58,7 +60,7 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
             {
                 "transaction_id": transaction_id,
                 "portfolio_id": portfolio_id,
-                "instrument_id": "CSHFLW",
+                "instrument_id": f"CSHFLW_{suffix}",
                 "security_id": security_id,
                 "transaction_date": "2025-07-28T00:00:00Z",
                 "transaction_type": "BUY",
@@ -76,7 +78,11 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
     # 3. Poll the query service to ensure the entire pipeline has completed
     poll_url = f"/portfolios/{portfolio_id}/transactions"
     def validation_func(data):
-        return data.get("transactions") and len(data["transactions"]) == 1 and data["transactions"][0].get("cashflow") is not None  # noqa: E501
+        return (
+            data.get("transactions")
+            and len(data["transactions"]) == 1
+            and data["transactions"][0].get("cashflow") is not None
+        )
     e2e_api_client.poll_for_data(poll_url, validation_func, timeout=60)
 
     return {"transaction_id": transaction_id}

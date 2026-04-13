@@ -153,6 +153,7 @@ async def test_get_valuation_job_health_summary(
         "updated_at >= '2025-08-30 12:00:00+00:00'"
         in compiled
     )
+    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
     assert "order by" in compiled.lower()
     assert "valuation_date asc" in compiled.lower()
     assert "correlation_id" in compiled.lower()
@@ -525,6 +526,7 @@ async def test_get_position_snapshot_history_mismatch_count(
     assert "from (select position_history.portfolio_id" in compiled.lower()
     assert "left outer join" in compiled.lower()
     assert "daily_position_snapshots" in compiled.lower()
+    assert "position_state" in compiled.lower()
 
 
 async def test_get_position_snapshot_history_mismatch_count_honors_as_of(
@@ -542,6 +544,7 @@ async def test_get_position_snapshot_history_mismatch_count_honors_as_of(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_history.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
     assert "daily_position_snapshots.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "position_state.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
 async def test_get_position_state(repository: OperationsRepository, mock_db_session: AsyncMock):
@@ -717,6 +720,7 @@ async def test_get_valuation_jobs_count_with_status(
     assert "from portfolio_valuation_jobs" in compiled.lower()
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
+    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
 
 
 async def test_get_valuation_jobs_query(
@@ -745,6 +749,25 @@ async def test_get_valuation_jobs_query(
     assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
+    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
+
+
+async def test_get_valuation_jobs_query_by_job_id_does_not_hide_superseded_rows(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["job1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_valuation_jobs(
+        portfolio_id="P1", skip=0, limit=20, job_id=8801
+    )
+
+    assert value == ["job1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_valuation_jobs.id = 8801" in compiled
+    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" not in compiled
 
 
 async def test_get_aggregation_jobs_count_with_status(

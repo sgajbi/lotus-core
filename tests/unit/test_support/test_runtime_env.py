@@ -16,6 +16,8 @@ def test_build_test_runtime_env_assigns_dynamic_ports_and_endpoints() -> None:
     assert runtime_env["HOST_DATABASE_URL"].startswith("postgresql://user:password@localhost:")
     assert runtime_env["E2E_INGESTION_URL"].startswith("http://localhost:")
     assert runtime_env["KAFKA_BOOTSTRAP_SERVERS"].startswith("localhost:")
+    assert runtime_env["LOTUS_PROMETHEUS_HOST_PORT"].isdigit()
+    assert runtime_env["LOTUS_GRAFANA_HOST_PORT"].isdigit()
     assert endpoints.compose_project_name == runtime_env["COMPOSE_PROJECT_NAME"]
     assert endpoints.e2e_query_control_plane_url == runtime_env["E2E_QUERY_CONTROL_PLANE_URL"]
 

@@ -1,6 +1,8 @@
 # tests/e2e/test_reliability_pipeline.py
-import time
 import uuid
+
+import pytest
+import requests
 
 from .api_client import E2EApiClient
 
@@ -130,9 +132,13 @@ def test_transaction_persists_after_portfolio_arrives(e2e_api_client: E2EApiClie
         ]
     }
 
-    # ACT: Ingest the transaction first, then wait briefly before ingesting the portfolio it depends on.  # noqa: E501
+    # ACT: Ingest the transaction first and prove it is not queryable before the
+    # dependent portfolio arrives.
     assert e2e_api_client.ingest("/ingest/transactions", transaction_payload).status_code == 202
-    time.sleep(2)
+    with pytest.raises(requests.exceptions.HTTPError) as excinfo:
+        e2e_api_client.query(f"/portfolios/{portfolio_id}/transactions")
+    assert excinfo.value.response.status_code == 404
+
     assert e2e_api_client.ingest("/ingest/portfolios", portfolio_payload).status_code == 202
 
     # ASSERT: Poll for the transaction, which should now have been persisted.

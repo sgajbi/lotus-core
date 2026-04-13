@@ -21,6 +21,7 @@ class ValuationLogic:
         price_currency: str,
         instrument_currency: str,
         portfolio_currency: str,
+        product_type: str | None = None,
         price_to_instrument_fx_rate: Optional[Decimal] = None,
         instrument_to_portfolio_fx_rate: Optional[Decimal] = None,
     ) -> Optional[Tuple[Decimal, Decimal, Decimal, Decimal]]:
@@ -47,6 +48,25 @@ class ValuationLogic:
                 )
                 return None
             valuation_price_local = market_price * price_to_instrument_fx_rate
+
+        normalized_product_type = (product_type or "").strip().upper()
+        if normalized_product_type == "BOND":
+            average_cost_local = (
+                abs(cost_basis_local / quantity)
+                if not quantity.is_zero() and cost_basis_local is not None
+                else Decimal("0")
+            )
+            absolute_price_local = abs(valuation_price_local)
+            if (
+                absolute_price_local > Decimal("0")
+                and absolute_price_local < Decimal("200")
+                and average_cost_local >= Decimal("500")
+            ):
+                price_ratio = average_cost_local / absolute_price_local
+                if price_ratio >= Decimal("50"):
+                    valuation_price_local *= Decimal("100")
+                elif price_ratio >= Decimal("5"):
+                    valuation_price_local *= Decimal("10")
 
         # 2. Calculate Market Value in local currency
         market_value_local = quantity * valuation_price_local

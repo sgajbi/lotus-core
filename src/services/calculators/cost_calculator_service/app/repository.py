@@ -22,6 +22,82 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 
 
+TRANSACTION_METADATA_FIELDS = (
+    "economic_event_id",
+    "linked_transaction_group_id",
+    "calculation_policy_id",
+    "calculation_policy_version",
+    "source_system",
+    "cash_entry_mode",
+    "external_cash_transaction_id",
+    "settlement_cash_account_id",
+    "settlement_cash_instrument_id",
+    "movement_direction",
+    "originating_transaction_id",
+    "originating_transaction_type",
+    "adjustment_reason",
+    "link_type",
+    "reconciliation_key",
+    "interest_direction",
+    "withholding_tax_amount",
+    "other_interest_deductions_amount",
+    "net_interest_amount",
+    "component_type",
+    "component_id",
+    "linked_component_ids",
+    "fx_cash_leg_role",
+    "linked_fx_cash_leg_id",
+    "settlement_status",
+    "pair_base_currency",
+    "pair_quote_currency",
+    "fx_rate_quote_convention",
+    "buy_currency",
+    "sell_currency",
+    "buy_amount",
+    "sell_amount",
+    "contract_rate",
+    "fx_contract_id",
+    "fx_contract_open_transaction_id",
+    "fx_contract_close_transaction_id",
+    "settlement_of_fx_contract_id",
+    "swap_event_id",
+    "near_leg_group_id",
+    "far_leg_group_id",
+    "spot_exposure_model",
+    "fx_realized_pnl_mode",
+    "realized_capital_pnl_local",
+    "realized_fx_pnl_local",
+    "realized_total_pnl_local",
+    "realized_capital_pnl_base",
+    "realized_fx_pnl_base",
+    "realized_total_pnl_base",
+    "parent_transaction_reference",
+    "linked_parent_event_id",
+    "parent_event_reference",
+    "child_role",
+    "child_sequence_hint",
+    "dependency_reference_ids",
+    "source_instrument_id",
+    "target_instrument_id",
+    "source_transaction_reference",
+    "target_transaction_reference",
+    "linked_cash_transaction_id",
+    "has_synthetic_flow",
+    "synthetic_flow_effective_date",
+    "synthetic_flow_amount_local",
+    "synthetic_flow_currency",
+    "synthetic_flow_amount_base",
+    "synthetic_flow_fx_rate_to_base",
+    "synthetic_flow_price_used",
+    "synthetic_flow_quantity_used",
+    "synthetic_flow_valuation_method",
+    "synthetic_flow_classification",
+    "synthetic_flow_price_source",
+    "synthetic_flow_fx_source",
+    "synthetic_flow_source",
+)
+
+
 class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -83,6 +159,10 @@ class CostCalculatorRepository:
             db_txn_to_update.transaction_fx_rate = transaction_result.transaction_fx_rate
             db_txn_to_update.net_cost_local = transaction_result.net_cost_local
             db_txn_to_update.realized_gain_loss_local = transaction_result.realized_gain_loss_local
+            for field_name in TRANSACTION_METADATA_FIELDS:
+                field_value = getattr(transaction_result, field_name, None)
+                if field_value is not None:
+                    setattr(db_txn_to_update, field_name, field_value)
 
         return db_txn_to_update
 

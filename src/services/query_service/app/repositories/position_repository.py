@@ -233,7 +233,7 @@ class PositionRepository:
                 & (PositionState.security_id == DailyPositionSnapshot.security_id)
                 & (PositionState.epoch == DailyPositionSnapshot.epoch),
             )
-            .filter(DailyPositionSnapshot.quantity > 0)
+            .filter(DailyPositionSnapshot.quantity != 0)
         )
 
         results = await self.db.execute(stmt)
@@ -284,7 +284,7 @@ class PositionRepository:
                 & (PositionState.security_id == PositionHistory.security_id)
                 & (PositionState.epoch == PositionHistory.epoch),
             )
-            .filter(PositionHistory.quantity > 0)
+            .filter(PositionHistory.quantity != 0)
         )
 
         results = await self.db.execute(stmt)
@@ -344,6 +344,7 @@ class PositionRepository:
                     PositionState.epoch == DailyPositionSnapshot.epoch,
                 ),
             )
+            .filter(DailyPositionSnapshot.quantity != 0)
         )
 
         results = await self.db.execute(stmt)
@@ -406,6 +407,7 @@ class PositionRepository:
                     PositionState.epoch == PositionHistory.epoch,
                 ),
             )
+            .filter(PositionHistory.quantity != 0)
         )
 
         results = await self.db.execute(stmt)
@@ -443,6 +445,55 @@ class PositionRepository:
                 .label("rn"),
             )
             .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+            .subquery()
+        )
+
+        stmt = select(ranked_snapshot_subq).where(ranked_snapshot_subq.c.rn == 1)
+        results = await self.db.execute(stmt)
+        rows = results.mappings().all()
+        valuation_map: dict[str, dict[str, float | None]] = {}
+        for row in rows:
+            security_id = row.get("security_id")
+            if not security_id:
+                continue
+            valuation_map[str(security_id)] = {
+                "market_price": row.get("market_price"),
+                "market_value": row.get("market_value"),
+                "unrealized_gain_loss": row.get("unrealized_gain_loss"),
+                "market_value_local": row.get("market_value_local"),
+                "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
+            }
+        return valuation_map
+
+    async def get_latest_snapshot_valuation_map_as_of_date(
+        self, portfolio_id: str, as_of_date: date
+    ) -> dict[str, dict[str, float | None]]:
+        """
+        Returns latest available valuation fields by security from daily snapshots
+        on or before the requested date, regardless of epoch. Used to enrich
+        history-backed rows when snapshot materialization lags reprocessing.
+        """
+        ranked_snapshot_subq = (
+            select(
+                DailyPositionSnapshot.security_id.label("security_id"),
+                DailyPositionSnapshot.market_price.label("market_price"),
+                DailyPositionSnapshot.market_value.label("market_value"),
+                DailyPositionSnapshot.unrealized_gain_loss.label("unrealized_gain_loss"),
+                DailyPositionSnapshot.market_value_local.label("market_value_local"),
+                DailyPositionSnapshot.unrealized_gain_loss_local.label(
+                    "unrealized_gain_loss_local"
+                ),
+                func.row_number()
+                .over(
+                    partition_by=DailyPositionSnapshot.security_id,
+                    order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
+                )
+                .label("rn"),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.date <= as_of_date,
+            )
             .subquery()
         )
 

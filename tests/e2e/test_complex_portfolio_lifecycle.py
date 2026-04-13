@@ -13,10 +13,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
     - multi-currency instrument with FX rates containing gaps
     - full pipeline validation through summary/review/support APIs
     """
-    portfolio_id = f"E2E_COMPLEX_{uuid.uuid4().hex[:8].upper()}"
+    suffix = uuid.uuid4().hex[:8].upper()
+    portfolio_id = f"E2E_COMPLEX_{suffix}"
     as_of_date = "2025-09-05"
-    security_id = "SEC_SAP_EU"
-    cash_security_id = "CASH_USD"
+    security_id = f"SEC_SAP_EU_{suffix}"
+    cash_security_id = f"CASH_USD_{suffix}"
 
     portfolio_payload = {
         "portfolios": [
@@ -28,7 +29,7 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
                 "investment_time_horizon": "Long",
                 "portfolio_type": "Discretionary",
                 "booking_center_code": "SG",
-                "client_id": "E2E_COMPLEX_CIF",
+                "client_id": f"E2E_COMPLEX_CIF_{suffix}",
                 "status": "ACTIVE",
             }
         ]
@@ -38,7 +39,7 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
             {
                 "security_id": cash_security_id,
                 "name": "US Dollar Cash",
-                "isin": "CASH_USD_E2E_COMPLEX",
+                "isin": f"CASH_USD_E2E_COMPLEX_{suffix}",
                 "currency": "USD",
                 "product_type": "Cash",
                 "asset_class": "Cash",

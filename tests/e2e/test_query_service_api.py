@@ -1,9 +1,9 @@
 # tests/e2e/test_query_service_api.py
-import uuid
 
 import pytest
 
 from .api_client import E2EApiClient
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -12,7 +12,14 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
     A module-scoped fixture to ingest a consistent set of data for testing
     API features like sorting, filtering, and pagination.
     """
-    portfolio_id = f"E2E_API_TEST_{uuid.uuid4()}"
+    suffix = unique_suffix()
+    portfolio_id = f"E2E_API_TEST_{suffix}"
+    security_1 = f"S1_{suffix}"
+    security_2 = f"S2_{suffix}"
+    security_3 = f"S3_{suffix}"
+    instrument_1 = f"A_{suffix}"
+    instrument_2 = f"B_{suffix}"
+    instrument_3 = f"C_{suffix}"
 
     # Ingest Portfolio
     e2e_api_client.ingest(
@@ -23,7 +30,7 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
                     "portfolioId": portfolio_id,
                     "baseCurrency": "USD",
                     "openDate": "2025-01-01",
-                    "cifId": "API_CIF",
+                    "cifId": f"API_CIF_{suffix}",
                     "status": "ACTIVE",
                     "riskExposure": "a",
                     "investmentTimeHorizon": "b",
@@ -39,8 +46,8 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "transaction_id": f"{portfolio_id}_T1",
             "portfolio_id": portfolio_id,
-            "instrument_id": "A",
-            "security_id": "S1",
+            "instrument_id": instrument_1,
+            "security_id": security_1,
             "transaction_date": "2025-08-01T10:00:00Z",
             "transaction_type": "BUY",
             "quantity": 10,
@@ -52,8 +59,8 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "transaction_id": f"{portfolio_id}_T2",
             "portfolio_id": portfolio_id,
-            "instrument_id": "B",
-            "security_id": "S2",
+            "instrument_id": instrument_2,
+            "security_id": security_2,
             "transaction_date": "2025-08-05T11:00:00Z",
             "transaction_type": "BUY",
             "quantity": 5,
@@ -65,8 +72,8 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "transaction_id": f"{portfolio_id}_T3",
             "portfolio_id": portfolio_id,
-            "instrument_id": "A",
-            "security_id": "S1",
+            "instrument_id": instrument_1,
+            "security_id": security_1,
             "transaction_date": "2025-08-03T12:00:00Z",
             "transaction_type": "SELL",
             "quantity": 2,
@@ -78,8 +85,8 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
         {
             "transaction_id": f"{portfolio_id}_T4",
             "portfolio_id": portfolio_id,
-            "instrument_id": "C",
-            "security_id": "S3",
+            "instrument_id": instrument_3,
+            "security_id": security_3,
             "transaction_date": "2025-08-05T09:00:00Z",
             "transaction_type": "BUY",
             "quantity": 25,
@@ -93,11 +100,23 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
 
     # Poll until all transactions are available via the API
     poll_url = f"/portfolios/{portfolio_id}/transactions"
+
     def validation_func(data):
-        return data.get("transactions") and len(data["transactions"]) == 4
+        return data.get("transactions") and {
+            item["transaction_id"] for item in data["transactions"]
+        } == {
+            f"{portfolio_id}_T1",
+            f"{portfolio_id}_T2",
+            f"{portfolio_id}_T3",
+            f"{portfolio_id}_T4",
+        }
+
     e2e_api_client.poll_for_data(poll_url, validation_func, timeout=60)
 
-    return {"portfolio_id": portfolio_id}
+    return {
+        "portfolio_id": portfolio_id,
+        "security_1": security_1,
+    }
 
 
 def test_transaction_query_default_sort(setup_e2e_data, e2e_api_client: E2EApiClient):
@@ -141,7 +160,7 @@ def test_transaction_query_filter_by_security_id(setup_e2e_data, e2e_api_client:
     Tests filtering transactions by a specific security ID.
     """
     portfolio_id = setup_e2e_data["portfolio_id"]
-    url = f"/portfolios/{portfolio_id}/transactions?security_id=S1"
+    url = f"/portfolios/{portfolio_id}/transactions?security_id={setup_e2e_data['security_1']}"
 
     response = e2e_api_client.query(url)
     data = response.json()
@@ -160,7 +179,10 @@ def test_transaction_query_filter_and_sort(setup_e2e_data, e2e_api_client: E2EAp
     Tests combining a filter (security_id) with custom sorting (quantity asc).
     """
     portfolio_id = setup_e2e_data["portfolio_id"]
-    url = f"/portfolios/{portfolio_id}/transactions?security_id=S1&sort_by=quantity&sort_order=asc"
+    url = (
+        f"/portfolios/{portfolio_id}/transactions"
+        f"?security_id={setup_e2e_data['security_1']}&sort_by=quantity&sort_order=asc"
+    )
 
     response = e2e_api_client.query(url)
     data = response.json()

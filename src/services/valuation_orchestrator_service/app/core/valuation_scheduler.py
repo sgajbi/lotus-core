@@ -23,7 +23,7 @@ from portfolio_common.monitoring import (
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
-from portfolio_common.valuation_job_repository import ValuationJobRepository
+from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
@@ -273,7 +273,14 @@ class ValuationScheduler:
             if (state.portfolio_id, state.security_id, state.epoch) not in first_open_dates
         ]
 
-        if keys_without_history:
+        keys_without_history_to_normalize = [
+            state for state in keys_without_history if state.status != "REPROCESSING"
+        ]
+        keys_waiting_for_history = [
+            state for state in keys_without_history if state.status == "REPROCESSING"
+        ]
+
+        if keys_without_history_to_normalize:
             normalized_updates = [
                 {
                     "portfolio_id": state.portfolio_id,
@@ -282,7 +289,7 @@ class ValuationScheduler:
                     "watermark_date": latest_business_date,
                     "status": "CURRENT",
                 }
-                for state in keys_without_history
+                for state in keys_without_history_to_normalize
             ]
             normalized_count = await position_state_repo.bulk_update_states(normalized_updates)
             if normalized_count != len(normalized_updates):
@@ -300,6 +307,19 @@ class ValuationScheduler:
                     extra={"normalized_count": normalized_count},
                 )
 
+        if keys_waiting_for_history:
+            logger.info(
+                "ValuationScheduler deferred no-history reprocessing states until "
+                "current-epoch position history is visible.",
+                extra={
+                    "deferred_count": len(keys_waiting_for_history),
+                    "examples": [
+                        f"({state.portfolio_id},{state.security_id},{state.epoch})"
+                        for state in keys_waiting_for_history[:3]
+                    ],
+                },
+            )
+
         for state in states_to_backfill:
             gap_days = (latest_business_date - state.watermark_date).days
             SCHEDULER_GAP_DAYS.observe(gap_days)
@@ -314,14 +334,12 @@ class ValuationScheduler:
 
             if not first_open_date:
                 logger.info(
-                    (
-                        "No current-epoch position history found; "
-                        "normalized state to current watermark."
-                    ),
+                    "No current-epoch position history found; skipping backfill for now.",
                     extra={
                         "portfolio_id": state.portfolio_id,
                         "security_id": state.security_id,
                         "epoch": state.epoch,
+                        "status": state.status,
                         "latest_business_date": str(latest_business_date),
                     },
                 )
@@ -329,32 +347,34 @@ class ValuationScheduler:
 
             start_date = max(state.watermark_date, first_open_date - timedelta(days=1))
 
-            job_count = 0
+            job_requests: list[ValuationJobUpsert] = []
             current_date = start_date + timedelta(days=1)
 
             while current_date <= latest_business_date:
-                await job_repo.upsert_job(
-                    portfolio_id=state.portfolio_id,
-                    security_id=state.security_id,
-                    valuation_date=current_date,
-                    epoch=state.epoch,
-                    correlation_id=self._build_backfill_correlation_id(
-                        state.portfolio_id,
-                        state.security_id,
-                        state.epoch,
-                        current_date,
-                    ),
+                job_requests.append(
+                    ValuationJobUpsert(
+                        portfolio_id=state.portfolio_id,
+                        security_id=state.security_id,
+                        valuation_date=current_date,
+                        epoch=state.epoch,
+                        correlation_id=self._build_backfill_correlation_id(
+                            state.portfolio_id,
+                            state.security_id,
+                            state.epoch,
+                            current_date,
+                        ),
+                    )
                 )
-                job_count += 1
                 current_date += timedelta(days=1)
 
-            if job_count > 0:
+            if job_requests:
+                staged_count = await job_repo.upsert_jobs(job_requests)
                 VALUATION_JOBS_CREATED_TOTAL.labels(
                     portfolio_id=state.portfolio_id, security_id=state.security_id
-                ).inc(job_count)
+                ).inc(staged_count)
                 logger.info(
                     "Scheduler: Created "
-                    f"{job_count} backfill valuation jobs for "
+                    f"{staged_count}/{len(job_requests)} backfill valuation jobs for "
                     f"{state.security_id} in {state.portfolio_id} "
                     f"for epoch {state.epoch}."
                 )

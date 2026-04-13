@@ -6,6 +6,7 @@ import pytest
 
 from .api_client import E2EApiClient
 from .assertions import as_decimal
+from .data_factory import unique_suffix
 
 
 @pytest.fixture(scope="module")
@@ -14,8 +15,9 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
     A module-scoped fixture that ingests data for a simple valuation scenario,
     and waits for the calculation to complete by polling the database for the final state.
     """
-    portfolio_id = "E2E_VAL_PORT_01"
-    security_id = "SEC_E2E_VAL"
+    suffix = unique_suffix()
+    portfolio_id = f"E2E_VAL_PORT_{suffix}"
+    security_id = f"SEC_E2E_VAL_{suffix}"
     tx_date = "2025-07-27"
 
     # 1. Ingest prerequisite data
@@ -31,7 +33,7 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
                     "investment_time_horizon": "Long",
                     "portfolio_type": "Advisory",
                     "booking_center_code": "NY",
-                    "client_id": "VAL_CIF",
+                    "client_id": f"VAL_CIF_{suffix}",
                     "status": "ACTIVE",
                 }
             ]
@@ -44,7 +46,7 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
                 {
                     "security_id": security_id,
                     "name": "Valuation Test Stock",
-                    "isin": "VAL12345",
+                    "isin": f"VAL12345_{suffix}",
                     "currency": "USD",
                     "product_type": "Equity",
                 }
@@ -58,9 +60,9 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
         {
             "transactions": [
                 {
-                    "transaction_id": "E2E_VAL_BUY_01",
+                    "transaction_id": f"{portfolio_id}_BUY_01",
                     "portfolio_id": portfolio_id,
-                    "instrument_id": "E2E_VAL",
+                    "instrument_id": f"E2E_VAL_{suffix}",
                     "security_id": security_id,
                     "transaction_date": f"{tx_date}T10:00:00Z",
                     "transaction_type": "BUY",
@@ -106,7 +108,7 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
         fail_message=f"Valuation for {security_id} on {tx_date} did not complete.",
     )
 
-    return {"portfolio_id": portfolio_id}
+    return {"portfolio_id": portfolio_id, "security_id": security_id}
 
 
 def test_full_valuation_pipeline(setup_valuation_data, e2e_api_client: E2EApiClient):
@@ -126,7 +128,7 @@ def test_full_valuation_pipeline(setup_valuation_data, e2e_api_client: E2EApiCli
     position = response_data["positions"][0]
     valuation = position["valuation"]
 
-    assert position["security_id"] == "SEC_E2E_VAL"
+    assert position["security_id"] == setup_valuation_data["security_id"]
     assert as_decimal(position["quantity"]) == Decimal("10")
     assert as_decimal(position["cost_basis"]) == Decimal("1000")
 

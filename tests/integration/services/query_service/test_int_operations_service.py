@@ -336,6 +336,64 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
     assert response.reprocessing.backlog_age_days == 12
 
 
+async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P2Q",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P2Q",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add_all(
+        [
+            BusinessDate(
+                date=date(2025, 8, 30),
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P2Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-val-superseded",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P2Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-val-actionable",
+                created_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_calculator_slos("P2Q")
+
+    assert response.valuation.pending_jobs == 1
+    assert response.valuation.processing_jobs == 0
+    assert response.valuation.oldest_open_job_date == date(2025, 8, 20)
+    assert response.valuation.oldest_open_job_correlation_id == "corr-val-actionable"
+
+
 async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
     clean_db, async_db_session: AsyncSession
 ):
@@ -1191,6 +1249,110 @@ async def test_valuation_jobs_expose_skipped_operational_state(
     assert response.items[0].failure_reason == "No position existed on valuation date."
     assert response.items[0].is_terminal_failure is False
     assert response.items[0].is_stale_processing is False
+    assert response.items[0].operational_state == "SKIPPED"
+
+
+async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P9Q",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P9Q",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P9Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-valuation-epoch-old",
+                created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P9Q",
+                security_id="SEC-VAL-EPOCH",
+                valuation_date=date(2025, 8, 20),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-valuation-epoch-new",
+                created_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_valuation_jobs("P9Q", skip=0, limit=20)
+
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].security_id == "SEC-VAL-EPOCH"
+    assert response.items[0].epoch == 2
+    assert response.items[0].correlation_id == "corr-valuation-epoch-new"
+
+
+async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P9R",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P9R",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+    skipped_job = PortfolioValuationJob(
+        portfolio_id="P9R",
+        security_id="SEC-VAL-SUPERSEDED",
+        valuation_date=date(2025, 8, 20),
+        epoch=1,
+        status="SKIPPED_SUPERSEDED",
+        correlation_id="corr-valuation-superseded",
+        failure_reason="Superseded by newer valuation epoch.",
+        created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2025, 8, 30, 9, 5, tzinfo=timezone.utc),
+    )
+    async_db_session.add(skipped_job)
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_valuation_jobs(
+            "P9R", skip=0, limit=20, job_id=skipped_job.id
+        )
+
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].job_id == skipped_job.id
+    assert response.items[0].status == "SKIPPED_SUPERSEDED"
     assert response.items[0].operational_state == "SKIPPED"
 
 

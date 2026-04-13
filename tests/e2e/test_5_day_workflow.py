@@ -28,6 +28,15 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
     cash_eur_id = f"CASH_EUR_{suffix}"
     aapl_id = f"SEC_AAPL_{suffix}"
     ibm_id = f"SEC_IBM_{suffix}"
+    tx_day1_deposit_id = f"{portfolio_id}_DAY1_DEPOSIT"
+    tx_day2_buy_aapl_id = f"{portfolio_id}_DAY2_BUY_AAPL"
+    tx_day2_cash_settle_id = f"{portfolio_id}_DAY2_CASH_SETTLE"
+    tx_day3_buy_ibm_id = f"{portfolio_id}_DAY3_BUY_IBM"
+    tx_day3_cash_settle_id = f"{portfolio_id}_DAY3_CASH_SETTLE"
+    tx_day4_sell_aapl_id = f"{portfolio_id}_DAY4_SELL_AAPL"
+    tx_day4_cash_settle_id = f"{portfolio_id}_DAY4_CASH_SETTLE"
+    tx_day5_div_ibm_id = f"{portfolio_id}_DAY5_DIV_IBM"
+    tx_day5_cash_settle_id = f"{portfolio_id}_DAY5_CASH_SETTLE"
 
     # Ingest Portfolio
     portfolio_payload = {
@@ -36,7 +45,7 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
                 "portfolioId": portfolio_id,
                 "baseCurrency": "USD",
                 "openDate": "2025-01-01",
-                "cifId": "E2E_WF_CIF_01",
+                "cifId": f"E2E_WF_CIF_{suffix}",
                 "status": "ACTIVE",
                 "riskExposure": "High",
                 "investmentTimeHorizon": "Long",
@@ -53,28 +62,28 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
                 {
                     "securityId": cash_usd_id,
                     "name": "US Dollar",
-                    "isin": "CASH_USD_ISIN",
+                    "isin": f"CASH_USD_ISIN_{suffix}",
                     "instrumentCurrency": "USD",
                 "productType": "Cash",
             },
                 {
                     "securityId": cash_eur_id,
                     "name": "Euro",
-                    "isin": "CASH_EUR_ISIN",
+                    "isin": f"CASH_EUR_ISIN_{suffix}",
                     "instrumentCurrency": "EUR",
                 "productType": "Cash",
             },
                 {
                     "securityId": aapl_id,
                     "name": "Apple Inc.",
-                    "isin": "US0378331005_E2E",
+                    "isin": f"US0378331005_E2E_{suffix}",
                     "instrumentCurrency": "USD",
                 "productType": "Equity",
             },
                 {
                     "securityId": ibm_id,
                     "name": "IBM Corp.",
-                    "isin": "US4592001014_E2E",
+                    "isin": f"US4592001014_E2E_{suffix}",
                     "instrumentCurrency": "USD",
                 "productType": "Equity",
             },
@@ -103,6 +112,15 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
         "cash_eur_id": cash_eur_id,
         "aapl_id": aapl_id,
         "ibm_id": ibm_id,
+        "tx_day1_deposit_id": tx_day1_deposit_id,
+        "tx_day2_buy_aapl_id": tx_day2_buy_aapl_id,
+        "tx_day2_cash_settle_id": tx_day2_cash_settle_id,
+        "tx_day3_buy_ibm_id": tx_day3_buy_ibm_id,
+        "tx_day3_cash_settle_id": tx_day3_cash_settle_id,
+        "tx_day4_sell_aapl_id": tx_day4_sell_aapl_id,
+        "tx_day4_cash_settle_id": tx_day4_cash_settle_id,
+        "tx_day5_div_ibm_id": tx_day5_div_ibm_id,
+        "tx_day5_cash_settle_id": tx_day5_cash_settle_id,
     }
 
 
@@ -140,13 +158,14 @@ def test_day_1_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     """
     portfolio_id = setup_prerequisites["portfolio_id"]
     cash_usd_id = setup_prerequisites["cash_usd_id"]
+    tx_day1_deposit_id = setup_prerequisites["tx_day1_deposit_id"]
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_1}]})
     e2e_api_client.ingest(
         "/ingest/transactions",
         {
             "transactions": [
                 {
-                    "transaction_id": "TXN_DAY1_DEPOSIT_01",
+                    "transaction_id": tx_day1_deposit_id,
                     "portfolio_id": portfolio_id,
                     "instrument_id": cash_usd_id,
                     "security_id": cash_usd_id,
@@ -202,11 +221,13 @@ def test_day_2_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     portfolio_id = setup_prerequisites["portfolio_id"]
     aapl_id = setup_prerequisites["aapl_id"]
     cash_usd_id = setup_prerequisites["cash_usd_id"]
+    tx_day2_buy_aapl_id = setup_prerequisites["tx_day2_buy_aapl_id"]
+    tx_day2_cash_settle_id = setup_prerequisites["tx_day2_cash_settle_id"]
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_2}]})
     transactions_payload = {
         "transactions": [
             {
-                "transaction_id": "TXN_DAY2_BUY_AAPL_01",
+                "transaction_id": tx_day2_buy_aapl_id,
                 "portfolio_id": portfolio_id,
                 "security_id": aapl_id,
                 "instrument_id": aapl_id,
@@ -220,7 +241,7 @@ def test_day_2_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "currency": "USD",
             },
             {
-                "transaction_id": "TXN_DAY2_CASH_SETTLE_01",
+                "transaction_id": tx_day2_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
                     "instrument_id": cash_usd_id,
@@ -278,11 +299,13 @@ def test_day_3_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     aapl_id = setup_prerequisites["aapl_id"]
     ibm_id = setup_prerequisites["ibm_id"]
     cash_usd_id = setup_prerequisites["cash_usd_id"]
+    tx_day3_buy_ibm_id = setup_prerequisites["tx_day3_buy_ibm_id"]
+    tx_day3_cash_settle_id = setup_prerequisites["tx_day3_cash_settle_id"]
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_3}]})
     transactions_payload = {
         "transactions": [
             {
-                "transaction_id": "TXN_DAY3_BUY_IBM_01",
+                "transaction_id": tx_day3_buy_ibm_id,
                 "portfolio_id": portfolio_id,
                 "security_id": ibm_id,
                 "instrument_id": ibm_id,
@@ -296,7 +319,7 @@ def test_day_3_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "currency": "USD",
             },
             {
-                "transaction_id": "TXN_DAY3_CASH_SETTLE_02",
+                "transaction_id": tx_day3_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
                     "instrument_id": cash_usd_id,
@@ -360,11 +383,13 @@ def test_day_4_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     aapl_id = setup_prerequisites["aapl_id"]
     ibm_id = setup_prerequisites["ibm_id"]
     cash_usd_id = setup_prerequisites["cash_usd_id"]
+    tx_day4_sell_aapl_id = setup_prerequisites["tx_day4_sell_aapl_id"]
+    tx_day4_cash_settle_id = setup_prerequisites["tx_day4_cash_settle_id"]
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_4}]})
     transactions_payload = {
         "transactions": [
             {
-                "transaction_id": "TXN_DAY4_SELL_AAPL_01",
+                "transaction_id": tx_day4_sell_aapl_id,
                 "portfolio_id": portfolio_id,
                 "security_id": aapl_id,
                 "instrument_id": aapl_id,
@@ -378,7 +403,7 @@ def test_day_4_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "currency": "USD",
             },
             {
-                "transaction_id": "TXN_DAY4_CASH_SETTLE_03",
+                "transaction_id": tx_day4_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
                     "instrument_id": cash_usd_id,
@@ -403,7 +428,7 @@ def test_day_4_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     e2e_api_client.ingest("/ingest/market-prices", prices_payload)
 
     query = "SELECT realized_gain_loss FROM transactions WHERE transaction_id = :txn_id"
-    params = {"txn_id": "TXN_DAY4_SELL_AAPL_01"}
+    params = {"txn_id": tx_day4_sell_aapl_id}
     expected_pnl = Decimal("1389.9000000000")
 
     def validation_func(result):
@@ -453,11 +478,13 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     aapl_id = setup_prerequisites["aapl_id"]
     ibm_id = setup_prerequisites["ibm_id"]
     cash_usd_id = setup_prerequisites["cash_usd_id"]
+    tx_day5_div_ibm_id = setup_prerequisites["tx_day5_div_ibm_id"]
+    tx_day5_cash_settle_id = setup_prerequisites["tx_day5_cash_settle_id"]
     e2e_api_client.ingest("/ingest/business-dates", {"business_dates": [{"businessDate": DAY_5}]})
     transactions_payload = {
         "transactions": [
             {
-                "transaction_id": "TXN_DAY5_DIV_IBM_01",
+                "transaction_id": tx_day5_div_ibm_id,
                 "portfolio_id": portfolio_id,
                 "security_id": ibm_id,
                 "instrument_id": ibm_id,
@@ -470,7 +497,7 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "currency": "USD",
             },
             {
-                "transaction_id": "TXN_DAY5_CASH_SETTLE_04",
+                "transaction_id": tx_day5_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
                     "instrument_id": cash_usd_id,

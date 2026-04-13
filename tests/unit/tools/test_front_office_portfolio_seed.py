@@ -2,10 +2,15 @@ from datetime import date
 from decimal import Decimal
 import sys
 
+import pytest
+
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_SEED_CONTRACT,
+    _validate_front_office_cash_transactions,
+    _validate_front_office_internal_transaction_pairs,
+    _verify_front_office_portfolio,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
     _extract_support_overview_summary,
@@ -94,6 +99,59 @@ def test_front_office_bundle_includes_income_and_paired_cash_transactions():
 
     assert by_txn["TXN-CASH-BUY-AAPL-001"]["transaction_type"] == "SELL"
     assert by_txn["TXN-CASH-SELL-AAPL-001"]["transaction_type"] == "BUY"
+    assert by_txn["TXN-FEE-ADVISORY-001"]["transaction_type"] == "FEE"
+    assert by_txn["TXN-FEE-ADVISORY-001"]["quantity"] == "275.00"
+    assert by_txn["TXN-FEE-ADVISORY-001"]["price"] == "1"
+
+
+def test_front_office_bundle_pairs_internal_transactions_under_shared_event_linkage():
+    bundle = _build_bundle()
+    by_txn = {transaction["transaction_id"]: transaction for transaction in bundle["transactions"]}
+
+    paired_transaction_ids = (
+        ("TXN-BUY-AAPL-001", "TXN-CASH-BUY-AAPL-001"),
+        ("TXN-BUY-MSFT-001", "TXN-CASH-BUY-MSFT-001"),
+        ("TXN-BUY-SAP-001", "TXN-CASH-BUY-SAP-001"),
+        ("TXN-BUY-WORLD-ETF-001", "TXN-CASH-BUY-WORLD-ETF-001"),
+        ("TXN-BUY-BLK-ALLOC-001", "TXN-CASH-BUY-BLK-ALLOC-001"),
+        ("TXN-BUY-PIMCO-INC-001", "TXN-CASH-BUY-PIMCO-INC-001"),
+        ("TXN-BUY-UST-001", "TXN-CASH-BUY-UST-001"),
+        ("TXN-BUY-SIEMENS-BOND-001", "TXN-CASH-BUY-SIEMENS-BOND-001"),
+        ("TXN-BUY-PRIVCREDIT-001", "TXN-CASH-BUY-PRIVCREDIT-001"),
+        ("TXN-SELL-AAPL-001", "TXN-CASH-SELL-AAPL-001"),
+        ("TXN-DIV-AAPL-001", "TXN-CASH-DIV-AAPL-001"),
+        ("TXN-INT-UST-001", "TXN-CASH-INT-UST-001"),
+    )
+
+    for product_transaction_id, cash_transaction_id in paired_transaction_ids:
+        product_leg = by_txn[product_transaction_id]
+        cash_leg = by_txn[cash_transaction_id]
+
+        assert product_leg["economic_event_id"] == cash_leg["economic_event_id"]
+        assert (
+            product_leg["linked_transaction_group_id"]
+            == cash_leg["linked_transaction_group_id"]
+        )
+
+
+def test_front_office_bundle_internal_pairs_economically_net_to_zero():
+    bundle = _build_bundle()
+
+    _validate_front_office_internal_transaction_pairs(bundle["transactions"])
+
+
+def test_front_office_bundle_normalizes_cash_book_transaction_shape():
+    bundle = _build_bundle()
+
+    for transaction in bundle["transactions"]:
+        if not transaction["security_id"].startswith("CASH_"):
+            continue
+        if transaction["transaction_type"] not in {"BUY", "SELL", "DEPOSIT", "WITHDRAWAL", "FEE"}:
+            continue
+
+        assert Decimal(transaction["price"]) == Decimal("1")
+        assert Decimal(transaction["quantity"]) == Decimal(transaction["gross_transaction_amount"])
+        assert transaction["currency"] == transaction["trade_currency"]
 
 
 def test_front_office_bundle_keeps_eur_sleeve_funded():
@@ -200,6 +258,22 @@ def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     assert cash_balance_by_currency["EUR"] > Decimal("0")
     assert cash_balance_by_currency["USD"] == Decimal("101347.00")
     assert cash_balance_by_currency["EUR"] == Decimal("19805.50")
+
+
+def test_front_office_cash_transaction_validator_rejects_non_normalized_cash_rows():
+    bundle = _build_bundle()
+    advisory_fee = next(
+        transaction
+        for transaction in bundle["transactions"]
+        if transaction["transaction_id"] == "TXN-FEE-ADVISORY-001"
+    )
+    broken_fee = dict(advisory_fee, quantity="1", price="275.00")
+
+    with pytest.raises(
+        ValueError,
+        match="TXN-FEE-ADVISORY-001 must use price=1 for cash-book transaction rows.",
+    ):
+        _validate_front_office_cash_transactions([broken_fee])
 
 
 def test_front_office_bundle_extends_fx_coverage_through_forward_projection_window():
@@ -504,3 +578,86 @@ def test_collect_front_office_readiness_diagnostics_queries_support_endpoints(mo
     assert diagnostics["support_overview"]["pending_aggregation_jobs"] == 1
     assert diagnostics["aggregation_jobs"]["job_ids"] == [4402]
     assert diagnostics["aggregation_jobs"]["statuses"] == ["PENDING"]
+
+
+def test_front_office_seed_verification_counts_projected_transactions(monkeypatch) -> None:
+    requested_urls: list[str] = []
+    responses = {
+        "http://query.dev/portfolios/P1/positions": (
+            200,
+            {
+                "positions": [
+                    {"security_id": "SEC-1", "valuation": {"market_value": "100"}},
+                    {"security_id": "SEC-2", "valuation": {"market_value": "200"}},
+                ]
+            },
+        ),
+        "http://query.dev/portfolios/P1/transactions?limit=300&include_projected=true": (
+            200,
+            {"total": 30, "transactions": []},
+        ),
+        "http://query.dev/reporting/asset-allocation/query": (
+            200,
+            {"views": [{"id": "asset_class"}, {"id": "sector"}]},
+        ),
+        "http://query.dev/reporting/cash-balances/query": (
+            200,
+            {"cash_accounts": [{"id": "USD"}, {"id": "EUR"}]},
+        ),
+        "http://query.dev/reporting/income-summary/query": (
+            200,
+            {"portfolios": [{"income_types": [{"type": "DIV"}, {"type": "INT"}]}]},
+        ),
+        "http://query.dev/reporting/activity-summary/query": (
+            200,
+            {"portfolios": [{"buckets": [{"bucket": "TRADE"}, {"bucket": "INCOME"}]}]},
+        ),
+        "http://cp.dev/integration/portfolios/P1/benchmark-assignment": (
+            200,
+            {"benchmark_id": "BMK-1"},
+        ),
+        "http://cp.dev/integration/portfolios/P1/analytics/reference": (
+            200,
+            {"performance_end_date": "2026-04-10"},
+        ),
+        "http://query.dev/portfolios/P1/cashflow-projection?as_of_date=2026-04-10&horizon_days=30&include_projected=true": (
+            200,
+            {"points": [{"net_cashflow": "100.00"}]},
+        ),
+        "http://gateway.dev/api/v1/workbench/P1/performance/summary?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class&attribution_dimension=asset_class&detail_basis=NET": (
+            200,
+            {
+                "benchmark_code": "BMK-1",
+                "report_end_date": "2026-04-12",
+                "capabilities": {"return_path": {"latest_available_date": "2026-04-12"}},
+            },
+        ),
+    }
+
+    def fake_request(method, url, *, payload=None):
+        requested_urls.append(url)
+        return responses[url]
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", fake_request)
+
+    verification = _verify_front_office_portfolio(
+        query_base_url="http://query.dev",
+        query_control_plane_base_url="http://cp.dev",
+        gateway_base_url="http://gateway.dev",
+        expected=FRONT_OFFICE_EXPECTATION.__class__(
+            portfolio_id="P1",
+            min_positions=2,
+            min_valued_positions=2,
+            min_transactions=30,
+            min_cash_accounts=2,
+            min_allocation_views=2,
+            min_projected_cashflow_points=1,
+        ),
+        as_of_date="2026-04-10",
+        end_date="2026-04-10",
+        wait_seconds=1,
+        poll_interval_seconds=1,
+    )
+
+    assert verification["transactions"] == 30
+    assert any("include_projected=true" in url for url in requested_urls)

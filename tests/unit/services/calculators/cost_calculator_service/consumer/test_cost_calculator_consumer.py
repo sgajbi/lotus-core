@@ -16,6 +16,8 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
+    BUY_DEFAULT_POLICY_ID,
+    BUY_DEFAULT_POLICY_VERSION,
     DIVIDEND_DEFAULT_POLICY_ID,
     DIVIDEND_DEFAULT_POLICY_VERSION,
     INTEREST_DEFAULT_POLICY_ID,
@@ -472,6 +474,16 @@ async def test_consumer_uses_trade_fee_in_calculation(
     assert updated_transaction_arg.net_cost == Decimal("1507.50")
     assert updated_transaction_arg.realized_gain_loss == Decimal("0")
     assert updated_transaction_arg.realized_gain_loss_local == Decimal("0")
+    assert (
+        updated_transaction_arg.economic_event_id
+        == f"EVT-BUY-PORT_COST_01-{updated_transaction_arg.transaction_id}"
+    )
+    assert (
+        updated_transaction_arg.linked_transaction_group_id
+        == f"LTG-BUY-PORT_COST_01-{updated_transaction_arg.transaction_id}"
+    )
+    assert updated_transaction_arg.calculation_policy_id == BUY_DEFAULT_POLICY_ID
+    assert updated_transaction_arg.calculation_policy_version == BUY_DEFAULT_POLICY_VERSION
     mock_repo.upsert_buy_lot_state.assert_called_once()
     mock_repo.upsert_accrued_income_offset_state.assert_called_once()
 

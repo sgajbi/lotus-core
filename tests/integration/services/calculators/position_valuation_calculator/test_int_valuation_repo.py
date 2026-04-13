@@ -16,7 +16,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
-from portfolio_common.valuation_job_repository import ValuationJobRepository
+from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
@@ -1034,6 +1034,104 @@ async def test_upsert_job_deduplicates_concurrent_duplicate_scheduler_pressure(
     assert jobs[0].correlation_id == "corr-val-conc"
 
 
+async def test_upsert_jobs_bulk_skips_stale_rows_and_stages_eligible_rows(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = ValuationJobRepository(async_db_session)
+
+    await repo.upsert_job(
+        portfolio_id="P-BULK-1",
+        security_id="S-BULK-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=3,
+        correlation_id="corr-existing",
+    )
+    await async_db_session.commit()
+
+    staged_count = await repo.upsert_jobs(
+        [
+            ValuationJobUpsert(
+                portfolio_id="P-BULK-1",
+                security_id="S-BULK-1",
+                valuation_date=date(2025, 8, 11),
+                epoch=2,
+                correlation_id="corr-stale",
+            ),
+            ValuationJobUpsert(
+                portfolio_id="P-BULK-1",
+                security_id="S-BULK-1",
+                valuation_date=date(2025, 8, 12),
+                epoch=3,
+                correlation_id="corr-fresh",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .where(PortfolioValuationJob.portfolio_id == "P-BULK-1")
+                .order_by(PortfolioValuationJob.valuation_date.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert staged_count == 1
+    assert [(job.valuation_date, job.epoch, job.correlation_id) for job in jobs] == [
+        (date(2025, 8, 11), 3, "corr-existing"),
+        (date(2025, 8, 12), 3, "corr-fresh"),
+    ]
+
+
+async def test_upsert_job_marks_older_pending_epoch_skipped_when_newer_epoch_arrives(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = ValuationJobRepository(async_db_session)
+
+    await repo.upsert_job(
+        portfolio_id="P-SUPERSEDE-1",
+        security_id="S-SUPERSEDE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=1,
+        correlation_id="corr-old",
+    )
+    await async_db_session.commit()
+
+    await repo.upsert_job(
+        portfolio_id="P-SUPERSEDE-1",
+        security_id="S-SUPERSEDE-1",
+        valuation_date=date(2025, 8, 11),
+        epoch=2,
+        correlation_id="corr-new",
+    )
+    await async_db_session.commit()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .where(
+                    PortfolioValuationJob.portfolio_id == "P-SUPERSEDE-1",
+                    PortfolioValuationJob.security_id == "S-SUPERSEDE-1",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 11),
+                )
+                .order_by(PortfolioValuationJob.epoch.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert [(job.epoch, job.status, job.failure_reason) for job in jobs] == [
+        (1, "SKIPPED_SUPERSEDED", "Superseded by newer valuation epoch."),
+        (2, "PENDING", None),
+    ]
+
+
 async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     async_db_session: AsyncSession, clean_db
 ):
@@ -1082,6 +1180,101 @@ async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurre
     assert len(jobs) == 1
     assert jobs[0].status == "PROCESSING"
     assert jobs[0].attempt_count == 1
+
+
+async def test_find_and_claim_eligible_jobs_skips_superseded_pending_epochs(
+    async_db_session: AsyncSession, clean_db
+):
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-EPOCH",
+                security_id="S-VAL-EPOCH",
+                valuation_date=date(2025, 8, 15),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-old",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-EPOCH",
+                security_id="S-VAL-EPOCH",
+                valuation_date=date(2025, 8, 15),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-new",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=10)
+    await async_db_session.commit()
+
+    assert [(job.valuation_date, job.epoch, job.status) for job in claimed_jobs] == [
+        (date(2025, 8, 15), 2, "PROCESSING")
+    ]
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .where(
+                    PortfolioValuationJob.portfolio_id == "P-VAL-EPOCH",
+                    PortfolioValuationJob.security_id == "S-VAL-EPOCH",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 15),
+                )
+                .order_by(PortfolioValuationJob.epoch.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert [(job.epoch, job.status, job.attempt_count) for job in jobs] == [
+        (1, "PENDING", 0),
+        (2, "PROCESSING", 1),
+    ]
+
+
+async def test_get_job_queue_stats_ignores_superseded_pending_epochs(
+    async_db_session: AsyncSession, clean_db
+):
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-STATS",
+                security_id="S-VAL-STATS",
+                valuation_date=date(2025, 8, 15),
+                epoch=1,
+                status="PENDING",
+                correlation_id="corr-old",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-STATS",
+                security_id="S-VAL-STATS",
+                valuation_date=date(2025, 8, 15),
+                epoch=2,
+                status="PENDING",
+                correlation_id="corr-new",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P-VAL-STATS",
+                security_id="S-VAL-STATS-FAILED",
+                valuation_date=date(2025, 8, 16),
+                epoch=1,
+                status="FAILED",
+                correlation_id="corr-failed",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    stats = await repo.get_job_queue_stats()
+
+    assert stats["pending_count"] == 1
+    assert stats["failed_count"] == 1
 
 
 async def test_get_latest_business_date_falls_back_to_processing_dates_when_calendar_is_empty(
