@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -171,11 +172,7 @@ def _load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict[str, set[str]]]
             if not isinstance(route_keys, list):
                 raise ValueError(f"registry routes for {service}/{family} must be a list")
             validated_route_keys = [_require_route_key(item) for item in route_keys]
-            duplicate_route_keys = {
-                route_key
-                for route_key in validated_route_keys
-                if validated_route_keys.count(route_key) > 1
-            }
+            duplicate_route_keys = _duplicates(validated_route_keys)
             if duplicate_route_keys:
                 raise ValueError(
                     f"duplicate route keys in {service}/{family}: "
@@ -194,6 +191,10 @@ def _require_route_key(item: Any) -> str:
     if not path.startswith("/"):
         raise ValueError(f"route path must start with / in route key {item!r}")
     return item
+
+
+def _duplicates(items: list[str]) -> set[str]:
+    return {item for item, count in Counter(items).items() if count > 1}
 
 
 def _registry_keys(registry: dict[str, dict[str, set[str]]]) -> dict[str, str]:
@@ -215,8 +216,21 @@ def evaluate_routes(
         registry_keys = _registry_keys(registry)
     except ValueError as exc:
         return [str(exc)]
+    discovered_route_keys = [f"{route.service} {route.key}" for route in discovered_routes]
+    duplicate_discovered_keys = _duplicates(discovered_route_keys)
     discovered_keys = {f"{route.service} {route.key}": route for route in discovered_routes}
     errors: list[str] = []
+
+    for full_key in sorted(duplicate_discovered_keys):
+        duplicate_sources = [
+            f"{route.source}:{route.function_name}"
+            for route in discovered_routes
+            if f"{route.service} {route.key}" == full_key
+        ]
+        errors.append(
+            f"{full_key} is defined by multiple active router handlers: "
+            + ", ".join(sorted(duplicate_sources))
+        )
 
     for full_key, route in sorted(discovered_keys.items()):
         if full_key not in registry_keys:
