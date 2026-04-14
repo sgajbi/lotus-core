@@ -42,6 +42,10 @@ The current local source-data product catalog is:
 
 - `docs/architecture/RFC-0083-source-data-product-catalog.md`
 
+The current local market and reference data target model is:
+
+- `docs/architecture/RFC-0083-market-reference-data-target-model.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.

@@ -427,6 +427,19 @@ and convenience shapes to consolidate. The helper validates duplicate product na
 ownership, required metadata, and consumer product lookup. This slice does not change runtime
 behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
 
+## Slice 7 Completion Note
+
+Slice 7 market and reference data target modeling is recorded in:
+
+- `docs/architecture/RFC-0083-market-reference-data-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/market_reference_quality.py`
+- `tests/unit/libs/portfolio-common/test_market_reference_quality.py`
+
+The model defines instrument/reference, market-data, benchmark, index, and risk-free product
+alignment; maps legacy `source_timestamp` to canonical `observed_at`; and standardizes market and
+reference data point quality, freshness, and coverage classification. This slice does not change
+runtime behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

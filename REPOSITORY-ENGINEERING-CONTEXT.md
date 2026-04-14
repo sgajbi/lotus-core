@@ -37,8 +37,9 @@ Current repository posture:
 7. RFC-0083 Slice 4 now defines the ingestion source-lineage target model and source-batch evidence helper,
 8. RFC-0083 Slice 5 now defines the reconciliation/data-quality target model and shared status helper,
 9. RFC-0083 Slice 6 now defines the priority source-data product catalog, product metadata requirements, consumer map, and paging/export disposition,
-10. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-11. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+10. RFC-0083 Slice 7 now defines market/reference quality, observed-at mapping, and freshness/completeness classification for benchmark, index, risk-free, price, FX, and instrument products,
+11. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+12. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
 
 ## Architecture And Module Map
 
@@ -131,9 +132,10 @@ Most relevant current governance:
 14. `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
 15. `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
 16. `docs/architecture/RFC-0083-source-data-product-catalog.md`
-17. `docs/standards/route-contract-family-registry.json`
-18. `docs/standards/temporal-vocabulary.md`
-19. `docs/standards/layering-boundaries.md`
+17. `docs/architecture/RFC-0083-market-reference-data-target-model.md`
+18. `docs/standards/route-contract-family-registry.json`
+19. `docs/standards/temporal-vocabulary.md`
+20. `docs/standards/layering-boundaries.md`
 
 ## Known Constraints And Implementation Notes
 
@@ -146,9 +148,10 @@ Most relevant current governance:
 7. future ingestion/replay evidence products must use `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md` before expanding runtime evidence contracts,
 8. future reconciliation/data-quality evidence products must use `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md` before expanding source-data product supportability fields,
 9. future source-data product DTO and route work must use `docs/architecture/RFC-0083-source-data-product-catalog.md` and `src/libs/portfolio-common/portfolio_common/source_data_products.py` for product names, versions, required metadata, consumer mapping, and paging/export disposition,
-10. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-11. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-12. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+10. future market/reference/benchmark/index/risk-free DTO work must use `docs/architecture/RFC-0083-market-reference-data-target-model.md` and `src/libs/portfolio-common/portfolio_common/market_reference_quality.py` before changing observed/source timestamp or freshness/completeness semantics,
+11. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+12. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+13. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 
 ## Context Maintenance Rule
 
