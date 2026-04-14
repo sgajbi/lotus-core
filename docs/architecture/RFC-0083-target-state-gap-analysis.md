@@ -400,6 +400,19 @@ replay/DLQ evidence fields, and retention/repair posture. The helper provides ex
 fingerprinting and partial outcome classification for future ingestion evidence DTO wiring. This slice
 does not change runtime behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
 
+## Slice 5 Completion Note
+
+Slice 5 reconciliation and data-quality target modeling is recorded in:
+
+- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/reconciliation_quality.py`
+- `tests/unit/libs/portfolio-common/test_reconciliation_quality.py`
+
+The model defines the target reconciliation status vocabulary, break model, data-quality coverage
+contract, and source-data product supportability field requirements. The helper provides executable
+status classification for future evidence DTO wiring. This slice does not change runtime behavior,
+schemas, generated OpenAPI, persistence, or downstream contract shape.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

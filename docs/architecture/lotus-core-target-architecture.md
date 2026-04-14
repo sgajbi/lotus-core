@@ -34,6 +34,10 @@ The current local ingestion source-lineage target model is:
 
 - `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
 
+The current local reconciliation and data-quality target model is:
+
+- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.

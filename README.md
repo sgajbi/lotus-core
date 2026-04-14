@@ -16,6 +16,7 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 - `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
 - `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
+- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/route-contract-family-registry.json`
 - `docs/standards/layering-boundaries.md`
@@ -97,6 +98,11 @@ RFC-0083 Slice 4 ingestion source-lineage target state is documented in:
 
 - `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
 - `src/libs/portfolio-common/portfolio_common/ingestion_evidence.py`
+
+RFC-0083 Slice 5 reconciliation and data-quality target state is documented in:
+
+- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/reconciliation_quality.py`
 
 ### Key Architectural Patterns
 

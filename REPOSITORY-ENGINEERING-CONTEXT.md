@@ -35,8 +35,9 @@ Current repository posture:
 5. RFC-0083 Slice 2 now enforces route contract-family classification through a machine-readable registry and guard,
 6. RFC-0083 Slice 3 now defines the portfolio reconstruction target model and deterministic snapshot identity helper,
 7. RFC-0083 Slice 4 now defines the ingestion source-lineage target model and source-batch evidence helper,
-8. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-9. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+8. RFC-0083 Slice 5 now defines the reconciliation/data-quality target model and shared status helper,
+9. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+10. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
 
 ## Architecture And Module Map
 
@@ -127,9 +128,10 @@ Most relevant current governance:
 12. `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 13. `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
 14. `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
-15. `docs/standards/route-contract-family-registry.json`
-16. `docs/standards/temporal-vocabulary.md`
-17. `docs/standards/layering-boundaries.md`
+15. `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
+16. `docs/standards/route-contract-family-registry.json`
+17. `docs/standards/temporal-vocabulary.md`
+18. `docs/standards/layering-boundaries.md`
 
 ## Known Constraints And Implementation Notes
 
@@ -140,9 +142,10 @@ Most relevant current governance:
 5. route additions, removals, or family changes must update `docs/standards/route-contract-family-registry.json` and pass `make route-contract-family-guard`,
 6. future portfolio state products must use `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md` and the deterministic identity helper before exposing restatable snapshots,
 7. future ingestion/replay evidence products must use `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md` before expanding runtime evidence contracts,
-8. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-9. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-10. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+8. future reconciliation/data-quality evidence products must use `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md` before expanding source-data product supportability fields,
+9. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+10. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+11. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 
 ## Context Maintenance Rule
 
