@@ -10,8 +10,10 @@ Platform architecture governance source:
 Local architecture direction and restructuring plan:
 - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
 - `../lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+- `../lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
 - `docs/architecture/lotus-core-target-architecture.md`
 - `docs/architecture/RFC-0082-contract-family-inventory.md`
+- `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/layering-boundaries.md`
 
@@ -62,6 +64,16 @@ The active families are:
 5. `financial_reconciliation_service`: reconciliation and control execution contracts.
 
 `lotus-core` owns canonical source data and analytics inputs. It does not own downstream performance or risk analytics conclusions.
+
+### RFC-0083 Target-State Gap Analysis
+
+RFC-0083 is the master target architecture blueprint for hardening the current `lotus-core` into the
+banking-grade system of record. The local Slice 0 implementation map is:
+
+- `docs/architecture/RFC-0083-target-state-gap-analysis.md`
+
+It identifies the current route, model, temporal, source-data product, ingestion, reconciliation,
+security, and observability gaps that should drive the next implementation slices.
 
 ### Key Architectural Patterns
 

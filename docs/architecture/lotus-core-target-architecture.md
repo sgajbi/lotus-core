@@ -6,9 +6,17 @@ Platform RFC-0082 now governs the downstream-facing domain-authority and analyti
 
 - `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
 
+Platform RFC-0083 now governs the system-of-record target architecture:
+
+- `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
+
 The current local contract-family inventory is:
 
 - `docs/architecture/RFC-0082-contract-family-inventory.md`
+
+The current local target-state gap analysis and implementation slice map is:
+
+- `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 
 ## System Role
 

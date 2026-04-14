@@ -30,8 +30,9 @@ Current repository posture:
 
 1. `lotus-core` is the domain authority for portfolio-management and transaction data,
 2. downstream-facing API ownership is now classified under the RFC-0082 contract-family model, with `query_service` as the operational read plane and `query_control_plane_service` as the governed analytics-input, snapshot/simulation, support, and policy contract plane,
-3. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-4. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+3. RFC-0083 now defines the target system-of-record architecture, and the local Slice 0 gap analysis maps current route, model, temporal, source-data product, ingestion, reconciliation, and observability gaps to the implementation program,
+4. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+5. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
 
 ## Architecture And Module Map
 
@@ -115,18 +116,21 @@ Most relevant current governance:
 5. `../lotus-platform/rfcs/RFC-0072-platform-wide-multi-lane-ci-validation-and-release-governance.md`
 6. `../lotus-platform/rfcs/RFC-0073-lotus-ecosystem-engineering-context-and-agent-guidance-system.md`
 7. `../lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
-8. `docs/architecture/RFC-0082-contract-family-inventory.md`
-9. `docs/architecture/lotus-core-target-architecture.md`
-10. `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
-11. `docs/standards/layering-boundaries.md`
+8. `../lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
+9. `docs/architecture/RFC-0082-contract-family-inventory.md`
+10. `docs/architecture/RFC-0083-target-state-gap-analysis.md`
+11. `docs/architecture/lotus-core-target-architecture.md`
+12. `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
+13. `docs/standards/layering-boundaries.md`
 
 ## Known Constraints And Implementation Notes
 
 1. this repository has the heaviest local gate set in the ecosystem, so targeted local proof plus GitHub-backed heavy execution is often the right working model,
 2. query-service contracts are highly consequential because many other apps depend on them,
-3. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-4. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-5. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+3. RFC-0083 implementation should follow `docs/architecture/RFC-0083-target-state-gap-analysis.md` slice order before adding broad new architecture work,
+4. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+5. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+6. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 
 ## Context Maintenance Rule
 
@@ -135,7 +139,7 @@ Update this document when:
 1. service ownership or major service boundaries change,
 2. repo-native command contracts or test-manifest structure change,
 3. shared-infrastructure ownership assumptions change,
-4. integration contract posture, RFC-0082 contract-family classification, or current-state architecture shifts materially,
+4. integration contract posture, RFC-0082 contract-family classification, RFC-0083 target-state slice plan, or current-state architecture shifts materially,
 5. the repository's CI and runtime expectations change.
 
 ## Cross-Links
