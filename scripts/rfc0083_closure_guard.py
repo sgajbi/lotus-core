@@ -14,7 +14,6 @@ LEDGER_SPEC_VERSION = "1.0.0"
 APPLICATION = "lotus-core"
 GOVERNING_RFCS = {"RFC-0082", "RFC-0083"}
 EXPECTED_SLICES = set(range(12))
-VALID_STATUSES = {"completed", "blocked", "superseded"}
 
 
 def load_ledger(path: Path = LEDGER_PATH) -> dict[str, Any]:
@@ -33,8 +32,13 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
         errors.append("ledger closureStatus must describe guarded target-model closure")
     if payload.get("runtimeProductionStatus") != "not-production-closed":
         errors.append("ledger must not claim runtime production closure without full proof")
-    if not payload.get("remainingRuntimeProof"):
+    remaining_runtime_proof = payload.get("remainingRuntimeProof")
+    if not isinstance(remaining_runtime_proof, list) or not remaining_runtime_proof:
         errors.append("ledger must list remaining runtime proof")
+    else:
+        for proof_item in remaining_runtime_proof:
+            if not isinstance(proof_item, str) or not proof_item.strip():
+                errors.append(f"ledger has invalid remaining runtime proof: {proof_item!r}")
 
     slices = payload.get("slices")
     if not isinstance(slices, list):
@@ -55,8 +59,8 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
         _require_non_empty_string(item, "title", errors, slice_number)
         _require_non_empty_string(item, "validationLane", errors, slice_number)
         status = item.get("status")
-        if status not in VALID_STATUSES:
-            errors.append(f"slice {slice_number} status must be one of {sorted(VALID_STATUSES)}")
+        if status != "completed":
+            errors.append(f"slice {slice_number} status must be completed for closure")
         artifacts = item.get("artifacts")
         if not isinstance(artifacts, list) or not artifacts:
             errors.append(f"slice {slice_number} must list artifacts")

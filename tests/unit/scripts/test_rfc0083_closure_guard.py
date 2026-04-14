@@ -64,6 +64,27 @@ def test_evaluate_ledger_rejects_runtime_production_claim(tmp_path: Path) -> Non
     assert "ledger must not claim runtime production closure without full proof" in errors
 
 
+def test_evaluate_ledger_rejects_incomplete_slice_status(tmp_path: Path) -> None:
+    _write_artifacts(tmp_path)
+    ledger = _ledger()
+    slices = ledger["slices"]  # type: ignore[assignment]
+    slices[4]["status"] = "blocked"
+
+    errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
+
+    assert "slice 4 status must be completed for closure" in errors
+
+
+def test_evaluate_ledger_rejects_invalid_remaining_runtime_proof(tmp_path: Path) -> None:
+    _write_artifacts(tmp_path)
+    ledger = _ledger()
+    ledger["remainingRuntimeProof"] = [""]
+
+    errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
+
+    assert "ledger has invalid remaining runtime proof: ''" in errors
+
+
 def test_evaluate_ledger_rejects_absolute_artifact_path(tmp_path: Path) -> None:
     _write_artifacts(tmp_path)
     ledger = _ledger()
