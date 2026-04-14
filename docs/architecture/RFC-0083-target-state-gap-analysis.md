@@ -454,6 +454,20 @@ classification stable until affected consumers migrate. Route removal remains ga
 evidence, RFC-0067 no-alias governance, route-registry updates, and platform proof where gateway or
 Workbench behavior changes.
 
+## Slice 9 Completion Note
+
+Slice 9 security, tenancy, and lifecycle target modeling is recorded in:
+
+- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/source_data_security.py`
+- `tests/unit/libs/portfolio-common/test_source_data_security.py`
+
+The model defines source-data product security profiles covering tenant scoping, entitlement scoping,
+access classification, sensitivity classification, retention requirement, audit requirement,
+PII/client-sensitive fields, and operator-only evidence posture. The helper validates that every
+source-data product has a profile. This slice does not change runtime authorization behavior, schemas,
+generated OpenAPI, persistence, or downstream contract shape.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

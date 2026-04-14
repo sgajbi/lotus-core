@@ -39,8 +39,9 @@ Current repository posture:
 9. RFC-0083 Slice 6 now defines the priority source-data product catalog, product metadata requirements, consumer map, and paging/export disposition,
 10. RFC-0083 Slice 7 now defines market/reference quality, observed-at mapping, and freshness/completeness classification for benchmark, index, risk-free, price, FX, and instrument products,
 11. RFC-0083 Slice 8 now records endpoint-consolidation disposition and deprecates selected pre-live reporting convenience routes in OpenAPI while preserving tested handlers,
-12. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-13. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+12. RFC-0083 Slice 9 now defines source-data product security, tenancy, entitlement, audit, sensitivity, and retention profiles,
+13. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+14. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
 
 ## Architecture And Module Map
 
@@ -135,9 +136,10 @@ Most relevant current governance:
 16. `docs/architecture/RFC-0083-source-data-product-catalog.md`
 17. `docs/architecture/RFC-0083-market-reference-data-target-model.md`
 18. `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
-19. `docs/standards/route-contract-family-registry.json`
-20. `docs/standards/temporal-vocabulary.md`
-21. `docs/standards/layering-boundaries.md`
+19. `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
+20. `docs/standards/route-contract-family-registry.json`
+21. `docs/standards/temporal-vocabulary.md`
+22. `docs/standards/layering-boundaries.md`
 
 ## Known Constraints And Implementation Notes
 
@@ -152,9 +154,10 @@ Most relevant current governance:
 9. future source-data product DTO and route work must use `docs/architecture/RFC-0083-source-data-product-catalog.md` and `src/libs/portfolio-common/portfolio_common/source_data_products.py` for product names, versions, required metadata, consumer mapping, and paging/export disposition,
 10. future market/reference/benchmark/index/risk-free DTO work must use `docs/architecture/RFC-0083-market-reference-data-target-model.md` and `src/libs/portfolio-common/portfolio_common/market_reference_quality.py` before changing observed/source timestamp or freshness/completeness semantics,
 11. route removal or deprecation must follow `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`, update the route-family registry when routes change, and carry affected-consumer evidence,
-12. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-13. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-14. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+12. future source-data product security, retention, audit, and entitlement changes must use `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md` and `src/libs/portfolio-common/portfolio_common/source_data_security.py`,
+13. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+14. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+15. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 
 ## Context Maintenance Rule
 

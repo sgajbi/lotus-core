@@ -50,6 +50,10 @@ The current local endpoint consolidation disposition is:
 
 - `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
 
+The current local security, tenancy, and lifecycle target model is:
+
+- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.

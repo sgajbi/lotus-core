@@ -20,6 +20,7 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/RFC-0083-source-data-product-catalog.md`
 - `docs/architecture/RFC-0083-market-reference-data-target-model.md`
 - `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
+- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/route-contract-family-registry.json`
 - `docs/standards/layering-boundaries.md`
@@ -120,6 +121,11 @@ RFC-0083 Slice 7 market and reference data target state is documented in:
 RFC-0083 Slice 8 endpoint consolidation disposition is documented in:
 
 - `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
+
+RFC-0083 Slice 9 security, tenancy, and lifecycle target state is documented in:
+
+- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/source_data_security.py`
 
 ### Key Architectural Patterns
 
