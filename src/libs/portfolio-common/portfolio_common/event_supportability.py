@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from portfolio_common.source_data_products import SOURCE_DATA_PRODUCT_CATALOG
+
 
 SOURCE_INGESTION_EVENT = "source_ingestion_event"
 DOMAIN_STATE_EVENT = "domain_state_event"
@@ -323,6 +325,10 @@ def validate_event_supportability_catalog(
         RECONCILIATION_EVIDENCE_BUNDLE,
         DATA_QUALITY_COVERAGE_REPORT,
     }
+    source_data_product_names = {
+        product.product_name.upper(): product.product_name
+        for product in SOURCE_DATA_PRODUCT_CATALOG
+    }
     available_models = (
         {
             _normalize_required_text(model, "available_schema_models")
@@ -333,14 +339,12 @@ def validate_event_supportability_catalog(
     )
 
     event_names: set[str] = set()
-    schema_models: set[str] = set()
     for definition in event_definitions:
         event_type = _normalize_required_text(definition.event_type, "event_type")
         if event_type in event_names:
             raise ValueError(f"Duplicate event family definition: {definition.event_type}")
         event_names.add(event_type)
         schema_model = _normalize_required_text(definition.schema_model, "schema_model")
-        schema_models.add(schema_model)
         _require_allowed(definition.family, "family", supported_families)
         _require_allowed(definition.direction, "direction", supported_directions)
         _normalize_required_text(definition.aggregate_type, "aggregate_type")
@@ -356,8 +360,19 @@ def validate_event_supportability_catalog(
             raise ValueError(f"{definition.event_type} must require correlation")
         if not definition.schema_version_required:
             raise ValueError(f"{definition.event_type} must require schema versioning")
+        if not definition.source_data_products and not definition.supportability_evidence:
+            raise ValueError(
+                f"{definition.event_type} must link to source-data products or evidence"
+            )
         for evidence_bundle in definition.supportability_evidence:
             _require_allowed(evidence_bundle, "supportability_evidence", supported_evidence)
+        for product_name in definition.source_data_products:
+            normalized_product_name = _normalize_required_text(product_name, "source_data_products")
+            if normalized_product_name not in source_data_product_names:
+                raise ValueError(
+                    f"{definition.event_type} references unknown source-data product: "
+                    f"{product_name}"
+                )
         if available_models is not None and schema_model not in available_models:
             raise ValueError(
                 f"{definition.event_type} references missing schema model: "

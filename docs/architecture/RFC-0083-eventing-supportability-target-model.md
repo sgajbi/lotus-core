@@ -61,7 +61,8 @@ Every event family definition must declare:
 
 The helper validates duplicate event names, supported event families, supported directions, required
 idempotency, required correlation, required schema versioning, evidence bundle names, consumer service
-presence, and schema-model binding against existing event model names when supplied by tests.
+presence, source-data product names against the governed product catalog, and schema-model binding
+against existing event model names when supplied by tests.
 
 ## Supportability Surfaces
 

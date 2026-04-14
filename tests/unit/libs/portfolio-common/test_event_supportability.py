@@ -116,3 +116,24 @@ def test_validation_rejects_missing_schema_model_binding() -> None:
             (),
             available_schema_models={"PortfolioEvent"},
         )
+
+
+def test_validation_rejects_unknown_source_data_product_binding() -> None:
+    invalid = EventFamilyDefinition(
+        event_type="InvalidEvent",
+        schema_model="PortfolioEvent",
+        family=SOURCE_INGESTION_EVENT,
+        direction="inbound",
+        aggregate_type="portfolio",
+        topic="portfolio.invalid",
+        producer_service="ingestion_service",
+        consumer_services=("persistence_service",),
+        idempotency_required=True,
+        correlation_required=True,
+        schema_version_required=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("UnknownProduct",),
+    )
+
+    with pytest.raises(ValueError, match="references unknown source-data product"):
+        validate_event_supportability_catalog((invalid,), ())
