@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timezone, timedelta
 
 import pytest
 from portfolio_common.ingestion_evidence import (
@@ -47,6 +47,23 @@ def test_source_batch_fingerprint_ignores_record_key_order_and_duplicates() -> N
     assert first == second
 
 
+def test_source_batch_fingerprint_normalizes_text_and_observed_at_timezone() -> None:
+    first = build_source_batch_fingerprint(_scope())
+    second = build_source_batch_fingerprint(
+        _scope(
+            source_system=" custodian_sftp ",
+            source_batch_id=" batch_20260415_001 ",
+            payload_kind=" transactions ",
+            tenant_id=" tenant_sg_pb ",
+            feed_name=" daily_transactions ",
+            observed_at=datetime(2026, 4, 15, 9, 30, tzinfo=timezone(timedelta(hours=8))),
+            source_record_keys=(" TXN_1 ", " TXN_2 "),
+        )
+    )
+
+    assert first == second
+
+
 def test_source_batch_fingerprint_ignores_ingestion_attempt_metadata() -> None:
     first = build_source_batch_fingerprint(_scope())
     second = build_source_batch_fingerprint(
@@ -84,6 +101,9 @@ def test_source_batch_fingerprint_rejects_invalid_scope() -> None:
 
     with pytest.raises(ValueError, match="source_record_keys is required"):
         build_source_batch_fingerprint(_scope(source_record_keys=("TXN_1", " ")))
+
+    with pytest.raises(ValueError, match="datetime values must be timezone-aware"):
+        build_source_batch_fingerprint(_scope(observed_at=datetime(2026, 4, 15, 1, 30)))
 
 
 @pytest.mark.parametrize(

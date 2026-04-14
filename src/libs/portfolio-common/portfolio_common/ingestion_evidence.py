@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from hashlib import sha256
 
 
@@ -66,33 +66,42 @@ def classify_ingestion_outcome(counts: IngestionOutcomeCounts) -> str:
 
 
 def _canonical_batch_payload(scope: SourceBatchIdentityScope) -> dict[str, object]:
-    _require_text(scope.source_system, "source_system")
-    _require_text(scope.source_batch_id, "source_batch_id")
-    _require_text(scope.payload_kind, "payload_kind")
-    _require_text(scope.tenant_id, "tenant_id")
+    source_system = _clean_text(scope.source_system, "source_system")
+    source_batch_id = _clean_text(scope.source_batch_id, "source_batch_id")
+    payload_kind = _clean_text(scope.payload_kind, "payload_kind")
+    tenant_id = _clean_text(scope.tenant_id, "tenant_id")
+    feed_name = None
     if scope.feed_name is not None:
-        _require_text(scope.feed_name, "feed_name")
-    for source_record_key in scope.source_record_keys:
-        _require_text(source_record_key, "source_record_keys")
+        feed_name = _clean_text(scope.feed_name, "feed_name")
+    source_record_keys = [
+        _clean_text(source_record_key, "source_record_keys")
+        for source_record_key in scope.source_record_keys
+    ]
 
     return {
-        "feed_name": scope.feed_name,
+        "feed_name": feed_name,
         "observed_at": _datetime_or_none(scope.observed_at),
-        "payload_kind": scope.payload_kind,
-        "source_batch_id": scope.source_batch_id,
-        "source_record_keys": sorted(set(scope.source_record_keys)),
-        "source_system": scope.source_system,
-        "tenant_id": scope.tenant_id,
+        "payload_kind": payload_kind,
+        "source_batch_id": source_batch_id,
+        "source_record_keys": sorted(set(source_record_keys)),
+        "source_system": source_system,
+        "tenant_id": tenant_id,
     }
 
 
 def _datetime_or_none(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("datetime values must be timezone-aware")
+    return value.astimezone(UTC).isoformat()
 
 
-def _require_text(value: str, field_name: str) -> None:
-    if not value.strip():
+def _clean_text(value: str, field_name: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
         raise ValueError(f"{field_name} is required")
+    return cleaned
 
 
 def _require_non_negative(value: int, field_name: str) -> None:

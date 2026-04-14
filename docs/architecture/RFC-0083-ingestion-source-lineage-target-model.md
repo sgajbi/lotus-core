@@ -75,6 +75,10 @@ The source-batch fingerprint intentionally excludes `ingested_at`, `idempotency_
 `correlation_id`. Those fields describe an ingestion or replay attempt, not the upstream source batch.
 Validation reports and replay evidence must still carry them separately.
 
+Canonical source-batch fingerprints trim text fields, normalize `observed_at` to UTC, and reject naive
+datetimes. This prevents equivalent source evidence from splitting into different batch identities due
+to formatting or timezone representation drift.
+
 ## Validation Report Contract
 
 Target validation reports must include:
