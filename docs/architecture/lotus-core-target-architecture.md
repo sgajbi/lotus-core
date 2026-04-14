@@ -26,6 +26,10 @@ The current local route contract-family registry is:
 
 - `docs/standards/route-contract-family-registry.json`
 
+The current local portfolio reconstruction target model is:
+
+- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.

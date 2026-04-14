@@ -374,6 +374,19 @@ The guard parses active FastAPI router decorators and fails when a route is adde
 without a matching RFC-0082 family registry update. It does not change runtime behavior, schemas,
 generated OpenAPI, or persistence.
 
+## Slice 3 Completion Note
+
+Slice 3 portfolio reconstruction target modeling is recorded in:
+
+- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/reconstruction_identity.py`
+- `tests/unit/libs/portfolio-common/test_reconstruction_identity.py`
+
+The model defines the target reconstruction scope, holdings/cash/transaction lineage requirements,
+snapshot identity rules, and the current restatement decision. The helper provides an executable
+deterministic identity rule for future source-data product wiring. This slice does not change runtime
+behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

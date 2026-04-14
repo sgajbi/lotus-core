@@ -14,6 +14,7 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/lotus-core-target-architecture.md`
 - `docs/architecture/RFC-0082-contract-family-inventory.md`
 - `docs/architecture/RFC-0083-target-state-gap-analysis.md`
+- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/route-contract-family-registry.json`
 - `docs/standards/layering-boundaries.md`
@@ -85,6 +86,11 @@ RFC-0083 Slice 2 route family enforcement is documented in:
 
 - `docs/standards/route-contract-family-registry.json`
 - `scripts/route_contract_family_guard.py`
+
+RFC-0083 Slice 3 portfolio reconstruction target state is documented in:
+
+- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/reconstruction_identity.py`
 
 ### Key Architectural Patterns
 
