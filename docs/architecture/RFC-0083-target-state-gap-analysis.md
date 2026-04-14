@@ -413,6 +413,20 @@ contract, and source-data product supportability field requirements. The helper 
 status classification for future evidence DTO wiring. This slice does not change runtime behavior,
 schemas, generated OpenAPI, persistence, or downstream contract shape.
 
+## Slice 6 Completion Note
+
+Slice 6 source-data product catalog modeling is recorded in:
+
+- `docs/architecture/RFC-0083-source-data-product-catalog.md`
+- `src/libs/portfolio-common/portfolio_common/source_data_products.py`
+- `tests/unit/libs/portfolio-common/test_source_data_products.py`
+
+The catalog defines priority source-data product names, versions, route-family ownership, serving
+plane, consumers, current route mappings, required supportability metadata, paging/export disposition,
+and convenience shapes to consolidate. The helper validates duplicate product names, duplicate route
+ownership, required metadata, and consumer product lookup. This slice does not change runtime
+behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

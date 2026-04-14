@@ -38,6 +38,10 @@ The current local reconciliation and data-quality target model is:
 
 - `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
 
+The current local source-data product catalog is:
+
+- `docs/architecture/RFC-0083-source-data-product-catalog.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.
