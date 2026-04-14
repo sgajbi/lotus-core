@@ -46,6 +46,39 @@ The highest-priority target-state gaps are:
 6. tenancy, entitlement, retention, and supportability metadata appear in some integration contracts but
    are not yet a universal contract property for core source truth.
 
+## Inventory Evidence Used
+
+This pass was based on the current repository state on branch `feat/rfc-0082-boundary-governance`.
+
+The inventory reviewed:
+
+1. downstream route modules under `src/services/query_service/app/routers`,
+2. analytics, integration, support, and simulation route modules under
+   `src/services/query_control_plane_service/app/routers`,
+3. write-ingress route modules under `src/services/ingestion_service/app/routers`,
+4. replay, DLQ, ingestion-health, and ingestion-operations routes under
+   `src/services/event_replay_service/app/routers`,
+5. reconciliation route modules under `src/services/financial_reconciliation_service/app/routers`,
+6. SQLAlchemy model/table definitions in `src/libs/portfolio-common/portfolio_common/database_models.py`,
+7. DTO and repository usage of temporal, source-lineage, tenant, policy, correlation, and idempotency
+   fields across `src`.
+
+The inventory did not execute runtime flows or generated OpenAPI output. Runtime proof starts in later
+slices when schemas, route metadata, migrations, or behavior change.
+
+## Severity Model
+
+| Severity | Meaning | Current gaps |
+| --- | --- | --- |
+| P0 blocker before runtime contract hardening | Without this, later implementation can create incompatible or ambiguous contracts | Temporal vocabulary, route family enforcement |
+| P1 blocker before consumer migration | Without this, downstream services can consume unstable or incomplete source shapes | Portfolio reconstruction semantics, restatement/version behavior, source-data product minimum metadata, consumer impact maps |
+| P2 blocker before production readiness | Without this, operators and auditors cannot prove data trust or diagnose failures safely | Ingestion evidence bundles, reconciliation evidence bundles, data-quality coverage reports, product SLOs |
+| P3 cleanup during touched slices | Important to prevent drift, but not a blocker for the next slice if guarded | Endpoint consolidation watchlist, duplicate convenience routes, inconsistent descriptions |
+
+Slice 1 should address the P0 temporal vocabulary gap first because temporal semantics affect schema
+names, DTO documentation, migration planning, source-data product identity, and downstream analytics
+repeatability.
+
 ## Current Route-To-Target-Domain Map
 
 | RFC-0083 target domain | Current modules and routes | Current state | Gap |
@@ -122,6 +155,69 @@ date parameters should be reviewed before they become public contract precedent.
 | `DataQualityCoverageReport` | coverage, readiness, support, and SLO routes | Partial | Define one governed report shape for downstream gating |
 | `IngestionEvidenceBundle` | ingestion jobs, failures, replay, DLQ, audit routes | Partial | Define evidence bundle shape across ingestion and replay services |
 
+## Ingestion And Replay Capability Inventory
+
+Current strengths:
+
+1. write-ingress routes exist for transactions, transaction batches, portfolios, portfolio bundles,
+   instruments, market prices, FX rates, business dates, benchmark/reference data, uploads, and
+   transaction reprocessing,
+2. ingestion job, failure, backlog, SLO, operating-band, capacity, saturation, stalled-job, DLQ, replay,
+   replay-audit, operations-control, and idempotency diagnostics are exposed through ingestion
+   operations routes,
+3. job and replay tables exist for ingestion jobs, ingestion job failures, ingestion operations control,
+   consumer DLQ events, consumer DLQ replay audit, reprocessing jobs, processed events, and outbox
+   events,
+4. correlation id, trace id, idempotency key, source system, source batch, and source record fields
+   appear in important ingestion and reference paths.
+
+Current gaps:
+
+1. there is no single named `IngestionEvidenceBundle` contract that packages source batch, validation,
+   replay, rejection, quarantine, and operator evidence for downstream and audit consumers,
+2. accepted, rejected, quarantined, partially accepted, replayed, and repaired states are not yet
+   normalized as one business vocabulary across all ingestion surfaces,
+3. source timestamp terminology still needs alignment with `observed_at` and `ingested_at`,
+4. replay and DLQ evidence is operationally rich but not yet tied consistently to source-data product
+   provenance,
+5. retention and archival expectations for raw source records, validation reports, and replay audit
+   records are not yet explicit.
+
+Required follow-up slice:
+
+1. Slice 4 owns the runtime and contract hardening for ingestion and source lineage.
+2. Slice 0 only records the current baseline and keeps implementation out of scope.
+
+## Reconciliation And Data-Quality Capability Inventory
+
+Current strengths:
+
+1. financial reconciliation routes exist for transaction-to-cashflow completeness,
+   position-to-valuation consistency, and portfolio-timeseries integrity controls,
+2. reconciliation run and finding tables exist,
+3. support routes expose reconciliation runs and findings alongside valuation, aggregation, replay,
+   lineage, and readiness diagnostics,
+4. coverage/readiness routes already provide a useful basis for data-quality and supportability
+   signals.
+
+Current gaps:
+
+1. there is no single named `ReconciliationEvidenceBundle` contract that downstream consumers can use
+   to decide whether source data is reconciled, unreconciled, partial, stale, blocked, or unknown,
+2. reconciliation statuses, finding severities, break ownership, tolerance, age, and resolution state
+   need one governed vocabulary,
+3. reconciliation evidence is not yet uniformly included in source-data products where data safety
+   depends on it,
+4. data-quality coverage is present as supportability behavior but not yet formalized as a
+   `DataQualityCoverageReport` product,
+5. SLOs for freshness, completeness, reconciliation latency, and supportability are not yet tied to
+   individual source-data products.
+
+Required follow-up slice:
+
+1. Slice 5 owns the runtime and contract hardening for reconciliation and data quality.
+2. Slice 0 only identifies the capability baseline and the contract gaps.
+
 ## Endpoint Consolidation Watchlist
 
 These endpoint families are useful, but they must be controlled so `lotus-core` does not grow
@@ -164,21 +260,51 @@ RFC-0083 requires these to become uniform contract properties:
    and exports,
 5. product-level SLOs should cover freshness, completeness, latency, replayability, and diagnosability.
 
+## Open Decisions Before Runtime Slices
+
+These decisions should be closed before code-changing slices expand contracts.
+
+| Decision | Why it matters | Owner slice | Blocking level |
+| --- | --- | --- | --- |
+| Whether `source_timestamp` is renamed, mapped, or documented as legacy while `observed_at` becomes canonical | Prevents reference/market-data contracts from carrying two source-observation concepts | Slice 1 | P0 |
+| Whether `booking_date` is introduced as a new persisted field, derived field, or contract-only concept in the first phase | Booking, correction, and transaction ledger semantics depend on it | Slice 1 or Slice 3 | P0 |
+| How `restatement_version` is represented in snapshots, exports, and source-data products | Determines deterministic historical analytics and report replay | Slice 3 or Slice 4 | P1 |
+| Which route metadata mechanism records RFC-0082 family and RFC-0083 product identity | Needed for route classification tests and OpenAPI governance | Slice 2 | P0 |
+| Which evidence statuses become canonical across ingestion, reconciliation, and source-data products | Prevents each service plane from inventing incompatible safety states | Slice 4 or Slice 5 | P1 |
+| Whether endpoint consolidation happens by immediate pre-live replacement or short-lived aliases | Impacts consumer migration effort and RFC-0067 no-alias governance | Slice 8 | P3 |
+
+## Non-Goals For Slice 0
+
+Slice 0 intentionally does not:
+
+1. rename fields,
+2. change DTOs,
+3. change OpenAPI output,
+4. add database migrations,
+5. move routes between services,
+6. introduce compatibility aliases,
+7. change consumer behavior,
+8. define final SLO targets.
+
+Those are implementation slices and must carry their own validation evidence.
+
 ## Implementation Slice Recommendation
+
+This local slice order intentionally matches the master implementation program in RFC-0083.
 
 | Slice | Goal | Primary output |
 | --- | --- | --- |
 | 0 | Current-state gap analysis | This document and repo context links |
 | 1 | Temporal vocabulary and schema policy | Temporal field policy, contract vocabulary updates, schema guard plan |
 | 2 | Command/read route classification enforcement | Route family tests and OpenAPI metadata checks aligned to RFC-0082 |
-| 3 | Source-data product catalog | Named product catalog, minimum metadata, DTO template, owner/version matrix |
-| 4 | Portfolio reconstruction and snapshot lineage | Deterministic snapshot and reconstruction semantics |
-| 5 | Ingestion and source-lineage hardening | Source batch, validation, replay, and lineage evidence rules |
-| 6 | Reconciliation and data-quality evidence | Consumer-safe reconciliation and coverage products |
+| 3 | Portfolio reconstruction target model | Reconstruction model, holdings/cash/transaction lineage, deterministic snapshot identity |
+| 4 | Ingestion and source-lineage hardening | Source batch identity, validation report contract, partial rejection, replay, DLQ/repair posture |
+| 5 | Reconciliation and data-quality model | Reconciliation status vocabulary, break model, data-quality coverage contract |
+| 6 | Source-data product catalog implementation | Priority source-data products, analytics input alignment, paging/export behavior |
 | 7 | Market/reference/benchmark product hardening | Market, FX, instrument, benchmark, index, and risk-free product contracts |
 | 8 | Endpoint consolidation | Watchlist cleanup, migrations, aliases/deprecations, consumer migration notes |
 | 9 | Security, tenancy, retention, and entitlement | Uniform access, policy, audit, and lifecycle controls |
-| 10 | Observability and eventing | Product SLOs, supportability APIs, change notification contract |
+| 10 | Eventing and supportability hardening | Event family definitions, observability posture, supportability APIs, operator diagnostics |
 | 11 | Production closure | Final contract tests, docs, migration notes, and platform validation evidence |
 
 ## Validation Lane By Slice
@@ -192,6 +318,40 @@ RFC-0083 requires these to become uniform contract properties:
 | Ingestion/replay/reconciliation behavior | targeted unit, integration-lite, and ops-contract tests | full PR merge gate and failure-recovery evidence |
 | Consumer migration | affected repo tests and gateway checks when UI-facing | cross-repo validation and platform evidence as needed |
 
+## Acceptance Evidence By Implementation Slice
+
+| Slice | Acceptance evidence |
+| --- | --- |
+| 1 | Temporal vocabulary note, ambiguous temporal field inventory, keep/rename/map/legacy decision for each ambiguous field, guard plan, and validation plan for any schema or OpenAPI change |
+| 2 | Route classification inventory, route metadata or OpenAPI evidence for RFC-0082 family coverage, failing test path for unclassified downstream routes, and vocabulary/no-alias evidence where affected |
+| 3 | Portfolio reconstruction model, deterministic snapshot identity rule, holdings/cash/transaction lineage requirements, restatement decision record, and targeted tests if runtime behavior changes |
+| 4 | Source batch identity model, validation report contract, partial rejection behavior, replay/DLQ evidence contract, retention note, and ingestion/replay test evidence for runtime changes |
+| 5 | Reconciliation status vocabulary, break/finding model, data-quality coverage contract, source-data product supportability field requirements, and reconciliation/supportability test evidence for runtime changes |
+| 6 | Source-data product catalog, product owners and versions, required metadata template, paging/export rules, consumer map updates, and performance/risk contract evidence where affected |
+| 7 | Market/reference/benchmark alignment note, observed/ingested timestamp decision, freshness/completeness diagnostics, and downstream analytics input evidence where affected |
+| 8 | Endpoint watchlist disposition, deprecation or removal notes, affected-consumer migration evidence, RFC-0067 no-alias evidence, and platform proof when gateway/workbench behavior changes |
+| 9 | Tenant/entitlement/support access classification, audit and retention requirements, PII/client-sensitive field notes where applicable, and security/entitlement test evidence for runtime changes |
+| 10 | Event family definitions, event schema governance, supportability API posture, operator diagnostic evidence, and event/supportability tests where runtime behavior changes |
+| 11 | Final route inventory, final source-data product catalog, final temporal-field inventory, final deprecation list, downstream conformance proof, and updated platform/repo context docs |
+
+## Slice 1 Ready Checklist
+
+Slice 1 can start when the implementer has this document, RFC-0083, and the RFC-0082 route inventory
+open and agrees to keep the first runtime-adjacent change limited to temporal vocabulary and schema
+policy.
+
+Slice 1 should produce:
+
+1. a canonical temporal vocabulary note in `lotus-core`,
+2. an inventory of ambiguous current temporal fields and whether each is keep, rename, map, or
+   document-as-legacy,
+3. route/schema guidance for new DTOs,
+4. a practical guard plan for preventing new generic date fields in downstream-facing contracts,
+5. a validation plan for any OpenAPI or DTO changes.
+
+Slice 1 should not yet consolidate endpoint families, redesign ingestion, or introduce broad
+source-data product DTO changes. Those follow after temporal semantics are stable.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:
@@ -201,4 +361,3 @@ Slice 0 is complete when:
 3. implementation slices are ordered,
 4. repo-local context points engineers to this document,
 5. no runtime behavior or generated contract output is changed.
-
