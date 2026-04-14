@@ -482,6 +482,21 @@ family definitions, schema model bindings, required idempotency/correlation/sche
 and operator supportability surfaces. This slice does not change runtime event emission, Kafka topics,
 schemas, generated OpenAPI, persistence, or downstream contract shape.
 
+## Slice 11 Completion Note
+
+Slice 11 production-readiness closure is recorded in:
+
+- `docs/architecture/RFC-0083-production-readiness-closure.md`
+- `docs/standards/rfc-0083-implementation-ledger.json`
+- `scripts/rfc0083_closure_guard.py`
+- `tests/unit/scripts/test_rfc0083_closure_guard.py`
+
+The closure ledger records the implemented RFC-0083 target-model artifacts for every slice and the
+closure guard verifies that every listed artifact exists. The ledger intentionally records
+`runtimeProductionStatus` as `not-production-closed`; full runtime closure still requires PR Merge
+Gate evidence, affected consumer proof, and platform validation where canonical flows depend on core
+behavior.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

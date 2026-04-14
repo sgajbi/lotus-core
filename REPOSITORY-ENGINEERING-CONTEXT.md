@@ -41,8 +41,9 @@ Current repository posture:
 11. RFC-0083 Slice 8 now records endpoint-consolidation disposition and deprecates selected pre-live reporting convenience routes in OpenAPI while preserving tested handlers,
 12. RFC-0083 Slice 9 now defines source-data product security, tenancy, entitlement, audit, sensitivity, and retention profiles,
 13. RFC-0083 Slice 10 now defines event family governance, schema governance requirements, and operator supportability surface posture,
-14. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-15. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+14. RFC-0083 Slice 11 now records target-model closure through a machine-readable implementation ledger and closure guard,
+15. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+16. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
 
 ## Architecture And Module Map
 
@@ -139,9 +140,11 @@ Most relevant current governance:
 18. `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
 19. `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
 20. `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
-21. `docs/standards/route-contract-family-registry.json`
-22. `docs/standards/temporal-vocabulary.md`
-23. `docs/standards/layering-boundaries.md`
+21. `docs/architecture/RFC-0083-production-readiness-closure.md`
+22. `docs/standards/rfc-0083-implementation-ledger.json`
+23. `docs/standards/route-contract-family-registry.json`
+24. `docs/standards/temporal-vocabulary.md`
+25. `docs/standards/layering-boundaries.md`
 
 ## Known Constraints And Implementation Notes
 
@@ -158,9 +161,10 @@ Most relevant current governance:
 11. route removal or deprecation must follow `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`, update the route-family registry when routes change, and carry affected-consumer evidence,
 12. future source-data product security, retention, audit, and entitlement changes must use `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md` and `src/libs/portfolio-common/portfolio_common/source_data_security.py`,
 13. future event, outbox, replay, DLQ, and operator diagnostic changes must use `docs/architecture/RFC-0083-eventing-supportability-target-model.md` and `src/libs/portfolio-common/portfolio_common/event_supportability.py`,
-14. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-15. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-16. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+14. RFC-0083 target-model closure is tracked by `docs/standards/rfc-0083-implementation-ledger.json` and guarded by `make rfc0083-closure-guard`; the ledger intentionally does not claim full production runtime closure,
+15. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+16. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+17. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 
 ## Context Maintenance Rule
 

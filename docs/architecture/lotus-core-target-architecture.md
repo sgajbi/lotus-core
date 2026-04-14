@@ -58,6 +58,11 @@ The current local eventing and supportability target model is:
 
 - `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
 
+The current local RFC-0083 production-readiness closure record is:
+
+- `docs/architecture/RFC-0083-production-readiness-closure.md`
+- `docs/standards/rfc-0083-implementation-ledger.json`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.
