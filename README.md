@@ -15,6 +15,7 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/RFC-0082-contract-family-inventory.md`
 - `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 - `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
+- `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/route-contract-family-registry.json`
 - `docs/standards/layering-boundaries.md`
@@ -91,6 +92,11 @@ RFC-0083 Slice 3 portfolio reconstruction target state is documented in:
 
 - `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
 - `src/libs/portfolio-common/portfolio_common/reconstruction_identity.py`
+
+RFC-0083 Slice 4 ingestion source-lineage target state is documented in:
+
+- `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/ingestion_evidence.py`
 
 ### Key Architectural Patterns
 

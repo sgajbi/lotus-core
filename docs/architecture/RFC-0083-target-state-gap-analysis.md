@@ -387,6 +387,19 @@ snapshot identity rules, and the current restatement decision. The helper provid
 deterministic identity rule for future source-data product wiring. This slice does not change runtime
 behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
 
+## Slice 4 Completion Note
+
+Slice 4 ingestion source-lineage target modeling is recorded in:
+
+- `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/ingestion_evidence.py`
+- `tests/unit/libs/portfolio-common/test_ingestion_evidence.py`
+
+The model defines source batch identity, validation report status vocabulary, partial rejection rules,
+replay/DLQ evidence fields, and retention/repair posture. The helper provides executable source-batch
+fingerprinting and partial outcome classification for future ingestion evidence DTO wiring. This slice
+does not change runtime behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:
