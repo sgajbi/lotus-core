@@ -468,6 +468,20 @@ PII/client-sensitive fields, and operator-only evidence posture. The helper vali
 source-data product has a profile. This slice does not change runtime authorization behavior, schemas,
 generated OpenAPI, persistence, or downstream contract shape.
 
+## Slice 10 Completion Note
+
+Slice 10 eventing and supportability target modeling is recorded in:
+
+- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/event_supportability.py`
+- `tests/unit/libs/portfolio-common/test_event_supportability.py`
+
+The model defines event family governance, event schema-governance requirements, supportability
+surface posture, operator-only diagnostics, and evidence bundle linkage. The helper validates event
+family definitions, schema model bindings, required idempotency/correlation/schema version posture,
+and operator supportability surfaces. This slice does not change runtime event emission, Kafka topics,
+schemas, generated OpenAPI, persistence, or downstream contract shape.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

@@ -54,6 +54,10 @@ The current local security, tenancy, and lifecycle target model is:
 
 - `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
 
+The current local eventing and supportability target model is:
+
+- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.

@@ -21,6 +21,7 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/RFC-0083-market-reference-data-target-model.md`
 - `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
 - `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
+- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/route-contract-family-registry.json`
 - `docs/standards/layering-boundaries.md`
@@ -126,6 +127,11 @@ RFC-0083 Slice 9 security, tenancy, and lifecycle target state is documented in:
 
 - `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
 - `src/libs/portfolio-common/portfolio_common/source_data_security.py`
+
+RFC-0083 Slice 10 eventing and supportability target state is documented in:
+
+- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/event_supportability.py`
 
 ### Key Architectural Patterns
 
