@@ -3,6 +3,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.source_data_products import SOURCE_DATA_PRODUCT_CATALOG
 
 from src.services.query_service.app.main import app, lifespan
 
@@ -177,12 +178,18 @@ async def test_openapi_deprecates_reporting_convenience_shapes(async_test_client
     paths = response.json()["paths"]
 
     deprecated_routes = {
+        route: product.product_name
+        for product in SOURCE_DATA_PRODUCT_CATALOG
+        for route in product.replaces_convenience_shapes
+        if route.startswith("/reporting/")
+    }
+
+    assert deprecated_routes == {
         "/reporting/cash-balances/query": "HoldingsAsOf",
         "/reporting/holdings-snapshot/query": "HoldingsAsOf",
         "/reporting/income-summary/query": "TransactionLedgerWindow",
         "/reporting/activity-summary/query": "TransactionLedgerWindow",
     }
-
     for route, target_product in deprecated_routes.items():
         operation = paths[route]["post"]
         assert operation["deprecated"] is True
