@@ -9,7 +9,10 @@ Platform architecture governance source:
 
 Local architecture direction and restructuring plan:
 - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
+- `../lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
 - `docs/architecture/lotus-core-target-architecture.md`
+- `docs/architecture/RFC-0082-contract-family-inventory.md`
+- `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/layering-boundaries.md`
 
 Query-service PB/WM reporting contract guide:
@@ -39,8 +42,26 @@ The system follows a microservices architecture, where each service is responsib
         * **ValuationScheduler**: Creates backfill valuation jobs, advances watermarks, and creates durable jobs for large-scale price reprocessing events.
         * **ReprocessingWorker**: Consumes the durable reprocessing jobs to fan-out watermark resets in a controlled, scalable manner, mitigating the "Thundering Herd" problem.
     * **Cashflow Calculator**: Calculates cash flows based on transactions.
-4.  **Timeseries Generator Service**: Aggregates daily position data into position-level and portfolio-level time series.
-5.  **Query Service**: Provides a rich FastAPI interface for read operations including foundational datasets (portfolios, positions, transactions, prices, fx rates), operational APIs, integration policy metadata, and simulation workflows.
+4.  **Timeseries and Aggregation Services**: Materialize position-level and portfolio-level time series through explicit worker and aggregation boundaries.
+5.  **Query Service**: Provides the operational read plane for foundational datasets such as portfolios, positions, transactions, prices, FX rates, instruments, lookups, and reporting-oriented source-data queries.
+6.  **Query Control-Plane Service**: Provides governed downstream contract surfaces for analytics inputs, core snapshots, simulation sessions, integration policy, capabilities, support, lineage, and export lifecycles.
+7.  **Event Replay and Financial Reconciliation Services**: Provide replay, DLQ, ingestion-health, reconciliation, and control-execution surfaces outside the ingestion write path.
+
+### RFC-0082 Contract Families
+
+Downstream-facing API ownership is governed by platform RFC-0082 and the local contract-family inventory:
+
+- `docs/architecture/RFC-0082-contract-family-inventory.md`
+
+The active families are:
+
+1. `query_service`: operational reads.
+2. `query_control_plane_service`: analytics inputs, snapshot/simulation, support, lineage, integration policy, and capability contracts.
+3. `ingestion_service`: write ingress and adapter ingestion contracts.
+4. `event_replay_service`: replay, DLQ, ingestion health, and operations control-plane contracts.
+5. `financial_reconciliation_service`: reconciliation and control execution contracts.
+
+`lotus-core` owns canonical source data and analytics inputs. It does not own downstream performance or risk analytics conclusions.
 
 ### Key Architectural Patterns
 
@@ -139,7 +160,7 @@ Machine-readable compose contract:
     # Terminal 2: Position Calculator Service
     python -m src.services.calculators.position_calculator.app.main
 
-    # Terminal 3: Position Valuation Calculator Service (includes scheduler and worker)
+    # Terminal 3: Position Valuation Calculator Service
     python -m src.services.calculators.position_valuation_calculator.app.main
 
     # Terminal 4: Timeseries Generator Service
@@ -148,7 +169,10 @@ Machine-readable compose contract:
     # Terminal 5: Query Service (API)
     python -m src.services.query_service.app.main
 
-    # Terminal 6: Ingestion Service (API)
+    # Terminal 6: Query Control-Plane Service (integration, support, simulation)
+    python -m src.services.query_control_plane_service.app.main
+
+    # Terminal 7: Ingestion Service (API)
     python -m src.services.ingestion_service.app.main
     ```
 

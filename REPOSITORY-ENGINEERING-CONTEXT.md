@@ -29,7 +29,7 @@ This repository owns:
 Current repository posture:
 
 1. `lotus-core` is the domain authority for portfolio-management and transaction data,
-2. the query-service is the primary downstream integration surface for other Lotus apps,
+2. downstream-facing API ownership is now classified under the RFC-0082 contract-family model, with `query_service` as the operational read plane and `query_control_plane_service` as the governed analytics-input, snapshot/simulation, support, and policy contract plane,
 3. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
 4. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
 
@@ -38,18 +38,20 @@ Current repository posture:
 Primary areas:
 
 1. `src/services/query_service/`
-   Primary read and integration API surface.
-2. `src/services/ingestion_service/`
+   Primary operational read-plane API surface.
+2. `src/services/query_control_plane_service/`
+   Governed downstream contract plane for analytics inputs, integration policy, support, lineage, and simulation APIs.
+3. `src/services/ingestion_service/`
    Bundle and upload ingestion endpoints.
-3. `src/services/persistence_service/`
+4. `src/services/persistence_service/`
    Persistence processing.
-4. `src/services/calculators/`
+5. `src/services/calculators/`
    Position, valuation, and cashflow calculator services.
-5. `src/services/timeseries_generator_service/`
+6. `src/services/timeseries_generator_service/`
    Position and portfolio time-series generation.
-6. `scripts/`
+7. `scripts/`
    quality gates, performance and recovery gates, test-manifest orchestration, and operational tooling.
-7. `tests/`
+8. `tests/`
    unit, integration-lite, full integration, ops-contract, transaction-contract, e2e, Docker smoke, and performance-oriented coverage.
 
 ## Runtime And Integration Boundaries
@@ -64,8 +66,9 @@ Boundary rules:
 
 1. `lotus-core` remains authoritative for portfolio-management and transaction domain data,
 2. downstream services should consume its governed APIs rather than duplicate foundational logic,
-3. integration and capability metadata are part of the supported contract,
-4. operational correctness and reprocessing reliability are first-class engineering concerns.
+3. downstream-facing contracts must stay classified under RFC-0082 families: operational reads, snapshot/simulation, analytics inputs, control-plane/policy, write ingress, or control execution,
+4. integration and capability metadata are part of the supported contract,
+5. operational correctness and reprocessing reliability are first-class engineering concerns.
 
 ## Repo-Native Commands
 
@@ -111,15 +114,19 @@ Most relevant current governance:
 4. `../lotus-platform/rfcs/RFC-0071-centralized-environment-scoped-service-addressing-and-ingress-governance.md`
 5. `../lotus-platform/rfcs/RFC-0072-platform-wide-multi-lane-ci-validation-and-release-governance.md`
 6. `../lotus-platform/rfcs/RFC-0073-lotus-ecosystem-engineering-context-and-agent-guidance-system.md`
-7. `docs/architecture/lotus-core-target-architecture.md`
-8. `docs/standards/layering-boundaries.md`
+7. `../lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+8. `docs/architecture/RFC-0082-contract-family-inventory.md`
+9. `docs/architecture/lotus-core-target-architecture.md`
+10. `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
+11. `docs/standards/layering-boundaries.md`
 
 ## Known Constraints And Implementation Notes
 
 1. this repository has the heaviest local gate set in the ecosystem, so targeted local proof plus GitHub-backed heavy execution is often the right working model,
 2. query-service contracts are highly consequential because many other apps depend on them,
-3. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-4. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+3. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+4. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+5. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 
 ## Context Maintenance Rule
 
@@ -128,7 +135,7 @@ Update this document when:
 1. service ownership or major service boundaries change,
 2. repo-native command contracts or test-manifest structure change,
 3. shared-infrastructure ownership assumptions change,
-4. integration contract posture or current-state architecture shifts materially,
+4. integration contract posture, RFC-0082 contract-family classification, or current-state architecture shifts materially,
 5. the repository's CI and runtime expectations change.
 
 ## Cross-Links

@@ -12,6 +12,15 @@ downstream analytics, integration, support, and simulation contracts.
 
 This document is normative for **new endpoint placement**.
 
+Platform RFC-0082 is the broader authority for downstream-facing `lotus-core`
+domain authority and analytics-serving boundaries:
+
+- `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+
+The current route-family inventory and watchlist is maintained in:
+
+- `docs/architecture/RFC-0082-contract-family-inventory.md`
+
 ## Short Model
 
 - `query_service` is the **canonical read engine**
@@ -22,6 +31,9 @@ That means:
 - `query_service` owns direct domain read models and reusable query logic
 - `query_control_plane_service` owns governed contracts for downstream systems,
   support workflows, simulation workflows, and policy-aware integration surfaces
+- RFC-0082 classifies all downstream-facing surfaces as operational reads,
+  snapshot/simulation, analytics inputs, control-plane/policy, write ingress,
+  or control execution
 
 ## Why Both Services Exist
 
@@ -45,10 +57,12 @@ This service answers:
 Owns:
 
 - downstream integration contracts
+- analytics input products
 - support and operations APIs
 - simulation session orchestration APIs
 - policy-aware snapshot and contract surfaces
 - lineage/diagnostics-governed read façades
+- export lifecycle contracts for large downstream retrievals
 
 This service answers:
 
@@ -90,6 +104,7 @@ Examples:
 - core snapshot
 - support overview and support drill-through APIs
 - simulation sessions and projected views
+- analytics export jobs
 
 ## Smell Test
 
@@ -155,6 +170,11 @@ Why:
 
 - these are valid control-plane contracts today
 - but they sit closest to the line where control-plane can become a catch-all public read API
+- the current RFC-0082 inventory marks these as watchlist areas requiring explicit review before material expansion
+
+For current route-by-route classification, use:
+
+- `docs/architecture/RFC-0082-contract-family-inventory.md`
 
 ## `integration.py` Endpoint-by-Endpoint Review
 
@@ -323,10 +343,14 @@ When a new API proposal arrives, answer these questions in order:
 3. Does it need policy, lineage, diagnostics, or governed paging/export semantics?
 4. Is it composing multiple read domains into one contract?
 5. Would moving it into control-plane create a new external contract that should be intentionally owned there?
+6. Is it an analytics input product, or is it trying to return a downstream analytics conclusion?
 
 If the answer pattern is mostly `1`, use `query_service`.
 
 If the answer pattern is mostly `2` through `5`, use `query_control_plane_service`.
+
+If the endpoint returns performance, risk, attribution, active-risk, or advisory
+interpretation owned by another Lotus service, do not add it to `lotus-core`.
 
 ## Practical Guardrail
 
@@ -343,6 +367,7 @@ Until then, the safer rule is:
 
 - `query_service` for canonical reads
 - `query_control_plane_service` for curated contracts
+- downstream analytics authorities for analytics conclusions
 
 ## Review Trigger
 
@@ -350,5 +375,7 @@ Revisit this boundary when either of these becomes true:
 
 1. a new control-plane router is mostly plain read-model retrieval
 2. a `query_service` endpoint starts carrying downstream-specific lineage, policy, or contract-governance rules
+3. any watchlist surface in `RFC-0082-contract-family-inventory.md` receives material expansion
+4. a proposed endpoint would let `lotus-core` return downstream performance, risk, reporting-composition, or advisory recommendation behavior
 
 Either case is a signal that the boundary is drifting and should be reviewed before more APIs are added.
