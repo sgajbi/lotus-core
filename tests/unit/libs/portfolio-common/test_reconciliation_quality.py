@@ -25,6 +25,8 @@ from portfolio_common.reconciliation_quality import (
         (ReconciliationRunSignal(run_status="COMPLETED", error_count=1), BLOCKED),
         (ReconciliationRunSignal(run_status="REQUIRES_REPLAY"), BLOCKED),
         (ReconciliationRunSignal(run_status="FAILED"), BLOCKED),
+        (ReconciliationRunSignal(run_status="FAILED", is_stale=True), BLOCKED),
+        (ReconciliationRunSignal(run_status="COMPLETED", error_count=1, is_stale=True), BLOCKED),
         (ReconciliationRunSignal(run_status="RUNNING"), PARTIAL),
         (ReconciliationRunSignal(run_status="COMPLETED", is_stale=True), STALE),
         (ReconciliationRunSignal(run_status=None), UNKNOWN),

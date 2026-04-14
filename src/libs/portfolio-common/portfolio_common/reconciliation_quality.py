@@ -54,13 +54,13 @@ def classify_reconciliation_status(signal: ReconciliationRunSignal) -> str:
     _require_non_negative(signal.warning_count, "warning_count")
     if not signal.has_run:
         return UNRECONCILED
-    if signal.is_stale:
-        return STALE
     status = _normalize_status(signal.run_status)
     if status is None:
         return UNKNOWN
     if status in BLOCKING_RUN_STATUSES or signal.error_count > 0:
         return BLOCKED
+    if signal.is_stale:
+        return STALE
     if signal.warning_count > 0:
         return PARTIAL
     if status in COMPLETE_RUN_STATUSES:
