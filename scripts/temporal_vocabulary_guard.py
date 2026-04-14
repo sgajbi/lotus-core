@@ -17,8 +17,13 @@ ALLOWLIST_PATH = REPO_ROOT / "docs" / "standards" / "temporal-vocabulary-allowli
 SCANNED_PATHS = (
     REPO_ROOT / "src" / "libs" / "portfolio-common" / "portfolio_common" / "database_models.py",
     REPO_ROOT / "src" / "services" / "ingestion_service" / "app" / "DTOs",
+    REPO_ROOT / "src" / "services" / "ingestion_service" / "app" / "routers",
     REPO_ROOT / "src" / "services" / "query_service" / "app" / "dtos",
+    REPO_ROOT / "src" / "services" / "query_service" / "app" / "routers",
     REPO_ROOT / "src" / "services" / "query_control_plane_service" / "app" / "contracts",
+    REPO_ROOT / "src" / "services" / "query_control_plane_service" / "app" / "routers",
+    REPO_ROOT / "src" / "services" / "event_replay_service" / "app" / "routers",
+    REPO_ROOT / "src" / "services" / "financial_reconciliation_service" / "app" / "routers",
 )
 
 FORBIDDEN_FIELDS = {
@@ -50,8 +55,8 @@ def _load_allowlist() -> dict[tuple[str, str], int]:
     for item in payload.get("allowlist", []):
         path = _required_str(item, "path")
         field = _required_str(item, "field")
-        max_count = _required_int(item, "maxCount")
-        allowlist[(path, field)] = max_count
+        expected_count = _required_int(item, "expectedCount")
+        allowlist[(path, field)] = expected_count
     return allowlist
 
 
@@ -99,12 +104,12 @@ def _iter_forbidden_occurrences() -> list[FieldOccurrence]:
     return occurrences
 
 
-def main() -> int:
-    allowlist = _load_allowlist()
-    occurrences = _iter_forbidden_occurrences()
+def _evaluate_occurrences(
+    occurrences: list[FieldOccurrence], allowlist: dict[tuple[str, str], int]
+) -> list[str]:
     counts = Counter((item.relative_path, item.field) for item in occurrences)
-
     errors: list[str] = []
+
     for occurrence in occurrences:
         key = (occurrence.relative_path, occurrence.field)
         if key not in allowlist:
@@ -114,23 +119,23 @@ def main() -> int:
                 f"{FORBIDDEN_FIELDS[occurrence.field]}"
             )
 
-    for key, count in sorted(counts.items()):
-        allowed_count = allowlist.get(key)
-        if allowed_count is not None and count > allowed_count:
+    for key, expected_count in sorted(allowlist.items()):
+        actual_count = counts.get(key, 0)
+        if actual_count != expected_count:
             path, field = key
             errors.append(
-                f"{path}: field {field!r} occurs {count} times; allowlist permits "
-                f"{allowed_count}. New occurrences require observed_at or a domain-specific "
-                "temporal field."
+                f"{path}: field {field!r} occurs {actual_count} times; allowlist "
+                f"expects {expected_count}. Update the field to canonical vocabulary "
+                "or update the allowlist with owner-slice rationale."
             )
 
-    for key in sorted(allowlist):
-        if counts.get(key, 0) == 0:
-            path, field = key
-            errors.append(
-                f"{path}: allowlist entry for {field!r} no longer matches any scanned field. "
-                "Remove the stale allowlist entry."
-            )
+    return errors
+
+
+def main() -> int:
+    allowlist = _load_allowlist()
+    occurrences = _iter_forbidden_occurrences()
+    errors = _evaluate_occurrences(occurrences, allowlist)
 
     if errors:
         print("Temporal vocabulary guard failed:")

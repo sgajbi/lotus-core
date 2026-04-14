@@ -163,7 +163,7 @@ Guard requirements:
 
 1. scan downstream-facing DTO and router modules for newly introduced bare `date`, `timestamp`, or
    `source_timestamp` fields,
-2. allow current legacy fields through an explicit allowlist with owner slice and removal condition,
+2. allow current legacy fields through an exact-count allowlist with owner slice and removal condition,
 3. fail on new generic temporal names unless they are explicitly approved by this standard,
 4. run in the fast contract/schema validation lane with OpenAPI and vocabulary gates,
 5. update `docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` only through the existing
@@ -179,12 +179,14 @@ The guard is also wired into `make lint` through `temporal-vocabulary-guard`.
 
 ## Validation Policy
 
-For this Slice 1 documentation pass:
+For this Slice 1 policy and guard pass:
 
 1. `git diff --check` is sufficient,
 2. `python scripts/temporal_vocabulary_guard.py` proves the current allowlist and scanner agree,
-3. no runtime tests are required,
-4. no OpenAPI or vocabulary regeneration is required because no DTO/schema output changed.
+3. `python -m pytest tests/unit/scripts/test_temporal_vocabulary_guard.py -q` proves the guard rejects new
+   ambiguous fields, enforces exact current counts, and scans router directories,
+4. no runtime tests are required,
+5. no OpenAPI or vocabulary regeneration is required because no DTO/schema output changed.
 
 For future Slice 1 runtime-adjacent changes:
 
