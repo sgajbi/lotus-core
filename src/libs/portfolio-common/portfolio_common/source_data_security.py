@@ -191,13 +191,18 @@ def get_source_data_security_profile(product_name: str) -> SourceDataSecurityPro
 def validate_source_data_security_profiles(
     profiles: tuple[SourceDataSecurityProfile, ...] = SOURCE_DATA_SECURITY_PROFILES,
 ) -> None:
-    product_names = {product.product_name for product in SOURCE_DATA_PRODUCT_CATALOG}
+    catalog_product_names = {
+        product.product_name.upper(): product.product_name
+        for product in SOURCE_DATA_PRODUCT_CATALOG
+    }
+    profile_product_names: dict[str, str] = {}
     profile_names: set[str] = set()
     for profile in profiles:
         product_name = _normalize_required_text(profile.product_name, "product_name")
         if product_name in profile_names:
             raise ValueError(f"Duplicate source-data security profile: {profile.product_name}")
         profile_names.add(product_name)
+        profile_product_names[product_name] = profile.product_name
         _require_allowed(
             profile.access_classification,
             "access_classification",
@@ -233,20 +238,25 @@ def validate_source_data_security_profiles(
             raise ValueError(f"{profile.product_name} must require entitlement scoping")
         if profile.operator_only and profile.access_classification != OPERATOR_ACCESS:
             raise ValueError(f"{profile.product_name} operator_only requires operator access")
+        if (
+            profile.sensitivity_classification in {CLIENT_CONFIDENTIAL, CLIENT_SENSITIVE}
+            and not profile.pii_fields
+        ):
+            raise ValueError(f"{profile.product_name} requires pii_fields for client sensitivity")
         for pii_field in profile.pii_fields:
             _normalize_required_text(pii_field, "pii_fields")
 
-    normalized_product_names = {name.upper() for name in product_names}
-    missing_profiles = normalized_product_names - profile_names
-    extra_profiles = profile_names - normalized_product_names
+    normalized_product_names = set(catalog_product_names)
+    missing_profiles = [
+        catalog_product_names[name] for name in sorted(normalized_product_names - profile_names)
+    ]
+    extra_profiles = [
+        profile_product_names[name] for name in sorted(profile_names - normalized_product_names)
+    ]
     if missing_profiles:
-        raise ValueError(
-            "Missing source-data security profile(s): " + ", ".join(sorted(missing_profiles))
-        )
+        raise ValueError("Missing source-data security profile(s): " + ", ".join(missing_profiles))
     if extra_profiles:
-        raise ValueError(
-            "Unknown source-data security profile(s): " + ", ".join(sorted(extra_profiles))
-        )
+        raise ValueError("Unknown source-data security profile(s): " + ", ".join(extra_profiles))
 
 
 def _require_allowed(value: str, field_name: str, allowed: set[str]) -> None:

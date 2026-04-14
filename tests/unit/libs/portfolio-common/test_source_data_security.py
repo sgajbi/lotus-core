@@ -59,7 +59,7 @@ def test_security_profile_validation_rejects_missing_product_profile() -> None:
         if profile.product_name != "HoldingsAsOf"
     )
 
-    with pytest.raises(ValueError, match="HOLDINGSASOF"):
+    with pytest.raises(ValueError, match="HoldingsAsOf"):
         validate_source_data_security_profiles(incomplete_profiles)
 
 
@@ -76,4 +76,19 @@ def test_security_profile_validation_rejects_operator_only_without_operator_acce
     )
 
     with pytest.raises(ValueError, match="operator_only requires operator access"):
+        validate_source_data_security_profiles((invalid,))
+
+
+def test_security_profile_validation_rejects_client_sensitivity_without_pii_fields() -> None:
+    invalid = SourceDataSecurityProfile(
+        product_name="PortfolioStateSnapshot",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification="business_consumer_access",
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement="retain_for_client_record",
+        audit_requirement="audit_read_and_export",
+    )
+
+    with pytest.raises(ValueError, match="requires pii_fields for client sensitivity"):
         validate_source_data_security_profiles((invalid,))
