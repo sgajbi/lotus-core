@@ -1,4 +1,4 @@
-.PHONY: install install-ci verify-dependencies compile-runtime-lock lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard temporal-vocabulary-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci clean
+.PHONY: install install-ci verify-dependencies compile-runtime-lock lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard temporal-vocabulary-guard route-contract-family-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci clean
 
 install:
 	python scripts/bootstrap_dev.py
@@ -13,13 +13,14 @@ compile-runtime-lock:
 	python scripts/update_shared_runtime_lock.py
 
 lint:
-	python -m ruff check src/services/query_service/app src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py tests/unit/services/query_service tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/test_support tests/unit/test_support tests/unit/scripts/test_temporal_vocabulary_guard.py scripts/test_manifest.py scripts/coverage_gate.py scripts/openapi_quality_gate.py scripts/warning_budget_gate.py scripts/api_vocabulary_inventory.py scripts/no_alias_contract_guard.py scripts/ingestion_endpoint_contract_gate.py scripts/temporal_vocabulary_guard.py --ignore E501,I001
+	python -m ruff check src/services/query_service/app src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py tests/unit/services/query_service tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/test_support tests/unit/test_support tests/unit/scripts/test_temporal_vocabulary_guard.py tests/unit/scripts/test_route_contract_family_guard.py scripts/test_manifest.py scripts/coverage_gate.py scripts/openapi_quality_gate.py scripts/warning_budget_gate.py scripts/api_vocabulary_inventory.py scripts/no_alias_contract_guard.py scripts/ingestion_endpoint_contract_gate.py scripts/temporal_vocabulary_guard.py scripts/route_contract_family_guard.py --ignore E501,I001
 	python -m ruff check scripts/docker_endpoint_smoke.py scripts/latency_profile.py scripts/performance_load_gate.py scripts/config_access_guard.py --ignore E501,I001
-	python -m ruff format --check src/services/query_service/app/main.py src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py tests/unit/services/query_service/test_openapi_quality_gate.py tests/unit/services/query_service/test_api_vocabulary_inventory.py tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/unit/scripts/test_temporal_vocabulary_guard.py scripts/test_manifest.py scripts/coverage_gate.py scripts/openapi_quality_gate.py scripts/warning_budget_gate.py scripts/api_vocabulary_inventory.py scripts/no_alias_contract_guard.py scripts/docker_endpoint_smoke.py scripts/latency_profile.py scripts/performance_load_gate.py scripts/ingestion_endpoint_contract_gate.py scripts/config_access_guard.py scripts/temporal_vocabulary_guard.py
+	python -m ruff format --check src/services/query_service/app/main.py src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py tests/unit/services/query_service/test_openapi_quality_gate.py tests/unit/services/query_service/test_api_vocabulary_inventory.py tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/unit/scripts/test_temporal_vocabulary_guard.py tests/unit/scripts/test_route_contract_family_guard.py scripts/test_manifest.py scripts/coverage_gate.py scripts/openapi_quality_gate.py scripts/warning_budget_gate.py scripts/api_vocabulary_inventory.py scripts/no_alias_contract_guard.py scripts/docker_endpoint_smoke.py scripts/latency_profile.py scripts/performance_load_gate.py scripts/ingestion_endpoint_contract_gate.py scripts/config_access_guard.py scripts/temporal_vocabulary_guard.py scripts/route_contract_family_guard.py
 	$(MAKE) monetary-float-guard
 	$(MAKE) ingestion-contract-gate
 	$(MAKE) config-access-guard
 	$(MAKE) temporal-vocabulary-guard
+	$(MAKE) route-contract-family-guard
 
 monetary-float-guard:
 	python scripts/check_monetary_float_usage.py
@@ -35,6 +36,9 @@ config-access-guard:
 
 temporal-vocabulary-guard:
 	python scripts/temporal_vocabulary_guard.py
+
+route-contract-family-guard:
+	python scripts/route_contract_family_guard.py
 
 typecheck:
 	python -m mypy --config-file mypy.ini

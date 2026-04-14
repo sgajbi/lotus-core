@@ -299,12 +299,17 @@ The following surfaces are acceptable today but should receive explicit review b
 
 ## Validation Guidance
 
-This Slice 1 artifact is documentation-only.
+This inventory now has an RFC-0083 Slice 2 machine-readable enforcement companion:
 
-Recommended validation for this slice:
+1. `docs/standards/route-contract-family-registry.json`
+2. `scripts/route_contract_family_guard.py`
+3. `make route-contract-family-guard`
 
-1. doc review against active routers,
-2. no runtime tests required,
-3. no OpenAPI regeneration required.
+Recommended validation for route-family changes:
+
+1. update this prose inventory when ownership semantics change,
+2. update `docs/standards/route-contract-family-registry.json` for any route add/remove/family change,
+3. run `make route-contract-family-guard`,
+4. run `python -m pytest tests/unit/scripts/test_route_contract_family_guard.py -q`.
 
 If later slices modify route behavior or OpenAPI descriptions, use the RFC-0082 validation lane map in the platform RFC.

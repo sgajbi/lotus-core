@@ -1,0 +1,155 @@
+{
+  "specVersion": "1.0.0",
+  "application": "lotus-core",
+  "governingRfcs": [
+    "RFC-0082",
+    "RFC-0083"
+  ],
+  "description": "Machine-readable RFC-0082 contract-family registry used by RFC-0083 Slice 2 route classification enforcement.",
+  "routes": {
+    "event_replay_service": {
+      "Control-Plane And Policy": [
+        "GET /ingestion/audit/replays",
+        "GET /ingestion/audit/replays/{replay_id}",
+        "GET /ingestion/dlq/consumer-events",
+        "GET /ingestion/health/backlog-breakdown",
+        "GET /ingestion/health/capacity",
+        "GET /ingestion/health/consumer-lag",
+        "GET /ingestion/health/error-budget",
+        "GET /ingestion/health/lag",
+        "GET /ingestion/health/operating-band",
+        "GET /ingestion/health/policy",
+        "GET /ingestion/health/reprocessing-queue",
+        "GET /ingestion/health/slo",
+        "GET /ingestion/health/stalled-jobs",
+        "GET /ingestion/health/summary",
+        "GET /ingestion/idempotency/diagnostics",
+        "GET /ingestion/jobs",
+        "GET /ingestion/jobs/{job_id}",
+        "GET /ingestion/jobs/{job_id}/failures",
+        "GET /ingestion/jobs/{job_id}/records",
+        "GET /ingestion/ops/control",
+        "POST /ingestion/dlq/consumer-events/{event_id}/replay",
+        "POST /ingestion/jobs/{job_id}/retry",
+        "PUT /ingestion/ops/control"
+      ]
+    },
+    "financial_reconciliation_service": {
+      "Control Execution": [
+        "GET /reconciliation/runs",
+        "GET /reconciliation/runs/{run_id}",
+        "GET /reconciliation/runs/{run_id}/findings",
+        "POST /reconciliation/runs/position-valuation",
+        "POST /reconciliation/runs/timeseries-integrity",
+        "POST /reconciliation/runs/transaction-cashflow"
+      ]
+    },
+    "ingestion_service": {
+      "Write Ingress": [
+        "POST /ingest/benchmark-assignments",
+        "POST /ingest/benchmark-compositions",
+        "POST /ingest/benchmark-definitions",
+        "POST /ingest/benchmark-return-series",
+        "POST /ingest/business-dates",
+        "POST /ingest/fx-rates",
+        "POST /ingest/index-price-series",
+        "POST /ingest/index-return-series",
+        "POST /ingest/indices",
+        "POST /ingest/instruments",
+        "POST /ingest/market-prices",
+        "POST /ingest/portfolio-bundle",
+        "POST /ingest/portfolios",
+        "POST /ingest/reference/cash-accounts",
+        "POST /ingest/reference/classification-taxonomy",
+        "POST /ingest/reference/instrument-lookthrough-components",
+        "POST /ingest/risk-free-series",
+        "POST /ingest/transaction",
+        "POST /ingest/transactions",
+        "POST /ingest/uploads/commit",
+        "POST /ingest/uploads/preview",
+        "POST /reprocess/transactions"
+      ]
+    },
+    "query_control_plane_service": {
+      "Analytics Input": [
+        "GET /integration/exports/analytics-timeseries/jobs/{job_id}",
+        "GET /integration/exports/analytics-timeseries/jobs/{job_id}/result",
+        "POST /integration/benchmarks/catalog",
+        "POST /integration/benchmarks/{benchmark_id}/composition-window",
+        "POST /integration/benchmarks/{benchmark_id}/definition",
+        "POST /integration/benchmarks/{benchmark_id}/market-series",
+        "POST /integration/benchmarks/{benchmark_id}/return-series",
+        "POST /integration/exports/analytics-timeseries/jobs",
+        "POST /integration/indices/catalog",
+        "POST /integration/indices/{index_id}/price-series",
+        "POST /integration/indices/{index_id}/return-series",
+        "POST /integration/instruments/enrichment-bulk",
+        "POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
+        "POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+        "POST /integration/portfolios/{portfolio_id}/analytics/reference",
+        "POST /integration/portfolios/{portfolio_id}/benchmark-assignment",
+        "POST /integration/reference/classification-taxonomy",
+        "POST /integration/reference/risk-free-series"
+      ],
+      "Control-Plane And Policy": [
+        "GET /integration/capabilities",
+        "GET /integration/policy/effective",
+        "GET /lineage/portfolios/{portfolio_id}/keys",
+        "GET /lineage/portfolios/{portfolio_id}/securities/{security_id}",
+        "GET /support/portfolios/{portfolio_id}/aggregation-jobs",
+        "GET /support/portfolios/{portfolio_id}/analytics-export-jobs",
+        "GET /support/portfolios/{portfolio_id}/calculator-slos",
+        "GET /support/portfolios/{portfolio_id}/control-stages",
+        "GET /support/portfolios/{portfolio_id}/overview",
+        "GET /support/portfolios/{portfolio_id}/readiness",
+        "GET /support/portfolios/{portfolio_id}/reconciliation-runs",
+        "GET /support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings",
+        "GET /support/portfolios/{portfolio_id}/reprocessing-jobs",
+        "GET /support/portfolios/{portfolio_id}/reprocessing-keys",
+        "GET /support/portfolios/{portfolio_id}/valuation-jobs",
+        "POST /integration/benchmarks/{benchmark_id}/coverage",
+        "POST /integration/reference/risk-free-series/coverage"
+      ],
+      "Snapshot And Simulation": [
+        "DELETE /simulation-sessions/{session_id}",
+        "DELETE /simulation-sessions/{session_id}/changes/{change_id}",
+        "GET /simulation-sessions/{session_id}",
+        "GET /simulation-sessions/{session_id}/projected-positions",
+        "GET /simulation-sessions/{session_id}/projected-summary",
+        "POST /integration/advisory/proposals/simulate-execution",
+        "POST /integration/portfolios/{portfolio_id}/core-snapshot",
+        "POST /simulation-sessions",
+        "POST /simulation-sessions/{session_id}/changes"
+      ]
+    },
+    "query_service": {
+      "Operational Read": [
+        "GET /fx-rates",
+        "GET /instruments",
+        "GET /lookups/currencies",
+        "GET /lookups/instruments",
+        "GET /lookups/portfolios",
+        "GET /portfolios",
+        "GET /portfolios/{portfolio_id}",
+        "GET /portfolios/{portfolio_id}/cash-accounts",
+        "GET /portfolios/{portfolio_id}/cashflow-projection",
+        "GET /portfolios/{portfolio_id}/position-history",
+        "GET /portfolios/{portfolio_id}/positions",
+        "GET /portfolios/{portfolio_id}/positions/{security_id}/accrued-offsets",
+        "GET /portfolios/{portfolio_id}/positions/{security_id}/lots",
+        "GET /portfolios/{portfolio_id}/positions/{security_id}/sell-disposals",
+        "GET /portfolios/{portfolio_id}/transactions",
+        "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage",
+        "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage",
+        "GET /prices",
+        "POST /reporting/activity-summary/query",
+        "POST /reporting/asset-allocation/query",
+        "POST /reporting/assets-under-management/query",
+        "POST /reporting/cash-balances/query",
+        "POST /reporting/holdings-snapshot/query",
+        "POST /reporting/income-summary/query",
+        "POST /reporting/portfolio-summary/query"
+      ]
+    }
+  }
+}

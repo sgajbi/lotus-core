@@ -362,6 +362,18 @@ That standard defines canonical temporal terms, current-field decisions, `source
 handling, `booking_date` target handling, `restatement_version` target handling, and the temporal guard
 plan. It does not change runtime behavior, schemas, generated OpenAPI, or persistence.
 
+## Slice 2 Completion Note
+
+Slice 2 route classification enforcement is recorded in:
+
+- `docs/standards/route-contract-family-registry.json`
+- `scripts/route_contract_family_guard.py`
+- `tests/unit/scripts/test_route_contract_family_guard.py`
+
+The guard parses active FastAPI router decorators and fails when a route is added, removed, or renamed
+without a matching RFC-0082 family registry update. It does not change runtime behavior, schemas,
+generated OpenAPI, or persistence.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

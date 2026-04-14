@@ -15,6 +15,7 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/RFC-0082-contract-family-inventory.md`
 - `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
+- `docs/standards/route-contract-family-registry.json`
 - `docs/standards/layering-boundaries.md`
 - `docs/standards/temporal-vocabulary.md`
 
@@ -79,6 +80,11 @@ security, and observability gaps that should drive the next implementation slice
 RFC-0083 Slice 1 temporal vocabulary and schema policy is documented in:
 
 - `docs/standards/temporal-vocabulary.md`
+
+RFC-0083 Slice 2 route family enforcement is documented in:
+
+- `docs/standards/route-contract-family-registry.json`
+- `scripts/route_contract_family_guard.py`
 
 ### Key Architectural Patterns
 

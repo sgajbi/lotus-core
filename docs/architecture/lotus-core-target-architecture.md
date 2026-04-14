@@ -22,6 +22,10 @@ The current local temporal vocabulary and schema policy is:
 
 - `docs/standards/temporal-vocabulary.md`
 
+The current local route contract-family registry is:
+
+- `docs/standards/route-contract-family-registry.json`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.
