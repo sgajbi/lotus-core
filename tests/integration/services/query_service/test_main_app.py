@@ -171,6 +171,28 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/portfolios/{portfolio_id}/cash-accounts" in paths
 
 
+async def test_openapi_deprecates_reporting_convenience_shapes(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+
+    deprecated_routes = {
+        "/reporting/cash-balances/query": "HoldingsAsOf",
+        "/reporting/holdings-snapshot/query": "HoldingsAsOf",
+        "/reporting/income-summary/query": "TransactionLedgerWindow",
+        "/reporting/activity-summary/query": "TransactionLedgerWindow",
+    }
+
+    for route, target_product in deprecated_routes.items():
+        operation = paths[route]["post"]
+        assert operation["deprecated"] is True
+        assert target_product in operation["description"]
+
+    assert paths["/reporting/assets-under-management/query"]["post"].get("deprecated") is not True
+    assert paths["/reporting/asset-allocation/query"]["post"].get("deprecated") is not True
+    assert paths["/reporting/portfolio-summary/query"]["post"].get("deprecated") is not True
+
+
 async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
@@ -281,9 +303,7 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
     )
     assert instrument_id["description"] == "Filter by a specific instrument identifier."
     security_id = next(
-        parameter
-        for parameter in transactions["parameters"]
-        if parameter["name"] == "security_id"
+        parameter for parameter in transactions["parameters"] if parameter["name"] == "security_id"
     )
     assert security_id["description"] == (
         "Filter by a specific security identifier for holdings drill-down and latest "

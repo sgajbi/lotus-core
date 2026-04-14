@@ -440,6 +440,20 @@ alignment; maps legacy `source_timestamp` to canonical `observed_at`; and standa
 reference data point quality, freshness, and coverage classification. This slice does not change
 runtime behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
 
+## Slice 8 Completion Note
+
+Slice 8 endpoint consolidation disposition is recorded in:
+
+- `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
+- `src/services/query_service/app/routers/reporting.py`
+- `tests/integration/services/query_service/test_main_app.py`
+
+The slice marks selected pre-live reporting convenience routes as deprecated in OpenAPI and points
+them to their RFC-0083 target source-data products. It keeps runtime handlers and route-family
+classification stable until affected consumers migrate. Route removal remains gated by consumer
+evidence, RFC-0067 no-alias governance, route-registry updates, and platform proof where gateway or
+Workbench behavior changes.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

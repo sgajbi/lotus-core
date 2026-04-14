@@ -46,6 +46,10 @@ The current local market and reference data target model is:
 
 - `docs/architecture/RFC-0083-market-reference-data-target-model.md`
 
+The current local endpoint consolidation disposition is:
+
+- `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.

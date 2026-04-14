@@ -121,11 +121,11 @@ These endpoints are currently classified as operational read contracts because t
 | --- | --- | --- | --- | --- |
 | `POST /reporting/assets-under-management/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Source-data query, not report composition. |
 | `POST /reporting/asset-allocation/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Must remain core-held allocation source truth. |
-| `POST /reporting/cash-balances/query` | Operational Read | `lotus-report`, gateway | Correct | Cash source-data summary. |
+| `POST /reporting/cash-balances/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Cash source-data summary; target product is `HoldingsAsOf`. |
 | `POST /reporting/portfolio-summary/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Avoid absorbing analytics narrative. |
-| `POST /reporting/holdings-snapshot/query` | Operational Read | `lotus-report`, gateway | Correct | Holdings snapshot query. |
-| `POST /reporting/income-summary/query` | Operational Read | `lotus-report`, gateway | Correct | Income source-data summary. |
-| `POST /reporting/activity-summary/query` | Operational Read | `lotus-report`, gateway | Correct | Transaction/activity source-data summary. |
+| `POST /reporting/holdings-snapshot/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Holdings snapshot query; target product is `HoldingsAsOf`. |
+| `POST /reporting/income-summary/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Income source-data summary; target product is `TransactionLedgerWindow`. |
+| `POST /reporting/activity-summary/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Transaction/activity source-data summary; target product is `TransactionLedgerWindow`. |
 
 ### `query_control_plane_service`: Analytics Input Contracts
 
@@ -262,7 +262,7 @@ The following surfaces are acceptable today but should receive explicit review b
 | `/integration/reference/risk-free-series` | Can become generic reference read. | Keep as analytics input. | Keep request semantics and consumer usage explicit. |
 | `/integration/reference/classification-taxonomy` | Can become generic taxonomy lookup. | Keep as analytics input. | Maintain canonical analytics taxonomy framing. |
 | `/integration/instruments/enrichment-bulk` | Could live in `query_service` if it is only plain reference lookup. | Keep as downstream enrichment contract for now. | Revisit if it does not carry governed downstream semantics. |
-| `/reporting/*/query` | Can drift into report composition or analytics narrative. | Keep as operational read. | Keep `lotus-report` and analytics services as owners of downstream composition. |
+| `/reporting/*/query` | Can drift into report composition or analytics narrative. | Keep as operational read; selected convenience shapes are deprecated in OpenAPI pending source-data product migration. | Keep `lotus-report` and analytics services as owners of downstream composition. |
 | `/portfolios/{portfolio_id}/cashflow-projection` | Can drift into forecasting or performance interpretation. | Keep as operational read. | Restrict to core-derived cashflow state. |
 | `/simulation-sessions/{session_id}/projected-summary` | Can drift into advisory recommendations. | Keep as simulation state. | Keep recommendation/proposal logic outside `lotus-core`. |
 
