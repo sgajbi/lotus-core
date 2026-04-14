@@ -33,6 +33,7 @@ def test_portfolio_snapshot_id_is_deterministic_for_same_scope() -> None:
 
     assert first == second
     assert first.startswith("pss_")
+    assert len(first) == len("pss_") + 32
 
 
 def test_portfolio_snapshot_id_ignores_source_product_order_and_duplicates() -> None:
@@ -50,9 +51,13 @@ def test_portfolio_snapshot_id_ignores_source_product_order_and_duplicates() -> 
     ("field_name", "value"),
     [
         ("restatement_version", "restatement_0002"),
+        ("portfolio_id", "PORT_002"),
+        ("product", "HoldingsAsOf"),
+        ("as_of_date", date(2026, 2, 26)),
         ("position_epoch", 8),
         ("cashflow_epoch", 6),
         ("valuation_date", date(2026, 2, 26)),
+        ("transaction_window_end", date(2026, 2, 26)),
         ("policy_version", "tenant-default-v2"),
     ],
 )
