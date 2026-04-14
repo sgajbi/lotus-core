@@ -352,6 +352,16 @@ Slice 1 should produce:
 Slice 1 should not yet consolidate endpoint families, redesign ingestion, or introduce broad
 source-data product DTO changes. Those follow after temporal semantics are stable.
 
+## Slice 1 Completion Note
+
+Slice 1 policy output is now recorded in:
+
+- `docs/standards/temporal-vocabulary.md`
+
+That standard defines canonical temporal terms, current-field decisions, `source_timestamp` legacy
+handling, `booking_date` target handling, `restatement_version` target handling, and the temporal guard
+plan. It does not change runtime behavior, schemas, generated OpenAPI, or persistence.
+
 ## Slice 0 Acceptance
 
 Slice 0 is complete when:

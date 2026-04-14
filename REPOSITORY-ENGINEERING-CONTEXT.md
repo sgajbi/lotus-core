@@ -31,8 +31,9 @@ Current repository posture:
 1. `lotus-core` is the domain authority for portfolio-management and transaction data,
 2. downstream-facing API ownership is now classified under the RFC-0082 contract-family model, with `query_service` as the operational read plane and `query_control_plane_service` as the governed analytics-input, snapshot/simulation, support, and policy contract plane,
 3. RFC-0083 now defines the target system-of-record architecture, and the local Slice 0 gap analysis maps current route, model, temporal, source-data product, ingestion, reconciliation, and observability gaps to the implementation program,
-4. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-5. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+4. RFC-0083 Slice 1 now defines repo-local temporal vocabulary and schema policy for as-of, valuation, trade, settlement, booking, effective, ingestion, observation, correction, and restatement semantics,
+5. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+6. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
 
 ## Architecture And Module Map
 
@@ -121,16 +122,18 @@ Most relevant current governance:
 10. `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 11. `docs/architecture/lotus-core-target-architecture.md`
 12. `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
-13. `docs/standards/layering-boundaries.md`
+13. `docs/standards/temporal-vocabulary.md`
+14. `docs/standards/layering-boundaries.md`
 
 ## Known Constraints And Implementation Notes
 
 1. this repository has the heaviest local gate set in the ecosystem, so targeted local proof plus GitHub-backed heavy execution is often the right working model,
 2. query-service contracts are highly consequential because many other apps depend on them,
 3. RFC-0083 implementation should follow `docs/architecture/RFC-0083-target-state-gap-analysis.md` slice order before adding broad new architecture work,
-4. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-5. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-6. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+4. temporal fields in new downstream-facing contracts must follow `docs/standards/temporal-vocabulary.md`,
+5. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+6. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+7. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 
 ## Context Maintenance Rule
 

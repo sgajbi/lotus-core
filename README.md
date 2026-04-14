@@ -16,6 +16,7 @@ Local architecture direction and restructuring plan:
 - `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 - `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
 - `docs/standards/layering-boundaries.md`
+- `docs/standards/temporal-vocabulary.md`
 
 Query-service PB/WM reporting contract guide:
 - `docs/features/query_service/WEALTH-REPORTING-API-GUIDE.md`
@@ -74,6 +75,10 @@ banking-grade system of record. The local Slice 0 implementation map is:
 
 It identifies the current route, model, temporal, source-data product, ingestion, reconciliation,
 security, and observability gaps that should drive the next implementation slices.
+
+RFC-0083 Slice 1 temporal vocabulary and schema policy is documented in:
+
+- `docs/standards/temporal-vocabulary.md`
 
 ### Key Architectural Patterns
 

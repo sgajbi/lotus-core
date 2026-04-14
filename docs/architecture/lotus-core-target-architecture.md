@@ -18,6 +18,10 @@ The current local target-state gap analysis and implementation slice map is:
 
 - `docs/architecture/RFC-0083-target-state-gap-analysis.md`
 
+The current local temporal vocabulary and schema policy is:
+
+- `docs/standards/temporal-vocabulary.md`
+
 ## System Role
 
 `lotus-core` is the canonical source of portfolio and position state for the Lotus ecosystem.
