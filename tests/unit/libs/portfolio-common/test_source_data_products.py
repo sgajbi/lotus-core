@@ -1,11 +1,14 @@
+import json
+from pathlib import Path
+
 import pytest
 from portfolio_common.source_data_products import (
     ANALYTICS_INPUT,
+    CONTROL_PLANE_AND_POLICY,
     DEFAULT_REQUIRED_METADATA_FIELDS,
     OPERATIONAL_READ,
     QUERY_CONTROL_PLANE_SERVICE,
     SOURCE_DATA_PRODUCT_CATALOG,
-    CONTROL_PLANE_AND_POLICY,
     SourceDataProductDefinition,
     get_source_data_product,
     products_for_consumer,
@@ -67,6 +70,22 @@ def test_holdings_product_records_convenience_shapes_to_consolidate() -> None:
     assert product.route_family == OPERATIONAL_READ
     assert "/reporting/holdings-snapshot/query" in product.replaces_convenience_shapes
     assert "/reporting/cash-balances/query" in product.replaces_convenience_shapes
+
+
+def test_catalog_current_routes_are_registered_contract_routes() -> None:
+    registry = json.loads(Path("docs/standards/route-contract-family-registry.json").read_text())
+    registered_routes = {
+        route.split(" ", maxsplit=1)[1]
+        for service_routes in registry["routes"].values()
+        for family_routes in service_routes.values()
+        for route in family_routes
+    }
+
+    catalog_routes = {
+        route for product in SOURCE_DATA_PRODUCT_CATALOG for route in product.current_routes
+    }
+
+    assert catalog_routes <= registered_routes
 
 
 def test_catalog_rejects_duplicate_product_names() -> None:

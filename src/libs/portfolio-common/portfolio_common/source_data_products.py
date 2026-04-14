@@ -208,8 +208,8 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         owner="lotus-core",
         consumers=("lotus-performance", "lotus-risk", "lotus-gateway", "lotus-manage"),
         current_routes=(
-            "/support/reconciliation-runs",
-            "/support/reconciliation-findings",
+            "/support/portfolios/{portfolio_id}/reconciliation-runs",
+            "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings",
         ),
         paging_mode=INLINE_PAGED,
         notes="Consumer-safe reconciliation run, finding, break, and blocking evidence.",
@@ -236,9 +236,9 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         owner="lotus-core",
         consumers=("lotus-gateway", "lotus-manage", "lotus-report"),
         current_routes=(
-            "/support/lineage-keys",
-            "/support/replay-keys",
-            "/ingestion-health/readiness",
+            "/lineage/portfolios/{portfolio_id}/keys",
+            "/support/portfolios/{portfolio_id}/reprocessing-keys",
+            "/support/portfolios/{portfolio_id}/reprocessing-jobs",
         ),
         paging_mode=INLINE_PAGED,
         notes="Source-batch, validation, replay, DLQ, quarantine, and repair evidence.",
