@@ -30,6 +30,8 @@ them until public contracts are changed, but new market/reference product DTOs m
 
 `ingested_at` remains the timestamp when Lotus accepted the source record into the platform.
 
+When both values are supplied, `ingested_at` must be on or after the resolved source-observed time.
+
 ## Product Alignment
 
 | Area | Target product | Required alignment |

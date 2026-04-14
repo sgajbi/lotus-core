@@ -52,8 +52,15 @@ def resolve_observed_at(signal: SourceObservationSignal) -> datetime | None:
 
     observed_at = _datetime_or_none(signal.observed_at, "observed_at")
     source_timestamp = _datetime_or_none(signal.source_timestamp, "source_timestamp")
-    _datetime_or_none(signal.ingested_at, "ingested_at")
-    return observed_at or source_timestamp
+    ingested_at = _datetime_or_none(signal.ingested_at, "ingested_at")
+    resolved_observed_at = observed_at or source_timestamp
+    if (
+        resolved_observed_at is not None
+        and ingested_at is not None
+        and ingested_at < resolved_observed_at
+    ):
+        raise ValueError("ingested_at must be on or after observed_at")
+    return resolved_observed_at
 
 
 def classify_market_reference_point(signal: MarketReferencePointSignal) -> str:

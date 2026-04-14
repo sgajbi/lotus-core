@@ -42,6 +42,18 @@ def test_resolve_observed_at_maps_legacy_source_timestamp_to_utc_observed_time()
     )
 
 
+def test_resolve_observed_at_rejects_ingestion_before_observation() -> None:
+    observed_at = aware("2026-04-15T01:00:00")
+
+    with pytest.raises(ValueError, match="ingested_at must be on or after observed_at"):
+        resolve_observed_at(
+            SourceObservationSignal(
+                observed_at=observed_at,
+                ingested_at=observed_at - timedelta(seconds=1),
+            )
+        )
+
+
 def test_resolve_observed_at_rejects_naive_timestamps() -> None:
     with pytest.raises(ValueError, match="source_timestamp must be timezone-aware"):
         resolve_observed_at(SourceObservationSignal(source_timestamp=datetime(2026, 4, 15, 9, 0)))
@@ -53,6 +65,12 @@ def test_resolve_observed_at_rejects_naive_timestamps() -> None:
         (
             MarketReferencePointSignal(
                 quality_status="accepted", observed_at=aware("2026-04-15T01:00:00")
+            ),
+            COMPLETE,
+        ),
+        (
+            MarketReferencePointSignal(
+                quality_status="accepted", source_timestamp=aware("2026-04-15T01:00:00")
             ),
             COMPLETE,
         ),
