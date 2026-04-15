@@ -67,6 +67,19 @@ def test_products_for_consumer_maps_performance_to_analytics_inputs() -> None:
     )
 
 
+def test_catalog_keeps_performance_snapshot_outputs_out_of_core() -> None:
+    product_names = {product.product_name for product in SOURCE_DATA_PRODUCT_CATALOG}
+    performance_products = products_for_consumer("lotus-performance")
+
+    assert "PortfolioPerformanceSnapshot" not in product_names
+    assert "PerformanceSnapshot" not in product_names
+    assert all(
+        not product.product_name.endswith(("ReturnSnapshot", "PerformanceSnapshot"))
+        for product in performance_products
+    )
+    assert all(product.owner == "lotus-core" for product in performance_products)
+
+
 def test_source_data_product_openapi_extra_exposes_machine_readable_contract_identity() -> None:
     extra = source_data_product_openapi_extra("PortfolioTimeseriesInput")
 

@@ -108,6 +108,24 @@ evidence through gateway/product contracts without mutating core state outside c
 `lotus-report` should compose reports from source-data products and evidence bundles, not direct
 database assumptions or report-specific private shapes.
 
+## Portfolio Performance Snapshot Boundary
+
+The portfolio workspace performance snapshot is not a `lotus-core` source-data product.
+
+`lotus-core` owns the source inputs required by that feature:
+
+1. `PortfolioAnalyticsReference` for portfolio currency, lifecycle, and performance horizon bounds,
+2. `PortfolioTimeseriesInput` for valuation and cash-flow economics,
+3. `BenchmarkAssignment` for effective benchmark mapping,
+4. `BenchmarkConstituentWindow`, `IndexSeriesWindow`, and `RiskFreeSeriesWindow` for benchmark,
+   excess-return, and risk-free source inputs,
+5. `DataQualityCoverageReport` and `ReconciliationEvidenceBundle` for readiness evidence.
+
+`lotus-performance` owns the calculated portfolio return, benchmark return, excess return, and
+compact return path used by the book workspace. `lotus-gateway` and UI surfaces should consume the
+performance-owned snapshot contract and may use `lotus-core` readiness evidence only to explain
+source availability. They must not recompute performance returns from raw `lotus-core` inputs.
+
 ## Runtime Follow-Up
 
 Future runtime slices must:
