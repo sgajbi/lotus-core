@@ -254,6 +254,16 @@ async def test_position_analytics_timeseries_success(async_test_client):
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     mock_service.get_position_timeseries.assert_awaited_once()
+    position_call = mock_service.get_position_timeseries.await_args.kwargs
+    assert position_call["portfolio_id"] == "DEMO_DPM_EUR_001"
+    assert position_call["request"].as_of_date == date(2025, 12, 31)
+    assert position_call["request"].window.start_date == date(2025, 1, 1)
+    assert position_call["request"].window.end_date == date(2025, 1, 31)
+    assert position_call["request"].reporting_currency == "EUR"
+    assert position_call["request"].frequency == "daily"
+    assert position_call["request"].consumer_system == "lotus-performance"
+    assert position_call["request"].dimensions == ["asset_class"]
+    assert position_call["request"].page.page_size == 100
 
 
 async def test_position_analytics_timeseries_insufficient_data_maps_to_422(async_test_client):
@@ -300,6 +310,10 @@ async def test_portfolio_analytics_reference_success(async_test_client):
     assert body["resolved_as_of_date"] == "2025-12-31"
     assert body["reference_state_policy"] == "current_portfolio_reference_state"
     mock_service.get_portfolio_reference.assert_awaited_once()
+    reference_call = mock_service.get_portfolio_reference.await_args.kwargs
+    assert reference_call["portfolio_id"] == "DEMO_DPM_EUR_001"
+    assert reference_call["request"].as_of_date == date(2025, 12, 31)
+    assert reference_call["request"].consumer_system == "lotus-performance"
 
 
 async def test_portfolio_analytics_reference_not_found_maps_to_404(async_test_client):
@@ -341,6 +355,14 @@ async def test_create_analytics_export_job_success(async_test_client):
     assert response.json()["lifecycle_mode"] == "inline_job_execution"
     assert response.json()["result_available"] is True
     mock_service.create_export_job.assert_awaited_once()
+    export_request = mock_service.create_export_job.await_args.args[0]
+    assert export_request.dataset_type == "portfolio_timeseries"
+    assert export_request.portfolio_id == "DEMO_DPM_EUR_001"
+    assert export_request.portfolio_timeseries_request.as_of_date == date(2025, 12, 31)
+    assert export_request.portfolio_timeseries_request.period == "one_month"
+    assert export_request.result_format == "json"
+    assert export_request.compression == "none"
+    assert export_request.consumer_system == "lotus-performance"
 
 
 async def test_create_analytics_export_job_invalid_request_maps_to_400(async_test_client):
