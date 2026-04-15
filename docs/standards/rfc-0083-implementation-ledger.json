@@ -86,7 +86,7 @@
       "slice": 6,
       "title": "Source-data product catalog implementation",
       "status": "completed",
-      "validationLane": "portfolio-common unit tests",
+      "validationLane": "portfolio-common unit tests and downstream consumer contract guard",
       "artifacts": [
         "docs/architecture/RFC-0083-source-data-product-catalog.md",
         "src/libs/portfolio-common/portfolio_common/source_data_products.py",

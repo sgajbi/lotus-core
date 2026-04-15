@@ -298,7 +298,10 @@ The following surfaces are acceptable today but should receive explicit review b
    `scripts/analytics_input_consumer_contract_guard.py`, which verifies that declared
    `lotus-performance` source-data products stay on the query control plane and that the governed
    analytics cash-flow vocabulary remains canonical.
-3. Add consumer conformance notes for `lotus-risk` upstream dependency usage.
+3. Add consumer conformance notes for `lotus-risk` upstream dependency usage. Completed through
+   `scripts/analytics_input_consumer_contract_guard.py`, which verifies that declared `lotus-risk`
+   source-data products cover operational holdings, transaction windows, snapshot state,
+   analytics-input market/reference products, and evidence products on the governed serving planes.
 
 ### P2
 

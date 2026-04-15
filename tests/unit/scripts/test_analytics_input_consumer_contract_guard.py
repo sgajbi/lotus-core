@@ -3,6 +3,7 @@ from portfolio_common.source_data_products import (
     OPERATIONAL_READ,
     QUERY_CONTROL_PLANE_SERVICE,
     QUERY_SERVICE,
+    SNAPSHOT_AND_SIMULATION,
     SOURCE_DATA_PRODUCT_CATALOG,
     SourceDataProductDefinition,
 )
@@ -36,6 +37,18 @@ def _performance_catalog(
     products = tuple(
         _product(product_name)
         for product_name in sorted(guard.LOTUS_PERFORMANCE_REQUIRED_PRODUCTS - override_names)
+    )
+    return products + overrides
+
+
+def _risk_catalog(
+    *,
+    overrides: tuple[SourceDataProductDefinition, ...] = (),
+) -> tuple[SourceDataProductDefinition, ...]:
+    override_names = {product.product_name for product in overrides}
+    products = tuple(
+        _product(product_name, consumers=("lotus-risk",))
+        for product_name in sorted(guard.LOTUS_RISK_REQUIRED_PRODUCTS - override_names)
     )
     return products + overrides
 
@@ -78,7 +91,7 @@ def test_lotus_performance_contract_guard_rejects_operational_read_binding() -> 
 
     assert any("must be served by query_control_plane_service" in error for error in errors)
     assert any("unsupported lotus-performance route family" in error for error in errors)
-    assert any("not a governed control-plane consumer route" in error for error in errors)
+    assert any("not a governed consumer route" in error for error in errors)
 
 
 def test_lotus_performance_contract_guard_rejects_unexpected_product() -> None:
@@ -117,3 +130,49 @@ def test_lotus_performance_current_products_are_explicitly_control_plane_only() 
     assert all(
         product.serving_plane == QUERY_CONTROL_PLANE_SERVICE for product in products.values()
     )
+
+
+def test_lotus_risk_contract_guard_accepts_current_catalog() -> None:
+    assert guard.evaluate_lotus_risk_contracts() == []
+
+
+def test_lotus_risk_contract_guard_rejects_missing_required_product() -> None:
+    catalog = tuple(
+        product for product in _risk_catalog() if product.product_name != "HoldingsAsOf"
+    )
+
+    errors = guard.evaluate_lotus_risk_contracts(catalog=catalog)
+
+    assert any("HoldingsAsOf" in error for error in errors)
+
+
+def test_lotus_risk_contract_guard_rejects_wrong_serving_plane_for_operational_read() -> None:
+    catalog = _risk_catalog(
+        overrides=(
+            _product(
+                "HoldingsAsOf",
+                route="/portfolios/{portfolio_id}/positions",
+                route_family=OPERATIONAL_READ,
+                serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+                consumers=("lotus-risk",),
+            ),
+        )
+    )
+
+    errors = guard.evaluate_lotus_risk_contracts(catalog=catalog)
+
+    assert any("HoldingsAsOf must be served by query_service" in error for error in errors)
+
+
+def test_lotus_risk_current_products_cover_operational_snapshot_analytics_and_evidence() -> None:
+    products = {
+        product.product_name: product
+        for product in SOURCE_DATA_PRODUCT_CATALOG
+        if "lotus-risk" in product.consumers
+    }
+
+    assert set(products) == guard.LOTUS_RISK_REQUIRED_PRODUCTS
+    assert products["PortfolioStateSnapshot"].route_family == SNAPSHOT_AND_SIMULATION
+    assert products["HoldingsAsOf"].serving_plane == QUERY_SERVICE
+    assert products["PortfolioTimeseriesInput"].serving_plane == QUERY_CONTROL_PLANE_SERVICE
+    assert products["ReconciliationEvidenceBundle"].serving_plane == QUERY_CONTROL_PLANE_SERVICE

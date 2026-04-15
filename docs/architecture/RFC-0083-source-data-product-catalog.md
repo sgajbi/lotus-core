@@ -301,11 +301,14 @@ The source-data product contract guard statically checks both sides of the bindi
 3. every catalog-backed route helper must expose `x-lotus-source-data-security` metadata that
    matches the governed RFC-0083 Slice 9 security profile.
 
-The analytics-input consumer contract guard adds an explicit downstream-consumer conformance check
-for `lotus-performance`. It verifies that the declared performance-facing products are exactly the
-governed analytics/supportability products, that those products are served from the query control
-plane rather than operational reads, and that the analytics cash-flow vocabulary remains
-`external_flow`, `internal_trade_flow`, `income`, `fee`, `transfer`, and `other`.
+The analytics-input consumer contract guard adds explicit downstream-consumer conformance checks for
+`lotus-performance` and `lotus-risk`. It verifies that the declared performance-facing products are
+exactly the governed analytics/supportability products, that those products are served from the query
+control plane rather than operational reads, and that the analytics cash-flow vocabulary remains
+`external_flow`, `internal_trade_flow`, `income`, `fee`, `transfer`, and `other`. It also verifies
+that the declared risk-facing products cover operational holdings, transaction windows, snapshot
+state, analytics-input market/reference products, and evidence products on the governed serving plane
+for each route family.
 
 ## Validation
 
