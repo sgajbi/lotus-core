@@ -12,6 +12,9 @@ from src.services.query_control_plane_service.app.routers.analytics_inputs impor
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
 )
+from src.services.query_service.app.services.analytics_timeseries_service import (
+    AnalyticsInputError,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -200,6 +203,30 @@ async def test_portfolio_analytics_timeseries_success(async_test_client):
     assert body["data_quality_status"] == "UNKNOWN"
 
 
+async def test_portfolio_analytics_timeseries_invalid_request_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_timeseries = AsyncMock(
+        side_effect=AnalyticsInputError(
+            "INVALID_REQUEST", "Page token does not match request scope."
+        )
+    )
+
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/portfolio-timeseries",
+        json={
+            "as_of_date": "2025-12-31",
+            "window": {"start_date": "2025-01-01", "end_date": "2025-01-31"},
+            "reporting_currency": "EUR",
+            "frequency": "daily",
+            "consumer_system": "lotus-performance",
+            "page": {"page_size": 100, "page_token": "invalid-token"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Page token does not match request scope."
+
+
 async def test_position_analytics_timeseries_success(async_test_client):
     client, mock_service = async_test_client
     response = await client.post(
@@ -225,6 +252,30 @@ async def test_position_analytics_timeseries_success(async_test_client):
     mock_service.get_position_timeseries.assert_awaited_once()
 
 
+async def test_position_analytics_timeseries_insufficient_data_maps_to_422(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_position_timeseries = AsyncMock(
+        side_effect=AnalyticsInputError(
+            "INSUFFICIENT_DATA", "Missing FX rate for EUR/USD on 2025-01-31."
+        )
+    )
+
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/position-timeseries",
+        json={
+            "as_of_date": "2025-12-31",
+            "window": {"start_date": "2025-01-01", "end_date": "2025-01-31"},
+            "reporting_currency": "EUR",
+            "frequency": "daily",
+            "consumer_system": "lotus-performance",
+            "dimensions": ["asset_class"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Missing FX rate for EUR/USD on 2025-01-31."
+
+
 async def test_portfolio_analytics_reference_success(async_test_client):
     client, mock_service = async_test_client
     response = await client.post(
@@ -245,6 +296,24 @@ async def test_portfolio_analytics_reference_success(async_test_client):
     assert body["resolved_as_of_date"] == "2025-12-31"
     assert body["reference_state_policy"] == "current_portfolio_reference_state"
     mock_service.get_portfolio_reference.assert_awaited_once()
+
+
+async def test_portfolio_analytics_reference_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_reference = AsyncMock(
+        side_effect=AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+    )
+
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/reference",
+        json={
+            "as_of_date": "2025-12-31",
+            "consumer_system": "lotus-performance",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Portfolio not found."
 
 
 async def test_create_analytics_export_job_success(async_test_client):

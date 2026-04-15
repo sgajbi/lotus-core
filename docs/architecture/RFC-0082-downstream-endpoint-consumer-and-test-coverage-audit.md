@@ -89,6 +89,11 @@ Automated proof now includes a recursive analytics-input schema completeness ass
 `tests/integration/services/query_control_plane_service/test_control_plane_app.py` so regressions
 in field descriptions/examples are caught even when nested models change.
 
+The HTTP dependency lane now also proves route-level error semantics across the strategic
+analytics-input family: invalid analytics request shape maps to `400`, missing portfolio reference
+maps to `404`, and insufficient source data maps to `422`, so downstream consumers do not need to
+infer those statuses only from OpenAPI examples.
+
 ### Issue Disposition For This Endpoint Family
 
 Reviewed open `lotus-core` issues tied directly to these contracts:
