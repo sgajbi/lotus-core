@@ -1,8 +1,8 @@
 import logging
 from datetime import date
-from typing import Optional
+from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +44,7 @@ LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
 RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
 }
+T = TypeVar("T")
 
 
 def problem_response(description: str, example: dict[str, str]) -> dict[str, object]:
@@ -77,6 +78,25 @@ def parse_optional_iso_date(field_name: str, value: Optional[str]) -> Optional[d
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid {field_name} '{value}'. Expected YYYY-MM-DD format.",
+        ) from exc
+
+
+async def execute_operations_call(
+    operation: Awaitable[T],
+    *,
+    log_message: str,
+    unexpected_detail: str,
+    log_args: tuple[object, ...],
+) -> T:
+    try:
+        return await operation
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(log_message, *log_args)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=unexpected_detail,
         ) from exc
 
 
@@ -122,20 +142,16 @@ async def get_support_overview(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_support_overview(
+    return await execute_operations_call(
+        service.get_support_overview(
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to build support overview for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building support overview.",
-        )
+        ),
+        log_message="Failed to build support overview for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while building support overview.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -186,22 +202,17 @@ async def get_portfolio_readiness(
     service: OperationsService = Depends(get_operations_service),
 ):
     parsed_as_of_date = parse_optional_iso_date("as_of_date", as_of_date)
-
-    try:
-        return await service.get_portfolio_readiness(
+    return await execute_operations_call(
+        service.get_portfolio_readiness(
             portfolio_id=portfolio_id,
             as_of_date=parsed_as_of_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to build readiness response for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building portfolio readiness.",
-        )
+        ),
+        log_message="Failed to build readiness response for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while building portfolio readiness.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -239,20 +250,16 @@ async def get_calculator_slos(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_calculator_slos(
+    return await execute_operations_call(
+        service.get_calculator_slos(
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to build calculator SLO snapshot for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building calculator SLO snapshot.",
-        )
+        ),
+        log_message="Failed to build calculator SLO snapshot for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while building calculator SLO snapshot.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -299,9 +306,8 @@ async def get_portfolio_control_stages(
     service: OperationsService = Depends(get_operations_service),
 ):
     parsed_business_date = parse_optional_iso_date("business_date", business_date)
-
-    try:
-        return await service.get_portfolio_control_stages(
+    return await execute_operations_call(
+        service.get_portfolio_control_stages(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -309,15 +315,11 @@ async def get_portfolio_control_stages(
             stage_name=stage_name,
             business_date=parsed_business_date,
             status=status_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list portfolio control stages for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing portfolio control stages.",
-        )
+        ),
+        log_message="Failed to list portfolio control stages for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing portfolio control stages.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -367,9 +369,8 @@ async def get_reprocessing_keys(
     service: OperationsService = Depends(get_operations_service),
 ):
     parsed_watermark_date = parse_optional_iso_date("watermark_date", watermark_date)
-
-    try:
-        return await service.get_reprocessing_keys(
+    return await execute_operations_call(
+        service.get_reprocessing_keys(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -377,15 +378,11 @@ async def get_reprocessing_keys(
             security_id=security_id,
             watermark_date=parsed_watermark_date,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list reprocessing keys for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reprocessing keys.",
-        )
+        ),
+        log_message="Failed to list reprocessing keys for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing reprocessing keys.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -436,8 +433,8 @@ async def get_reprocessing_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_reprocessing_jobs(
+    return await execute_operations_call(
+        service.get_reprocessing_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -446,15 +443,11 @@ async def get_reprocessing_jobs(
             status=status_filter,
             security_id=security_id,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list reprocessing jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reprocessing jobs.",
-        )
+        ),
+        log_message="Failed to list reprocessing jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing reprocessing jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -511,9 +504,8 @@ async def get_valuation_jobs(
     service: OperationsService = Depends(get_operations_service),
 ):
     parsed_business_date = parse_optional_iso_date("business_date", business_date)
-
-    try:
-        return await service.get_valuation_jobs(
+    return await execute_operations_call(
+        service.get_valuation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -523,15 +515,11 @@ async def get_valuation_jobs(
             correlation_id=correlation_id,
             status=status,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list valuation jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing valuation jobs.",
-        )
+        ),
+        log_message="Failed to list valuation jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing valuation jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -583,9 +571,8 @@ async def get_aggregation_jobs(
     service: OperationsService = Depends(get_operations_service),
 ):
     parsed_business_date = parse_optional_iso_date("business_date", business_date)
-
-    try:
-        return await service.get_aggregation_jobs(
+    return await execute_operations_call(
+        service.get_aggregation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -594,15 +581,11 @@ async def get_aggregation_jobs(
             correlation_id=correlation_id,
             status=status,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list aggregation jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing aggregation jobs.",
-        )
+        ),
+        log_message="Failed to list aggregation jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing aggregation jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -644,8 +627,8 @@ async def get_analytics_export_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_analytics_export_jobs(
+    return await execute_operations_call(
+        service.get_analytics_export_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -653,15 +636,11 @@ async def get_analytics_export_jobs(
             request_fingerprint=request_fingerprint,
             status=status_filter,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list analytics export jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing analytics export jobs.",
-        )
+        ),
+        log_message="Failed to list analytics export jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing analytics export jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -715,8 +694,8 @@ async def get_reconciliation_runs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_reconciliation_runs(
+    return await execute_operations_call(
+        service.get_reconciliation_runs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -726,15 +705,11 @@ async def get_reconciliation_runs(
             correlation_id=correlation_id,
             reconciliation_type=reconciliation_type,
             status=status_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list reconciliation runs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reconciliation runs.",
-        )
+        ),
+        log_message="Failed to list reconciliation runs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing reconciliation runs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
@@ -783,27 +758,19 @@ async def get_reconciliation_findings(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_reconciliation_findings(
+    return await execute_operations_call(
+        service.get_reconciliation_findings(
             portfolio_id=portfolio_id,
             run_id=run_id,
             limit=limit,
             finding_id=finding_id,
             security_id=security_id,
             transaction_id=transaction_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception(
-            "Failed to list reconciliation findings for portfolio %s run %s",
-            portfolio_id,
-            run_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reconciliation findings.",
-        )
+        ),
+        log_message="Failed to list reconciliation findings for portfolio %s run %s",
+        unexpected_detail="An unexpected server error occurred while listing reconciliation findings.",
+        log_args=(portfolio_id, run_id),
+    )
 
 
 @router.get(
@@ -828,18 +795,12 @@ async def get_lineage(
     security_id: str = Path(..., description="Security identifier.", examples=["SEC-US-IBM"]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_lineage(portfolio_id, security_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception(
-            "Failed to build lineage for portfolio %s security %s", portfolio_id, security_id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building lineage response.",
-        )
+    return await execute_operations_call(
+        service.get_lineage(portfolio_id, security_id),
+        log_message="Failed to build lineage for portfolio %s security %s",
+        unexpected_detail="An unexpected server error occurred while building lineage response.",
+        log_args=(portfolio_id, security_id),
+    )
 
 
 @router.get(
@@ -871,19 +832,15 @@ async def get_lineage_keys(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_lineage_keys(
+    return await execute_operations_call(
+        service.get_lineage_keys(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
             reprocessing_status=reprocessing_status,
             security_id=security_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list lineage keys for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing lineage keys.",
-        )
+        ),
+        log_message="Failed to list lineage keys for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing lineage keys.",
+        log_args=(portfolio_id,),
+    )
