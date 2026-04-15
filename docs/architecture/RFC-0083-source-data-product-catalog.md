@@ -299,14 +299,22 @@ The source-data product contract guard statically checks both sides of the bindi
 2. every catalog route must declare a response model whose DTO envelope exposes matching
    `product_name` and `product_version` defaults.
 
+The analytics-input consumer contract guard adds an explicit downstream-consumer conformance check
+for `lotus-performance`. It verifies that the declared performance-facing products are exactly the
+governed analytics/supportability products, that those products are served from the query control
+plane rather than operational reads, and that the analytics cash-flow vocabulary remains
+`external_flow`, `internal_trade_flow`, `income`, `fee`, `transfer`, and `other`.
+
 ## Validation
 
 Slice 6 validation is:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_products.py -q`,
 2. `python -m pytest tests/unit/scripts/test_source_data_product_contract_guard.py -q`,
-3. `python scripts/source_data_product_contract_guard.py`,
-4. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
-5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
-6. `git diff --check`,
-7. `make lint`.
+3. `python -m pytest tests/unit/scripts/test_analytics_input_consumer_contract_guard.py -q`,
+4. `python scripts/source_data_product_contract_guard.py`,
+5. `python scripts/analytics_input_consumer_contract_guard.py`,
+6. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py scripts/analytics_input_consumer_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py --ignore E501,I001`,
+7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py scripts/analytics_input_consumer_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py`,
+8. `git diff --check`,
+9. `make lint`.

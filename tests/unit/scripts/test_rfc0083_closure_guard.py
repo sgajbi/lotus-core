@@ -73,8 +73,10 @@ def test_evaluate_ledger_rejects_missing_required_artifact_entry(tmp_path: Path)
 
     assert (
         "slice 6 is missing required artifact(s): "
+        "scripts/analytics_input_consumer_contract_guard.py, "
         "scripts/source_data_product_contract_guard.py, "
         "tests/unit/libs/portfolio-common/test_source_data_products.py, "
+        "tests/unit/scripts/test_analytics_input_consumer_contract_guard.py, "
         "tests/unit/scripts/test_source_data_product_contract_guard.py"
     ) in errors
 

@@ -49,7 +49,9 @@ EXPECTED_SLICE_ARTIFACTS = {
         "docs/architecture/RFC-0083-source-data-product-catalog.md",
         "src/libs/portfolio-common/portfolio_common/source_data_products.py",
         "tests/unit/libs/portfolio-common/test_source_data_products.py",
+        "scripts/analytics_input_consumer_contract_guard.py",
         "scripts/source_data_product_contract_guard.py",
+        "tests/unit/scripts/test_analytics_input_consumer_contract_guard.py",
         "tests/unit/scripts/test_source_data_product_contract_guard.py",
     },
     7: {

@@ -284,12 +284,14 @@ def source_data_product_openapi_extra(product_name: str) -> dict[str, dict[str, 
     }
 
 
-def products_for_consumer(consumer: str) -> tuple[SourceDataProductDefinition, ...]:
+def products_for_consumer(
+    consumer: str,
+    *,
+    catalog: tuple[SourceDataProductDefinition, ...] = SOURCE_DATA_PRODUCT_CATALOG,
+) -> tuple[SourceDataProductDefinition, ...]:
     requested = _normalize_required_text(consumer, "consumer")
     return tuple(
-        product
-        for product in SOURCE_DATA_PRODUCT_CATALOG
-        if requested in {item.upper() for item in product.consumers}
+        product for product in catalog if requested in {item.upper() for item in product.consumers}
     )
 
 
