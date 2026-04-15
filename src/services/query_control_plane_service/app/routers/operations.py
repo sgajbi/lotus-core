@@ -306,7 +306,8 @@ async def get_portfolio_control_stages(
         "How: Query `position_state` rows with pagination and optional status, security, and "
         "watermark-date filters.\n"
         "When: Use to inspect stuck or stale REPROCESSING keys and verify replay normalization "
-        "after recovery."
+        "after recovery. These rows are operational evidence and not direct "
+        "business-calculation inputs."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
@@ -374,7 +375,8 @@ async def get_reprocessing_keys(
         "How: Query reprocessing jobs linked to the portfolio's replay keys, with pagination and "
         "optional id, status, correlation, and security filters.\n"
         "When: Use to inspect queued, stale, retried, or failed replay jobs without direct "
-        "database access."
+        "database access. These jobs are operational evidence and not direct "
+        "business-calculation inputs."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
@@ -661,7 +663,8 @@ async def get_analytics_export_jobs(
         "How: Query reconciliation run records with pagination and optional id, requester, "
         "deduplication key, type, status, and correlation filters.\n"
         "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
-        "unexpected reconciliation failures."
+        "unexpected reconciliation failures. These records are operator evidence, not business "
+        "calculations."
     ),
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
@@ -737,7 +740,8 @@ async def get_reconciliation_runs(
         "What: Return durable findings for one reconciliation run.\n"
         "How: Query persisted reconciliation findings scoped to the requested run identifier.\n"
         "When: Use after a control failure or replay requirement to inspect the exact breaches "
-        "that blocked publication."
+        "that blocked publication. These findings are operator evidence, not business "
+        "calculations."
     ),
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
@@ -804,7 +808,8 @@ async def get_reconciliation_findings(
     description=(
         "What: Return lineage state for one portfolio-security key.\n"
         "How: Read epoch, watermark, and latest artifact pointers from lineage state services.\n"
-        "When: Use during replay/reprocessing investigations for deterministic state validation."
+        "When: Use during replay/reprocessing investigations for deterministic state validation. "
+        "This is operational lineage evidence, not a business-calculation contract."
     ),
 )
 async def get_lineage(
@@ -839,7 +844,8 @@ async def get_lineage(
     description=(
         "What: List lineage keys for a portfolio.\n"
         "How: Query portfolio-security lineage rows with status/security filters and pagination.\n"
-        "When: Use to scope impacted keys before running replay, backfill, or targeted recovery."
+        "When: Use to scope impacted keys before running replay, backfill, or targeted recovery. "
+        "These records are operational lineage evidence and not business-calculation inputs."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )

@@ -363,6 +363,66 @@ Automated proof now includes a classification-taxonomy schema-family completenes
 No new downstream migration issue is required from this slice. The active need here is classification
 coverage quality, not route replacement.
 
+## Certified Endpoint Slice: Support And Lineage Evidence
+
+This certification pass covers the operator-evidence family around:
+
+1. `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
+2. `GET /support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings`
+3. `GET /support/portfolios/{portfolio_id}/reprocessing-keys`
+4. `GET /support/portfolios/{portfolio_id}/reprocessing-jobs`
+5. `GET /lineage/portfolios/{portfolio_id}/securities/{security_id}`
+6. `GET /lineage/portfolios/{portfolio_id}/keys`
+
+### Route Contract Decision
+
+These are support-plane and lineage-plane contracts, not business-calculation inputs.
+
+They exist to publish:
+
+1. operator evidence for blocked controls and replay workflows,
+2. deterministic lineage state for recovery and investigation,
+3. durable support metadata without requiring direct database access.
+
+They should not be presented to downstream teams as calculation-grade portfolio analytics APIs.
+
+### Downstream Consumer Reality
+
+| Route family | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| portfolio support overview/readiness | `lotus-gateway` | Active direct use exists for workspace supportability and readiness context. |
+| deeper reconciliation / replay / lineage evidence | no strong active direct consumer found in this pass | Contract is published and documented, but live product-flow evidence remains limited. Treat these routes as support-plane ready, not fully downstream-proven product surfaces. |
+
+This is an important distinction: the endpoints are useful and intentionally governed, but the
+consumer proof is still lighter than the core integration-contract families above.
+
+### Upstream Integration Assessment
+
+The support and lineage routes are correctly placed and modeled, but their main risk is overclaiming
+runtime maturity. The current contract now states more explicitly that:
+
+1. reconciliation runs and findings are operator evidence,
+2. replay keys/jobs are operational evidence,
+3. lineage routes are operational lineage evidence,
+4. none of these routes should be treated as business-calculation inputs.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the operator-only boundary clearer and recursive schema-family
+tests protect the evidence bundle models from documentation drift.
+
+Automated proof now includes:
+
+1. reconciliation-evidence schema-family completeness checks;
+2. ingestion-evidence schema-family completeness checks.
+
+### Issue Disposition For This Endpoint Family
+
+No active GitHub issue was found that changes the current contract decision for this family.
+The main follow-up remains product adoption and downstream workflow testing in repos such as
+`lotus-gateway`, `lotus-manage`, and `lotus-report` when they start relying on these deeper support
+surfaces directly.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |

@@ -68,6 +68,23 @@ CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS = {
     "ClassificationTaxonomyResponse",
 }
 
+RECONCILIATION_EVIDENCE_SCHEMA_ROOTS = {
+    "ReconciliationRunListResponse",
+    "ReconciliationFindingListResponse",
+}
+
+INGESTION_EVIDENCE_SCHEMA_ROOTS = {
+    "LineageResponse",
+    "LineageKeyListResponse",
+    "ReprocessingKeyListResponse",
+    "ReprocessingJobListResponse",
+}
+
+RECONCILIATION_SUPPORT_SCHEMA_ROOTS = {
+    "ReconciliationRunListResponse",
+    "ReconciliationFindingListResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -382,6 +399,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
         "get"
     ]
+    assert "not business calculations" in reconciliation_runs["description"]
+    assert "not business calculations" in reconciliation_findings["description"]
+    assert "not direct business-calculation inputs" in reprocessing_keys["description"]
+    assert "not direct business-calculation inputs" in reprocessing_jobs["description"]
+    assert "not a business-calculation contract" in lineage["description"]
+    assert "not business-calculation inputs" in schema["paths"]["/lineage/portfolios/{portfolio_id}/keys"]["get"]["description"]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -1688,6 +1711,34 @@ async def test_openapi_fully_documents_classification_taxonomy_schema_family(asy
 
     _assert_schema_properties_are_documented_and_exampled(
         schema, CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS
+    )
+
+
+async def test_openapi_fully_documents_reconciliation_evidence_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(
+        schema, RECONCILIATION_EVIDENCE_SCHEMA_ROOTS
+    )
+
+
+async def test_openapi_fully_documents_ingestion_evidence_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, INGESTION_EVIDENCE_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_reconciliation_support_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(
+        schema, RECONCILIATION_SUPPORT_SCHEMA_ROOTS
     )
 
 
