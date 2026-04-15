@@ -114,6 +114,7 @@ async def async_test_client():
             },
             "contract_version": "rfc_063_v1",
             "supported_grouping_dimensions": ["asset_class", "sector", "country"],
+            **source_data_product_runtime_metadata(as_of_date=date(2025, 12, 31)),
         }
     )
     mock_service.create_export_job = AsyncMock(
@@ -235,6 +236,12 @@ async def test_portfolio_analytics_reference_success(async_test_client):
     )
     assert response.status_code == 200
     body = response.json()
+    assert body["product_name"] == "PortfolioAnalyticsReference"
+    assert body["product_version"] == "v1"
+    assert body["as_of_date"] == "2025-12-31"
+    assert body["generated_at"].endswith("Z")
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
     assert body["resolved_as_of_date"] == "2025-12-31"
     assert body["reference_state_policy"] == "current_portfolio_reference_state"
     mock_service.get_portfolio_reference.assert_awaited_once()
