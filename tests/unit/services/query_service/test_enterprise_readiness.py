@@ -94,6 +94,12 @@ def test_validate_enterprise_runtime_config_uses_default_when_rotation_not_numer
     assert "secret_rotation_days_out_of_range" not in issues
 
 
+def test_validate_enterprise_runtime_config_reports_invalid_payload_limit(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "0")
+    issues = validate_enterprise_runtime_config()
+    assert "max_write_payload_bytes_out_of_range" in issues
+
+
 def test_validate_enterprise_runtime_config_reports_missing_primary_key(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.delenv("ENTERPRISE_PRIMARY_KEY_ID", raising=False)

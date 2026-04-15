@@ -84,6 +84,10 @@ class EnterpriseReadinessRuntime:
         if rotation_days <= 0 or rotation_days > 90:
             issues.append("secret_rotation_days_out_of_range")
 
+        max_write_payload_bytes = self.env_int("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576)
+        if max_write_payload_bytes <= 0:
+            issues.append("max_write_payload_bytes_out_of_range")
+
         if (
             self.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false")
             or self.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false")

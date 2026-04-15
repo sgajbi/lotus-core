@@ -277,6 +277,12 @@ def test_runtime_config_treats_only_invalid_capability_rules_as_missing() -> Non
     assert "missing_capability_rules" in runtime.validate_enterprise_runtime_config()
 
 
+def test_validate_enterprise_runtime_config_rejects_nonpositive_payload_limit() -> None:
+    runtime = _runtime(max_payload_bytes=0)
+
+    assert "max_write_payload_bytes_out_of_range" in runtime.validate_enterprise_runtime_config()
+
+
 def test_validate_enterprise_runtime_config_checks_primary_key_for_read_authorization() -> None:
     runtime = _runtime(read_authz_enabled=True)
 
