@@ -201,7 +201,8 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     ]
     assert "lotus-performance and lotus-risk" in portfolio_timeseries["description"]
     assert "historical risk attribution" in position_timeseries["description"]
-    assert "lotus-performance and lotus-risk" in portfolio_reference["description"]
+    assert "lotus-performance analytics pipelines" in portfolio_reference["description"]
+    assert "lotus-gateway workspace source context flows" in portfolio_reference["description"]
 
     assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
     assert "/integration/positions/{portfolio_id}/timeseries" not in paths

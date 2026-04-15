@@ -166,8 +166,9 @@ async def get_position_analytics_timeseries(
         "lifecycle context.\n"
         "How: Resolve current canonical portfolio reference fields, bound "
         "performance_end_date by the requested as_of_date, and include lineage metadata.\n"
-        "When: Used by lotus-performance and lotus-risk alongside analytics timeseries endpoints "
-        "to avoid repetitive metadata payload duplication.\n"
+        "When: Used by lotus-performance analytics pipelines and lotus-gateway workspace source "
+        "context flows alongside analytics timeseries endpoints to avoid repetitive metadata "
+        "payload duplication.\n"
         "Contract note: portfolio reference fields are current canonical portfolio state, "
         "not historical effective-dated portfolio snapshots."
     ),
