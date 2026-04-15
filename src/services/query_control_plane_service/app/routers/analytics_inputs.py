@@ -34,6 +34,12 @@ ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = {
     "detail": "Analytics export job JOB-AN-0001 is not complete."
 }
 HTTP_422_UNPROCESSABLE_CONTENT = 422
+ANALYTICS_ERROR_STATUS_MAP = {
+    "RESOURCE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
+    "INVALID_REQUEST": status.HTTP_400_BAD_REQUEST,
+    "INSUFFICIENT_DATA": HTTP_422_UNPROCESSABLE_CONTENT,
+    "UNSUPPORTED_CONFIGURATION": HTTP_422_UNPROCESSABLE_CONTENT,
+}
 
 
 def get_analytics_timeseries_service(
@@ -43,15 +49,11 @@ def get_analytics_timeseries_service(
 
 
 def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
-    if exc.code == "RESOURCE_NOT_FOUND":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if exc.code == "INVALID_REQUEST":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    if exc.code == "INSUFFICIENT_DATA":
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
-    if exc.code == "UNSUPPORTED_CONFIGURATION":
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
-    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    status_code = ANALYTICS_ERROR_STATUS_MAP.get(
+        exc.code,
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+    raise HTTPException(status_code=status_code, detail=str(exc))
 
 
 @router.post(
