@@ -79,6 +79,11 @@ Future runtime slices must:
 5. add migration smoke only when persistence changes,
 6. update downstream consumer tests when authorization or field visibility changes.
 
+`PortfolioAnalyticsReference` follows the analytics-input system-access posture but remains
+`client_confidential` because it exposes portfolio identity and client linkage needed by downstream
+analytics services. It requires tenant scoping, entitlement scoping, system-access audit, and
+client-record retention rather than operator-only evidence handling.
+
 ## Validation
 
 Slice 9 validation is:

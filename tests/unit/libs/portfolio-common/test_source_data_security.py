@@ -2,9 +2,11 @@ import pytest
 from portfolio_common.source_data_products import SOURCE_DATA_PRODUCT_CATALOG
 from portfolio_common.source_data_security import (
     AUDIT_OPERATOR_ACCESS,
+    AUDIT_SYSTEM_ACCESS,
     CLIENT_CONFIDENTIAL,
     OPERATOR_ACCESS,
     RETAIN_FOR_OPERATIONAL_AUDIT,
+    SYSTEM_ACCESS,
     SOURCE_DATA_SECURITY_PROFILES,
     SourceDataSecurityProfile,
     get_source_data_security_profile,
@@ -50,6 +52,16 @@ def test_portfolio_snapshot_profile_is_client_confidential() -> None:
 
     assert profile.sensitivity_classification == CLIENT_CONFIDENTIAL
     assert {"portfolio_id", "client_id"} <= set(profile.pii_fields)
+
+
+def test_portfolio_analytics_reference_profile_is_system_client_confidential() -> None:
+    profile = get_source_data_security_profile("PortfolioAnalyticsReference")
+
+    assert profile.access_classification == SYSTEM_ACCESS
+    assert profile.sensitivity_classification == CLIENT_CONFIDENTIAL
+    assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
+    assert {"portfolio_id", "client_id"} <= set(profile.pii_fields)
+    assert profile.operator_only is False
 
 
 def test_security_profile_validation_rejects_missing_product_profile() -> None:
