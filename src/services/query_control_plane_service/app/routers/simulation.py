@@ -31,6 +31,10 @@ def _raise_simulation_mutation_error(exc: ValueError) -> None:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
+def _raise_simulation_not_found(exc: ValueError) -> None:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
 def get_simulation_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> SimulationService:
@@ -66,7 +70,7 @@ async def create_simulation_session(
     try:
         return await service.create_session(request)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        _raise_simulation_not_found(exc)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -96,7 +100,7 @@ async def get_simulation_session(
     try:
         return await service.get_session(session_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        _raise_simulation_not_found(exc)
 
 
 @router.delete(
@@ -124,7 +128,7 @@ async def close_simulation_session(
     try:
         return await service.close_session(session_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        _raise_simulation_not_found(exc)
 
 
 @router.post(
@@ -171,7 +175,7 @@ async def add_simulation_changes(
         },
         status.HTTP_400_BAD_REQUEST: {
             "description": "Simulation session is inactive or change request is invalid.",
-            "content": {"application/json": {"example": SIMULATION_CHANGE_NOT_FOUND_EXAMPLE}},
+            "content": {"application/json": {"example": SIMULATION_SESSION_INVALID_STATE_EXAMPLE}},
         },
     },
     description="Delete a simulation change from a session.",
@@ -221,7 +225,7 @@ async def get_projected_positions(
     try:
         return await service.get_projected_positions(session_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        _raise_simulation_not_found(exc)
 
 
 @router.get(
@@ -250,4 +254,4 @@ async def get_projected_summary(
     try:
         return await service.get_projected_summary(session_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        _raise_simulation_not_found(exc)
