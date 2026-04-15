@@ -243,6 +243,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "failed_window_hours"
     )
     assert overview_failed_window["description"].startswith("Window in hours")
+    assert "400" not in overview["responses"]
 
     readiness_as_of_date = next(
         parameter for parameter in readiness["parameters"] if parameter["name"] == "as_of_date"

@@ -74,12 +74,6 @@ def get_operations_service(
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
         },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
-            "content": {
-                "application/json": {"example": invalid_date_response_example("business_date")}
-            },
-        },
     },
     summary="Get operational support overview for a portfolio",
     description=(

@@ -567,7 +567,9 @@ tests protect the evidence bundle models from documentation drift.
 
 Malformed operator date filters are now also contractually separated from missing-portfolio
 conditions: support routes that parse caller-supplied dates return `400 Bad Request` with an
-explicit field-level message instead of collapsing malformed dates into `404 Not Found`.
+explicit field-level message instead of collapsing malformed dates into `404 Not Found`. Support
+overview is intentionally excluded from that list because it does not accept a caller-supplied
+date filter.
 
 Automated proof now includes:
 
