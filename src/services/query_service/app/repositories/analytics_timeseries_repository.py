@@ -76,6 +76,13 @@ class AnalyticsTimeseriesRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_latest_position_timeseries_date(self, portfolio_id: str) -> date | None:
+        stmt = select(func.max(PositionTimeseries.date)).where(
+            PositionTimeseries.portfolio_id == portfolio_id
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_business_dates(
         self,
         *,

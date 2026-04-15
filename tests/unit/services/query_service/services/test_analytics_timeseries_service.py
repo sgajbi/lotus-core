@@ -307,6 +307,59 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
 
 
 @pytest.mark.asyncio
+async def test_get_portfolio_timeseries_uses_position_horizon_when_portfolio_rows_lag() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P_STAGE",
+                base_currency="USD",
+                open_date=date(2026, 3, 1),
+                close_date=None,
+            )
+        ),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 3, 16)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 3, 20)),
+        list_business_dates=AsyncMock(
+            return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="CASH_USD",
+                    valuation_date=date(2026, 3, day),
+                    bod_market_value=Decimal("0") if day == 16 else Decimal("10000"),
+                    eod_market_value=Decimal("10000"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=0,
+                    position_currency="USD",
+                    asset_class="cash",
+                )
+                for day in (16, 17, 18, 19, 20)
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    response = await service.get_portfolio_timeseries(
+        portfolio_id="P_STAGE",
+        request=PortfolioAnalyticsTimeseriesRequest(
+            as_of_date="2026-03-20",
+            window=AnalyticsWindow(start_date="2026-03-16", end_date="2026-03-20"),
+            reporting_currency="USD",
+        ),
+    )
+
+    assert response.performance_end_date == date(2026, 3, 20)
+    assert [observation.valuation_date for observation in response.observations] == [
+        date(2026, 3, day) for day in (16, 17, 18, 19, 20)
+    ]
+
+
+@pytest.mark.asyncio
 async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_next_page_token() -> (
     None
 ):
@@ -1141,6 +1194,34 @@ async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date
         request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-06-30"),
     )
     assert response.performance_end_date == date(2025, 6, 30)
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_reference_uses_position_timeseries_horizon_when_portfolio_rows_lag() -> (
+    None
+):
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+                client_id="CIF_1",
+                booking_center_code="SGPB",
+                portfolio_type="advisory",
+                objective="Growth",
+            )
+        ),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 3, 16)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 3, 20)),
+    )
+    response = await service.get_portfolio_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-03-20"),
+    )
+    assert response.performance_end_date == date(2025, 3, 20)
 
 
 @pytest.mark.asyncio
