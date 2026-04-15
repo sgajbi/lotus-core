@@ -1,3 +1,4 @@
+import gzip
 from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -172,6 +173,9 @@ async def async_test_client():
             "data": [],
         }
     )
+    mock_service.get_export_result_ndjson = AsyncMock(
+        return_value=(gzip.compress(b'{"row":1}\n'), "application/x-ndjson", "gzip")
+    )
 
     app.dependency_overrides[get_analytics_timeseries_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app)
@@ -339,6 +343,57 @@ async def test_create_analytics_export_job_success(async_test_client):
     mock_service.create_export_job.assert_awaited_once()
 
 
+async def test_create_analytics_export_job_invalid_request_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.create_export_job = AsyncMock(
+        side_effect=AnalyticsInputError(
+            "INVALID_REQUEST", "Exactly one of window or period must be provided."
+        )
+    )
+
+    response = await client.post(
+        "/integration/exports/analytics-timeseries/jobs",
+        json={
+            "dataset_type": "portfolio_timeseries",
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "portfolio_timeseries_request": {
+                "as_of_date": "2025-12-31",
+                "period": "one_month",
+            },
+            "result_format": "json",
+            "compression": "none",
+            "consumer_system": "lotus-performance",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Exactly one of window or period must be provided."
+
+
+async def test_get_analytics_export_job_success(async_test_client):
+    client, mock_service = async_test_client
+    response = await client.get("/integration/exports/analytics-timeseries/jobs/aexp_1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job_id"] == "aexp_1"
+    assert body["disposition"] == "status_lookup"
+    assert body["result_available"] is True
+    mock_service.get_export_job.assert_awaited_once_with("aexp_1")
+
+
+async def test_get_analytics_export_job_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_export_job = AsyncMock(
+        side_effect=AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
+    )
+
+    response = await client.get("/integration/exports/analytics-timeseries/jobs/aexp_404")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Export job not found."
+
+
 async def test_get_analytics_export_job_result_json_success(async_test_client):
     client, _mock_service = async_test_client
     response = await client.get(
@@ -347,3 +402,35 @@ async def test_get_analytics_export_job_result_json_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["job_id"] == "aexp_1"
     assert response.json()["result_row_count"] == 1
+
+
+async def test_get_analytics_export_job_result_ndjson_gzip_success(async_test_client):
+    client, mock_service = async_test_client
+    response = await client.get(
+        "/integration/exports/analytics-timeseries/jobs/aexp_1/result?result_format=ndjson&compression=gzip"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.content == b'{"row":1}\n'
+    mock_service.get_export_result_ndjson.assert_awaited_once_with(
+        "aexp_1",
+        compression="gzip",
+    )
+
+
+async def test_get_analytics_export_job_result_incomplete_maps_to_422(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_export_result_json = AsyncMock(
+        side_effect=AnalyticsInputError(
+            "INSUFFICIENT_DATA", "Export job JOB-AN-0001 is not complete."
+        )
+    )
+
+    response = await client.get(
+        "/integration/exports/analytics-timeseries/jobs/aexp_1/result?result_format=json&compression=none"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Export job JOB-AN-0001 is not complete."

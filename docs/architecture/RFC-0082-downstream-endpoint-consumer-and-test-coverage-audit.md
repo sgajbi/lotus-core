@@ -41,6 +41,9 @@ This certification pass covers the current strategic analytics-input contracts:
 1. `POST /integration/portfolios/{portfolio_id}/analytics/reference`
 2. `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries`
 3. `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries`
+4. `POST /integration/exports/analytics-timeseries/jobs`
+5. `GET /integration/exports/analytics-timeseries/jobs/{job_id}`
+6. `GET /integration/exports/analytics-timeseries/jobs/{job_id}/result`
 
 ### Route Contract Decision
 
@@ -60,6 +63,7 @@ expected in earlier probes are not the governed integration contract:
 | `POST /integration/portfolios/{portfolio_id}/analytics/reference` | `lotus-performance`, `lotus-gateway` | Correct. `lotus-performance` uses the route for stateful portfolio lifecycle/reference metadata. `lotus-gateway` uses it for workspace source context and does not attempt to compute analytics itself. |
 | `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` | `lotus-performance` | Correct. This is the canonical upstream source for stateful portfolio-level return inputs. No gateway direct use was found, which is appropriate. |
 | `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries` | `lotus-performance`, `lotus-risk` | Correct. `lotus-performance` uses it for contribution/attribution-style sourcing. `lotus-risk` uses it for historical attribution exposure history. |
+| analytics export create/status/result | `lotus-performance` | Correct. These adjunct routes support large-window extraction and batch retrieval workflows when direct paged polling is not the right fit. |
 
 ### Upstream Integration Assessment
 
@@ -70,6 +74,7 @@ The analytics-input family is on the correct serving plane for upstream callers:
 3. explicit request lineage through `consumer_system`
 4. deterministic paging via `page.page_token` and `request_scope_fingerprint`
 5. reproducible currency scope via `reporting_currency`
+6. durable export lifecycle and result retrieval for large-window downstream extraction
 
 For this family, the upstream contract is already aligned with the architecture target in
 RFC-0082/RFC-0083. The remaining risk is not route placement; it is keeping economic correctness
@@ -93,6 +98,10 @@ The HTTP dependency lane now also proves route-level error semantics across the 
 analytics-input family: invalid analytics request shape maps to `400`, missing portfolio reference
 maps to `404`, and insufficient source data maps to `422`, so downstream consumers do not need to
 infer those statuses only from OpenAPI examples.
+
+The same dependency lane now covers the adjunct analytics export contract family, including create,
+status lookup, JSON result retrieval, NDJSON result retrieval with gzip transport, `404` for
+missing jobs, and `422` for incomplete export payload state.
 
 ### Issue Disposition For This Endpoint Family
 
