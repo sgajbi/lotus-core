@@ -176,13 +176,13 @@ market/reference response envelopes:
 16. `CoverageResponse`,
 17. `ClassificationTaxonomyResponse`.
 
-The binding populates `generated_at`, `as_of_date`, `restatement_version`, and `correlation_id`
-from runtime request context and deterministic defaults. It leaves
-`tenant_id`, `latest_evidence_timestamp`, `source_batch_fingerprint`, `snapshot_id`, and
-`policy_version` as truthful nulls until tenant enforcement, evidence linking, snapshot identity,
-and policy versioning are wired for these products. `reconciliation_status` and
-`data_quality_status` remain `UNKNOWN` until the reconciliation and data-quality evidence models are
-joined into operational product responses.
+The initial binding populated `generated_at`, `as_of_date`, `restatement_version`, and
+`correlation_id` from runtime request context and deterministic defaults. It left `tenant_id`,
+`latest_evidence_timestamp`, `source_batch_fingerprint`, `snapshot_id`, `policy_version`,
+`reconciliation_status`, and `data_quality_status` as truthful null or `UNKNOWN` defaults until
+later runtime slices could wire product-specific evidence without overclaiming lineage. The sections
+below record the fields that are now derived from durable runtime evidence and the fields that
+remain unresolved.
 
 `HoldingsAsOf` portfolio-position responses additionally derive `data_quality_status` from returned
 position evidence. Fully snapshot-backed current holdings are `COMPLETE`; current holdings that
@@ -210,11 +210,14 @@ integration governance context because those values already exist in the core sn
 path. Snapshot-backed baseline responses populate `freshness.snapshot_timestamp` and top-level
 `latest_evidence_timestamp` from durable position snapshot and position-state timestamps. Historical
 fallback baselines leave those fields null because they are not resolved snapshot evidence. The
-response leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs
-for deterministic snapshot identity. The core snapshot freshness block populates
-`freshness.snapshot_epoch` only when the returned snapshot-backed baseline rows resolve to one
-unambiguous position epoch; mixed per-security epochs remain null rather than claiming a single
-portfolio-wide epoch.
+response derives `data_quality_status` from baseline evidence: current snapshot-backed baselines with
+durable timestamp and one unambiguous position epoch are `COMPLETE`, historical fallback baselines
+are `PARTIAL`, snapshot-backed baselines missing complete epoch or timestamp evidence are `PARTIAL`,
+and empty baselines remain `UNKNOWN`. The response leaves `snapshot_id` null until the
+reconstruction scope can supply complete epoch inputs for deterministic snapshot identity. The core
+snapshot freshness block populates `freshness.snapshot_epoch` only when the returned
+snapshot-backed baseline rows resolve to one unambiguous position epoch; mixed per-security epochs
+remain null rather than claiming a single portfolio-wide epoch.
 
 The analytics-input timeseries products reuse their existing `lineage.generated_at` timestamp for
 the top-level `generated_at` supportability field so lineage and envelope metadata stay internally

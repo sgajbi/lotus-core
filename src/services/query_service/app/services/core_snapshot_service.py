@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import Depends
 from portfolio_common.db import get_async_db_session
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.core_snapshot_dto import (
@@ -83,6 +84,24 @@ class CoreSnapshotService:
         return md5(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+
+    @staticmethod
+    def _snapshot_data_quality_status(
+        *,
+        freshness: CoreSnapshotFreshnessMetadata,
+        baseline_count: int,
+    ) -> str:
+        if baseline_count <= 0:
+            return UNKNOWN
+        if freshness.freshness_status == "HISTORICAL_FALLBACK":
+            return PARTIAL
+        if (
+            freshness.freshness_status == "CURRENT_SNAPSHOT"
+            and freshness.snapshot_timestamp is not None
+            and freshness.snapshot_epoch is not None
+        ):
+            return COMPLETE
+        return PARTIAL
 
     async def get_core_snapshot(
         self,
@@ -291,6 +310,10 @@ class CoreSnapshotService:
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 tenant_id=resolved_tenant_id,
+                data_quality_status=self._snapshot_data_quality_status(
+                    freshness=freshness_meta,
+                    baseline_count=len(baseline_positions),
+                ),
                 latest_evidence_timestamp=freshness_meta.snapshot_timestamp,
                 policy_version=policy_provenance.policy_version,
             ),

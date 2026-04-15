@@ -4,8 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 
 from src.services.query_service.app.dtos.core_snapshot_dto import (
+    CoreSnapshotFreshnessMetadata,
     CoreSnapshotMode,
     CoreSnapshotRequest,
     CoreSnapshotSection,
@@ -174,12 +176,61 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.tenant_id == "default"
     assert response.restatement_version == "current"
     assert response.reconciliation_status == "UNKNOWN"
-    assert response.data_quality_status == "UNKNOWN"
+    assert response.data_quality_status == COMPLETE
     assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
     assert response.snapshot_id is None
     assert response.policy_version == "snapshot.policy.inline.default"
     assert response.correlation_id is None
+
+
+async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> None:
+    assert (
+        CoreSnapshotService._snapshot_data_quality_status(
+            freshness=CoreSnapshotFreshnessMetadata(
+                freshness_status="CURRENT_SNAPSHOT",
+                baseline_source="position_state",
+                snapshot_timestamp=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
+                snapshot_epoch=7,
+            ),
+            baseline_count=1,
+        )
+        == COMPLETE
+    )
+    assert (
+        CoreSnapshotService._snapshot_data_quality_status(
+            freshness=CoreSnapshotFreshnessMetadata(
+                freshness_status="CURRENT_SNAPSHOT",
+                baseline_source="position_state",
+                snapshot_timestamp=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
+                snapshot_epoch=None,
+            ),
+            baseline_count=2,
+        )
+        == PARTIAL
+    )
+    assert (
+        CoreSnapshotService._snapshot_data_quality_status(
+            freshness=CoreSnapshotFreshnessMetadata(
+                freshness_status="HISTORICAL_FALLBACK",
+                baseline_source="position_history",
+                fallback_reason="NO_CURRENT_POSITION_STATE_ROWS",
+            ),
+            baseline_count=1,
+        )
+        == PARTIAL
+    )
+    assert (
+        CoreSnapshotService._snapshot_data_quality_status(
+            freshness=CoreSnapshotFreshnessMetadata(
+                freshness_status="HISTORICAL_FALLBACK",
+                baseline_source="position_history",
+                fallback_reason="NO_CURRENT_POSITION_STATE_ROWS",
+            ),
+            baseline_count=0,
+        )
+        == UNKNOWN
+    )
 
 
 async def test_get_instrument_enrichment_bulk_preserves_order_and_unknowns(mock_dependencies):
@@ -436,6 +487,35 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
     assert source.freshness_status == "HISTORICAL_FALLBACK"
     assert source.snapshot_timestamp is None
     assert source.fallback_reason == "NO_CURRENT_POSITION_STATE_ROWS"
+
+
+async def test_core_snapshot_history_fallback_classifies_data_quality_partial(mock_dependencies):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = []
+    position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = [
+        (
+            SimpleNamespace(
+                security_id="SEC_BOND_US",
+                quantity=Decimal("3"),
+                cost_basis=Decimal("45"),
+                cost_basis_local=Decimal("45"),
+            ),
+            _instrument("SEC_BOND_US", "USD", "BOND"),
+            SimpleNamespace(status="CURRENT"),
+        )
+    ]
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+    )
+
+    response = await service.get_core_snapshot("PORT_001", request)
+
+    assert response.freshness.freshness_status == "HISTORICAL_FALLBACK"
+    assert response.data_quality_status == PARTIAL
+    assert response.latest_evidence_timestamp is None
 
 
 async def test_latest_snapshot_timestamp_uses_latest_row_or_state_timestamp():
