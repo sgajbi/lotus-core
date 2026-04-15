@@ -73,6 +73,8 @@ EXPECTED_SLICE_ARTIFACTS = {
         "docs/architecture/RFC-0083-eventing-supportability-target-model.md",
         "src/libs/portfolio-common/portfolio_common/event_supportability.py",
         "tests/unit/libs/portfolio-common/test_event_supportability.py",
+        "scripts/event_runtime_contract_guard.py",
+        "tests/unit/scripts/test_event_runtime_contract_guard.py",
     },
     11: {
         "docs/architecture/RFC-0083-production-readiness-closure.md",

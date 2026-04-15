@@ -5,12 +5,14 @@ from portfolio_common.event_supportability import (
     CONTROL_EXECUTION,
     CONTROL_PLANE_AND_POLICY,
     DATA_QUALITY_COVERAGE_REPORT,
+    DOMAIN_STATE_EVENT,
     EVENT_FAMILY_DEFINITIONS,
     INGESTION_EVIDENCE_BUNDLE,
     RECONCILIATION_CONTROL_EVENT,
     RECONCILIATION_EVIDENCE_BUNDLE,
     SOURCE_INGESTION_EVENT,
     SUPPORTABILITY_SURFACE_DEFINITIONS,
+    SUPPORTABILITY_RECOVERY_EVENT,
     EventFamilyDefinition,
     SupportabilitySurfaceDefinition,
     get_event_family_definition,
@@ -81,6 +83,43 @@ def test_get_event_family_definition_is_case_insensitive() -> None:
 
     assert definition.event_type == "FinancialReconciliationCompleted"
     assert definition.family == RECONCILIATION_CONTROL_EVENT
+
+
+def test_runtime_outbox_events_are_cataloged_with_current_topics() -> None:
+    expected_topics = {
+        "RawTransactionPersisted": "transactions.persisted",
+        "ProcessedTransactionPersisted": "transactions.cost.processed",
+        "InstrumentUpserted": "instruments.received",
+        "MarketPricePersisted": "market_prices.persisted",
+        "DailyPositionSnapshotPersisted": "valuation.snapshot.persisted",
+        "CashflowCalculated": "cashflows.calculated",
+    }
+
+    for event_type, topic in expected_topics.items():
+        definition = get_event_family_definition(event_type)
+        assert definition.family == DOMAIN_STATE_EVENT
+        assert definition.topic == topic
+
+
+def test_runtime_pipeline_events_are_cataloged_with_current_topics() -> None:
+    expected_topics = {
+        "TransactionProcessingCompleted": "transaction_processing.ready",
+        "PortfolioDayReadyForValuation": "portfolio_security_day.valuation.ready",
+        "ValuationDayCompleted": "portfolio_security_day.valuation.completed",
+        "PositionTimeseriesDayCompleted": ("portfolio_security_day.position_timeseries.completed"),
+        "PortfolioAggregationDayCompleted": "portfolio_day.aggregation.completed",
+    }
+
+    for event_type, topic in expected_topics.items():
+        assert get_event_family_definition(event_type).topic == topic
+
+
+def test_replay_event_is_cataloged_as_supportability_recovery() -> None:
+    definition = get_event_family_definition("ReprocessTransactionReplay")
+
+    assert definition.family == SUPPORTABILITY_RECOVERY_EVENT
+    assert definition.topic == "transactions.cost.processed"
+    assert INGESTION_EVIDENCE_BUNDLE in definition.supportability_evidence
 
 
 def test_validation_rejects_event_without_schema_versioning() -> None:

@@ -482,12 +482,15 @@ Slice 10 eventing and supportability target modeling is recorded in:
 - `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
 - `src/libs/portfolio-common/portfolio_common/event_supportability.py`
 - `tests/unit/libs/portfolio-common/test_event_supportability.py`
+- `scripts/event_runtime_contract_guard.py`
+- `tests/unit/scripts/test_event_runtime_contract_guard.py`
 
 The model defines event family governance, event schema-governance requirements, supportability
 surface posture, operator-only diagnostics, and evidence bundle linkage. The helper validates event
 family definitions, schema model bindings, required idempotency/correlation/schema version posture,
-and operator supportability surfaces. This slice does not change runtime event emission, Kafka topics,
-schemas, generated OpenAPI, persistence, or downstream contract shape.
+operator supportability surfaces, and actual outbox `event_type`/topic alignment against runtime
+emissions. This slice does not change runtime event emission behavior, Kafka topics, schemas, generated
+OpenAPI, persistence, or downstream contract shape.
 
 ## Slice 11 Completion Note
 

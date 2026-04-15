@@ -26,7 +26,7 @@ slice:
 8. market/reference quality model,
 9. endpoint consolidation disposition,
 10. security, tenancy, audit, and lifecycle profiles,
-11. eventing and supportability catalog,
+11. eventing and supportability catalog with runtime outbox event/type topic alignment guard,
 12. production-readiness closure ledger.
 
 The closure guard validates that every slice is present in the ledger, every required slice artifact

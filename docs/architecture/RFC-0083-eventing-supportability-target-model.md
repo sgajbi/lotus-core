@@ -4,13 +4,17 @@ This document is the RFC-0083 Slice 10 target model for event family governance,
 observability posture, supportability APIs, operator diagnostics, and supportability evidence bundles
 in `lotus-core`.
 
-It does not change runtime event emission, Kafka topics, persistence, REST APIs, OpenAPI output, or
-downstream contracts. It defines the governed catalog that later runtime and contract slices must use.
+It does not change runtime event emission behavior, Kafka topics, persistence, REST APIs, OpenAPI
+output, or downstream contracts. It defines the governed catalog that later runtime and contract slices
+must use, and adds runtime contract proof that current outbox `event_type` and topic pairs remain
+aligned with that catalog.
 
 The executable helper is:
 
 1. `src/libs/portfolio-common/portfolio_common/event_supportability.py`
 2. `tests/unit/libs/portfolio-common/test_event_supportability.py`
+3. `scripts/event_runtime_contract_guard.py`
+4. `tests/unit/scripts/test_event_runtime_contract_guard.py`
 
 ## Target Principle
 
@@ -64,6 +68,13 @@ idempotency, required correlation, required schema versioning, evidence bundle n
 presence, source-data product names against the governed product catalog, and schema-model binding
 against existing event model names when supplied by tests.
 
+The runtime contract guard parses source files for literal `OutboxRepository.create_outbox_event(...)`
+calls and outbox-details dictionaries. Every discovered runtime `event_type` and topic pair must exist
+in the event supportability catalog with the same topic. This catches accidental Kafka topic drift,
+renamed outbox event types, or new emissions that bypass governance. The guard intentionally does not
+claim full payload-envelope proof; schema-version and correlation payload behavior still require
+runtime validation when event payloads change.
+
 ## Supportability Surfaces
 
 Supportability surfaces are operator/control-plane surfaces, not business read products.
@@ -90,7 +101,7 @@ Future runtime slices must:
 1. add explicit schema-version fields or envelope metadata where current event payloads do not carry
    them,
 2. make correlation and idempotency visible in emitted events and replay evidence,
-3. align Kafka topic names and outbox `event_type` values with the governed catalog,
+3. keep Kafka topic names and outbox `event_type` values aligned with the guarded catalog,
 4. emit or persist supportability recovery events where replay, DLQ, repair, or duplicate-blocking
    behavior changes,
 5. expose operator diagnostics through supportability APIs rather than private database inspection,
@@ -100,8 +111,9 @@ Future runtime slices must:
 
 Slice 10 validation is:
 
-1. `python -m pytest tests/unit/libs/portfolio-common/test_event_supportability.py -q`,
-2. `python -m ruff check src/libs/portfolio-common/portfolio_common/event_supportability.py tests/unit/libs/portfolio-common/test_event_supportability.py --ignore E501,I001`,
-3. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/event_supportability.py tests/unit/libs/portfolio-common/test_event_supportability.py`,
-4. `git diff --check`,
-5. `make lint`.
+1. `python scripts/event_runtime_contract_guard.py`,
+2. `python -m pytest tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py -q`,
+3. `python -m ruff check src/libs/portfolio-common/portfolio_common/event_supportability.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py --ignore E501,I001`,
+4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/event_supportability.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py`,
+5. `git diff --check`,
+6. `make lint`.
