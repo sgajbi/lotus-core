@@ -1545,7 +1545,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert market_series_param["description"] == (
         "Benchmark identifier for the requested market series input contract."
     )
-    assert "lotus-performance and lotus-risk" in benchmark_market_series["description"]
+    assert (
+        "lotus-performance and other downstream benchmark sourcing workflows"
+        in benchmark_market_series["description"]
+    )
     assert "benchmark-to-target FX context semantics" in benchmark_market_series["description"]
     assert "lotus-performance owns benchmark math" in benchmark_market_series["description"]
     assert "lotus-performance and lotus-risk" in risk_free_series["description"]
@@ -1586,18 +1589,20 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert "broad-market sector labels" in index_catalog_route["description"]
     assert "prefer `index_ids` to avoid full-catalog scans" in index_catalog_route["description"]
     assert (
-        "lotus-performance and lotus-risk analytics pipelines"
+        "lotus-performance and other downstream benchmark sourcing workflows"
         in (index_price_series["description"])
     )
     assert (
         "not a normalized benchmark-engine output contract" in (index_price_series["description"])
     )
-    assert "lotus-performance and lotus-risk" in index_return_series["description"]
+    assert "lotus-performance and other downstream workflows" in index_return_series["description"]
     assert (
         "not a substitute for benchmark composition plus market-series inputs"
         in (index_return_series["description"])
     )
-    assert "lotus-performance and lotus-risk" in benchmark_return_series["description"]
+    assert (
+        "lotus-performance and other downstream workflows" in benchmark_return_series["description"]
+    )
     assert "not the default benchmark-math source" in benchmark_return_series["description"]
 
     coverage_param = next(
