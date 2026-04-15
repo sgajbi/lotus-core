@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Any
 
@@ -29,11 +28,7 @@ def _env_enabled(name: str, default: str = "true") -> bool:
 
 def _load_json_map(name: str) -> dict[str, Any]:
     if name not in {"ENTERPRISE_FEATURE_FLAGS_JSON", "ENTERPRISE_CAPABILITY_RULES_JSON"}:
-        try:
-            parsed = json.loads("{}")
-        except json.JSONDecodeError:
-            return {}
-        return parsed if isinstance(parsed, dict) else {}
+        return {}
     return _runtime.load_json_map(name)
 
 
