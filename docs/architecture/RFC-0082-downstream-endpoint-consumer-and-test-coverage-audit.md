@@ -63,7 +63,7 @@ expected in earlier probes are not the governed integration contract:
 | `POST /integration/portfolios/{portfolio_id}/analytics/reference` | `lotus-performance`, `lotus-gateway` | Correct. `lotus-performance` uses the route for stateful portfolio lifecycle/reference metadata. `lotus-gateway` uses it for workspace source context and does not attempt to compute analytics itself. |
 | `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` | `lotus-performance` | Correct. This is the canonical upstream source for stateful portfolio-level return inputs. No gateway direct use was found, which is appropriate. |
 | `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries` | `lotus-performance`, `lotus-risk` | Correct. `lotus-performance` uses it for contribution/attribution-style sourcing. `lotus-risk` uses it for historical attribution exposure history. |
-| analytics export create/status/result | `lotus-performance` | Correct. These adjunct routes support large-window extraction and batch retrieval workflows when direct paged polling is not the right fit. |
+| analytics export create/status/result | `lotus-performance` | Correct. These adjunct routes support large-window extraction and batch retrieval workflows when direct paged polling is not the right fit. Swagger now makes the create/status/result split explicit so downstreams can distinguish interactive page traversal from durable export-job hand-off. |
 
 ### Upstream Integration Assessment
 

@@ -248,7 +248,9 @@ async def create_analytics_export_job(
         "How: Reads persisted job metadata and terminal status from canonical "
         "query-service storage, including result availability and deterministic "
         "result retrieval path.\n"
-        "When: Used by polling clients before attempting result retrieval."
+        "When: Used by polling clients before attempting result retrieval, especially for "
+        "large-window extraction flows where direct page-by-page replay would be slower or "
+        "operationally noisier than a durable export hand-off."
     ),
 )
 async def get_analytics_export_job(
@@ -286,7 +288,8 @@ async def get_analytics_export_job(
         "What: Retrieve finalized export payload for a completed analytics export job.\n"
         "How: Returns JSON envelope or NDJSON stream with optional gzip encoding and "
         "includes deterministic request/result provenance metadata.\n"
-        "When: Used by lotus-performance batch pipelines after job completion."
+        "When: Used by lotus-performance batch pipelines and similar downstream bulk retrieval "
+        "flows after job completion instead of repeatedly replaying large paged windows."
     ),
 )
 async def get_analytics_export_job_result(

@@ -1202,6 +1202,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     position_inputs = schema["paths"][
         "/integration/portfolios/{portfolio_id}/analytics/position-timeseries"
     ]["post"]
+    export_status = schema["paths"]["/integration/exports/analytics-timeseries/jobs/{job_id}"][
+        "get"
+    ]
     export_result = schema["paths"][
         "/integration/exports/analytics-timeseries/jobs/{job_id}/result"
     ]["get"]
@@ -1231,10 +1234,15 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert position_product["route_family"] == "Analytics Input"
     assert "lotus-risk" in position_product["consumers"]
 
+    assert "large-window extraction flows" in export_status["description"]
+    assert "durable export hand-off" in export_status["description"]
+
     job_id_param = next(
         parameter for parameter in export_result["parameters"] if parameter["name"] == "job_id"
     )
     assert job_id_param["description"] == "Durable analytics export job identifier."
+    assert "lotus-performance batch pipelines" in export_result["description"]
+    assert "instead of repeatedly replaying large paged windows" in export_result["description"]
 
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
