@@ -1583,6 +1583,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Prefer the targeted routes once a concrete benchmark identifier is known."
         in (benchmark_catalog_route["description"])
     )
+    assert (
+        "Used directly by lotus-performance benchmark exposure and attribution sourcing flows"
+        in (index_catalog_route["description"])
+    )
     assert "governed classification labels" in index_catalog_route["description"]
     assert "broad-market sector labels" in index_catalog_route["description"]
     assert "prefer `index_ids` to avoid full-catalog scans" in index_catalog_route["description"]
