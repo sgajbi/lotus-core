@@ -170,6 +170,76 @@ No downstream migration issue is required from this slice. `lotus-performance` a
 are both calling the strategic route, and no duplicate/stale benchmark-assignment consumer path was
 found during review.
 
+## Certified Endpoint Slice: Benchmark Source Family
+
+This certification pass covers:
+
+1. `POST /integration/benchmarks/{benchmark_id}/composition-window`
+2. `POST /integration/benchmarks/{benchmark_id}/market-series`
+
+### Route Contract Decision
+
+These are the correct benchmark-source contracts for downstream benchmark-aware analytics.
+
+The contract split is intentional:
+
+1. `composition-window` is the strategic source for cross-rebalance benchmark composition history;
+2. `market-series` is the strategic source for raw component market series plus optional
+   benchmark-to-target FX context;
+3. downstream benchmark calculation still belongs to `lotus-performance`, not `lotus-core`;
+4. single-date benchmark definition reads are useful reference context, but are not a substitute
+   for long-window benchmark calculation across composition changes.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/benchmarks/{benchmark_id}/composition-window` | `lotus-performance` | Correct. `lotus-performance` uses the route in its stateful benchmark input path for rebalance-aware benchmark sourcing. |
+| `POST /integration/benchmarks/{benchmark_id}/market-series` | `lotus-performance` | Correct. `lotus-performance` uses the route for component weights, raw component series, and FX-context-aware benchmark exposure/build flows. |
+
+`lotus-risk` is catalog-intended for this family, but current live risk architecture deliberately
+consumes performance-aligned benchmark exposure context rather than orchestrating core benchmark
+market-series directly.
+
+### Upstream Integration Assessment
+
+The current benchmark-source family is aligned with the intended boundary:
+
+1. `composition-window` returns effective-dated segments and avoids daily-expanded duplication;
+2. `market-series` returns native component series plus explicit normalization metadata;
+3. deterministic paging exists for large component universes via `ReferencePageRequest` and
+   `ReferencePageMetadata`;
+4. current `fx_rate` semantics are benchmark-currency-to-target-currency context only and should
+   not be mistaken for component-to-benchmark normalization.
+
+That last point is important enough to make explicit: the contract is strong and truthful today,
+but it is not a fully normalized benchmark-engine output contract. That remains a valid future
+enhancement area under the broader benchmark-source program.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the following explicit:
+
+1. `composition-window` is the strategic cross-rebalance source;
+2. `market-series` exposes native component series, not benchmark-currency-normalized component
+   outputs;
+3. benchmark math ownership remains with `lotus-performance`;
+4. deterministic paging, request fingerprints, and normalization metadata are first-class parts of
+   the public schema.
+
+Automated proof now includes a benchmark-source schema-family completeness assertion in
+`tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `#246` broader benchmark source hardening | Still valid as the umbrella benchmark-source program. This slice closes documentation/truth gaps but does not claim the entire benchmark-source roadmap is finished. | Keep open. |
+| `#237` grouped benchmark analytics contract | Still valid. Current consumers still need some client-side grouping work on top of the lower-level source contracts. | Keep open. |
+
+No new downstream migration issue is required from this slice. The active downstream consumer is
+already using the strategic routes rather than a stale or duplicate benchmark path.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |

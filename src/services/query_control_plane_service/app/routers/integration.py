@@ -334,7 +334,8 @@ async def resolve_portfolio_benchmark_assignment(
         "How: Resolves overlapping benchmark definition and composition records with deterministic "
         "ordering and without daily-expanding weights.\n"
         "When: Used by lotus-performance and other downstream consumers to calculate benchmark "
-        "returns across rebalance windows."
+        "returns across rebalance windows. This is the strategic cross-rebalance source contract; "
+        "single-date benchmark definition reads are not a substitute for long-window benchmark math."
     ),
     openapi_extra=source_data_product_openapi_extra("BenchmarkConstituentWindow"),
 )
@@ -464,7 +465,9 @@ async def fetch_index_catalog(
         "How: Resolves components and returns aligned raw series honoring requested "
         "series_fields, deterministic paging, and benchmark-to-target FX context semantics.\n"
         "When: Used by lotus-performance and lotus-risk for benchmark analytics and replay-safe "
-        "portfolio or risk attribution calculations."
+        "portfolio or risk attribution calculations. The response publishes native component "
+        "series plus optional benchmark-to-target FX context; lotus-performance owns benchmark "
+        "math and any benchmark-currency normalization of component series."
     ),
     openapi_extra=source_data_product_openapi_extra("MarketDataWindow"),
 )

@@ -45,6 +45,15 @@ BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS = {
     "IntegrationPolicyContext",
 }
 
+BENCHMARK_SOURCE_SCHEMA_ROOTS = {
+    "BenchmarkCompositionWindowRequest",
+    "BenchmarkCompositionWindowResponse",
+    "BenchmarkMarketSeriesRequest",
+    "BenchmarkMarketSeriesResponse",
+    "ReferencePageRequest",
+    "ReferencePageMetadata",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1407,6 +1416,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_id["description"] == (
         "Benchmark identifier for the requested composition window contract."
     )
+    assert "without daily-expanding weights" in benchmark_composition_window["description"]
+    assert "calculate benchmark returns across rebalance windows" in benchmark_composition_window[
+        "description"
+    ]
 
     composition_not_found = benchmark_composition_window["responses"]["404"]["content"][
         "application/json"
@@ -1440,6 +1453,8 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Benchmark identifier for the requested market series input contract."
     )
     assert "lotus-performance and lotus-risk" in benchmark_market_series["description"]
+    assert "benchmark-to-target FX context semantics" in benchmark_market_series["description"]
+    assert "lotus-performance owns benchmark math" in benchmark_market_series["description"]
     assert "lotus-performance and lotus-risk" in risk_free_series["description"]
     assert (
         "lotus-performance, lotus-risk, lotus-gateway, and lotus-advise"
@@ -1625,6 +1640,14 @@ async def test_openapi_fully_documents_benchmark_assignment_schema_family(async_
     schema = response.json()
 
     _assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_benchmark_source_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_SOURCE_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_capabilities_query_parameters(async_test_client):
