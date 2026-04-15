@@ -396,10 +396,11 @@ async def fetch_benchmark_composition_window(
     description=(
         "What: Return effective benchmark definition for an as-of date.\n"
         "How: Resolves benchmark master fields and composition records with effective dating.\n"
-        "When: Used by lotus-performance and other downstream consumers that need point-in-time "
-        "benchmark reference context before targeted composition-window, market-series, or "
-        "benchmark-aware reporting workflows. This is point-in-time reference context, not the "
-        "strategic cross-window benchmark calculation contract."
+        "When: Used directly by lotus-performance stateful benchmark sourcing and other "
+        "downstream consumers that need point-in-time benchmark reference context before "
+        "targeted composition-window, market-series, or benchmark-aware reporting workflows. "
+        "This is point-in-time reference context, not the strategic cross-window benchmark "
+        "calculation contract."
     ),
 )
 async def fetch_benchmark_definition(
@@ -526,9 +527,10 @@ async def fetch_benchmark_market_series(
     description=(
         "What: Return raw index price series for the requested index and window.\n"
         "How: Reads canonical time series records with deterministic ordering.\n"
-        "When: Used by lotus-performance and other downstream benchmark sourcing workflows that "
-        "require raw index price inputs for validation or evidence. This is source reference "
-        "data, not a normalized benchmark-engine output contract."
+        "When: Used directly by lotus-performance stateful benchmark sourcing and other "
+        "downstream benchmark workflows that require raw index price inputs for calculation, "
+        "validation, or evidence. This is source reference data, not a normalized "
+        "benchmark-engine output contract."
     ),
     openapi_extra=source_data_product_openapi_extra("IndexSeriesWindow"),
 )
@@ -583,10 +585,10 @@ async def fetch_index_return_series(
     description=(
         "What: Return raw vendor-provided benchmark return series.\n"
         "How: Reads canonical benchmark return records with explicit convention fields.\n"
-        "When: Used by lotus-performance and other downstream workflows when provider benchmark "
-        "return inputs are available for validation, evidence, or explicit override modes. "
-        "This is not the default benchmark-math source when lower-level benchmark composition "
-        "and market-series contracts are available."
+        "When: Used directly by lotus-performance vendor-series sourcing and other downstream "
+        "workflows when provider benchmark return inputs are available for validation, evidence, "
+        "or explicit override modes. This is not the default benchmark-math source when "
+        "lower-level benchmark composition and market-series contracts are available."
     ),
 )
 async def fetch_benchmark_return_series(

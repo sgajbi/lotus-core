@@ -291,14 +291,16 @@ reference/publication fields do not drift silently while benchmark sourcing evol
 
 Swagger now also makes the supporting-route boundary clearer for this adjacent family:
 
-1. benchmark definition is point-in-time benchmark context, not the strategic cross-window
+1. benchmark definition is point-in-time benchmark context, now explicitly documents direct
+   `lotus-performance` stateful benchmark-sourcing usage, and is not the strategic cross-window
    benchmark calculation contract;
 2. benchmark catalog is discovery-first, now explicitly documents `lotus-gateway` workspace
    benchmark-selection usage, and should give way to targeted benchmark routes once an identifier
    is known;
-3. raw index and benchmark return-series routes are evidence or validation sources, not substitutes
-   for composition-window plus market-series sourcing when lower-level benchmark reconstruction is
-   required.
+3. raw index price-series and benchmark return-series routes now also document the active
+   `lotus-performance` sourcing modes they support, while remaining evidence/reference contracts
+   rather than substitutes for composition-window plus market-series sourcing when lower-level
+   benchmark reconstruction is required.
 
 ## Certified Endpoint Slice: Risk-Free Reference Family
 

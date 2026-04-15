@@ -1537,7 +1537,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Benchmark identifier for the requested benchmark definition."
     )
     assert "point-in-time reference context" in benchmark_definition["description"]
-    assert "lotus-performance and other downstream consumers" in benchmark_definition["description"]
+    assert (
+        "Used directly by lotus-performance stateful benchmark sourcing"
+        in (benchmark_definition["description"])
+    )
     assert (
         "not the strategic cross-window benchmark calculation contract"
         in (benchmark_definition["description"])
@@ -1610,7 +1613,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert "broad-market sector labels" in index_catalog_route["description"]
     assert "prefer `index_ids` to avoid full-catalog scans" in index_catalog_route["description"]
     assert (
-        "lotus-performance and other downstream benchmark sourcing workflows"
+        "Used directly by lotus-performance stateful benchmark sourcing"
         in (index_price_series["description"])
     )
     assert (
@@ -1622,7 +1625,8 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         in (index_return_series["description"])
     )
     assert (
-        "lotus-performance and other downstream workflows" in benchmark_return_series["description"]
+        "Used directly by lotus-performance vendor-series sourcing"
+        in (benchmark_return_series["description"])
     )
     assert "not the default benchmark-math source" in benchmark_return_series["description"]
 
