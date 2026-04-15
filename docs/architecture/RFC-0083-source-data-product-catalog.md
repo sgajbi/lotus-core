@@ -225,6 +225,9 @@ durable evidence business dates or watermarks when rows are present, and populat
 Empty evidence listings fall back to the response generation date for `as_of_date` and leave
 `latest_evidence_timestamp` null. Tenant, source batch, deterministic snapshot, and policy fields
 remain null until those controls are joined to the evidence response path.
+`ReconciliationEvidenceBundle` additionally derives `reconciliation_status` from returned run
+statuses and finding severities using `reconciliation_quality.py`, with blocking evidence taking
+precedence over partial or complete evidence.
 
 The source-data product contract guard statically checks both sides of the binding:
 

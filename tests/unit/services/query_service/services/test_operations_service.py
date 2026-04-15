@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.operations_repository import (
@@ -1162,6 +1163,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.generated_at == response.generated_at_utc
     assert response.as_of_date == date(2026, 3, 13)
     assert response.latest_evidence_timestamp == completed_at
+    assert response.reconciliation_status == BLOCKED
     assert response.items[0].run_id == "recon_1234567890abcdef"
     assert response.items[0].reconciliation_type == "transaction_cashflow"
     assert response.items[0].status == "FAILED"
@@ -1331,6 +1333,34 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
     assert OperationsService._get_reconciliation_finding_operational_state("INFO") == "NON_BLOCKING"
 
 
+async def test_reconciliation_evidence_status_aggregation_branches():
+    def run(status: str):
+        return type("RunStub", (), {"status": status})()
+
+    def finding(severity: str):
+        return type("FindingStub", (), {"severity": severity})()
+
+    assert OperationsService._aggregate_reconciliation_run_status([]) == UNKNOWN
+    assert OperationsService._aggregate_reconciliation_run_status([run("COMPLETED")]) == COMPLETE
+    assert OperationsService._aggregate_reconciliation_run_status([run("RUNNING")]) == PARTIAL
+    assert (
+        OperationsService._aggregate_reconciliation_run_status([run("COMPLETED"), run("FAILED")])
+        == BLOCKED
+    )
+    assert OperationsService._aggregate_reconciliation_finding_status([], total=0) == COMPLETE
+    assert OperationsService._aggregate_reconciliation_finding_status([], total=3) == UNKNOWN
+    assert (
+        OperationsService._aggregate_reconciliation_finding_status([finding("WARNING")], total=1)
+        == BREAK_OPEN
+    )
+    assert (
+        OperationsService._aggregate_reconciliation_finding_status(
+            [finding("INFO"), finding("ERROR")], total=2
+        )
+        == BLOCKED
+    )
+
+
 async def test_stale_detection_helpers_cover_remaining_branches():
     now = datetime(2026, 3, 13, 10, 30, tzinfo=timezone.utc)
     stale = datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc)
@@ -1397,6 +1427,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     assert response.generated_at == response.generated_at_utc
     assert response.as_of_date == date(2026, 3, 13)
     assert response.latest_evidence_timestamp == created_at
+    assert response.reconciliation_status == BLOCKED
     assert response.total == 7
     assert response.items[0].finding_id == "rf_1234567890abcdef"
     assert response.items[0].severity == "ERROR"

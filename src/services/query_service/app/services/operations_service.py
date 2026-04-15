@@ -3,6 +3,17 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from portfolio_common.reconciliation_quality import (
+    BLOCKED,
+    BREAK_OPEN,
+    COMPLETE,
+    PARTIAL,
+    UNKNOWN,
+    ReconciliationRunSignal,
+    classify_finding_status,
+    classify_reconciliation_status,
+)
+
 from ..dtos.operations_dto import (
     AnalyticsExportJobListResponse,
     AnalyticsExportJobRecord,
@@ -51,6 +62,7 @@ class OperationsService:
         generated_at_utc: datetime,
         as_of_dates: list[date | None],
         evidence_timestamps: list[datetime | None],
+        reconciliation_status: str = UNKNOWN,
     ) -> dict[str, object]:
         resolved_as_of_dates = [as_of_date for as_of_date in as_of_dates if as_of_date is not None]
         resolved_timestamps = [
@@ -63,8 +75,46 @@ class OperationsService:
                 max(resolved_as_of_dates) if resolved_as_of_dates else generated_at_utc.date()
             ),
             generated_at=generated_at_utc,
+            reconciliation_status=reconciliation_status,
             latest_evidence_timestamp=(max(resolved_timestamps) if resolved_timestamps else None),
         )
+
+    @staticmethod
+    def _aggregate_reconciliation_run_status(runs: list[object]) -> str:
+        statuses = [
+            classify_reconciliation_status(
+                ReconciliationRunSignal(
+                    run_status=getattr(run, "status", None),
+                    has_run=True,
+                )
+            )
+            for run in runs
+        ]
+        return OperationsService._aggregate_statuses(statuses)
+
+    @staticmethod
+    def _aggregate_reconciliation_finding_status(findings: list[object], total: int) -> str:
+        if not findings:
+            return COMPLETE if total == 0 else UNKNOWN
+        statuses = [
+            classify_finding_status(severity=str(getattr(finding, "severity", "")))
+            for finding in findings
+        ]
+        return OperationsService._aggregate_statuses(statuses)
+
+    @staticmethod
+    def _aggregate_statuses(statuses: list[str]) -> str:
+        if not statuses:
+            return UNKNOWN
+        if BLOCKED in statuses:
+            return BLOCKED
+        if BREAK_OPEN in statuses:
+            return BREAK_OPEN
+        if PARTIAL in statuses:
+            return PARTIAL
+        if all(status == COMPLETE for status in statuses):
+            return COMPLETE
+        return UNKNOWN
 
     @classmethod
     def _get_support_job_operational_state(
@@ -1364,6 +1414,7 @@ class OperationsService:
                     for run in runs
                 ],
                 evidence_timestamps=[run.completed_at or run.started_at for run in runs],
+                reconciliation_status=self._aggregate_reconciliation_run_status(runs),
             ),
             portfolio_id=portfolio_id,
             generated_at_utc=generated_at_utc,
@@ -1436,6 +1487,9 @@ class OperationsService:
                     for finding in findings
                 ],
                 evidence_timestamps=[finding.created_at for finding in findings],
+                reconciliation_status=self._aggregate_reconciliation_finding_status(
+                    findings, total
+                ),
             ),
             run_id=run_id,
             generated_at_utc=generated_at_utc,
