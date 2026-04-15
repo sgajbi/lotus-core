@@ -17,6 +17,18 @@ def test_discover_outbox_event_emissions_finds_current_runtime_outbox_contracts(
     ) in emitted_contracts
 
 
+def test_discover_direct_kafka_publishes_finds_current_ingestion_topics() -> None:
+    publishes = guard.discover_direct_kafka_publishes()
+    topics = {publish.topic for publish in publishes}
+
+    assert "portfolios.raw.received" in topics
+    assert "transactions.raw.received" in topics
+    assert "market_prices.raw.received" in topics
+    assert "transactions.reprocessing.requested" in topics
+    assert "valuation.job.requested" in topics
+    assert "portfolio_day.aggregation.job.requested" in topics
+
+
 def test_evaluate_outbox_event_contracts_accepts_current_runtime_emissions() -> None:
     assert guard.evaluate_outbox_event_contracts() == []
 
@@ -30,7 +42,8 @@ def test_evaluate_outbox_event_contracts_rejects_missing_catalog_event() -> None
                 event_type="UnknownEvent",
                 topic="unknown.topic",
             ),
-        )
+        ),
+        direct_publishes=(),
     )
 
     assert errors == [
@@ -67,6 +80,7 @@ def test_evaluate_outbox_event_contracts_rejects_invalid_event_catalog() -> None
             ),
         ),
         event_definitions=invalid_definitions,
+        direct_publishes=(),
     )
 
     assert errors == [
@@ -84,12 +98,31 @@ def test_evaluate_outbox_event_contracts_rejects_topic_drift() -> None:
                 event_type="CashflowCalculated",
                 topic="cashflow.calculated",
             ),
-        )
+        ),
+        direct_publishes=(),
     )
 
     assert errors == [
         "src/example.py:publish: CashflowCalculated emits topic 'cashflow.calculated', "
         "expected 'cashflows.calculated'"
+    ]
+
+
+def test_evaluate_outbox_event_contracts_rejects_uncataloged_direct_kafka_publish() -> None:
+    errors = guard.evaluate_outbox_event_contracts(
+        emissions=(),
+        direct_publishes=(
+            guard.DirectKafkaPublish(
+                source="src/example.py",
+                function_name="publish",
+                topic="uncataloged.topic",
+            ),
+        ),
+    )
+
+    assert errors == [
+        "src/example.py:publish: uncataloged.topic publishes a direct Kafka topic missing "
+        "from the RFC-0083 direct Kafka topic catalog"
     ]
 
 
@@ -132,5 +165,46 @@ def publish_dict():
             function_name="publish_dict",
             event_type="FinancialReconciliationRequested",
             topic="portfolio_day.reconciliation.requested",
+        ),
+    )
+
+
+def test_discover_direct_kafka_publishes_resolves_literal_and_config_topics(
+    tmp_path: Path,
+) -> None:
+    source_file = tmp_path / "producer.py"
+    source_file.write_text(
+        """
+from portfolio_common.config import KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC
+
+def publish_direct(producer):
+    producer.publish_message(
+        topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
+        key="P1",
+        value={},
+    )
+
+def publish_literal(producer):
+    producer.publish_message(
+        topic="portfolios.raw.received",
+        key="P1",
+        value={},
+    )
+""",
+        encoding="utf-8",
+    )
+
+    publishes = guard.discover_direct_kafka_publishes(source_root=tmp_path)
+
+    assert publishes == (
+        guard.DirectKafkaPublish(
+            source="producer.py",
+            function_name="publish_literal",
+            topic="portfolios.raw.received",
+        ),
+        guard.DirectKafkaPublish(
+            source="producer.py",
+            function_name="publish_direct",
+            topic="transactions.raw.received",
         ),
     )

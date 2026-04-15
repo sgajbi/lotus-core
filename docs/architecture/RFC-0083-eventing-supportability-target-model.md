@@ -6,8 +6,8 @@ in `lotus-core`.
 
 It does not change runtime event emission behavior, Kafka topics, persistence, REST APIs, OpenAPI
 output, or downstream contracts. It defines the governed catalog that later runtime and contract slices
-must use, and adds runtime contract proof that current outbox `event_type` and topic pairs remain
-aligned with that catalog.
+must use, and adds runtime contract proof that current outbox `event_type` / topic pairs and direct
+Kafka publish topics remain aligned with that catalog.
 
 The executable helper is:
 
@@ -77,6 +77,13 @@ in the event supportability catalog with the same topic. This catches accidental
 renamed outbox event types, or new emissions that bypass governance. Payload envelope proof is owned by
 the centralized outbox repository tests because that repository constructs the emitted Kafka payload.
 
+The guard also parses direct `publish_message(...)` calls where the topic can be resolved from a
+literal or `portfolio_common.config` constant. Every discovered direct Kafka topic must be listed in
+the direct Kafka topic catalog. This covers source-ingestion topics, supportability recovery commands,
+and pipeline job-command topics that do not flow through the outbox repository. The intentionally
+shared `instruments.received` topic is cataloged as `mixed_source_and_derived_fact` because it carries
+both direct instrument ingress and derived instrument events from cost processing.
+
 `OutboxRepository` now centrally enriches emitted payloads with governed envelope metadata:
 
 1. `event_type`,
@@ -112,13 +119,34 @@ vocabulary as the route contract-family registry. The accepted Slice 10 values a
 Supportability surface evidence bundles must also resolve to RFC-0083 Slice 9 operator-only security
 profiles, keeping operator diagnostics aligned with the source-data product security model.
 
+## Direct Kafka Topics
+
+Direct Kafka publishes are allowed only for governed ingress, recovery, or job-command paths where
+the payload contract and supportability evidence are explicit.
+
+Current governed direct topics are:
+
+| Topic | Producer | Consumer | Payload contract | Purpose |
+| --- | --- | --- | --- | --- |
+| `portfolios.raw.received` | `ingestion_service` | `persistence_service` | `PortfolioEvent` | Raw portfolio ingress fact |
+| `transactions.raw.received` | `ingestion_service` | `persistence_service` | `TransactionEvent` | Raw transaction ingress fact |
+| `instruments.received` | `ingestion_service`, `cost_calculator_service` | `persistence_service` | `InstrumentEvent` | Mixed direct and derived instrument fact |
+| `market_prices.raw.received` | `ingestion_service` | `persistence_service` | `MarketPriceEvent` | Raw market-price ingress fact |
+| `fx_rates.raw.received` | `ingestion_service` | `persistence_service` | `FxRateEvent` | Raw FX-rate ingress fact |
+| `business_dates.raw.received` | `ingestion_service` | `persistence_service` | `BusinessDateEvent` | Raw business-calendar ingress fact |
+| `transactions.reprocessing.requested` | `ingestion_service`, `event_replay_service` | `cost_calculator_service` | `transaction_id_command` | Transaction reprocessing request |
+| `transactions.persisted` | `event_replay_service` | `cost_calculator_service`, `cashflow_calculator_service` | `TransactionEvent` | Transaction replay back into persisted-stage processing |
+| `valuation.job.requested` | `valuation_orchestrator_service` | `valuation_service` | `valuation_job_command` | Valuation job dispatch |
+| `portfolio_day.aggregation.job.requested` | `portfolio_aggregation_service` | `portfolio_aggregation_service` | `portfolio_aggregation_job_command` | Portfolio aggregation job dispatch |
+
 ## Runtime Follow-Up
 
 Future runtime slices must:
 
 1. keep schema-version envelope metadata centralized in `OutboxRepository`,
 2. make idempotency visible in emitted events and replay evidence,
-3. keep Kafka topic names and outbox `event_type` values aligned with the guarded catalog,
+3. keep Kafka topic names, direct publish topics, and outbox `event_type` values aligned with the
+   guarded catalog,
 4. emit or persist supportability recovery events where replay, DLQ, repair, or duplicate-blocking
    behavior changes,
 5. expose operator diagnostics through supportability APIs rather than private database inspection,

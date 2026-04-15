@@ -10,7 +10,9 @@ from typing import Any
 
 from portfolio_common import config, events
 from portfolio_common.event_supportability import (
+    DIRECT_KAFKA_TOPIC_DEFINITIONS,
     EVENT_FAMILY_DEFINITIONS,
+    DirectKafkaTopicDefinition,
     EventFamilyDefinition,
     validate_event_supportability_catalog,
 )
@@ -30,6 +32,17 @@ class OutboxEventEmission:
     @property
     def diagnostic_key(self) -> str:
         return f"{self.source}:{self.function_name}: {self.event_type}"
+
+
+@dataclass(frozen=True)
+class DirectKafkaPublish:
+    source: str
+    function_name: str
+    topic: str
+
+    @property
+    def diagnostic_key(self) -> str:
+        return f"{self.source}:{self.function_name}: {self.topic}"
 
 
 def _literal_string(node: ast.AST) -> str | None:
@@ -91,11 +104,18 @@ def _is_create_outbox_call(node: ast.Call) -> bool:
     return False
 
 
+def _is_publish_message_call(node: ast.Call) -> bool:
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr == "publish_message"
+    return False
+
+
 class _OutboxEmissionVisitor(ast.NodeVisitor):
     def __init__(self, source: str) -> None:
         self.source = source
         self.function_name = "<module>"
         self.emissions: list[OutboxEventEmission] = []
+        self.direct_publishes: list[DirectKafkaPublish] = []
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
         self._visit_function(node)
@@ -113,6 +133,16 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
             )
             if emission is not None:
                 self.emissions.append(emission)
+        if _is_publish_message_call(node):
+            topic = _resolve_topic(_call_keyword_value(node, "topic"))
+            if topic is not None:
+                self.direct_publishes.append(
+                    DirectKafkaPublish(
+                        source=self.source,
+                        function_name=self.function_name,
+                        topic=topic,
+                    )
+                )
         self.generic_visit(node)
 
     def visit_Dict(self, node: ast.Dict) -> Any:
@@ -153,6 +183,19 @@ def discover_outbox_event_emissions(
     )
 
 
+def discover_direct_kafka_publishes(
+    source_root: Path = SOURCE_ROOT,
+) -> tuple[DirectKafkaPublish, ...]:
+    publishes: list[DirectKafkaPublish] = []
+    for source_file in sorted(source_root.rglob("*.py")):
+        tree = ast.parse(source_file.read_text(encoding="utf-8"))
+        source = _source_label(source_file, source_root)
+        visitor = _OutboxEmissionVisitor(source)
+        visitor.visit(tree)
+        publishes.extend(visitor.direct_publishes)
+    return tuple(sorted(set(publishes), key=lambda item: (item.topic, item.source)))
+
+
 def _source_label(source_file: Path, source_root: Path) -> str:
     try:
         return source_file.relative_to(REPO_ROOT).as_posix()
@@ -163,6 +206,10 @@ def _source_label(source_file: Path, source_root: Path) -> str:
 def evaluate_outbox_event_contracts(
     emissions: tuple[OutboxEventEmission, ...] | None = None,
     event_definitions: tuple[EventFamilyDefinition, ...] = EVENT_FAMILY_DEFINITIONS,
+    direct_publishes: tuple[DirectKafkaPublish, ...] | None = None,
+    direct_topic_definitions: tuple[
+        DirectKafkaTopicDefinition, ...
+    ] = DIRECT_KAFKA_TOPIC_DEFINITIONS,
 ) -> list[str]:
     errors: list[str] = []
     available_models = {
@@ -171,15 +218,20 @@ def evaluate_outbox_event_contracts(
     try:
         validate_event_supportability_catalog(
             event_definitions,
+            direct_kafka_topics=direct_topic_definitions,
             available_schema_models=available_models,
         )
     except ValueError as exc:
         errors.append(f"event supportability catalog is invalid: {exc}")
 
     emissions = discover_outbox_event_emissions() if emissions is None else emissions
+    direct_publishes = (
+        discover_direct_kafka_publishes() if direct_publishes is None else direct_publishes
+    )
     definitions_by_event_type = {
         definition.event_type: definition for definition in event_definitions
     }
+    direct_topics = {definition.topic for definition in direct_topic_definitions}
 
     for emission in emissions:
         definition = definitions_by_event_type.get(emission.event_type)
@@ -193,6 +245,13 @@ def evaluate_outbox_event_contracts(
             errors.append(
                 f"{emission.diagnostic_key} emits topic {emission.topic!r}, "
                 f"expected {definition.topic!r}"
+            )
+
+    for publish in direct_publishes:
+        if publish.topic not in direct_topics:
+            errors.append(
+                f"{publish.diagnostic_key} publishes a direct Kafka topic missing from the "
+                "RFC-0083 direct Kafka topic catalog"
             )
 
     return errors

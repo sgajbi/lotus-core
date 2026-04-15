@@ -6,6 +6,7 @@ from portfolio_common.event_supportability import (
     CONTROL_EXECUTION,
     CONTROL_PLANE_AND_POLICY,
     DATA_QUALITY_COVERAGE_REPORT,
+    DIRECT_KAFKA_TOPIC_DEFINITIONS,
     DOMAIN_STATE_EVENT,
     EVENT_FAMILY_DEFINITIONS,
     INGESTION_EVIDENCE_BUNDLE,
@@ -14,6 +15,7 @@ from portfolio_common.event_supportability import (
     SOURCE_INGESTION_EVENT,
     SUPPORTABILITY_SURFACE_DEFINITIONS,
     SUPPORTABILITY_RECOVERY_EVENT,
+    DirectKafkaTopicDefinition,
     EventFamilyDefinition,
     SupportabilitySurfaceDefinition,
     get_event_family_definition,
@@ -241,6 +243,29 @@ def test_runtime_pipeline_events_are_cataloged_with_current_topics() -> None:
         assert get_event_family_definition(event_type).topic == topic
 
 
+def test_direct_kafka_ingestion_topics_are_cataloged() -> None:
+    topics = {definition.topic: definition for definition in DIRECT_KAFKA_TOPIC_DEFINITIONS}
+
+    assert {
+        "portfolios.raw.received",
+        "transactions.raw.received",
+        "instruments.received",
+        "market_prices.raw.received",
+        "fx_rates.raw.received",
+        "business_dates.raw.received",
+        "transactions.reprocessing.requested",
+        "transactions.persisted",
+        "valuation.job.requested",
+        "portfolio_day.aggregation.job.requested",
+    } <= set(topics)
+    assert topics["transactions.raw.received"].payload_contract == "TransactionEvent"
+    assert topics["instruments.received"].semantic_type == "mixed_source_and_derived_fact"
+    assert topics["valuation.job.requested"].payload_contract == "valuation_job_command"
+    for definition in topics.values():
+        assert definition.idempotency_header_supported is True
+        assert definition.correlation_header_supported is True
+
+
 def test_replay_event_is_cataloged_as_supportability_recovery() -> None:
     definition = get_event_family_definition("ReprocessTransactionReplay")
 
@@ -312,6 +337,23 @@ def test_validation_rejects_unknown_source_data_product_binding() -> None:
 
     with pytest.raises(ValueError, match="references unknown source-data product"):
         validate_event_supportability_catalog((invalid,), ())
+
+
+def test_validation_rejects_direct_kafka_topic_without_correlation_header() -> None:
+    invalid = DirectKafkaTopicDefinition(
+        name="InvalidDirectTopic",
+        topic="invalid.raw.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("persistence_service",),
+        payload_contract="PortfolioEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=False,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    )
+
+    with pytest.raises(ValueError, match="must support correlation headers"):
+        validate_event_supportability_catalog((), (), (invalid,))
 
 
 def test_validation_rejects_unknown_supportability_surface_route_family() -> None:

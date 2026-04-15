@@ -57,6 +57,20 @@ class SupportabilitySurfaceDefinition:
     replay_or_repair_capable: bool = False
 
 
+@dataclass(frozen=True)
+class DirectKafkaTopicDefinition:
+    name: str
+    topic: str
+    semantic_type: str
+    producer_service: str
+    consumer_services: tuple[str, ...]
+    payload_contract: str
+    idempotency_header_supported: bool
+    correlation_header_supported: bool
+    supportability_evidence: tuple[str, ...] = ()
+    source_data_products: tuple[str, ...] = ()
+
+
 EVENT_FAMILY_DEFINITIONS: tuple[EventFamilyDefinition, ...] = (
     EventFamilyDefinition(
         event_type="PortfolioIngested",
@@ -321,6 +335,129 @@ EVENT_FAMILY_DEFINITIONS: tuple[EventFamilyDefinition, ...] = (
 )
 
 
+DIRECT_KAFKA_TOPIC_DEFINITIONS: tuple[DirectKafkaTopicDefinition, ...] = (
+    DirectKafkaTopicDefinition(
+        name="RawPortfolioReceived",
+        topic="portfolios.raw.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("persistence_service",),
+        payload_contract="PortfolioEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("PortfolioStateSnapshot",),
+    ),
+    DirectKafkaTopicDefinition(
+        name="RawTransactionReceived",
+        topic="transactions.raw.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("persistence_service",),
+        payload_contract="TransactionEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("TransactionLedgerWindow", "HoldingsAsOf"),
+    ),
+    DirectKafkaTopicDefinition(
+        name="InstrumentReceived",
+        topic="instruments.received",
+        semantic_type="mixed_source_and_derived_fact",
+        producer_service="ingestion_service,cost_calculator_service",
+        consumer_services=("persistence_service",),
+        payload_contract="InstrumentEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("InstrumentReferenceBundle",),
+    ),
+    DirectKafkaTopicDefinition(
+        name="RawMarketPriceReceived",
+        topic="market_prices.raw.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("persistence_service",),
+        payload_contract="MarketPriceEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("MarketDataWindow",),
+    ),
+    DirectKafkaTopicDefinition(
+        name="RawFxRateReceived",
+        topic="fx_rates.raw.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("persistence_service",),
+        payload_contract="FxRateEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("MarketDataWindow",),
+    ),
+    DirectKafkaTopicDefinition(
+        name="RawBusinessDateReceived",
+        topic="business_dates.raw.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("persistence_service",),
+        payload_contract="BusinessDateEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    ),
+    DirectKafkaTopicDefinition(
+        name="TransactionReprocessingRequested",
+        topic="transactions.reprocessing.requested",
+        semantic_type="supportability_recovery_command",
+        producer_service="ingestion_service,event_replay_service",
+        consumer_services=("cost_calculator_service",),
+        payload_contract="transaction_id_command",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("TransactionLedgerWindow", "HoldingsAsOf"),
+    ),
+    DirectKafkaTopicDefinition(
+        name="TransactionReprocessingPersistedReplay",
+        topic="transactions.persisted",
+        semantic_type="supportability_recovery_fact_replay",
+        producer_service="event_replay_service",
+        consumer_services=("cost_calculator_service", "cashflow_calculator_service"),
+        payload_contract="TransactionEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+        source_data_products=("TransactionLedgerWindow", "HoldingsAsOf"),
+    ),
+    DirectKafkaTopicDefinition(
+        name="ValuationJobRequested",
+        topic="valuation.job.requested",
+        semantic_type="pipeline_command",
+        producer_service="valuation_orchestrator_service",
+        consumer_services=("valuation_service",),
+        payload_contract="valuation_job_command",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(DATA_QUALITY_COVERAGE_REPORT,),
+        source_data_products=("HoldingsAsOf",),
+    ),
+    DirectKafkaTopicDefinition(
+        name="PortfolioAggregationJobRequested",
+        topic="portfolio_day.aggregation.job.requested",
+        semantic_type="pipeline_command",
+        producer_service="portfolio_aggregation_service",
+        consumer_services=("portfolio_aggregation_service",),
+        payload_contract="portfolio_aggregation_job_command",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(DATA_QUALITY_COVERAGE_REPORT,),
+        source_data_products=("PortfolioTimeseriesInput",),
+    ),
+)
+
+
 SUPPORTABILITY_SURFACE_DEFINITIONS: tuple[SupportabilitySurfaceDefinition, ...] = (
     SupportabilitySurfaceDefinition(
         name="IngestionOperationsDiagnostics",
@@ -380,6 +517,7 @@ def validate_event_supportability_catalog(
     supportability_surfaces: tuple[
         SupportabilitySurfaceDefinition, ...
     ] = SUPPORTABILITY_SURFACE_DEFINITIONS,
+    direct_kafka_topics: tuple[DirectKafkaTopicDefinition, ...] = DIRECT_KAFKA_TOPIC_DEFINITIONS,
     available_schema_models: Iterable[str] | None = None,
 ) -> None:
     supported_families = {
@@ -470,6 +608,51 @@ def validate_event_supportability_catalog(
             raise ValueError(f"{surface.name} must define diagnostics")
         for diagnostic in surface.diagnostics:
             _normalize_required_text(diagnostic, "diagnostics")
+
+    direct_topic_names: set[str] = set()
+    for topic_definition in direct_kafka_topics:
+        name = _normalize_required_text(topic_definition.name, "name")
+        if name in direct_topic_names:
+            raise ValueError(f"Duplicate direct Kafka topic definition: {topic_definition.name}")
+        direct_topic_names.add(name)
+        _normalize_required_text(topic_definition.topic, "topic")
+        _normalize_required_text(topic_definition.semantic_type, "semantic_type")
+        _normalize_required_text(topic_definition.producer_service, "producer_service")
+        _normalize_required_text(topic_definition.payload_contract, "payload_contract")
+        if not topic_definition.consumer_services:
+            raise ValueError(f"{topic_definition.name} must define at least one consumer service")
+        for consumer_service in topic_definition.consumer_services:
+            _normalize_required_text(consumer_service, "consumer_services")
+        if not topic_definition.idempotency_header_supported:
+            raise ValueError(f"{topic_definition.name} must support idempotency headers")
+        if not topic_definition.correlation_header_supported:
+            raise ValueError(f"{topic_definition.name} must support correlation headers")
+        if (
+            not topic_definition.source_data_products
+            and not topic_definition.supportability_evidence
+        ):
+            raise ValueError(
+                f"{topic_definition.name} must link to source-data products or evidence"
+            )
+        for evidence_bundle in topic_definition.supportability_evidence:
+            _require_allowed(evidence_bundle, "supportability_evidence", supported_evidence)
+        for product_name in topic_definition.source_data_products:
+            normalized_product_name = _normalize_required_text(product_name, "source_data_products")
+            if normalized_product_name not in source_data_product_names:
+                raise ValueError(
+                    f"{topic_definition.name} references unknown source-data product: "
+                    f"{product_name}"
+                )
+        if (
+            available_models is not None
+            and not topic_definition.payload_contract.endswith("_command")
+            and _normalize_required_text(topic_definition.payload_contract, "payload_contract")
+            not in available_models
+        ):
+            raise ValueError(
+                f"{topic_definition.name} references missing payload contract: "
+                f"{topic_definition.payload_contract}"
+            )
 
 
 def _require_allowed(value: str, field_name: str, allowed: set[str]) -> None:
