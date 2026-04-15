@@ -1567,7 +1567,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         in (risk_free_coverage["description"])
     )
     assert (
-        "lotus-performance, lotus-risk, lotus-gateway, and lotus-advise"
+        "downstream consumers that need governed shared classification labels"
         in (classification_taxonomy["description"])
     )
     assert "instead of local taxonomy drift" in classification_taxonomy["description"]
