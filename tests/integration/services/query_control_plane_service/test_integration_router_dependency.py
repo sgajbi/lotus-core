@@ -144,6 +144,79 @@ async def async_test_client():
             ),
         }
     )
+    mock_integration_service.get_benchmark_composition_window = AsyncMock(
+        return_value={
+            "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+            "benchmark_currency": "USD",
+            "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-03-31"},
+            "segments": [
+                {
+                    "index_id": "IDX_MSCI_WORLD_TR",
+                    "composition_weight": "0.6000000000",
+                    "composition_effective_from": "2026-01-01",
+                    "composition_effective_to": "2026-03-31",
+                    "rebalance_event_id": "rebalance_2026q1",
+                }
+            ],
+            "lineage": {
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core",
+                "generated_by": "query_control_plane_service",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 3, 31),
+                generated_at=datetime(2026, 3, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
+    mock_integration_service.get_benchmark_market_series = AsyncMock(
+        return_value={
+            "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+            "as_of_date": "2026-01-31",
+            "benchmark_currency": "USD",
+            "target_currency": "EUR",
+            "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "component_series": [
+                {
+                    "index_id": "IDX_MSCI_WORLD_TR",
+                    "points": [
+                        {
+                            "series_date": "2026-01-02",
+                            "series_currency": "USD",
+                            "index_price": "100.2500000000",
+                            "index_return": "0.0025000000",
+                            "component_weight": "0.6000000000",
+                            "fx_rate": "0.9200000000",
+                            "quality_status": "accepted",
+                        }
+                    ],
+                }
+            ],
+            "quality_status_summary": {"accepted": 1},
+            "fx_context_source_currency": "USD",
+            "fx_context_target_currency": "EUR",
+            "normalization_policy": "native_component_series_downstream_normalization_required",
+            "normalization_status": "native_component_series_with_benchmark_to_target_fx_context",
+            "request_fingerprint": "fp-benchmark-market-series-1",
+            "page": {
+                "page_size": 250,
+                "sort_key": "index_id:asc",
+                "returned_component_count": 1,
+                "request_scope_fingerprint": "fp-benchmark-market-series-1",
+                "next_page_token": None,
+            },
+            "lineage": {
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core",
+                "generated_by": "query_control_plane_service",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
@@ -247,6 +320,95 @@ async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
     assert response.json()["detail"] == (
         "No effective benchmark assignment found for portfolio and as_of_date."
     )
+
+
+async def test_benchmark_composition_window_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/composition-window",
+        json={"window": {"start_date": "2026-01-01", "end_date": "2026-03-31"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "BenchmarkConstituentWindow"
+    assert body["product_version"] == "v1"
+    assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert body["benchmark_currency"] == "USD"
+    assert body["segments"][0]["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_benchmark_composition_window.assert_awaited_once()
+
+
+async def test_benchmark_composition_window_not_found_maps_to_404(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_benchmark_composition_window = AsyncMock(return_value=None)
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/composition-window",
+        json={"window": {"start_date": "2026-01-01", "end_date": "2026-03-31"}},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "No overlapping benchmark definition found for benchmark_id and requested window."
+    )
+
+
+async def test_benchmark_market_series_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/market-series",
+        json={
+            "as_of_date": "2026-01-31",
+            "window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "target_currency": "EUR",
+            "series_fields": ["index_price", "index_return", "component_weight", "fx_rate"],
+            "page": {"page_size": 250},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "MarketDataWindow"
+    assert body["product_version"] == "v1"
+    assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert body["benchmark_currency"] == "USD"
+    assert body["target_currency"] == "EUR"
+    assert body["normalization_policy"] == (
+        "native_component_series_downstream_normalization_required"
+    )
+    assert body["page"]["returned_component_count"] == 1
+    assert body["component_series"][0]["points"][0]["fx_rate"] == "0.9200000000"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_benchmark_market_series.assert_awaited_once()
+
+
+async def test_benchmark_market_series_invalid_page_token_maps_to_400(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_benchmark_market_series = AsyncMock(
+        side_effect=ValueError("Invalid benchmark market series page_token.")
+    )
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/market-series",
+        json={
+            "as_of_date": "2026-01-31",
+            "window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "target_currency": "EUR",
+            "series_fields": ["index_price", "fx_rate"],
+            "page": {"page_size": 250, "page_token": "invalid-token"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid benchmark market series page_token."
 
 
 async def test_risk_free_series_success(async_test_client):

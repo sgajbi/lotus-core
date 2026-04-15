@@ -236,6 +236,11 @@ For this family, Swagger now makes the following explicit:
 Automated proof now includes a benchmark-source schema-family completeness assertion in
 `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
 
+HTTP-level dependency proof now also exercises both benchmark-source routes in
+`tests/integration/services/query_control_plane_service/test_integration_router_dependency.py`,
+including route-success payload shape and route-specific `404` or `400` mapping for downstream
+integration failures.
+
 ### Issue Disposition For This Endpoint Family
 
 | Issue | Assessment | Disposition |
