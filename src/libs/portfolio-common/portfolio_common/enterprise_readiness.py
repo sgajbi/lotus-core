@@ -120,12 +120,19 @@ class EnterpriseReadinessRuntime:
     def is_feature_enabled(self, feature_key: str, tenant_id: str, role: str) -> bool:
         flags = self.load_feature_flags()
         feature = flags.get(feature_key, {})
+        if not isinstance(feature, dict):
+            return False
         tenant = feature.get(tenant_id, {})
+        if not isinstance(tenant, dict):
+            return False
         if isinstance(tenant.get(role), bool):
             return tenant[role]
         if isinstance(tenant.get("*"), bool):
             return tenant["*"]
-        global_default = feature.get("*", {}).get("*")
+        global_entry = feature.get("*", {})
+        if not isinstance(global_entry, dict):
+            return False
+        global_default = global_entry.get("*")
         return bool(global_default) if isinstance(global_default, bool) else False
 
     def authorize_write_request(

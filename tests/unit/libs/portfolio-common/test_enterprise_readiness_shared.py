@@ -121,6 +121,22 @@ def test_runtime_uses_typed_settings_for_enterprise_flags() -> None:
     assert runtime.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false") is True
 
 
+def test_feature_flags_fail_closed_for_invalid_shapes() -> None:
+    runtime = _runtime(
+        settings=_Settings(
+            enterprise_feature_flags={
+                "not.object": True,
+                "tenant.not.object": {"tenant-1": True},
+                "global.not.object": {"*": True},
+            }
+        )
+    )
+
+    assert runtime.is_feature_enabled("not.object", "tenant-1", "ops") is False
+    assert runtime.is_feature_enabled("tenant.not.object", "tenant-1", "ops") is False
+    assert runtime.is_feature_enabled("global.not.object", "tenant-2", "ops") is False
+
+
 def test_authorize_request_enforces_read_capability_rules_when_enabled() -> None:
     runtime = _runtime(
         read_authz_enabled=True,
