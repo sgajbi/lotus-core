@@ -157,9 +157,7 @@ INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE = {
 INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE = {
     "detail": {
         "code": "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND",
-        "message": (
-            "Consumer DLQ event 'cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6' was not found."
-        ),
+        "message": ("Consumer DLQ event 'cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6' was not found."),
     }
 }
 
@@ -670,8 +668,7 @@ async def retry_ingestion_job(
             detail={
                 "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
                 "message": (
-                    "Retry blocked because an equivalent deterministic replay "
-                    "already succeeded."
+                    "Retry blocked because an equivalent deterministic replay already succeeded."
                 ),
                 "replay_fingerprint": replay_fingerprint,
             },
@@ -722,10 +719,7 @@ async def retry_ingestion_job(
             requested_by=ops_actor,
         )
     except Exception as exc:
-        replay_reason = (
-            "Replay publish succeeded but post-publish bookkeeping failed: "
-            f"{exc}"
-        )
+        replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
         replay_audit_id = await _record_replay_audit_best_effort(
             ingestion_job_service=ingestion_job_service,
             recovery_path="ingestion_job_retry",
@@ -901,8 +895,7 @@ async def get_ingestion_error_budget_status(
         ge=5,
         le=1440,
         description=(
-            "Lookback window, in minutes, used for current-vs-previous "
-            "error-budget comparison."
+            "Lookback window, in minutes, used for current-vs-previous error-budget comparison."
         ),
         examples=[60],
     ),
@@ -1162,7 +1155,7 @@ async def list_ingestion_stalled_jobs(
                                 "error_reason_code": "VALIDATION_ERROR",
                                 "error_reason": "ValidationError: portfolio_id is required",
                                 "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
-                                "payload_excerpt": "{\"transaction_id\":\"TXN-2026-000145\"}",
+                                "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
                                 "observed_at": "2026-03-06T09:11:05.812Z",
                             }
                         ],
@@ -1214,9 +1207,7 @@ async def list_consumer_dlq_events(
     responses={
         200: {
             "description": "Replay outcome for the correlated DLQ event.",
-            "content": {
-                "application/json": {"example": CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE}
-            },
+            "content": {"application/json": {"example": CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE}},
         },
         404: {
             "description": "Consumer DLQ event was not found.",
@@ -1268,8 +1259,7 @@ async def replay_consumer_dlq_event(
             replay_status="not_replayable",
             dry_run=replay_request.dry_run,
             replay_reason=(
-                "DLQ event has no correlation id and cannot be mapped to "
-                "ingestion payload."
+                "DLQ event has no correlation id and cannot be mapped to ingestion payload."
             ),
             requested_by=ops_actor,
         )
@@ -1465,10 +1455,7 @@ async def replay_consumer_dlq_event(
             requested_by=ops_actor,
         )
     except Exception as exc:
-        replay_reason = (
-            "Replay publish succeeded but post-publish bookkeeping failed: "
-            f"{exc}"
-        )
+        replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
         replay_audit_id = await _record_replay_audit_best_effort(
             ingestion_job_service=ingestion_job_service,
             recovery_path="consumer_dlq_replay",
@@ -1666,7 +1653,7 @@ async def update_ingestion_ops_control(
         and update_request.replay_window_start > update_request.replay_window_end
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "INGESTION_INVALID_REPLAY_WINDOW",
                 "message": "replay_window_start must be before replay_window_end.",
