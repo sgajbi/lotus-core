@@ -377,10 +377,21 @@ class CoreSnapshotService:
             freshness_status=("CURRENT_SNAPSHOT" if use_snapshot else "HISTORICAL_FALLBACK"),
             baseline_source=source,
             snapshot_timestamp=None,
-            snapshot_epoch=None,
+            snapshot_epoch=(
+                self._single_resolved_epoch(rows) if use_snapshot and baseline else None
+            ),
             fallback_reason=(None if use_snapshot else "NO_CURRENT_POSITION_STATE_ROWS"),
         )
         return dict(sorted(baseline.items(), key=lambda item: item[0])), freshness
+
+    @staticmethod
+    def _single_resolved_epoch(rows: list[Any]) -> int | None:
+        epochs = {
+            int(state.epoch)
+            for _row, _instrument, state in rows
+            if getattr(state, "epoch", None) is not None
+        }
+        return next(iter(epochs)) if len(epochs) == 1 else None
 
     async def _resolve_projected_positions(
         self,

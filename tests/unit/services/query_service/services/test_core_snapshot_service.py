@@ -71,7 +71,7 @@ def mock_dependencies():
         base_currency="USD",
     )
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
-        (_snapshot_row(), _instrument(), SimpleNamespace(status="CURRENT"))
+        (_snapshot_row(), _instrument(), SimpleNamespace(status="CURRENT", epoch=7))
     ]
     position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = []
     simulation_repo.get_session.return_value = SimpleNamespace(
@@ -147,7 +147,7 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.contract_version == "rfc_081_v1"
     assert response.request_fingerprint
     assert response.freshness.baseline_source == "position_state"
-    assert response.freshness.snapshot_epoch is None
+    assert response.freshness.snapshot_epoch == 7
     assert response.freshness.fallback_reason is None
     assert response.governance.consumer_system == "lotus-performance"
     assert response.governance.tenant_id == "default"
@@ -413,6 +413,36 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
     assert source.baseline_source == "position_history"
     assert source.freshness_status == "HISTORICAL_FALLBACK"
     assert source.fallback_reason == "NO_CURRENT_POSITION_STATE_ROWS"
+
+
+async def test_resolve_baseline_positions_leaves_snapshot_epoch_null_for_mixed_epochs(
+    mock_dependencies,
+):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        (
+            _snapshot_row("SEC_A", Decimal("1"), Decimal("10"), Decimal("10")),
+            _instrument("SEC_A"),
+            SimpleNamespace(status="CURRENT", epoch=7),
+        ),
+        (
+            _snapshot_row("SEC_B", Decimal("2"), Decimal("20"), Decimal("20")),
+            _instrument("SEC_B"),
+            SimpleNamespace(status="CURRENT", epoch=8),
+        ),
+    ]
+    service = CoreSnapshotService(AsyncMock())
+
+    _rows, freshness = await service._resolve_baseline_positions(
+        portfolio_id="PORT_001",
+        as_of_date=date(2026, 2, 27),
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    assert freshness.baseline_source == "position_state"
+    assert freshness.snapshot_epoch is None
 
 
 async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dependencies):

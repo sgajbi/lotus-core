@@ -187,7 +187,10 @@ joined into operational product responses.
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly
 path. It leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs
-for deterministic snapshot identity.
+for deterministic snapshot identity. The core snapshot freshness block populates
+`freshness.snapshot_epoch` only when the returned snapshot-backed baseline rows resolve to one
+unambiguous position epoch; mixed per-security epochs remain null rather than claiming a single
+portfolio-wide epoch.
 
 The analytics-input timeseries products reuse their existing `lineage.generated_at` timestamp for
 the top-level `generated_at` supportability field so lineage and envelope metadata stay internally
