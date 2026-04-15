@@ -17,6 +17,14 @@ class RetentionRule:
     delete_sql: str
 
 
+TERMINAL_VALUATION_JOB_STATUSES = (
+    "COMPLETE",
+    "FAILED",
+    "SKIPPED_NO_POSITION",
+    "SKIPPED_SUPERSEDED",
+)
+
+
 def _rules(args: argparse.Namespace) -> list[RetentionRule]:
     return [
         RetentionRule(
@@ -49,12 +57,12 @@ def _rules(args: argparse.Namespace) -> list[RetentionRule]:
             name="portfolio_valuation_jobs_terminal",
             count_sql=(
                 "SELECT count(*) FROM portfolio_valuation_jobs "
-                "WHERE status IN ('COMPLETE', 'FAILED', 'SKIPPED_NO_POSITION') "
+                f"WHERE status IN {_sql_string_tuple(TERMINAL_VALUATION_JOB_STATUSES)} "
                 "AND updated_at < now() - make_interval(days => :days)"
             ),
             delete_sql=(
                 "DELETE FROM portfolio_valuation_jobs "
-                "WHERE status IN ('COMPLETE', 'FAILED', 'SKIPPED_NO_POSITION') "
+                f"WHERE status IN {_sql_string_tuple(TERMINAL_VALUATION_JOB_STATUSES)} "
                 "AND updated_at < now() - make_interval(days => :days)"
             ),
         ),
@@ -100,6 +108,10 @@ def _rules(args: argparse.Namespace) -> list[RetentionRule]:
             ),
         ),
     ]
+
+
+def _sql_string_tuple(values: tuple[str, ...]) -> str:
+    return "(" + ", ".join(f"'{value}'" for value in values) + ")"
 
 
 def run(args: argparse.Namespace) -> int:
