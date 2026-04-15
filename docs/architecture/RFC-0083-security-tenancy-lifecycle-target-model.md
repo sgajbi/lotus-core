@@ -3,8 +3,10 @@
 This document is the RFC-0083 Slice 9 target model for source-data product security, tenancy,
 entitlement, audit, sensitivity, and retention posture in `lotus-core`.
 
-It does not change runtime authorization behavior, persistence, DTOs, OpenAPI output, or downstream
-contracts. It defines the governed profile that later runtime and contract slices must use.
+It does not change runtime authorization behavior, persistence, DTO payloads, or downstream response
+contracts. The governed profile is exposed in OpenAPI route metadata so consumers and contract guards
+can discover the required tenant, entitlement, audit, sensitivity, and retention posture before
+runtime enforcement moves to gateway/platform ingress or service policy.
 
 The executable helper is:
 
@@ -34,7 +36,8 @@ Every source-data product profile must define:
 8. PII/client-sensitive fields where applicable,
 9. whether the product is operator-only.
 
-The helper validates that every product in the Slice 6 source-data product catalog has a profile.
+The helper validates that every product in the Slice 6 source-data product catalog has a profile and
+emits the `x-lotus-source-data-security` OpenAPI extension for catalog-backed routes.
 
 ## Access Classes
 
@@ -84,12 +87,29 @@ Future runtime slices must:
 analytics services. It requires tenant scoping, entitlement scoping, system-access audit, and
 client-record retention rather than operator-only evidence handling.
 
+## Runtime-Contract Binding
+
+Every catalog-backed source-data product route now exposes two machine-readable OpenAPI extensions:
+
+1. `x-lotus-source-data-product` for product identity, ownership, serving plane, consumers, and
+   required supportability metadata,
+2. `x-lotus-source-data-security` for tenant scoping, entitlement scoping, access class, sensitivity
+   class, retention requirement, audit requirement, PII/client-sensitive field markers, and
+   operator-only posture.
+
+`scripts/source_data_product_contract_guard.py` verifies that the OpenAPI metadata emitted by
+`source_data_product_openapi_extra(...)` matches the governed security profile. This is contract
+readiness proof, not runtime authorization enforcement.
+
 ## Validation
 
 Slice 9 validation is:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_security.py -q`,
-2. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py tests/unit/libs/portfolio-common/test_source_data_security.py --ignore E501,I001`,
-3. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py tests/unit/libs/portfolio-common/test_source_data_security.py`,
-4. `git diff --check`,
-5. `make lint`.
+2. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py -q`,
+3. `python scripts/source_data_product_contract_guard.py`,
+4. `python -m pytest tests/integration/services/query_service/test_main_app.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`,
+5. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
+6. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
+7. `git diff --check`,
+8. `make lint`.

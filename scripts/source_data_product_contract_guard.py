@@ -10,7 +10,9 @@ from pathlib import Path
 from portfolio_common.source_data_products import (
     SOURCE_DATA_PRODUCT_CATALOG,
     SourceDataProductDefinition,
+    source_data_product_openapi_extra,
 )
+from portfolio_common.source_data_security import get_source_data_security_profile
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -249,6 +251,33 @@ def evaluate_source_data_product_bindings(
             errors.append(
                 f"{route.diagnostic_key} binds {product.product_name!r} but the route is not "
                 "listed in that product's current_routes"
+            )
+
+    for product in catalog:
+        extra = source_data_product_openapi_extra(product.product_name)
+        security_extension = extra.get("x-lotus-source-data-security")
+        if not isinstance(security_extension, dict):
+            errors.append(
+                f"{product.product_name} source-data product OpenAPI metadata must expose "
+                "x-lotus-source-data-security"
+            )
+            continue
+        profile = get_source_data_security_profile(product.product_name)
+        expected_security = {
+            "product_name": profile.product_name,
+            "tenant_required": profile.tenant_required,
+            "entitlement_required": profile.entitlement_required,
+            "access_classification": profile.access_classification,
+            "sensitivity_classification": profile.sensitivity_classification,
+            "retention_requirement": profile.retention_requirement,
+            "audit_requirement": profile.audit_requirement,
+            "pii_fields": list(profile.pii_fields),
+            "operator_only": profile.operator_only,
+        }
+        if security_extension != expected_security:
+            errors.append(
+                f"{product.product_name} source-data product OpenAPI security metadata must "
+                "match its governed source-data security profile"
             )
 
     return errors

@@ -4,6 +4,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from portfolio_common.source_data_products import QUERY_SERVICE, SOURCE_DATA_PRODUCT_CATALOG
+from portfolio_common.source_data_security import get_source_data_security_profile
 
 from src.services.query_service.app.main import app, lifespan
 
@@ -59,6 +60,14 @@ async def test_openapi_binds_query_service_source_data_products(async_test_clien
             assert extension["owner"] == product.owner
             assert extension["consumers"] == list(product.consumers)
             assert extension["current_routes"] == list(product.current_routes)
+            security_extension = operation["x-lotus-source-data-security"]
+            profile = get_source_data_security_profile(product.product_name)
+            assert security_extension["product_name"] == product.product_name
+            assert security_extension["tenant_required"] == profile.tenant_required
+            assert security_extension["entitlement_required"] == profile.entitlement_required
+            assert security_extension["access_classification"] == profile.access_classification
+            assert security_extension["audit_requirement"] == profile.audit_requirement
+            assert security_extension["operator_only"] == profile.operator_only
 
 
 async def test_openapi_binds_query_service_source_data_product_response_identity(

@@ -10,6 +10,7 @@ from portfolio_common.source_data_security import (
     SOURCE_DATA_SECURITY_PROFILES,
     SourceDataSecurityProfile,
     get_source_data_security_profile,
+    source_data_security_openapi_extra,
     validate_source_data_security_profiles,
 )
 
@@ -62,6 +63,21 @@ def test_portfolio_analytics_reference_profile_is_system_client_confidential() -
     assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
     assert {"portfolio_id", "client_id"} <= set(profile.pii_fields)
     assert profile.operator_only is False
+
+
+def test_source_data_security_openapi_extra_exposes_governed_profile() -> None:
+    extra = source_data_security_openapi_extra("PortfolioAnalyticsReference")
+
+    extension = extra["x-lotus-source-data-security"]
+
+    assert extension["product_name"] == "PortfolioAnalyticsReference"
+    assert extension["tenant_required"] is True
+    assert extension["entitlement_required"] is True
+    assert extension["access_classification"] == SYSTEM_ACCESS
+    assert extension["sensitivity_classification"] == CLIENT_CONFIDENTIAL
+    assert extension["audit_requirement"] == AUDIT_SYSTEM_ACCESS
+    assert {"portfolio_id", "client_id"} <= set(extension["pii_fields"])
+    assert extension["operator_only"] is False
 
 
 def test_security_profile_validation_rejects_missing_product_profile() -> None:

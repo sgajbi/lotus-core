@@ -198,6 +198,23 @@ def get_source_data_security_profile(product_name: str) -> SourceDataSecurityPro
     raise KeyError(f"Unknown source-data security profile: {product_name}")
 
 
+def source_data_security_openapi_extra(product_name: str) -> dict[str, dict[str, object]]:
+    profile = get_source_data_security_profile(product_name)
+    return {
+        "x-lotus-source-data-security": {
+            "product_name": profile.product_name,
+            "tenant_required": profile.tenant_required,
+            "entitlement_required": profile.entitlement_required,
+            "access_classification": profile.access_classification,
+            "sensitivity_classification": profile.sensitivity_classification,
+            "retention_requirement": profile.retention_requirement,
+            "audit_requirement": profile.audit_requirement,
+            "pii_fields": list(profile.pii_fields),
+            "operator_only": profile.operator_only,
+        }
+    }
+
+
 def validate_source_data_security_profiles(
     profiles: tuple[SourceDataSecurityProfile, ...] = SOURCE_DATA_SECURITY_PROFILES,
 ) -> None:

@@ -267,8 +267,10 @@ def get_source_data_product(product_name: str) -> SourceDataProductDefinition:
 
 
 def source_data_product_openapi_extra(product_name: str) -> dict[str, dict[str, object]]:
+    from portfolio_common.source_data_security import source_data_security_openapi_extra
+
     product = get_source_data_product(product_name)
-    return {
+    extra = {
         "x-lotus-source-data-product": {
             "product_name": product.product_name,
             "product_version": product.product_version,
@@ -282,6 +284,8 @@ def source_data_product_openapi_extra(product_name: str) -> dict[str, dict[str, 
             "required_metadata_fields": list(product.required_metadata_fields),
         }
     }
+    extra.update(source_data_security_openapi_extra(product.product_name))
+    return extra
 
 
 def products_for_consumer(

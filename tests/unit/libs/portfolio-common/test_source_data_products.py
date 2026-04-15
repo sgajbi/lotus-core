@@ -85,6 +85,13 @@ def test_source_data_product_openapi_extra_exposes_machine_readable_contract_ide
     assert "required_metadata_fields" in extension
     assert "restatement_version" in extension["required_metadata_fields"]
 
+    security_extension = extra["x-lotus-source-data-security"]
+    assert security_extension["product_name"] == "PortfolioTimeseriesInput"
+    assert security_extension["tenant_required"] is True
+    assert security_extension["entitlement_required"] is True
+    assert security_extension["access_classification"] == "system_access"
+    assert security_extension["audit_requirement"] == "audit_system_access"
+
 
 def test_holdings_product_records_convenience_shapes_to_consolidate() -> None:
     product = get_source_data_product("HoldingsAsOf")

@@ -4,6 +4,7 @@ from portfolio_common.source_data_products import (
     QUERY_SERVICE,
     SourceDataProductDefinition,
 )
+from portfolio_common.source_data_security import SourceDataSecurityProfile
 from scripts import source_data_product_contract_guard as guard
 
 
@@ -151,6 +152,35 @@ def test_evaluate_source_data_product_bindings_rejects_wrong_response_identity()
     assert len(errors) == 2
     assert "must declare product_name 'PortfolioTimeseriesInput'" in errors[0]
     assert "must declare product_version 'v1'" in errors[1]
+
+
+def test_evaluate_source_data_product_bindings_rejects_security_profile_drift(
+    monkeypatch,
+) -> None:
+    catalog = (_product("PortfolioTimeseriesInput", "/integration/example"),)
+    routes = [_route(QUERY_SERVICE, "/integration/example", "PortfolioTimeseriesInput")]
+    identities = {"ExampleResponse": ("PortfolioTimeseriesInput", "v1")}
+    profile = SourceDataSecurityProfile(
+        product_name="PortfolioTimeseriesInput",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification="system_access",
+        sensitivity_classification="client_confidential",
+        retention_requirement="retain_for_client_record",
+        audit_requirement="audit_system_access",
+        pii_fields=("portfolio_id",),
+    )
+    monkeypatch.setattr(guard, "get_source_data_security_profile", lambda _: profile)
+    monkeypatch.setattr(
+        guard,
+        "source_data_product_openapi_extra",
+        lambda _: {"x-lotus-source-data-security": {"product_name": "PortfolioTimeseriesInput"}},
+    )
+
+    errors = guard.evaluate_source_data_product_bindings(routes, catalog, identities)
+
+    assert len(errors) == 1
+    assert "OpenAPI security metadata must match" in errors[0]
 
 
 def test_discover_source_data_product_routes_finds_current_catalog_bindings() -> None:

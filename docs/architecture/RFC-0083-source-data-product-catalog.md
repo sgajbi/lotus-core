@@ -297,7 +297,9 @@ The source-data product contract guard statically checks both sides of the bindi
 
 1. every catalog route must carry matching `x-lotus-source-data-product` route metadata,
 2. every catalog route must declare a response model whose DTO envelope exposes matching
-   `product_name` and `product_version` defaults.
+   `product_name` and `product_version` defaults,
+3. every catalog-backed route helper must expose `x-lotus-source-data-security` metadata that
+   matches the governed RFC-0083 Slice 9 security profile.
 
 The analytics-input consumer contract guard adds an explicit downstream-consumer conformance check
 for `lotus-performance`. It verifies that the declared performance-facing products are exactly the

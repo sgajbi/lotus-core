@@ -471,8 +471,9 @@ Slice 9 security, tenancy, and lifecycle target modeling is recorded in:
 The model defines source-data product security profiles covering tenant scoping, entitlement scoping,
 access classification, sensitivity classification, retention requirement, audit requirement,
 PII/client-sensitive fields, and operator-only evidence posture. The helper validates that every
-source-data product has a profile. This slice does not change runtime authorization behavior, schemas,
-generated OpenAPI, persistence, or downstream contract shape.
+source-data product has a profile and emits `x-lotus-source-data-security` OpenAPI metadata for
+catalog-backed routes. This slice does not change runtime authorization behavior, persistence, or
+downstream response payload shape.
 
 ## Slice 10 Completion Note
 
