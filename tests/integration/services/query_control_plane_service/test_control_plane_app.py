@@ -13,6 +13,25 @@ from portfolio_common.source_data_security import (
 )
 
 from src.services.query_control_plane_service.app.main import app, lifespan
+from tests.integration.services.query_control_plane_service.openapi_schema_contracts import (
+    ANALYTICS_INPUT_SCHEMA_ROOTS,
+    BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS,
+    BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS,
+    BENCHMARK_SOURCE_SCHEMA_ROOTS,
+    CAPABILITIES_SCHEMA_ROOTS,
+    CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS,
+    CORE_SNAPSHOT_SCHEMA_ROOTS,
+    INGESTION_EVIDENCE_SCHEMA_ROOTS,
+    INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS,
+    INTEGRATION_POLICY_SCHEMA_ROOTS,
+    READINESS_SUPPORT_SCHEMA_ROOTS,
+    RECONCILIATION_EVIDENCE_SCHEMA_ROOTS,
+    RECONCILIATION_SUPPORT_SCHEMA_ROOTS,
+    RISK_FREE_SCHEMA_ROOTS,
+    SIMULATION_SCHEMA_ROOTS,
+    SUPPORT_OPERATIONS_SCHEMA_ROOTS,
+    assert_schema_properties_are_documented_and_exampled,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -29,202 +48,6 @@ SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
     "policy_version",
     "correlation_id",
 }
-
-ANALYTICS_INPUT_SCHEMA_ROOTS = {
-    "PortfolioAnalyticsReferenceRequest",
-    "PortfolioAnalyticsReferenceResponse",
-    "PortfolioAnalyticsTimeseriesRequest",
-    "PortfolioAnalyticsTimeseriesResponse",
-    "PositionAnalyticsTimeseriesRequest",
-    "PositionAnalyticsTimeseriesResponse",
-}
-
-BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS = {
-    "BenchmarkAssignmentRequest",
-    "BenchmarkAssignmentResponse",
-    "IntegrationPolicyContext",
-}
-
-BENCHMARK_SOURCE_SCHEMA_ROOTS = {
-    "BenchmarkCompositionWindowRequest",
-    "BenchmarkCompositionWindowResponse",
-    "BenchmarkMarketSeriesRequest",
-    "BenchmarkMarketSeriesResponse",
-    "ReferencePageRequest",
-    "ReferencePageMetadata",
-}
-
-RISK_FREE_SCHEMA_ROOTS = {
-    "RiskFreeSeriesRequest",
-    "RiskFreeSeriesResponse",
-    "RiskFreeSeriesPoint",
-    "CoverageRequest",
-    "CoverageResponse",
-}
-
-CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS = {
-    "ClassificationTaxonomyRequest",
-    "ClassificationTaxonomyEntry",
-    "ClassificationTaxonomyResponse",
-}
-
-RECONCILIATION_EVIDENCE_SCHEMA_ROOTS = {
-    "ReconciliationRunListResponse",
-    "ReconciliationFindingListResponse",
-}
-
-INGESTION_EVIDENCE_SCHEMA_ROOTS = {
-    "LineageResponse",
-    "LineageKeyListResponse",
-    "ReprocessingKeyListResponse",
-    "ReprocessingJobListResponse",
-}
-
-RECONCILIATION_SUPPORT_SCHEMA_ROOTS = {
-    "ReconciliationRunListResponse",
-    "ReconciliationFindingListResponse",
-}
-
-CAPABILITIES_SCHEMA_ROOTS = {
-    "IntegrationCapabilitiesResponse",
-    "FeatureCapability",
-    "WorkflowCapability",
-}
-
-SIMULATION_SCHEMA_ROOTS = {
-    "SimulationSessionCreateRequest",
-    "SimulationSessionRecord",
-    "SimulationSessionResponse",
-    "SimulationChangeInput",
-    "SimulationChangeRecord",
-    "SimulationChangesResponse",
-    "ProjectedPositionRecord",
-    "ProjectedPositionsResponse",
-    "ProjectedSummaryResponse",
-}
-
-CORE_SNAPSHOT_SCHEMA_ROOTS = {
-    "CoreSnapshotSimulationOptions",
-    "CoreSnapshotRequestOptions",
-    "CoreSnapshotRequest",
-    "CoreSnapshotValuationContext",
-    "CoreSnapshotSimulationMetadata",
-    "CoreSnapshotPolicyProvenance",
-    "CoreSnapshotGovernanceMetadata",
-    "CoreSnapshotFreshnessMetadata",
-    "CoreSnapshotPositionRecord",
-    "CoreSnapshotDeltaRecord",
-    "CoreSnapshotInstrumentEnrichmentRecord",
-    "CoreSnapshotPortfolioTotals",
-    "CoreSnapshotSections",
-    "CoreSnapshotResponse",
-}
-
-INTEGRATION_POLICY_SCHEMA_ROOTS = {
-    "PolicyProvenanceMetadata",
-    "EffectiveIntegrationPolicyResponse",
-}
-
-INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS = {
-    "InstrumentEnrichmentBulkRequest",
-    "InstrumentEnrichmentRecord",
-    "InstrumentEnrichmentBulkResponse",
-}
-
-BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS = {
-    "BenchmarkDefinitionRequest",
-    "BenchmarkDefinitionResponse",
-    "BenchmarkCatalogRequest",
-    "BenchmarkCatalogResponse",
-    "IndexCatalogRequest",
-    "IndexDefinitionResponse",
-    "IndexCatalogResponse",
-    "IndexSeriesRequest",
-    "IndexPriceSeriesResponse",
-    "IndexReturnSeriesResponse",
-    "BenchmarkReturnSeriesRequest",
-    "BenchmarkReturnSeriesResponse",
-}
-
-READINESS_SUPPORT_SCHEMA_ROOTS = {
-    "PortfolioReadinessReason",
-    "PortfolioReadinessBucket",
-    "MissingHistoricalFxDependencyRecord",
-    "MissingHistoricalFxDependencySummary",
-    "PortfolioReadinessResponse",
-    "CalculatorSloBucket",
-    "ReprocessingSloBucket",
-    "CalculatorSloResponse",
-    "PortfolioControlStageRecord",
-    "PortfolioControlStageListResponse",
-}
-
-SUPPORT_OPERATIONS_SCHEMA_ROOTS = {
-    "SupportOverviewResponse",
-    "SupportJobRecord",
-    "SupportJobListResponse",
-    "AnalyticsExportJobRecord",
-    "AnalyticsExportJobListResponse",
-}
-
-
-def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
-    refs: set[str] = set()
-    direct_ref = property_schema.get("$ref")
-    if isinstance(direct_ref, str):
-        refs.add(direct_ref.rsplit("/", maxsplit=1)[-1])
-
-    items = property_schema.get("items")
-    if isinstance(items, dict):
-        item_ref = items.get("$ref")
-        if isinstance(item_ref, str):
-            refs.add(item_ref.rsplit("/", maxsplit=1)[-1])
-
-    for composition_key in ("anyOf", "allOf", "oneOf"):
-        variants = property_schema.get(composition_key, [])
-        if not isinstance(variants, list):
-            continue
-        for variant in variants:
-            if not isinstance(variant, dict):
-                continue
-            variant_ref = variant.get("$ref")
-            if isinstance(variant_ref, str):
-                refs.add(variant_ref.rsplit("/", maxsplit=1)[-1])
-
-    return refs
-
-
-def _assert_schema_properties_are_documented_and_exampled(
-    schema: dict[str, object],
-    root_names: set[str],
-) -> None:
-    components = schema["components"]["schemas"]
-    pending = list(root_names)
-    visited: set[str] = set()
-
-    while pending:
-        schema_name = pending.pop(0)
-        if schema_name in visited:
-            continue
-        visited.add(schema_name)
-        current_schema = components[schema_name]
-        properties = current_schema.get("properties", {})
-
-        for property_name, property_schema in properties.items():
-            assert "description" in property_schema, (
-                f"{schema_name}.{property_name} is missing an OpenAPI description"
-            )
-
-            pending.extend(sorted(_collect_schema_refs(property_schema) - visited))
-
-            has_example_signal = any(
-                key in property_schema
-                for key in ("example", "examples", "default", "enum", "$ref", "allOf", "anyOf", "oneOf")
-            )
-            if property_schema.get("type") != "array":
-                assert has_example_signal, (
-                    f"{schema_name}.{property_name} is missing an OpenAPI example/default/enum signal"
-                )
 
 
 @pytest_asyncio.fixture
@@ -607,21 +430,6 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         == "Optional analytics export request fingerprint filter."
     )
 
-
-async def test_openapi_fully_documents_readiness_support_schema_family(async_test_client):
-    response = await async_test_client.get("/openapi.json")
-    assert response.status_code == 200
-    schema = response.json()
-
-    _assert_schema_properties_are_documented_and_exampled(schema, READINESS_SUPPORT_SCHEMA_ROOTS)
-
-
-async def test_openapi_fully_documents_support_operations_schema_family(async_test_client):
-    response = await async_test_client.get("/openapi.json")
-    assert response.status_code == 200
-    schema = response.json()
-
-    _assert_schema_properties_are_documented_and_exampled(schema, SUPPORT_OPERATIONS_SCHEMA_ROOTS)
     control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
     reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
         "get"
@@ -1071,12 +879,20 @@ async def test_openapi_fully_documents_support_operations_schema_family(async_te
     assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
 
 
+async def test_openapi_fully_documents_readiness_support_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, READINESS_SUPPORT_SCHEMA_ROOTS)
+
+
 async def test_openapi_fully_documents_support_operations_schema_family(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, SUPPORT_OPERATIONS_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, SUPPORT_OPERATIONS_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_analytics_reference_contract(async_test_client):
@@ -1267,12 +1083,12 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
 
     create_route = schema["paths"]["/simulation-sessions"]["post"]
     get_session = schema["paths"]["/simulation-sessions/{session_id}"]["get"]
-    projected_positions_route = schema["paths"]["/simulation-sessions/{session_id}/projected-positions"][
-        "get"
-    ]
-    projected_summary_route = schema["paths"]["/simulation-sessions/{session_id}/projected-summary"][
-        "get"
-    ]
+    projected_positions_route = schema["paths"][
+        "/simulation-sessions/{session_id}/projected-positions"
+    ]["get"]
+    projected_summary_route = schema["paths"][
+        "/simulation-sessions/{session_id}/projected-summary"
+    ]["get"]
     delete_change = schema["paths"]["/simulation-sessions/{session_id}/changes/{change_id}"][
         "delete"
     ]
@@ -1321,7 +1137,7 @@ async def test_openapi_simulation_schema_family_is_fully_documented(async_test_c
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, SIMULATION_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, SIMULATION_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_analytics_input_parameters_and_examples(async_test_client):
@@ -1443,7 +1259,7 @@ async def test_openapi_fully_documents_analytics_input_schema_family(async_test_
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, ANALYTICS_INPUT_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, ANALYTICS_INPUT_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_integration_policy_and_core_snapshot(async_test_client):
@@ -1554,7 +1370,7 @@ async def test_openapi_fully_documents_core_snapshot_schema_family(async_test_cl
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, CORE_SNAPSHOT_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, CORE_SNAPSHOT_SCHEMA_ROOTS)
 
 
 async def test_openapi_fully_documents_policy_and_enrichment_schema_families(async_test_client):
@@ -1562,12 +1378,8 @@ async def test_openapi_fully_documents_policy_and_enrichment_schema_families(asy
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(
-        schema, INTEGRATION_POLICY_SCHEMA_ROOTS
-    )
-    _assert_schema_properties_are_documented_and_exampled(
-        schema, INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS
-    )
+    assert_schema_properties_are_documented_and_exampled(schema, INTEGRATION_POLICY_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_benchmark_reference_parameters(async_test_client):
@@ -1622,9 +1434,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Benchmark identifier for the requested composition window contract."
     )
     assert "without daily-expanding weights" in benchmark_composition_window["description"]
-    assert "calculate benchmark returns across rebalance windows" in benchmark_composition_window[
-        "description"
-    ]
+    assert (
+        "calculate benchmark returns across rebalance windows"
+        in benchmark_composition_window["description"]
+    )
 
     composition_not_found = benchmark_composition_window["responses"]["404"]["content"][
         "application/json"
@@ -1669,9 +1482,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         in (classification_taxonomy["description"])
     )
     assert "instead of local taxonomy drift" in classification_taxonomy["description"]
-    assert "Missing labels remain absent rather than synthesized" in classification_taxonomy[
-        "description"
-    ]
+    assert (
+        "Missing labels remain absent rather than synthesized"
+        in classification_taxonomy["description"]
+    )
 
     index_id = next(
         parameter
@@ -1751,11 +1565,13 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "InstrumentReferenceBundle"
     )
     assert benchmark_assignment_response["properties"]["product_version"]["default"] == "v1"
-    assert "does not change benchmark assignment selection" in (
-        benchmark_assignment_request["properties"]["reporting_currency"]["description"]
+    assert (
+        "does not change benchmark assignment selection"
+        in (benchmark_assignment_request["properties"]["reporting_currency"]["description"])
     )
-    assert "current implementation still resolves the effective assignment" in (
-        benchmark_assignment_request["properties"]["policy_context"]["description"]
+    assert (
+        "current implementation still resolves the effective assignment"
+        in (benchmark_assignment_request["properties"]["policy_context"]["description"])
     )
     assert benchmark_assignment_response["properties"]["assignment_recorded_at"]["examples"] == [
         "2026-01-31T09:15:00Z"
@@ -1864,7 +1680,7 @@ async def test_openapi_fully_documents_benchmark_reference_catalog_schema_family
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(
+    assert_schema_properties_are_documented_and_exampled(
         schema, BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS
     )
 
@@ -1874,7 +1690,7 @@ async def test_openapi_fully_documents_benchmark_assignment_schema_family(async_
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS)
 
 
 async def test_openapi_fully_documents_benchmark_source_schema_family(async_test_client):
@@ -1882,7 +1698,7 @@ async def test_openapi_fully_documents_benchmark_source_schema_family(async_test
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_SOURCE_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_SOURCE_SCHEMA_ROOTS)
 
 
 async def test_openapi_fully_documents_risk_free_schema_family(async_test_client):
@@ -1890,7 +1706,7 @@ async def test_openapi_fully_documents_risk_free_schema_family(async_test_client
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, RISK_FREE_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, RISK_FREE_SCHEMA_ROOTS)
 
 
 async def test_openapi_fully_documents_classification_taxonomy_schema_family(async_test_client):
@@ -1898,7 +1714,7 @@ async def test_openapi_fully_documents_classification_taxonomy_schema_family(asy
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(
+    assert_schema_properties_are_documented_and_exampled(
         schema, CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS
     )
 
@@ -1908,7 +1724,7 @@ async def test_openapi_fully_documents_reconciliation_evidence_schema_family(asy
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(
+    assert_schema_properties_are_documented_and_exampled(
         schema, RECONCILIATION_EVIDENCE_SCHEMA_ROOTS
     )
 
@@ -1918,7 +1734,7 @@ async def test_openapi_fully_documents_ingestion_evidence_schema_family(async_te
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, INGESTION_EVIDENCE_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, INGESTION_EVIDENCE_SCHEMA_ROOTS)
 
 
 async def test_openapi_fully_documents_reconciliation_support_schema_family(async_test_client):
@@ -1926,7 +1742,7 @@ async def test_openapi_fully_documents_reconciliation_support_schema_family(asyn
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(
+    assert_schema_properties_are_documented_and_exampled(
         schema, RECONCILIATION_SUPPORT_SCHEMA_ROOTS
     )
 
@@ -1981,4 +1797,4 @@ async def test_openapi_fully_documents_capabilities_schema_family(async_test_cli
     assert response.status_code == 200
     schema = response.json()
 
-    _assert_schema_properties_are_documented_and_exampled(schema, CAPABILITIES_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, CAPABILITIES_SCHEMA_ROOTS)
