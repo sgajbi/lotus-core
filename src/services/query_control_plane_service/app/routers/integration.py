@@ -94,8 +94,13 @@ def get_core_snapshot_service(
     response_model=EffectiveIntegrationPolicyResponse,
     summary="Get effective lotus-core integration policy",
     description=(
-        "Returns effective policy diagnostics and provenance for the given consumer and tenant "
-        "context, including strict-mode behavior and allowed sections."
+        "What: Return effective integration policy diagnostics for a consumer and tenant "
+        "context.\n"
+        "How: Resolves the canonical policy rule, reports policy provenance, and optionally "
+        "evaluates requested snapshot sections through `include_sections`.\n"
+        "When: Used by gateway, operator tooling, and downstream clients that need to inspect "
+        "lotus-core section policy before calling governed source-data routes such as "
+        "`/integration/portfolios/{portfolio_id}/core-snapshot`."
     ),
 )
 async def get_effective_integration_policy(

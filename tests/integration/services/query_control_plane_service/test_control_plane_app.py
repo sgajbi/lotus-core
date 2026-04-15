@@ -1295,6 +1295,8 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert consumer_system["description"] == (
         "Downstream consumer system requesting policy resolution."
     )
+    assert "gateway, operator tooling, and downstream clients" in effective_policy["description"]
+    assert "`include_sections`" in effective_policy["description"]
 
     portfolio_param = next(
         parameter
@@ -1334,6 +1336,9 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
 
     assert policy_response["properties"]["policy_provenance"]["description"] == (
         "Policy lineage metadata showing how the effective policy was resolved."
+    )
+    assert policy_response["properties"]["allowed_sections"]["description"] == (
+        "Section allow-list resolved for this consumer and tenant."
     )
     assert enrichment_request["properties"]["security_ids"]["description"] == (
         "Canonical Lotus security identifiers to enrich in one deterministic batch. Order is "

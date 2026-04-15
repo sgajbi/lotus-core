@@ -478,6 +478,58 @@ async def test_core_snapshot_success(async_test_client):
     ]
 
 
+async def test_effective_integration_policy_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-manage",
+        tenant_id="tenant-a",
+        generated_at="2026-02-27T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-a-v1",
+            policy_source="tenant",
+            matched_rule_id="tenant.tenant-a.consumers.lotus-manage",
+            strict_mode=True,
+        ),
+        allowed_sections=["POSITIONS_BASELINE", "PORTFOLIO_TOTALS"],
+        warnings=["STRICT_MODE_ENABLED"],
+    )
+
+    response = await client.get(
+        "/integration/policy/effective"
+        "?consumer_system=lotus-manage&tenant_id=tenant-a"
+        "&include_sections=positions_baseline&include_sections=portfolio_totals"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["consumer_system"] == "lotus-manage"
+    assert body["tenant_id"] == "tenant-a"
+    assert body["policy_provenance"]["strict_mode"] is True
+    assert body["allowed_sections"] == ["POSITIONS_BASELINE", "PORTFOLIO_TOTALS"]
+    assert body["warnings"] == ["STRICT_MODE_ENABLED"]
+    mock_integration_service.get_effective_policy.assert_called_with(
+        consumer_system="lotus-manage",
+        tenant_id="tenant-a",
+        include_sections=["positions_baseline", "portfolio_totals"],
+    )
+
+
+async def test_effective_integration_policy_defaults_apply(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.get("/integration/policy/effective")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["consumer_system"] == "lotus-gateway"
+    assert body["tenant_id"] == "default"
+    mock_integration_service.get_effective_policy.assert_called_with(
+        consumer_system="lotus-gateway",
+        tenant_id="default",
+        include_sections=None,
+    )
+
+
 async def test_core_snapshot_policy_block_maps_to_403(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(

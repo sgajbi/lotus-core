@@ -586,6 +586,50 @@ The main follow-up remains product adoption and downstream workflow testing in r
 `lotus-gateway`, `lotus-manage`, and `lotus-report` when they start relying on these deeper support
 surfaces directly.
 
+## Certified Endpoint Slice: Effective Integration Policy
+
+This certification pass covers:
+
+1. `GET /integration/policy/effective`
+
+### Route Contract Decision
+
+This is the strategic control-plane route for inspecting lotus-core policy posture before a
+downstream caller requests governed source-data sections.
+
+The contract is intentionally advisory and policy-scoped:
+
+1. it resolves consumer and tenant policy context;
+2. it can evaluate requested snapshot sections through `include_sections`;
+3. it reports policy provenance, strict-mode posture, allowed sections, and warnings;
+4. it does not itself publish portfolio state or analytics inputs.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /integration/policy/effective` | `lotus-gateway` | Active direct default-path use is consistent with gateway’s role as the main control-plane consumer of section policy before governed state reads. |
+
+Operator tooling and future downstream clients are also valid consumers when they need policy
+diagnostics ahead of snapshot orchestration or support investigations.
+
+### Swagger / OpenAPI Assessment
+
+Swagger now makes the following explicit:
+
+1. when the route should be used;
+2. that `include_sections` is an optional evaluation input rather than a state read;
+3. that the response is policy provenance and section-allowance metadata.
+
+The HTTP dependency lane now proves both:
+
+1. explicit consumer or tenant policy lookup with repeated `include_sections` query values;
+2. canonical default resolution to `consumer_system=lotus-gateway` and `tenant_id=default`.
+
+### Issue Disposition For This Endpoint
+
+No lotus-core issue is open against this route at the moment.
+
 ## Certified Endpoint Slice: Integration Capabilities
 
 This certification pass covers:
@@ -638,9 +682,9 @@ Related downstream follow-up remains valid:
 | `lotus-gateway #109` | Downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. | Keep open in gateway. |
 | `lotus-gateway #73` | Platform capabilities latency issue in gateway aggregation, not a lotus-core publication defect. | Keep open in gateway. |
 
-The same certification lane now also protects the adjacent policy/effective and
-instrument-enrichment contract families with recursive OpenAPI schema-family guards, so nested
-policy provenance and enrichment fields do not regress silently while core-snapshot evolves.
+The same certification lane now also protects the adjacent instrument-enrichment contract family
+with recursive OpenAPI schema-family guards, so nested enrichment fields do not regress silently
+while core-snapshot evolves.
 
 The source-owned readiness, calculator-SLO, and control-stage support contracts are now also
 covered by a recursive OpenAPI schema-family guard so nested readiness reasons, historical-FX
