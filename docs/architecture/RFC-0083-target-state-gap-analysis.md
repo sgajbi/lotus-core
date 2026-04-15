@@ -481,9 +481,9 @@ query-service and query-control-plane write authorization, capability-rule, poli
 audit, and opt-in read audit middleware logic while preserving service-local settings and wrapper
 functions. Security profile validation now also prevents operator-only products from being classified
 outside control-plane and policy route families and constrains business, system, and operator access
-classes and audit requirements to their governed RFC-0082 route-family lanes. This slice does not
-introduce new entitlement policy semantics, persistence changes, or downstream response payload shape
-changes.
+classes, audit requirements, and sensitivity-driven retention requirements to their governed
+RFC-0082/RFC-0083 lanes. This slice does not introduce new entitlement policy semantics, persistence
+changes, or downstream response payload shape changes.
 
 ## Slice 10 Completion Note
 

@@ -48,7 +48,10 @@ contracts. Access classifications are route-family constrained: business-consume
 operational read or snapshot/simulation products, system access belongs to analytics-input products,
 and operator access belongs to control-plane and policy products. Audit requirements are constrained
 the same way: business-consumer products use read/export audit, system products use system-access
-audit, and operator products use operator-access audit.
+audit, and operator products use operator-access audit. Retention requirements are constrained by
+sensitivity class: client-confidential and client-sensitive products use client-record retention,
+reference-internal products use source-audit retention, and internal-operational products use
+operational-audit retention.
 
 ## Access Classes
 

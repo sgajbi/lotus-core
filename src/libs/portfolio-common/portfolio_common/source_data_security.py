@@ -40,6 +40,12 @@ ACCESS_CLASSIFICATION_AUDIT_REQUIREMENT = {
     SYSTEM_ACCESS: AUDIT_SYSTEM_ACCESS,
     OPERATOR_ACCESS: AUDIT_OPERATOR_ACCESS,
 }
+SENSITIVITY_RETENTION_REQUIREMENT = {
+    CLIENT_CONFIDENTIAL: RETAIN_FOR_CLIENT_RECORD,
+    CLIENT_SENSITIVE: RETAIN_FOR_CLIENT_RECORD,
+    REFERENCE_INTERNAL: RETAIN_FOR_SOURCE_AUDIT,
+    INTERNAL_OPERATIONAL: RETAIN_FOR_OPERATIONAL_AUDIT,
+}
 
 
 @dataclass(frozen=True)
@@ -299,6 +305,15 @@ def validate_source_data_security_profiles(
             raise ValueError(
                 f"{profile.product_name} audit_requirement {profile.audit_requirement} "
                 f"is not valid for access_classification {profile.access_classification}"
+            )
+        expected_retention_requirement = SENSITIVITY_RETENTION_REQUIREMENT[
+            profile.sensitivity_classification
+        ]
+        if profile.retention_requirement != expected_retention_requirement:
+            raise ValueError(
+                f"{profile.product_name} retention_requirement "
+                f"{profile.retention_requirement} is not valid for sensitivity_classification "
+                f"{profile.sensitivity_classification}"
             )
         if catalog_product:
             allowed_route_families = ACCESS_CLASSIFICATION_ROUTE_FAMILIES[

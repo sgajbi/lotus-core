@@ -78,6 +78,23 @@ def test_security_profiles_align_audit_requirement_to_access_classification() ->
         assert profile.audit_requirement == expected_audit_by_access[profile.access_classification]
 
 
+def test_security_profiles_align_retention_to_sensitivity_classification() -> None:
+    expected_retention_by_sensitivity = {
+        "client_confidential": "retain_for_client_record",
+        "client_sensitive": "retain_for_client_record",
+        "reference_internal": "retain_for_source_audit",
+        "internal_operational": "retain_for_operational_audit",
+    }
+
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        profile = get_source_data_security_profile(product.product_name)
+
+        assert (
+            profile.retention_requirement
+            == expected_retention_by_sensitivity[profile.sensitivity_classification]
+        )
+
+
 def test_portfolio_snapshot_profile_is_client_confidential() -> None:
     profile = get_source_data_security_profile("PortfolioStateSnapshot")
 
@@ -200,6 +217,22 @@ def test_security_profile_validation_rejects_access_audit_mismatch() -> None:
     )
 
     with pytest.raises(ValueError, match="audit_requirement .* is not valid"):
+        validate_source_data_security_profiles((invalid,))
+
+
+def test_security_profile_validation_rejects_sensitivity_retention_mismatch() -> None:
+    invalid = SourceDataSecurityProfile(
+        product_name="PortfolioAnalyticsReference",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement="retain_for_source_audit",
+        audit_requirement="audit_system_access",
+        pii_fields=("portfolio_id", "client_id"),
+    )
+
+    with pytest.raises(ValueError, match="retention_requirement .* is not valid"):
         validate_source_data_security_profiles((invalid,))
 
 
