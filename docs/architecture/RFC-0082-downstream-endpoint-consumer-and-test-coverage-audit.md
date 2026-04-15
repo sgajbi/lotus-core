@@ -188,7 +188,7 @@ Reviewed open benchmark-assignment-related issues:
 | --- | --- | --- |
 | `#237` grouped benchmark analytics contract | Valid strategic follow-on. This is broader than assignment resolution and remains open. | Keep open. |
 | `#246` broader benchmark source-contract hardening | Valid broader benchmark-program issue. Not a duplicate of this assignment endpoint slice. | Keep open. |
-| `#249` benchmark-assignment ingest optional timestamp mismatch | Valid ingest-path issue, not a query-control-plane benchmark-assignment publication issue. | Keep open. |
+| `#249` benchmark-assignment ingest optional timestamp mismatch | Already addressed in the ingestion path. The reference-data ingestion service defaults `assignment_recorded_at` when omitted, and integration coverage proves the omitted-field request persists a non-null value. | Closure comment posted with service and integration-test evidence; close as implemented unless fresh contrary evidence appears. |
 
 No downstream migration issue is required from this slice. `lotus-performance` and `lotus-gateway`
 are both calling the strategic route, and no duplicate/stale benchmark-assignment consumer path was
