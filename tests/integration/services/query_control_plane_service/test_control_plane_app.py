@@ -3,6 +3,10 @@ from unittest.mock import patch
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.source_data_products import (
+    QUERY_CONTROL_PLANE_SERVICE,
+    SOURCE_DATA_PRODUCT_CATALOG,
+)
 
 from src.services.query_control_plane_service.app.main import app, lifespan
 
@@ -23,6 +27,28 @@ async def test_middleware_preserves_incoming_correlation_id(async_test_client):
 
     assert response.status_code == 200
     assert response.headers["X-Correlation-ID"] == "corr-123"
+
+
+async def test_openapi_binds_query_control_plane_source_data_products(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        if product.serving_plane != QUERY_CONTROL_PLANE_SERVICE:
+            continue
+        for route in product.current_routes:
+            path_item = schema["paths"][route]
+            operation = path_item.get("post") or path_item.get("get")
+            assert operation is not None
+            extension = operation["x-lotus-source-data-product"]
+            assert extension["product_name"] == product.product_name
+            assert extension["product_version"] == product.product_version
+            assert extension["route_family"] == product.route_family
+            assert extension["serving_plane"] == product.serving_plane
+            assert extension["owner"] == product.owner
+            assert extension["consumers"] == list(product.consumers)
+            assert extension["current_routes"] == list(product.current_routes)
 
 
 async def test_middleware_generates_correlation_id_when_missing(async_test_client):

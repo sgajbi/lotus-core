@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, status as http_status
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.operations_dto import (
@@ -306,6 +307,7 @@ async def get_portfolio_control_stages(
         "When: Use to inspect stuck or stale REPROCESSING keys and verify replay normalization "
         "after recovery."
     ),
+    openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
 async def get_reprocessing_keys(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
@@ -373,6 +375,7 @@ async def get_reprocessing_keys(
         "When: Use to inspect queued, stale, retried, or failed replay jobs without direct "
         "database access."
     ),
+    openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
 async def get_reprocessing_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
@@ -659,6 +662,7 @@ async def get_analytics_export_jobs(
         "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
         "unexpected reconciliation failures."
     ),
+    openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
 async def get_reconciliation_runs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
@@ -734,6 +738,7 @@ async def get_reconciliation_runs(
         "When: Use after a control failure or replay requirement to inspect the exact breaches "
         "that blocked publication."
     ),
+    openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
 async def get_reconciliation_findings(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
@@ -835,6 +840,7 @@ async def get_lineage(
         "How: Query portfolio-security lineage rows with status/security filters and pagination.\n"
         "When: Use to scope impacted keys before running replay, backfill, or targeted recovery."
     ),
+    openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
 async def get_lineage_keys(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),

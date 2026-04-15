@@ -76,6 +76,10 @@ def test_source_data_product_openapi_extra_exposes_machine_readable_contract_ide
     assert extension["serving_plane"] == QUERY_CONTROL_PLANE_SERVICE
     assert extension["owner"] == "lotus-core"
     assert "lotus-performance" in extension["consumers"]
+    assert (
+        "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries"
+        in extension["current_routes"]
+    )
     assert "required_metadata_fields" in extension
     assert "restatement_version" in extension["required_metadata_fields"]
 
