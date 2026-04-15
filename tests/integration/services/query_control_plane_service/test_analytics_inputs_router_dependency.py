@@ -203,8 +203,25 @@ async def test_portfolio_analytics_timeseries_success(async_test_client):
     assert body["product_name"] == "PortfolioTimeseriesInput"
     assert body["product_version"] == "v1"
     assert body["as_of_date"] == "2025-12-31"
+    assert body["portfolio_currency"] == "EUR"
+    assert body["reporting_currency"] == "EUR"
+    assert body["calendar_id"] == "business_date_calendar"
+    assert body["missing_observation_policy"] == "strict"
+    assert body["diagnostics"]["cash_flows_included"] is True
+    assert body["page"]["page_size"] == 100
+    assert body["page"]["request_scope_fingerprint"] == "scope-abc"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
+    mock_service.get_portfolio_timeseries.assert_awaited_once()
+    portfolio_call = mock_service.get_portfolio_timeseries.await_args.kwargs
+    assert portfolio_call["portfolio_id"] == "DEMO_DPM_EUR_001"
+    assert portfolio_call["request"].as_of_date == date(2025, 12, 31)
+    assert portfolio_call["request"].window.start_date == date(2025, 1, 1)
+    assert portfolio_call["request"].window.end_date == date(2025, 1, 31)
+    assert portfolio_call["request"].reporting_currency == "EUR"
+    assert portfolio_call["request"].frequency == "daily"
+    assert portfolio_call["request"].consumer_system == "lotus-performance"
+    assert portfolio_call["request"].page.page_size == 100
 
 
 async def test_portfolio_analytics_timeseries_invalid_request_maps_to_400(async_test_client):
@@ -229,6 +246,52 @@ async def test_portfolio_analytics_timeseries_invalid_request_maps_to_400(async_
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Page token does not match request scope."
+
+
+async def test_portfolio_analytics_timeseries_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_timeseries = AsyncMock(
+        side_effect=AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+    )
+
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/portfolio-timeseries",
+        json={
+            "as_of_date": "2025-12-31",
+            "window": {"start_date": "2025-01-01", "end_date": "2025-01-31"},
+            "reporting_currency": "EUR",
+            "frequency": "daily",
+            "consumer_system": "lotus-performance",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Portfolio not found."
+
+
+async def test_portfolio_analytics_timeseries_insufficient_data_maps_to_422(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_timeseries = AsyncMock(
+        side_effect=AnalyticsInputError(
+            "INSUFFICIENT_DATA", "Missing FX rate for EUR/USD on 2025-01-31."
+        )
+    )
+
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/portfolio-timeseries",
+        json={
+            "as_of_date": "2025-12-31",
+            "window": {"start_date": "2025-01-01", "end_date": "2025-01-31"},
+            "reporting_currency": "EUR",
+            "frequency": "daily",
+            "consumer_system": "lotus-performance",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Missing FX rate for EUR/USD on 2025-01-31."
 
 
 async def test_position_analytics_timeseries_success(async_test_client):
@@ -417,13 +480,14 @@ async def test_get_analytics_export_job_not_found_maps_to_404(async_test_client)
 
 
 async def test_get_analytics_export_job_result_json_success(async_test_client):
-    client, _mock_service = async_test_client
+    client, mock_service = async_test_client
     response = await client.get(
         "/integration/exports/analytics-timeseries/jobs/aexp_1/result?result_format=json&compression=none"
     )
     assert response.status_code == 200
     assert response.json()["job_id"] == "aexp_1"
     assert response.json()["result_row_count"] == 1
+    mock_service.get_export_result_json.assert_awaited_once_with("aexp_1")
 
 
 async def test_get_analytics_export_job_result_ndjson_gzip_success(async_test_client):

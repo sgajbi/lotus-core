@@ -109,8 +109,8 @@ Reviewed open `lotus-core` issues tied directly to these contracts:
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `#233` position-timeseries missing `position_currency` | Addressed in the live contract. `PositionTimeseriesRow.position_currency` is present in the public schema, documented, and regression-covered. | Close as implemented once GitHub issue hygiene is updated. |
-| `#259` need explicit flow provenance beyond plain external flow | Addressed in the live contract. `CashFlowObservation` now exposes `cash_flow_type`, `flow_scope`, and `source_classification`, with OpenAPI descriptions covering semantics. | Close as implemented once GitHub issue hygiene is updated. |
+| `#233` position-timeseries missing `position_currency` | Addressed in the live contract. `PositionTimeseriesRow.position_currency` is present in the public schema, documented, and regression-covered. | Closure comment posted with implementation evidence; issue should now be closed. |
+| `#259` need explicit flow provenance beyond plain external flow | Addressed in the live contract. `CashFlowObservation` now exposes `cash_flow_type`, `flow_scope`, and `source_classification`, with OpenAPI descriptions covering semantics. | Closure comment posted with implementation evidence; issue should now be closed. |
 | `#250`, `#253`, `#254`, `#258`, `#260` | These are route-family economics/readiness defects rather than documentation or route-publication gaps. They require runtime validation against canonical/live scenarios before closure. | Keep open until live source-economics proof is re-run and captured. |
 
 No new gateway issue is required from this slice. Gateway is using the strategic analytics-reference
