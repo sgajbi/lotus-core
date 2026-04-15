@@ -604,7 +604,9 @@ async def fetch_risk_free_series(
         "What: Return effective classification taxonomy records.\n"
         "How: Applies as-of effective dating and optional scope filtering.\n"
         "When: Used by lotus-performance, lotus-risk, lotus-gateway, and lotus-advise to enforce "
-        "shared classification labels instead of local taxonomy drift."
+        "shared classification labels instead of local taxonomy drift. Missing labels remain "
+        "absent rather than synthesized, so downstream consumers can distinguish governed "
+        "coverage gaps from valid source-owned classifications."
     ),
     openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )

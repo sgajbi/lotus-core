@@ -303,6 +303,66 @@ Automated proof now includes a risk-free schema-family completeness assertion in
 No new downstream migration issue is required from this slice. The known work here is live data
 availability and downstream messaging alignment, not route replacement.
 
+## Certified Endpoint Slice: Classification Taxonomy
+
+This certification pass covers:
+
+1. `POST /integration/reference/classification-taxonomy`
+
+### Route Contract Decision
+
+This is the strategic route for shared classification labels across Lotus applications.
+
+The contract is intentionally source-owned:
+
+1. it returns effective taxonomy entries by `as_of_date` and optional `taxonomy_scope`;
+2. it is the governed source for shared labels used by performance, risk, gateway, and advise;
+3. it does not synthesize missing labels for unsupported dimensions or incomplete source coverage.
+
+That final point matters. Downstream consumers should use absence of a governed label as a visible
+coverage signal, not silently invent fallback labels that blur source truth.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/reference/classification-taxonomy` | `lotus-risk`, `lotus-advise` | Correct. Both repos contain direct integration references to core-owned classification sourcing. |
+
+`lotus-performance` and `lotus-gateway` are catalog-intended consumers and are called out in the
+route contract because they rely on the same governed vocabulary, even where their current direct
+code paths more often consume those labels through adjacent source contracts.
+
+### Upstream Integration Assessment
+
+The taxonomy route is correctly placed on the query-control-plane and currently behaves as a
+truth-preserving vocabulary surface:
+
+1. effective-dated taxonomy entries are returned without caller-side inference;
+2. `taxonomy_scope` is a filter over governed source scopes, not a remapping layer;
+3. missing labels remain absent, which allows downstream consumers to distinguish unsupported or
+   incomplete classification coverage from valid source-owned classifications.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. the route exists to prevent local taxonomy drift;
+2. `taxonomy_scope` is an optional governed-scope filter;
+3. missing labels remain absent rather than synthesized;
+4. the taxonomy contract version is explicit and exampled.
+
+Automated proof now includes a classification-taxonomy schema-family completeness assertion in
+`tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core #306` missing sector labels for canonical benchmark indices | Valid downstream-impacting classification coverage issue. The taxonomy contract itself is correct; the remaining work is source coverage and/or more explicit unsupported-dimension signaling. | Keep open. |
+
+No new downstream migration issue is required from this slice. The active need here is classification
+coverage quality, not route replacement.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |

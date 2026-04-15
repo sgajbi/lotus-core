@@ -982,7 +982,10 @@ class ClassificationTaxonomyRequest(BaseModel):
     )
     taxonomy_scope: str | None = Field(
         None,
-        description="Optional taxonomy scope filter.",
+        description=(
+            "Optional taxonomy scope filter such as `index`, `instrument`, or other "
+            "governed source scopes. Omitting the field returns all effective scopes."
+        ),
         examples=["index"],
     )
 
@@ -1036,6 +1039,7 @@ class ClassificationTaxonomyResponse(SourceDataProductRuntimeMetadata):
     taxonomy_version: str = Field(
         "rfc_062_v1",
         description="Taxonomy contract version exposed by query service.",
+        examples=["rfc_062_v1"],
     )
     request_fingerprint: str = Field(
         ...,

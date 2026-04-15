@@ -62,6 +62,12 @@ RISK_FREE_SCHEMA_ROOTS = {
     "CoverageResponse",
 }
 
+CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS = {
+    "ClassificationTaxonomyRequest",
+    "ClassificationTaxonomyEntry",
+    "ClassificationTaxonomyResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1470,6 +1476,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "lotus-performance, lotus-risk, lotus-gateway, and lotus-advise"
         in (classification_taxonomy["description"])
     )
+    assert "instead of local taxonomy drift" in classification_taxonomy["description"]
+    assert "Missing labels remain absent rather than synthesized" in classification_taxonomy[
+        "description"
+    ]
 
     index_id = next(
         parameter
@@ -1635,6 +1645,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert classification_taxonomy_response["properties"]["request_fingerprint"]["description"] == (
         "Deterministic request fingerprint for the taxonomy response scope."
     )
+    assert classification_taxonomy_response["properties"]["taxonomy_version"]["examples"] == [
+        "rfc_062_v1"
+    ]
     reference_page_metadata = components["ReferencePageMetadata"]
     assert reference_page_metadata["properties"]["returned_component_count"]["description"] == (
         "Number of component series records returned in the current page."
@@ -1666,6 +1679,16 @@ async def test_openapi_fully_documents_risk_free_schema_family(async_test_client
     schema = response.json()
 
     _assert_schema_properties_are_documented_and_exampled(schema, RISK_FREE_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_classification_taxonomy_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(
+        schema, CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS
+    )
 
 
 async def test_openapi_describes_capabilities_query_parameters(async_test_client):
