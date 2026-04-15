@@ -369,6 +369,37 @@ For this family, Swagger is now production-grade on the following dimensions:
 | `#54` simulation OpenAPI error-response gap | Addressed. Negative response codes are documented and guarded by integration tests. | Close as implemented once issue hygiene is updated. |
 | `#52` unknown portfolio leaks raw DB 500 on create-session | Addressed in this slice. Service now prevalidates portfolio existence and the router returns a sanitized 404/500 contract. | Close as implemented once issue hygiene is updated. |
 
+## Certified Endpoint Slice: Advisory Simulation Execution
+
+This certification pass covers:
+
+1. `POST /integration/advisory/proposals/simulate-execution`
+
+### Route Contract Decision
+
+This is the strategic canonical execution-projection route for `lotus-advise`.
+
+The boundary remains explicit:
+
+1. use it after advisory context resolution, request hashing, and idempotency orchestration;
+2. do not use it as a generic simulation-session lifecycle route;
+3. do not use it as a gateway-facing workspace read;
+4. do not treat it as ownership of advisory recommendation logic.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/advisory/proposals/simulate-execution` | `lotus-advise` | Correct. `lotus-advise` sends the canonical contract header, request hash, idempotency key, correlation id, and validates both response header and payload contract version fields. |
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. execution projection belongs to `lotus-core`, while recommendation ownership does not;
+2. error responses are published as canonical problem-details payloads;
+3. problem-details fields now carry explicit examples for contract-version mismatch handling.
+
 ## Certified Endpoint Slice: Classification Taxonomy
 
 This certification pass covers:

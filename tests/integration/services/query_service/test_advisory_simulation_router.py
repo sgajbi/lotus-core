@@ -129,8 +129,17 @@ def test_advisory_simulation_execution_openapi_documents_contract_header_and_err
 
     operation = openapi["paths"]["/integration/advisory/proposals/simulate-execution"]["post"]
     parameter_names = {parameter["name"] for parameter in operation["parameters"]}
+    problem_details = openapi["components"]["schemas"]["CanonicalSimulationProblemDetails"]
 
     assert ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER in parameter_names
     assert "412" in operation["responses"]
     assert "422" in operation["responses"]
     assert "500" in operation["responses"]
+    assert "deterministic core-state execution projection only" in operation["description"]
+    assert problem_details["properties"]["detail"]["examples"] == [
+        "Unsupported canonical simulation contract version: "
+        "advisory-simulation.v0. Expected advisory-simulation.v1."
+    ]
+    assert problem_details["properties"]["contract_version"]["examples"] == [
+        ADVISORY_SIMULATION_CONTRACT_VERSION
+    ]
