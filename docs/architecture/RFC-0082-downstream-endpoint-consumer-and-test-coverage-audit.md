@@ -580,6 +580,10 @@ covered by a recursive OpenAPI schema-family guard so nested readiness reasons, 
 dependency summaries, SLO backlog fields, and control-stage lifecycle attributes remain
 self-describing for gateway and operator consumers.
 
+The adjacent support-operations contract family is now covered the same way, so support overview,
+job-list, and analytics-export operational payloads cannot silently lose nested descriptions or
+example signals while operator surfaces evolve.
+
 ## Certified Endpoint Slice: Core Snapshot
 
 This certification pass covers:

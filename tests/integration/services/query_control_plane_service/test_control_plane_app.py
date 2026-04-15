@@ -159,6 +159,14 @@ READINESS_SUPPORT_SCHEMA_ROOTS = {
     "PortfolioControlStageListResponse",
 }
 
+SUPPORT_OPERATIONS_SCHEMA_ROOTS = {
+    "SupportOverviewResponse",
+    "SupportJobRecord",
+    "SupportJobListResponse",
+    "AnalyticsExportJobRecord",
+    "AnalyticsExportJobListResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -606,18 +614,14 @@ async def test_openapi_fully_documents_readiness_support_schema_family(async_tes
     schema = response.json()
 
     _assert_schema_properties_are_documented_and_exampled(schema, READINESS_SUPPORT_SCHEMA_ROOTS)
-    analytics_export_jobs = schema["paths"][
-        "/support/portfolios/{portfolio_id}/analytics-export-jobs"
-    ]["get"]
-    reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
-        "get"
-    ]
-    reconciliation_runs = schema["paths"]["/support/portfolios/{portfolio_id}/reconciliation-runs"][
-        "get"
-    ]
-    reconciliation_findings = schema["paths"][
-        "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings"
-    ]["get"]
+
+
+async def test_openapi_fully_documents_support_operations_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, SUPPORT_OPERATIONS_SCHEMA_ROOTS)
     control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
     reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
         "get"
@@ -1065,6 +1069,14 @@ async def test_openapi_fully_documents_readiness_support_schema_family(async_tes
         "application/json"
     ]["example"]
     assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+
+
+async def test_openapi_fully_documents_support_operations_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, SUPPORT_OPERATIONS_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_analytics_reference_contract(async_test_client):
