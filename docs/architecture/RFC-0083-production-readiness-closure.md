@@ -40,14 +40,25 @@ The ledger intentionally records `runtimeProductionStatus` as `not-production-cl
 
 Full production runtime closure still requires:
 
-1. the `lotus-core` PR Merge Gate,
-2. affected downstream consumer PR Merge Gates,
-3. full gateway/platform authorization and entitlement proof when opt-in service-policy controls
+1. affected downstream consumer PR Merge Gates,
+2. full gateway/platform authorization and entitlement proof when opt-in service-policy controls
    move to production enforcement,
-4. full cross-service event replay proof when event payload behavior changes beyond the centrally
+3. full cross-service event replay proof when event payload behavior changes beyond the centrally
    guarded outbox envelope.
 
 ## Completed Runtime Proof
+
+The local `lotus-core` PR Merge Gate parity run completed on 2026-04-15 with:
+
+```powershell
+make ci
+```
+
+That command passed the repository-native dependency consistency, lint, no-alias, typecheck,
+architecture, OpenAPI, API vocabulary, warning, migration smoke, PR test suite, coverage, security
+audit, and PR runtime Docker/build gates. It also proved that the stale vulnerable `pytest==8.2.2`
+test dependency pin has been replaced with `pytest==9.0.3` so the security-audit lane reports no
+known vulnerabilities.
 
 The canonical front-office platform end-to-end validation for `PB_SG_GLOBAL_BAL_001` completed on
 2026-04-15 and is recorded in:
@@ -55,8 +66,7 @@ The canonical front-office platform end-to-end validation for `PB_SG_GLOBAL_BAL_
 1. `docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md`
 
 That evidence proves the live canonical Workbench/Gateway/Core/Performance/Risk/Manage/Report flow
-for the governed front-office portfolio. It does not replace the `lotus-core` PR Merge Gate or
-affected downstream PR Merge Gates.
+for the governed front-office portfolio. It does not replace affected downstream PR Merge Gates.
 
 ## Validation
 

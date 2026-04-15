@@ -15,10 +15,16 @@
       "validatedAt": "2026-04-15",
       "validationCommand": "npm run live:validate",
       "evidenceOwner": "lotus-workbench"
+    },
+    {
+      "proof": "lotus-core local PR Merge Gate parity",
+      "evidence": "docs/architecture/RFC-0083-production-readiness-closure.md",
+      "validatedAt": "2026-04-15",
+      "validationCommand": "make ci",
+      "evidenceOwner": "lotus-core"
     }
   ],
   "remainingRuntimeProof": [
-    "full lotus-core PR Merge Gate",
     "affected downstream consumer PR Merge Gates",
     "full gateway/platform authorization and entitlement proof when opt-in service-policy controls move to production enforcement",
     "full cross-service event replay proof when event payload behavior changes beyond the centrally guarded outbox envelope"
