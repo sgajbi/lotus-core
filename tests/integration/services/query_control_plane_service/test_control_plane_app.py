@@ -1354,10 +1354,8 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "example"
     ]
     assert invalid_enrichment["detail"] == "security_ids must contain at least one identifier"
-    assert (
-        "lotus-advise, lotus-risk, lotus-performance, and lotus-gateway"
-        in (enrichment_bulk["description"])
-    )
+    assert "Used directly by lotus-advise and lotus-risk" in (enrichment_bulk["description"])
+    assert "lotus-performance or lotus-gateway may adopt" in (enrichment_bulk["description"])
     assert "null issuer fields for unknown securities" in enrichment_bulk["description"]
 
     components = schema["components"]["schemas"]

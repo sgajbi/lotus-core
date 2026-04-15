@@ -266,8 +266,10 @@ async def create_core_snapshot(
         "How: Resolves canonical instrument metadata in one deterministic batch, preserves "
         "request order, and returns null issuer fields for unknown securities instead of "
         "inventing fallback identities.\n"
-        "When: Used by lotus-advise, lotus-risk, lotus-performance, and lotus-gateway when "
-        "shared instrument reference context is needed without direct query-service coupling."
+        "When: Used directly by lotus-advise and lotus-risk when shared instrument reference "
+        "context is needed without direct query-service coupling. Other downstream consumers "
+        "such as lotus-performance or lotus-gateway may adopt the same governed enrichment "
+        "contract when they need source-owned reference context."
     ),
     openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )
