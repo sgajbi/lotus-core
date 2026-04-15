@@ -579,6 +579,13 @@ runtime maturity. The current contract now states more explicitly that:
 For this family, Swagger now makes the operator-only boundary clearer and recursive schema-family
 tests protect the evidence bundle models from documentation drift.
 
+The first-hop gateway or operator routes are now more explicit too:
+
+1. `overview` is published as supportability evidence for gateway support panels, operator
+   consoles, and incident workflows, not as a business-calculation input;
+2. `readiness` is published as source-owned readiness posture for UI and operator flows, not as a
+   substitute for calculation-grade portfolio analytics.
+
 Malformed operator date filters are now also contractually separated from missing-portfolio
 conditions: support routes that parse caller-supplied dates return `400 Bad Request` with an
 explicit field-level message instead of collapsing malformed dates into `404 Not Found`. Support

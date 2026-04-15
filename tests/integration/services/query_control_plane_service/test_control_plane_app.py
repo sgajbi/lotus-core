@@ -243,6 +243,11 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "failed_window_hours"
     )
     assert overview_failed_window["description"].startswith("Window in hours")
+    assert (
+        "gateway support panels, operator consoles, and incident workflows"
+        in (overview["description"])
+    )
+    assert "supportability evidence, not business-calculation inputs" in (overview["description"])
     assert "400" not in overview["responses"]
 
     readiness_as_of_date = next(
@@ -252,6 +257,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Optional as-of date in YYYY-MM-DD format used to scope booked-state readiness."
     )
     assert "instead of inferring readiness from row counts" in readiness["description"]
+    assert "supportability and readiness posture" in readiness["description"]
+    assert "not calculation-grade portfolio analytics" in readiness["description"]
 
     stale_threshold = next(
         parameter

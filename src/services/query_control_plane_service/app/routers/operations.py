@@ -95,7 +95,9 @@ def get_operations_service(
         "What: Return support-oriented operational state for one portfolio.\n"
         "How: Aggregate reprocessing, valuation, and latest-data availability markers "
         "for the key.\n"
-        "When: Use during incidents to quickly assess whether portfolio processing is healthy."
+        "When: Use in gateway support panels, operator consoles, and incident workflows to "
+        "quickly assess whether portfolio processing is healthy. This route publishes "
+        "supportability evidence, not business-calculation inputs."
     ),
 )
 async def get_support_overview(
@@ -150,7 +152,8 @@ async def get_support_overview(
         "How: Combine durable support/control state with snapshot and historical-FX dependency "
         "signals to expose explicit readiness reasons.\n"
         "When: Use in gateway/UI and operations flows instead of inferring readiness from row "
-        "counts or indirect heuristics."
+        "counts or indirect heuristics. This route publishes supportability and readiness "
+        "posture, not calculation-grade portfolio analytics."
     ),
 )
 async def get_portfolio_readiness(
