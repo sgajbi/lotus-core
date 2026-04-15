@@ -77,6 +77,10 @@ BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = {
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 
 
+def problem_response(description: str, example: dict[str, str]) -> dict[str, object]:
+    return {"description": description, "content": {"application/json": {"example": example}}}
+
+
 def get_integration_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> IntegrationService:
@@ -136,22 +140,22 @@ async def get_effective_integration_policy(
         status.HTTP_400_BAD_REQUEST: {
             "description": "Invalid request payload or invalid section/mode combination."
         },
-        status.HTTP_403_FORBIDDEN: {
-            "description": "Requested sections are blocked by strict integration policy.",
-            "content": {"application/json": {"example": INTEGRATION_POLICY_BLOCKED_EXAMPLE}},
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio or simulation session not found.",
-            "content": {"application/json": {"example": CORE_SNAPSHOT_NOT_FOUND_EXAMPLE}},
-        },
-        status.HTTP_409_CONFLICT: {
-            "description": "Simulation expected version mismatch or portfolio/session conflict.",
-            "content": {"application/json": {"example": CORE_SNAPSHOT_CONFLICT_EXAMPLE}},
-        },
-        HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Section cannot be fulfilled due to missing valuation dependencies.",
-            "content": {"application/json": {"example": CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE}},
-        },
+        status.HTTP_403_FORBIDDEN: problem_response(
+            "Requested sections are blocked by strict integration policy.",
+            INTEGRATION_POLICY_BLOCKED_EXAMPLE,
+        ),
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio or simulation session not found.",
+            CORE_SNAPSHOT_NOT_FOUND_EXAMPLE,
+        ),
+        status.HTTP_409_CONFLICT: problem_response(
+            "Simulation expected version mismatch or portfolio/session conflict.",
+            CORE_SNAPSHOT_CONFLICT_EXAMPLE,
+        ),
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            "Section cannot be fulfilled due to missing valuation dependencies.",
+            CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE,
+        ),
     },
     summary="Fetch governed core snapshot contract",
     description=(
@@ -251,10 +255,10 @@ async def create_core_snapshot(
     "/instruments/enrichment-bulk",
     response_model=InstrumentEnrichmentBulkResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Invalid request payload.",
-            "content": {"application/json": {"example": INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE}},
-        },
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Invalid request payload.",
+            INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE,
+        ),
     },
     summary="Resolve issuer enrichment for security identifiers",
     description=(
@@ -283,10 +287,10 @@ async def get_instrument_enrichment_bulk(
     "/portfolios/{portfolio_id}/benchmark-assignment",
     response_model=BenchmarkAssignmentResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "No effective benchmark assignment found.",
-            "content": {"application/json": {"example": BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective benchmark assignment found.",
+            BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE,
+        ),
     },
     summary="Resolve effective portfolio benchmark assignment",
     description=(
@@ -328,12 +332,10 @@ async def resolve_portfolio_benchmark_assignment(
     "/benchmarks/{benchmark_id}/composition-window",
     response_model=BenchmarkCompositionWindowResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "No overlapping benchmark definition found.",
-            "content": {
-                "application/json": {"example": BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE}
-            },
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No overlapping benchmark definition found.",
+            BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE,
+        ),
         status.HTTP_409_CONFLICT: {
             "description": "Benchmark definition changed incompatibly inside the requested window."
         },
@@ -383,10 +385,10 @@ async def fetch_benchmark_composition_window(
     "/benchmarks/{benchmark_id}/definition",
     response_model=BenchmarkDefinitionResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "No effective benchmark definition found.",
-            "content": {"application/json": {"example": BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective benchmark definition found.",
+            BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE,
+        )
     },
     summary="Fetch effective benchmark definition",
     description=(
