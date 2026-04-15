@@ -92,6 +92,12 @@ product identity and carry the same supportability metadata.
 benchmark/index/risk-free/reference inputs, and reconciliation/data-quality evidence when gating
 analytics runs.
 
+For analytics-input cash-flow observations, `lotus-performance` should treat
+`cash_flow_type="fee"` with `flow_scope="operational"` as the canonical representation of persisted
+`EXPENSE` classifications. Net TWR includes the fee drag in portfolio return. Gross TWR may add back
+or otherwise neutralize those fee observations according to performance methodology, but should not
+expect a separate analytics-input `expense` type.
+
 `lotus-risk` should consume holdings, transaction windows, market/reference windows, and evidence
 products. Risk methodology, active-risk interpretation, and stress/scenario conclusions remain outside
 `lotus-core`.

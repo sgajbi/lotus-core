@@ -263,6 +263,16 @@ class AnalyticsTimeseriesService:
         return any(flow.flow_scope == "external" for flow in cash_flows)
 
     @staticmethod
+    def _has_only_internal_flows(cash_flows: list[CashFlowObservation]) -> bool:
+        return bool(cash_flows) and all(flow.flow_scope == "internal" for flow in cash_flows)
+
+    @staticmethod
+    def _is_cash_book_position(row: object) -> bool:
+        asset_class = str(getattr(row, "asset_class", "") or "").casefold()
+        security_id = str(getattr(row, "security_id", "") or "").upper()
+        return asset_class == "cash" or security_id.startswith("CASH_")
+
+    @staticmethod
     def _effective_beginning_market_value(
         row: object,
         *,
@@ -281,8 +291,14 @@ class AnalyticsTimeseriesService:
         ):
             return previous_eod_market_value
 
-        has_external_position_flow = AnalyticsTimeseriesService._has_external_flow(cash_flows)
-        has_internal_position_flow = bool(cash_flows) and not has_external_position_flow
+        has_internal_position_flow = AnalyticsTimeseriesService._has_only_internal_flows(cash_flows)
+        if (
+            AnalyticsTimeseriesService._is_cash_book_position(row)
+            and not has_portfolio_external_flow
+            and has_internal_position_flow
+        ):
+            return ending
+
         if (
             previous_eod_market_value is not None
             and stored_beginning == 0

@@ -200,7 +200,7 @@ class CashFlowObservation(BaseModel):
         "external_flow",
         "internal_trade_flow",
         "income",
-        "expense",
+        "fee",
         "transfer",
         "other",
     ] = Field(

@@ -9,7 +9,7 @@ For each `daily_position_snapshot` event it receives, `timeseries_generator_serv
 * **Beginning-of-Day (BOD) Market Value:** This is sourced directly from the **End-of-Day (EOD)** `market_value_local` of the *previous day's* snapshot. If no previous day snapshot exists, it is set to zero.
 * **End-of-Day (EOD) Market Value:** This is sourced directly from the `market_value_local` of the *current day's* snapshot.
 * **Cash Flows:** The service queries the `cashflows` table for all flows associated with that specific security on that specific day. It then aggregates these flows based on their timing (`BOD` or `EOD`) and their type (`is_position_flow`, `is_portfolio_flow`) to populate the four distinct cash flow fields in the time-series record.
-* **Fees:** Fees are derived from cash flows that are classified as expenses.
+* **Fees:** Fees are derived from persisted `EXPENSE` cash flows and are emitted through analytics-input contracts as canonical `cash_flow_type="fee"` observations.
 
 When a position snapshot is generated or restated, the consumer also recalculates dependent later
 position-timeseries rows for the same portfolio/security while material state continues to change.
@@ -22,7 +22,10 @@ the immediately preceding active EOD state, the analytics response uses the prio
 effective beginning capital. Positions that reappear after an absent date are not carried from stale
 historical rows; if internal position-flow evidence explains the reappearance and there is no
 portfolio-level external flow, they are treated as beginning capital rather than as
-zero-to-market-value returns.
+zero-to-market-value returns. Cash-book positions with only internal trade-settlement flows are
+treated as capital-neutral for TWR input purposes so settlement cash swings do not create synthetic
+portfolio returns. Portfolio-level external flows and operational fee flows remain explicit cash-flow
+economics and are not converted into internal capital continuity repairs.
 
 ## 2. Portfolio Time-Series Aggregation
 

@@ -292,6 +292,7 @@ class AnalyticsTimeseriesRepository:
                 PositionTimeseries.fees.label("fees"),
                 PositionTimeseries.quantity.label("quantity"),
                 PositionTimeseries.epoch.label("epoch"),
+                Instrument.asset_class.label("asset_class"),
                 Instrument.currency.label("position_currency"),
                 func.row_number()
                 .over(

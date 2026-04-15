@@ -13,6 +13,7 @@ from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
     AnalyticsWindow,
+    CashFlowObservation,
     PageRequest,
     PortfolioAnalyticsReferenceRequest,
     PortfolioAnalyticsTimeseriesRequest,
@@ -117,7 +118,7 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
     assert response.observations[0].cash_flows[0].flow_scope == "external"
     assert response.observations[0].cash_flows[1].cash_flow_type == "transfer"
     assert response.observations[0].cash_flows[1].flow_scope == "external"
-    assert response.observations[0].cash_flows[2].cash_flow_type == "expense"
+    assert response.observations[0].cash_flows[2].cash_flow_type == "fee"
     assert response.observations[0].cash_flows[2].source_classification == "EXPENSE"
     assert response.observations[0].cash_flow_currency == "EUR"
     assert response.diagnostics.expected_business_dates_count == 1
@@ -496,6 +497,118 @@ async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuit
     )
     assert second_observation.beginning_market_value == Decimal("250")
     assert second_observation.ending_market_value == Decimal("256")
+
+
+@pytest.mark.asyncio
+async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlement() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2026, 2, 27),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=14,
+                    asset_class="Equity",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="CASH_USD_BOOK_OPERATING",
+                    valuation_date=date(2026, 2, 27),
+                    bod_market_value=Decimal("-100"),
+                    eod_market_value=Decimal("-100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=14,
+                    asset_class="Cash",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2026, 2, 28),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=14,
+                    asset_class="Equity",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="CASH_USD_BOOK_OPERATING",
+                    valuation_date=date(2026, 2, 28),
+                    bod_market_value=Decimal("-100"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("200"),
+                    epoch=14,
+                    asset_class="Cash",
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="CASH_USD_BOOK_OPERATING",
+                    valuation_date=date(2026, 2, 28),
+                    amount=Decimal("-200"),
+                    classification="INVESTMENT_OUTFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    observations, _, _, _, _ = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date="2026-02-27", end_date="2026-02-28"),
+        page_size=10,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
+    )
+
+    second_observation = next(
+        observation
+        for observation in observations
+        if observation.valuation_date == date(2026, 2, 28)
+    )
+    assert second_observation.beginning_market_value == Decimal("200")
+    assert second_observation.ending_market_value == Decimal("200")
+
+
+def test_effective_beginning_market_value_keeps_cash_book_fee_drag_explicit() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        security_id="CASH_USD_BOOK_OPERATING",
+        asset_class="Cash",
+        bod_market_value=Decimal("100"),
+        eod_market_value=Decimal("99.725"),
+        bod_cashflow_position=Decimal("0"),
+    )
+    fee_flow = CashFlowObservation(
+        amount=Decimal("-0.275"),
+        timing="eod",
+        cash_flow_type="fee",
+        flow_scope="operational",
+        source_classification="EXPENSE",
+    )
+
+    result = service._effective_beginning_market_value(  # pylint: disable=protected-access
+        row,
+        previous_eod_market_value=Decimal("100"),
+        cash_flows=[fee_flow],
+        has_portfolio_external_flow=False,
+    )
+
+    assert result == Decimal("100")
 
 
 @pytest.mark.asyncio
@@ -1188,7 +1301,7 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     assert response.rows[0].cash_flows[0].flow_scope == "internal"
     assert response.rows[0].cash_flows[1].cash_flow_type == "external_flow"
     assert response.rows[0].cash_flows[1].flow_scope == "external"
-    assert response.rows[0].cash_flows[2].cash_flow_type == "expense"
+    assert response.rows[0].cash_flows[2].cash_flow_type == "fee"
     assert response.diagnostics.cash_flows_included is True
     assert response.diagnostics.requested_dimensions == ["asset_class", "sector", "country"]
     assert response.diagnostics.stale_points_count == 1
@@ -1367,7 +1480,7 @@ async def test_get_position_timeseries_repairs_beginning_values_for_continuity()
                     fees=Decimal("0"),
                     quantity=Decimal("1"),
                     epoch=1,
-                    asset_class="Cash",
+                    asset_class="Fund",
                     sector=None,
                     country="US",
                     position_currency="USD",

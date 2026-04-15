@@ -229,6 +229,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     unpaged_stmt = db.execute.await_args_list[0].args[0]
     unpaged_sql = str(unpaged_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.epoch <= 2" in unpaged_sql
+    assert "instruments.asset_class" in unpaged_sql
     assert "ORDER BY anon_1.valuation_date ASC, anon_1.security_id ASC" in unpaged_sql
 
     position_cashflow_rows = await repo.list_position_cashflow_rows(
