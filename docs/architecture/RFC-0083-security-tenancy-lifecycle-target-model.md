@@ -44,7 +44,9 @@ The helper validates that every product in the Slice 6 source-data product catal
 emits the `x-lotus-source-data-security` OpenAPI extension for catalog-backed routes. It also
 prevents operator-only products from being classified outside the control-plane and policy route
 family, so support and evidence products cannot silently drift into business read or analytics-input
-contracts.
+contracts. Access classifications are route-family constrained: business-consumer access belongs to
+operational read or snapshot/simulation products, system access belongs to analytics-input products,
+and operator access belongs to control-plane and policy products.
 
 ## Access Classes
 

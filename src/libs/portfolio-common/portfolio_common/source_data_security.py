@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from portfolio_common.source_data_products import (
+    ANALYTICS_INPUT,
     CONTROL_PLANE_AND_POLICY,
+    OPERATIONAL_READ,
     SOURCE_DATA_PRODUCT_CATALOG,
+    SNAPSHOT_AND_SIMULATION,
 )
 
 
@@ -26,6 +29,12 @@ RETAIN_FOR_OPERATIONAL_AUDIT = "retain_for_operational_audit"
 AUDIT_READ_AND_EXPORT = "audit_read_and_export"
 AUDIT_OPERATOR_ACCESS = "audit_operator_access"
 AUDIT_SYSTEM_ACCESS = "audit_system_access"
+
+ACCESS_CLASSIFICATION_ROUTE_FAMILIES = {
+    BUSINESS_CONSUMER_ACCESS: {OPERATIONAL_READ, SNAPSHOT_AND_SIMULATION},
+    SYSTEM_ACCESS: {ANALYTICS_INPUT},
+    OPERATOR_ACCESS: {CONTROL_PLANE_AND_POLICY},
+}
 
 
 @dataclass(frozen=True)
@@ -268,16 +277,26 @@ def validate_source_data_security_profiles(
             raise ValueError(f"{profile.product_name} must require tenant scoping")
         if not profile.entitlement_required:
             raise ValueError(f"{profile.product_name} must require entitlement scoping")
+        catalog_product = catalog_products.get(product_name)
         if profile.operator_only and profile.access_classification != OPERATOR_ACCESS:
             raise ValueError(f"{profile.product_name} operator_only requires operator access")
         if profile.operator_only:
-            catalog_product = catalog_products.get(product_name)
             if catalog_product and catalog_product.route_family != CONTROL_PLANE_AND_POLICY:
                 raise ValueError(
                     f"{profile.product_name} operator_only requires control-plane route family"
                 )
         if profile.audit_requirement == AUDIT_OPERATOR_ACCESS and not profile.operator_only:
             raise ValueError(f"{profile.product_name} operator audit requires operator_only")
+        if catalog_product:
+            allowed_route_families = ACCESS_CLASSIFICATION_ROUTE_FAMILIES[
+                profile.access_classification
+            ]
+            if catalog_product.route_family not in allowed_route_families:
+                raise ValueError(
+                    f"{profile.product_name} access_classification "
+                    f"{profile.access_classification} is not valid for route family "
+                    f"{catalog_product.route_family}"
+                )
         if (
             profile.sensitivity_classification in {CLIENT_CONFIDENTIAL, CLIENT_SENSITIVE}
             and not profile.pii_fields

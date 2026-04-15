@@ -48,6 +48,23 @@ def test_operator_evidence_products_require_operator_access_and_operational_rete
         assert profile.audit_requirement == AUDIT_OPERATOR_ACCESS
 
 
+def test_analytics_input_products_require_system_access_classification() -> None:
+    for product_name in (
+        "PositionTimeseriesInput",
+        "PortfolioTimeseriesInput",
+        "PortfolioAnalyticsReference",
+        "MarketDataWindow",
+        "InstrumentReferenceBundle",
+        "BenchmarkAssignment",
+        "BenchmarkConstituentWindow",
+        "IndexSeriesWindow",
+        "RiskFreeSeriesWindow",
+    ):
+        profile = get_source_data_security_profile(product_name)
+
+        assert profile.access_classification == SYSTEM_ACCESS
+
+
 def test_portfolio_snapshot_profile_is_client_confidential() -> None:
     profile = get_source_data_security_profile("PortfolioStateSnapshot")
 
@@ -138,6 +155,22 @@ def test_security_profile_validation_rejects_operator_audit_without_operator_onl
     )
 
     with pytest.raises(ValueError, match="operator audit requires operator_only"):
+        validate_source_data_security_profiles((invalid,))
+
+
+def test_security_profile_validation_rejects_access_classification_route_family_mismatch() -> None:
+    invalid = SourceDataSecurityProfile(
+        product_name="PortfolioTimeseriesInput",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification="business_consumer_access",
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement="retain_for_client_record",
+        audit_requirement="audit_read_and_export",
+        pii_fields=("portfolio_id",),
+    )
+
+    with pytest.raises(ValueError, match="not valid for route family"):
         validate_source_data_security_profiles((invalid,))
 
 
