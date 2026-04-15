@@ -282,7 +282,8 @@ async def get_instrument_enrichment_bulk(
         "What: Resolve benchmark assignment for a portfolio as-of a point-in-time date.\n"
         "How: Applies effective-dating and assignment version ordering to return "
         "deterministic match.\n"
-        "When: Used by lotus-performance before benchmark analytics workflows."
+        "When: Used by lotus-performance, lotus-risk, and reporting workflows before "
+        "benchmark-aware analytics or evidence generation."
     ),
     openapi_extra=source_data_product_openapi_extra("BenchmarkAssignment"),
 )
@@ -460,7 +461,8 @@ async def fetch_index_catalog(
         "What: Return benchmark market series inputs required by lotus-performance.\n"
         "How: Resolves components and returns aligned raw series honoring requested "
         "series_fields, deterministic paging, and benchmark-to-target FX context semantics.\n"
-        "When: Used for benchmark analytics and replay-safe portfolio attribution calculations."
+        "When: Used by lotus-performance and lotus-risk for benchmark analytics and replay-safe "
+        "portfolio or risk attribution calculations."
     ),
     openapi_extra=source_data_product_openapi_extra("MarketDataWindow"),
 )
@@ -571,7 +573,8 @@ async def fetch_benchmark_return_series(
     description=(
         "What: Return raw risk-free reference series for requested currency and window.\n"
         "How: Serves canonical risk-free records with convention metadata and lineage.\n"
-        "When: Used by lotus-performance for excess return and risk-adjusted analytics inputs."
+        "When: Used by lotus-performance and lotus-risk for excess return, Sharpe, and "
+        "risk-adjusted analytics inputs."
     ),
     openapi_extra=source_data_product_openapi_extra("RiskFreeSeriesWindow"),
 )
@@ -592,7 +595,8 @@ async def fetch_risk_free_series(
     description=(
         "What: Return effective classification taxonomy records.\n"
         "How: Applies as-of effective dating and optional scope filtering.\n"
-        "When: Used by lotus-performance attribution workflows to enforce shared domain labels."
+        "When: Used by lotus-performance, lotus-risk, lotus-gateway, and lotus-advise to enforce "
+        "shared classification labels instead of local taxonomy drift."
     ),
     openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )

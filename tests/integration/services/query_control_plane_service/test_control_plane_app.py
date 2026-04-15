@@ -165,6 +165,18 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert analytics_input_routes <= set(paths)
     for route in analytics_input_routes:
         assert set(paths[route]) == {"post"}
+    portfolio_timeseries = paths[
+        "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries"
+    ]["post"]
+    position_timeseries = paths[
+        "/integration/portfolios/{portfolio_id}/analytics/position-timeseries"
+    ]["post"]
+    portfolio_reference = paths["/integration/portfolios/{portfolio_id}/analytics/reference"][
+        "post"
+    ]
+    assert "lotus-performance and lotus-risk" in portfolio_timeseries["description"]
+    assert "historical risk attribution" in position_timeseries["description"]
+    assert "lotus-performance and lotus-risk" in portfolio_reference["description"]
 
     assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
     assert "/integration/positions/{portfolio_id}/timeseries" not in paths
@@ -1276,6 +1288,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     index_price_series = schema["paths"]["/integration/indices/{index_id}/price-series"]["post"]
     benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"]["post"]
     risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"]["post"]
+    risk_free_series = schema["paths"]["/integration/reference/risk-free-series"]["post"]
+    classification_taxonomy = schema["paths"]["/integration/reference/classification-taxonomy"][
+        "post"
+    ]
 
     portfolio_param = next(
         parameter
@@ -1285,6 +1301,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert portfolio_param["description"] == (
         "Portfolio identifier whose effective benchmark assignment is requested."
     )
+    assert "lotus-performance, lotus-risk, and reporting" in benchmark_assignment["description"]
 
     assignment_not_found = benchmark_assignment["responses"]["404"]["content"]["application/json"][
         "example"
@@ -1332,6 +1349,12 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     )
     assert market_series_param["description"] == (
         "Benchmark identifier for the requested market series input contract."
+    )
+    assert "lotus-performance and lotus-risk" in benchmark_market_series["description"]
+    assert "lotus-performance and lotus-risk" in risk_free_series["description"]
+    assert (
+        "lotus-performance, lotus-risk, lotus-gateway, and lotus-advise"
+        in (classification_taxonomy["description"])
     )
 
     index_id = next(

@@ -74,11 +74,12 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
     summary="Fetch portfolio analytics timeseries inputs",
     description=(
         "What: Return canonical portfolio valuation and cash-flow timeseries required by "
-        "lotus-performance.\n"
+        "lotus-performance and lotus-risk.\n"
         "How: Resolve effective window, apply deterministic paging, and include "
         "lineage/quality diagnostics. Returned cash_flows are canonical portfolio-level "
         "events expressed in the effective reporting currency with explicit flow provenance.\n"
-        "When: Used for stateful TWR and MWR input acquisition without direct database coupling."
+        "When: Used for stateful TWR/MWR input acquisition and risk analytics sourcing without "
+        "direct database coupling."
     ),
     openapi_extra=source_data_product_openapi_extra("PortfolioTimeseriesInput"),
 )
@@ -120,13 +121,13 @@ async def get_portfolio_analytics_timeseries(
     summary="Fetch position analytics timeseries inputs",
     description=(
         "What: Return canonical position-level valuation timeseries required by "
-        "contribution and attribution analytics.\n"
+        "performance contribution, performance attribution, and historical risk attribution.\n"
         "How: Apply deterministic paging and optional dimension/filter selectors while "
         "keeping enrichment separate. Cash-flow rows are included by default because "
         "acquisition-day analytics are unsafe without them, and they carry explicit "
         "internal versus external provenance.\n"
-        "When: Used by lotus-performance analytics pipelines for large-window "
-        "position input retrieval."
+        "When: Used by lotus-performance and lotus-risk analytics pipelines for large-window "
+        "position input retrieval without direct database coupling."
     ),
     openapi_extra=source_data_product_openapi_extra("PositionTimeseriesInput"),
 )
@@ -163,8 +164,8 @@ async def get_position_analytics_timeseries(
         "lifecycle context.\n"
         "How: Resolve current canonical portfolio reference fields, bound "
         "performance_end_date by the requested as_of_date, and include lineage metadata.\n"
-        "When: Used alongside analytics timeseries endpoints to avoid repetitive "
-        "metadata payload duplication.\n"
+        "When: Used by lotus-performance and lotus-risk alongside analytics timeseries endpoints "
+        "to avoid repetitive metadata payload duplication.\n"
         "Contract note: portfolio reference fields are current canonical portfolio state, "
         "not historical effective-dated portfolio snapshots."
     ),
