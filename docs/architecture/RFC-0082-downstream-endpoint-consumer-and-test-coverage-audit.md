@@ -478,6 +478,10 @@ For this endpoint, Swagger now makes the following explicit:
 Automated proof now includes a classification-taxonomy schema-family completeness assertion in
 `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
 
+The HTTP dependency lane now proves both the all-scope path and the explicit `taxonomy_scope`
+filter path so downstream consumers can rely on the route for either full vocabulary hydration or
+narrow governed-scope reads such as index-only classification pulls.
+
 ### Issue Disposition For This Endpoint
 
 | Issue | Assessment | Disposition |

@@ -798,3 +798,46 @@ async def test_classification_taxonomy_success(async_test_client):
         as_of_date=date(2026, 1, 31),
         taxonomy_scope=None,
     )
+
+
+async def test_classification_taxonomy_scope_filter_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_classification_taxonomy = AsyncMock(
+        return_value={
+            "as_of_date": "2026-01-31",
+            "records": [
+                {
+                    "classification_set_id": "wm_global_taxonomy_v1",
+                    "taxonomy_scope": "index",
+                    "dimension_name": "sector",
+                    "dimension_value": "technology",
+                    "dimension_description": "Technology sector classification",
+                    "effective_from": "2025-01-01",
+                    "effective_to": None,
+                    "quality_status": "accepted",
+                }
+            ],
+            "taxonomy_version": "rfc_062_v1",
+            "request_fingerprint": "fp-taxonomy-index-1",
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
+
+    response = await client.post(
+        "/integration/reference/classification-taxonomy",
+        json={"as_of_date": "2026-01-31", "taxonomy_scope": "index"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["taxonomy_version"] == "rfc_062_v1"
+    assert body["request_fingerprint"] == "fp-taxonomy-index-1"
+    assert body["records"][0]["taxonomy_scope"] == "index"
+    assert body["records"][0]["dimension_name"] == "sector"
+    mock_integration_service.get_classification_taxonomy.assert_awaited_once_with(
+        as_of_date=date(2026, 1, 31),
+        taxonomy_scope="index",
+    )
