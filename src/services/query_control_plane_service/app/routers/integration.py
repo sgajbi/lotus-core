@@ -579,7 +579,10 @@ async def fetch_benchmark_return_series(
         "What: Return raw risk-free reference series for requested currency and window.\n"
         "How: Serves canonical risk-free records with convention metadata and lineage.\n"
         "When: Used by lotus-performance and lotus-risk for excess return, Sharpe, and "
-        "risk-adjusted analytics inputs."
+        "risk-adjusted analytics inputs. Empty `points` means the route is reachable but "
+        "usable source data is absent for the requested currency/window, so downstream "
+        "readiness checks should treat that as a data-availability gap rather than a "
+        "fallback-to-zero methodology signal."
     ),
     openapi_extra=source_data_product_openapi_extra("RiskFreeSeriesWindow"),
 )
@@ -657,7 +660,9 @@ async def get_benchmark_coverage(
         "What: Return risk-free series coverage diagnostics for an expected window.\n"
         "How: Compares expected window dates against observed data and summarizes "
         "quality distribution.\n"
-        "When: Used by ops monitoring and analytics readiness checks."
+        "When: Used by ops monitoring and analytics readiness checks. A response with "
+        "`total_points = 0` and null observed bounds indicates an upstream data-availability "
+        "gap for the requested currency/window."
     ),
     openapi_extra=source_data_product_openapi_extra("DataQualityCoverageReport"),
 )

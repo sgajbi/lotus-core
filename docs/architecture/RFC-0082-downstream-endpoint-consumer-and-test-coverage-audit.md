@@ -240,6 +240,69 @@ Automated proof now includes a benchmark-source schema-family completeness asser
 No new downstream migration issue is required from this slice. The active downstream consumer is
 already using the strategic routes rather than a stale or duplicate benchmark path.
 
+## Certified Endpoint Slice: Risk-Free Reference Family
+
+This certification pass covers:
+
+1. `POST /integration/reference/risk-free-series`
+2. `POST /integration/reference/risk-free-series/coverage?currency=...`
+
+### Route Contract Decision
+
+These are the correct strategic routes for risk-free reference sourcing and readiness diagnostics.
+
+The contract split is intentional:
+
+1. `risk-free-series` publishes raw source series plus convention metadata and lineage;
+2. `coverage` publishes readiness diagnostics for the same currency/window;
+3. downstream analytics services decide whether they can proceed, fail closed, or omit dependent
+   metrics based on the returned data availability.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/reference/risk-free-series` | `lotus-performance`, `lotus-risk` | Correct. Both services use the route as a source input rather than computing or inventing risk-free assumptions locally. |
+| `POST /integration/reference/risk-free-series/coverage?currency=...` | `lotus-risk` | Correct. `lotus-risk` uses coverage diagnostics to produce deterministic readiness and dependency-failure behavior for rolling Sharpe. |
+
+Gateway is not a direct caller of these endpoints. Its current follow-on issue is product-surface
+messaging alignment, not route misuse.
+
+### Upstream Integration Assessment
+
+The current risk-free family is structurally correct and on the right serving plane. The important
+contract truth is:
+
+1. an empty `points` list means the route is reachable but usable source data is absent for the
+   requested currency/window;
+2. `coverage` with `total_points = 0` and null observed bounds means the same thing in readiness
+   form;
+3. these responses should be treated as upstream data-availability gaps, not as permission for
+   downstream zero-risk-free fallback math unless a downstream service explicitly governs that mode.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the following explicit:
+
+1. raw series publication versus readiness diagnostics;
+2. that empty series responses are data-availability signals, not alternate methodology signals;
+3. that zero-point coverage with null observed bounds indicates upstream data absence for the
+   requested currency/window.
+
+Automated proof now includes a risk-free schema-family completeness assertion in
+`tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core #294` risk-free data missing for USD live window | Still valid. This is a live data-readiness defect, not a route-publication defect. | Keep open until canonical/live source data is present and revalidated. |
+| `lotus-risk #77` rolling Sharpe follow-up after upstream fix | Still valid downstream follow-up issue. | Keep open until `lotus-core #294` is closed and live revalidation passes. |
+| `lotus-gateway #112` stale zero-risk-free fallback wording | Still valid product-surface issue in gateway. Core route semantics are now documented truthfully, but gateway messaging still needs to align. | Keep open in gateway. |
+
+No new downstream migration issue is required from this slice. The known work here is live data
+availability and downstream messaging alignment, not route replacement.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |

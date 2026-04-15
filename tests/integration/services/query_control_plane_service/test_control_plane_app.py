@@ -54,6 +54,14 @@ BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "ReferencePageMetadata",
 }
 
+RISK_FREE_SCHEMA_ROOTS = {
+    "RiskFreeSeriesRequest",
+    "RiskFreeSeriesResponse",
+    "RiskFreeSeriesPoint",
+    "CoverageRequest",
+    "CoverageResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1456,6 +1464,8 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert "benchmark-to-target FX context semantics" in benchmark_market_series["description"]
     assert "lotus-performance owns benchmark math" in benchmark_market_series["description"]
     assert "lotus-performance and lotus-risk" in risk_free_series["description"]
+    assert "raw risk-free reference series" in risk_free_series["description"]
+    assert "analytics readiness checks" in risk_free_coverage["description"]
     assert (
         "lotus-performance, lotus-risk, lotus-gateway, and lotus-advise"
         in (classification_taxonomy["description"])
@@ -1648,6 +1658,14 @@ async def test_openapi_fully_documents_benchmark_source_schema_family(async_test
     schema = response.json()
 
     _assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_SOURCE_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_risk_free_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, RISK_FREE_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_capabilities_query_parameters(async_test_client):
