@@ -190,6 +190,38 @@ def test_authorize_request_requires_matching_capability_rule_when_configured() -
     assert reason == "missing_capability_rule"
 
 
+def test_authorize_request_rejects_blank_required_header_values() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+    headers = {
+        "X-Actor-Id": " ",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-gateway",
+    }
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
+
+    assert allowed is False
+    assert reason == "missing_headers:x-actor-id"
+
+
+def test_authorize_request_rejects_blank_service_identity() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": " ",
+    }
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
+
+    assert allowed is False
+    assert reason == "missing_service_identity"
+
+
 def test_required_capability_matches_only_path_segments() -> None:
     runtime = _runtime(
         settings=_Settings(enterprise_capability_rules={"GET /portfolios": "portfolios.read"}),
