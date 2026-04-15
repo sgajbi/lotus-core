@@ -348,6 +348,13 @@ For this family, Swagger now makes the following explicit:
 3. that zero-point coverage with null observed bounds indicates upstream data absence for the
    requested currency/window.
 
+The adjacent benchmark and risk-free coverage routes now also publish the same boundary more
+plainly:
+
+1. coverage routes are source-data readiness evidence for downstream analytics and operator flows;
+2. they are not benchmark-return outputs, risk metrics, or a substitute for the downstream
+   analytics engines that consume them.
+
 Automated proof now includes a risk-free schema-family completeness assertion in
 `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
 
