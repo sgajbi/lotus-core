@@ -582,6 +582,9 @@ support entry points: `overview` and `readiness` both have direct router-level c
 canonical default stale-threshold and failed-window parameters, and readiness also proves the
 `as_of_date=None` path used by callers that want source-owned latest-state evaluation.
 
+The reconciliation-findings OpenAPI example now also reflects the more precise missing-run failure
+mode instead of collapsing that route into a generic portfolio-only not-found example.
+
 ### Issue Disposition For This Endpoint Family
 
 No active GitHub issue was found that changes the current contract decision for this family.

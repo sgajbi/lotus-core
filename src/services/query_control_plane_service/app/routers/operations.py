@@ -41,6 +41,9 @@ INVALID_DATE_RESPONSE_DESCRIPTION = "Invalid date filter."
 LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
 }
+RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
+}
 
 
 def invalid_date_response_example(field_name: str) -> dict[str, str]:
@@ -785,7 +788,9 @@ async def get_reconciliation_runs(
     responses={
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio or reconciliation run not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+            "content": {
+                "application/json": {"example": RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE}
+            },
         }
     },
     summary="List reconciliation findings for one support run",

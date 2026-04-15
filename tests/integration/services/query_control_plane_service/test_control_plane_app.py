@@ -855,7 +855,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     findings_not_found = reconciliation_findings["responses"]["404"]["content"]["application/json"][
         "example"
     ]
-    assert findings_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    assert findings_not_found["detail"] == (
+        "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
+    )
     control_stage_name = next(
         parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_name"
     )
