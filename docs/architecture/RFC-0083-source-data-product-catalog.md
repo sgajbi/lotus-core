@@ -225,13 +225,18 @@ path.
 
 The market/reference products populate top-level `as_of_date` from their explicit as-of request
 where one exists, or from the resolved window end date for window-only products. They preserve
-existing lineage dictionaries and leave evidence, snapshot, and policy fields null until reference
-source-batch and quality evidence are joined into those contracts.
+existing lineage dictionaries, derive `data_quality_status` from returned row quality statuses using
+`market_reference_quality.py`, and populate `latest_evidence_timestamp` from durable returned-row
+source/update evidence where available. They continue to leave source-batch fingerprints,
+deterministic snapshot ids, and policy fields null until reference source-batch lineage and
+snapshot identity are joined into those contracts.
 
 `DataQualityCoverageReport` additionally derives `data_quality_status` from observed coverage,
 missing dates, and stale quality-status counts using `reconciliation_quality.py`. Full observed
 coverage is `COMPLETE`, missing coverage is `PARTIAL`, stale observed coverage is `STALE`, and empty
-observed coverage is `UNRECONCILED`.
+observed coverage is `UNRECONCILED`. Coverage reports populate `latest_evidence_timestamp` when the
+repository can resolve durable evidence timestamps from the underlying benchmark, index, or
+risk-free rows used to calculate coverage.
 
 The snapshot DTO-envelope binding adds `product_name` and `product_version` to
 `PortfolioStateSnapshot` on the core snapshot response. The existing route-level

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -30,6 +30,16 @@ def _effective_filter(
         effective_from_column <= as_of_date,
         or_(effective_to_column.is_(None), effective_to_column >= as_of_date),
     )
+
+
+def _latest_reference_evidence_timestamp(rows: list[Any]) -> datetime | None:
+    timestamps: list[datetime] = []
+    for row in rows:
+        for field_name in ("source_timestamp", "updated_at", "created_at"):
+            value = getattr(row, field_name, None)
+            if isinstance(value, datetime):
+                timestamps.append(value)
+    return max(timestamps) if timestamps else None
 
 
 class ReferenceDataRepository:
@@ -408,6 +418,9 @@ class ReferenceDataRepository:
             "observed_end_date": observed_end,
             "observed_dates": observed_dates,
             "quality_status_counts": dict(quality_counts),
+            "latest_evidence_timestamp": _latest_reference_evidence_timestamp(
+                price_points + benchmark_returns
+            ),
         }
 
     async def get_risk_free_coverage(
@@ -428,6 +441,8 @@ class ReferenceDataRepository:
             "observed_start_date": observed_start,
             "observed_end_date": observed_end,
             "quality_status_counts": dict(quality_counts),
+            "observed_dates": all_dates,
+            "latest_evidence_timestamp": _latest_reference_evidence_timestamp(points),
         }
 
     @staticmethod

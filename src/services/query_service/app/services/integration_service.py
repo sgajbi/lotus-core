@@ -10,9 +10,12 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.reconciliation_quality import (
-    DataQualityCoverageSignal,
-    classify_data_quality_coverage,
+from portfolio_common.market_reference_quality import (
+    BLOCKING_QUALITY_STATUSES,
+    PARTIAL_QUALITY_STATUSES,
+    STALE_QUALITY_STATUSES,
+    MarketReferenceCoverageSignal,
+    classify_market_reference_coverage,
 )
 
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyProvenanceMetadata
@@ -84,17 +87,71 @@ class IntegrationService:
         as_of_date: date,
         *,
         data_quality_status: str | None = None,
+        latest_evidence_timestamp: datetime | None = None,
     ) -> dict[str, object]:
         return source_data_product_runtime_metadata(
             as_of_date=as_of_date,
             data_quality_status=data_quality_status or "UNKNOWN",
+            latest_evidence_timestamp=latest_evidence_timestamp,
         )
 
     @staticmethod
-    def _runtime_metadata_for_existing_as_of_date(as_of_date: date) -> dict[str, object]:
-        metadata = source_data_product_runtime_metadata(as_of_date=as_of_date)
+    def _runtime_metadata_for_existing_as_of_date(
+        as_of_date: date,
+        *,
+        data_quality_status: str | None = None,
+        latest_evidence_timestamp: datetime | None = None,
+    ) -> dict[str, object]:
+        metadata = source_data_product_runtime_metadata(
+            as_of_date=as_of_date,
+            data_quality_status=data_quality_status or "UNKNOWN",
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        )
         metadata.pop("as_of_date")
         return metadata
+
+    @staticmethod
+    def _latest_reference_evidence_timestamp(*row_groups: list[Any]) -> datetime | None:
+        timestamps: list[datetime] = []
+        for rows in row_groups:
+            for row in rows:
+                for field_name in (
+                    "source_timestamp",
+                    "assignment_recorded_at",
+                    "updated_at",
+                    "created_at",
+                ):
+                    value = getattr(row, field_name, None)
+                    if isinstance(value, datetime):
+                        timestamps.append(value)
+        return max(timestamps) if timestamps else None
+
+    @staticmethod
+    def _market_reference_data_quality_status(rows: list[Any], required_count: int) -> str:
+        if required_count <= 0:
+            return "UNKNOWN"
+        quality_statuses = [
+            str(status).strip().upper()
+            for row in rows
+            if (status := getattr(row, "quality_status", None)) is not None
+        ]
+        if not quality_statuses:
+            return "UNKNOWN"
+        return classify_market_reference_coverage(
+            MarketReferenceCoverageSignal(
+                required_count=required_count,
+                observed_count=len(quality_statuses),
+                stale_count=sum(
+                    1 for status in quality_statuses if status in STALE_QUALITY_STATUSES
+                ),
+                estimated_count=sum(
+                    1 for status in quality_statuses if status in PARTIAL_QUALITY_STATUSES
+                ),
+                blocking_count=sum(
+                    1 for status in quality_statuses if status in BLOCKING_QUALITY_STATUSES
+                ),
+            )
+        )
 
     @staticmethod
     def _canonical_consumer_system(value: str | None) -> str:
@@ -321,7 +378,10 @@ class IntegrationService:
             source_system=row.source_system,
             assignment_recorded_at=row.assignment_recorded_at,
             assignment_version=int(row.assignment_version),
-            **self._runtime_metadata_for_existing_as_of_date(as_of_date),
+            **self._runtime_metadata_for_existing_as_of_date(
+                as_of_date,
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+            ),
         )
 
     async def get_benchmark_definition(
@@ -391,6 +451,7 @@ class IntegrationService:
             end_date=request.window.end_date,
         )
 
+        evidence_rows = definitions + components
         return BenchmarkCompositionWindowResponse(
             benchmark_id=benchmark_id,
             benchmark_currency=next(iter(benchmark_currencies)),
@@ -413,7 +474,14 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.benchmark_composition_window",
             },
-            **self._runtime_metadata(request.window.end_date),
+            **self._runtime_metadata(
+                request.window.end_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    evidence_rows,
+                    required_count=len(evidence_rows),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(evidence_rows),
+            ),
         )
 
     async def list_benchmark_catalog(
@@ -663,6 +731,16 @@ class IntegrationService:
 
         has_more = len(component_series_all) > page_size
         component_series = component_series_all[:page_size]
+        returned_index_ids = {series.index_id for series in component_series}
+        returned_index_prices = [row for row in index_prices if row.index_id in returned_index_ids]
+        returned_index_returns = [
+            row for row in index_returns if row.index_id in returned_index_ids
+        ]
+        returned_components = [row for row in components if row.index_id in returned_index_ids]
+        returned_evidence_rows = (
+            returned_components + returned_index_prices + returned_index_returns + benchmark_returns
+        )
+        total_evidence_rows = components + index_prices + index_returns + benchmark_returns
         next_page_token: str | None = None
         if has_more and component_series:
             next_page_token = self._encode_page_token(
@@ -709,7 +787,18 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.market_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(request.as_of_date),
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    returned_evidence_rows,
+                    required_count=(
+                        len(total_evidence_rows) if has_more else len(returned_evidence_rows)
+                    ),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                    returned_evidence_rows
+                ),
+            ),
         )
 
     async def get_index_price_series(
@@ -742,7 +831,14 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_price_series",
             },
-            **self._runtime_metadata(getattr(request, "as_of_date", request.window.end_date)),
+            **self._runtime_metadata(
+                getattr(request, "as_of_date", request.window.end_date),
+                data_quality_status=self._market_reference_data_quality_status(
+                    rows,
+                    required_count=len(rows),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+            ),
         )
 
     async def get_index_return_series(
@@ -784,7 +880,14 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_return_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(request.as_of_date),
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    rows,
+                    required_count=len(rows),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+            ),
         )
 
     async def get_benchmark_return_series(
@@ -868,7 +971,14 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.risk_free_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(request.as_of_date),
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    rows,
+                    required_count=len(rows),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+            ),
         )
 
     async def get_benchmark_coverage(
@@ -959,7 +1069,14 @@ class IntegrationService:
                 for row in rows
             ],
             request_fingerprint=request_fingerprint,
-            **self._runtime_metadata_for_existing_as_of_date(as_of_date),
+            **self._runtime_metadata_for_existing_as_of_date(
+                as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    rows,
+                    required_count=len(rows),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+            ),
         )
 
     @staticmethod
@@ -988,14 +1105,29 @@ class IntegrationService:
 
         missing_dates = sorted(expected_dates - observed_dates)
         quality_counts = dict(coverage.get("quality_status_counts", {}))
-        data_quality_status = classify_data_quality_coverage(
-            DataQualityCoverageSignal(
+        normalized_quality_counts = {
+            str(status).strip().upper(): int(count)
+            for status, count in quality_counts.items()
+            if count
+        }
+        data_quality_status = classify_market_reference_coverage(
+            MarketReferenceCoverageSignal(
                 required_count=len(expected_dates),
                 observed_count=len(observed_dates),
-                stale_count=int(
-                    quality_counts.get("STALE", 0)
-                    or quality_counts.get("stale", 0)
-                    or quality_counts.get("Stale", 0)
+                stale_count=sum(
+                    count
+                    for status, count in normalized_quality_counts.items()
+                    if status in STALE_QUALITY_STATUSES
+                ),
+                estimated_count=sum(
+                    count
+                    for status, count in normalized_quality_counts.items()
+                    if status in PARTIAL_QUALITY_STATUSES
+                ),
+                blocking_count=sum(
+                    count
+                    for status, count in normalized_quality_counts.items()
+                    if status in BLOCKING_QUALITY_STATUSES
                 ),
             )
         )
@@ -1012,5 +1144,6 @@ class IntegrationService:
             **IntegrationService._runtime_metadata(
                 end_date,
                 data_quality_status=data_quality_status,
+                latest_evidence_timestamp=coverage.get("latest_evidence_timestamp"),
             ),
         )

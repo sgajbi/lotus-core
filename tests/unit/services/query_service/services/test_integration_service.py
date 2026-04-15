@@ -1,10 +1,10 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNRECONCILED
+from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, STALE, UNRECONCILED
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -75,6 +75,69 @@ def test_to_coverage_response_classifies_data_quality_status(
     )
 
     assert response.data_quality_status == expected_status
+
+
+def test_to_coverage_response_carries_latest_evidence_timestamp() -> None:
+    latest_evidence_timestamp = datetime(2026, 1, 3, 14, 30, tzinfo=UTC)
+
+    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+        coverage={
+            "total_points": 3,
+            "observed_dates": [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)],
+            "quality_status_counts": {"accepted": 3},
+            "latest_evidence_timestamp": latest_evidence_timestamp,
+        },
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 3),
+        request_fingerprint="fp-coverage-test",
+    )
+
+    assert response.latest_evidence_timestamp == latest_evidence_timestamp
+
+
+def test_market_reference_data_quality_classifies_reference_rows() -> None:
+    rows = [
+        SimpleNamespace(quality_status="accepted"),
+        SimpleNamespace(quality_status="estimated"),
+        SimpleNamespace(quality_status="accepted"),
+    ]
+
+    assert (
+        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+            rows,
+            required_count=len(rows),
+        )
+        == PARTIAL
+    )
+    assert (
+        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+            [SimpleNamespace(quality_status="blocked")],
+            required_count=1,
+        )
+        == BLOCKED
+    )
+    assert (
+        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+            [SimpleNamespace()],
+            required_count=1,
+        )
+        == "UNKNOWN"
+    )
+
+
+def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps() -> None:
+    older_source_timestamp = datetime(2026, 1, 2, 9, 0, tzinfo=UTC)
+    latest_updated_at = datetime(2026, 1, 3, 11, 0, tzinfo=UTC)
+
+    assert (
+        IntegrationService._latest_reference_evidence_timestamp(  # pylint: disable=protected-access
+            [
+                SimpleNamespace(source_timestamp=older_source_timestamp),
+                SimpleNamespace(updated_at=latest_updated_at),
+            ]
+        )
+        == latest_updated_at
+    )
 
 
 def test_canonical_consumer_system_mappings() -> None:
@@ -307,6 +370,7 @@ async def test_reference_contract_methods() -> None:
                     benchmark_currency="USD",
                     effective_from=date(2026, 1, 1),
                     effective_to=None,
+                    quality_status="accepted",
                 )
             ]
         ),
@@ -318,6 +382,7 @@ async def test_reference_contract_methods() -> None:
                     composition_effective_from=date(2026, 1, 1),
                     composition_effective_to=None,
                     rebalance_event_id="r1",
+                    quality_status="accepted",
                 )
             ]
         ),
@@ -329,6 +394,7 @@ async def test_reference_contract_methods() -> None:
                     composition_effective_from=date(2026, 1, 1),
                     composition_effective_to=date(2026, 3, 31),
                     rebalance_event_id="r1",
+                    quality_status="accepted",
                 )
             ]
         ),
@@ -341,6 +407,7 @@ async def test_reference_contract_methods() -> None:
                         composition_effective_from=date(2026, 1, 1),
                         composition_effective_to=None,
                         rebalance_event_id="r1",
+                        quality_status="accepted",
                     )
                 ]
             }
@@ -532,7 +599,7 @@ async def test_reference_contract_methods() -> None:
     assert market_series.product_name == "MarketDataWindow"
     assert market_series.as_of_date == date(2026, 1, 1)
     assert market_series.reconciliation_status == "UNKNOWN"
-    assert market_series.data_quality_status == "UNKNOWN"
+    assert market_series.data_quality_status == COMPLETE
 
     index_price = await service.get_index_price_series(
         index_id="IDX1",
@@ -601,6 +668,50 @@ async def test_reference_contract_methods() -> None:
     assert taxonomy.request_fingerprint
     assert taxonomy.product_name == "InstrumentReferenceBundle"
     assert taxonomy.restatement_version == "current"
+
+
+@pytest.mark.asyncio
+async def test_market_reference_products_expose_row_backed_quality_and_evidence_timestamp() -> None:
+    service = make_service()
+    older_source_timestamp = datetime(2026, 1, 2, 9, 0, tzinfo=UTC)
+    latest_source_timestamp = datetime(2026, 1, 3, 11, 15, tzinfo=UTC)
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_index_price_series=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    series_date=date(2026, 1, 2),
+                    index_price=Decimal("100"),
+                    series_currency="USD",
+                    value_convention="close_price",
+                    quality_status="accepted",
+                    source_timestamp=older_source_timestamp,
+                ),
+                SimpleNamespace(
+                    series_date=date(2026, 1, 3),
+                    index_price=Decimal("101"),
+                    series_currency="USD",
+                    value_convention="close_price",
+                    quality_status="estimated",
+                    source_timestamp=latest_source_timestamp,
+                ),
+            ]
+        )
+    )
+
+    response = await service.get_index_price_series(
+        index_id="IDX1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 3),
+            window=SimpleNamespace(start_date=date(2026, 1, 2), end_date=date(2026, 1, 3)),
+            frequency="daily",
+        ),
+    )
+
+    assert response.product_name == "IndexSeriesWindow"
+    assert response.data_quality_status == PARTIAL
+    assert response.latest_evidence_timestamp == latest_source_timestamp
+    assert response.source_batch_fingerprint is None
+    assert response.snapshot_id is None
 
 
 @pytest.mark.asyncio
