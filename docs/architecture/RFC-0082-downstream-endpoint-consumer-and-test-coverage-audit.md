@@ -587,6 +587,11 @@ should use snake_case `consumer_system` and `tenant_id`.
 For this endpoint, Swagger now makes the canonical query names explicit and recursive schema-family
 tests protect the capabilities response surface from documentation drift.
 
+The HTTP dependency lane also proves both the explicit consumer or tenant request shape and the
+default `consumer_system=lotus-gateway` plus `tenant_id=default` resolution path so downstream
+discovery clients are covered whether they pass both query parameters or rely on the canonical
+defaults.
+
 ### Issue Disposition For This Endpoint
 
 No lotus-core issue is open against this route at the moment.
