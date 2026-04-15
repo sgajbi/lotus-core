@@ -1,6 +1,9 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from .source_data_product_identity import product_name_field, product_version_field
 
 
 class PolicyProvenanceMetadata(BaseModel):
@@ -120,8 +123,7 @@ class InstrumentEnrichmentRecord(BaseModel):
     liquidity_tier: str | None = Field(
         None,
         description=(
-            "Liquidity tier used by suitability and concentration workflows, "
-            "when available."
+            "Liquidity tier used by suitability and concentration workflows, when available."
         ),
         examples=["L1", "L5"],
     )
@@ -130,6 +132,10 @@ class InstrumentEnrichmentRecord(BaseModel):
 
 
 class InstrumentEnrichmentBulkResponse(BaseModel):
+    product_name: Literal["InstrumentReferenceBundle"] = product_name_field(
+        "InstrumentReferenceBundle"
+    )
+    product_version: Literal["v1"] = product_version_field()
     records: list[InstrumentEnrichmentRecord] = Field(
         ...,
         description="Deterministic enrichment records in the same order as request security_ids.",

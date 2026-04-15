@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from src.services.query_service.app.dtos.integration_dto import InstrumentEnrichmentBulkResponse
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
     BenchmarkCompositionWindowResponse,
@@ -58,6 +59,7 @@ def test_benchmark_market_series_request_requires_target_currency_for_fx() -> No
         (RiskFreeSeriesResponse, "RiskFreeSeriesWindow"),
         (CoverageResponse, "DataQualityCoverageReport"),
         (ClassificationTaxonomyResponse, "InstrumentReferenceBundle"),
+        (InstrumentEnrichmentBulkResponse, "InstrumentReferenceBundle"),
     ],
 )
 def test_source_data_product_responses_declare_product_identity_defaults(
