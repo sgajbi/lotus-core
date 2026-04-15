@@ -165,6 +165,12 @@ The evidence DTO-envelope binding adds `product_name` and `product_version` to
 dedicated `ReprocessingJobListResponse` envelope so generic valuation and aggregation support-job
 responses do not claim ingestion evidence semantics.
 
+The source-data product contract guard statically checks both sides of the binding:
+
+1. every catalog route must carry matching `x-lotus-source-data-product` route metadata,
+2. every catalog route must declare a response model whose DTO envelope exposes matching
+   `product_name` and `product_version` defaults.
+
 ## Validation
 
 Slice 6 validation is:

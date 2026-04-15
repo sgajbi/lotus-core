@@ -1,4 +1,4 @@
-"""Validate RFC-0083 source-data product route metadata bindings."""
+"""Validate RFC-0083 source-data product route and response metadata bindings."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ ROUTER_ROOTS = {
     "query_service": REPO_ROOT / "src" / "services" / "query_service" / "app" / "routers",
 }
 
+DTO_ROOT = REPO_ROOT / "src" / "services" / "query_service" / "app" / "dtos"
 ROUTE_METHODS = {"delete", "get", "patch", "post", "put"}
 
 
@@ -36,6 +37,7 @@ class SourceDataProductRoute:
     source: str
     function_name: str
     product_name: str | None
+    response_model: str | None
 
     @property
     def route_key(self) -> str:
@@ -87,6 +89,14 @@ def _source_data_product_name(node: ast.AST) -> str | None:
     return _literal_string(node.args[0])
 
 
+def _name_or_attribute(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
 def _extract_routes_from_file(service: str, router_file: Path) -> list[SourceDataProductRoute]:
     tree = ast.parse(router_file.read_text(encoding="utf-8"))
     prefix = _router_prefix(tree)
@@ -108,11 +118,14 @@ def _extract_routes_from_file(service: str, router_file: Path) -> list[SourceDat
             if decorator.args:
                 route_path = _literal_string(decorator.args[0]) or ""
             product_name: str | None = None
+            response_model: str | None = None
             for keyword in decorator.keywords:
                 if keyword.arg == "path":
                     route_path = _literal_string(keyword.value) or route_path
                 if keyword.arg == "openapi_extra":
                     product_name = _source_data_product_name(keyword.value)
+                if keyword.arg == "response_model":
+                    response_model = _name_or_attribute(keyword.value)
 
             routes.append(
                 SourceDataProductRoute(
@@ -122,6 +135,7 @@ def _extract_routes_from_file(service: str, router_file: Path) -> list[SourceDat
                     source=router_file.relative_to(REPO_ROOT).as_posix(),
                     function_name=node.name,
                     product_name=product_name,
+                    response_model=response_model,
                 )
             )
     return routes
@@ -135,11 +149,49 @@ def discover_source_data_product_routes() -> list[SourceDataProductRoute]:
     return sorted(routes, key=lambda route: (route.service, route.path, route.method))
 
 
+def _product_identity_field_value(node: ast.AST) -> str | None:
+    if not isinstance(node, ast.Call):
+        return None
+    function_name = _name_or_attribute(node.func)
+    if function_name == "product_name_field" and node.args:
+        return _literal_string(node.args[0])
+    if function_name == "product_version_field":
+        return "v1"
+    return None
+
+
+def discover_response_model_product_identities(
+    dto_root: Path = DTO_ROOT,
+) -> dict[str, tuple[str | None, str | None]]:
+    identities: dict[str, tuple[str | None, str | None]] = {}
+    for dto_file in sorted(dto_root.glob("*.py")):
+        tree = ast.parse(dto_file.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            product_name: str | None = None
+            product_version: str | None = None
+            for statement in node.body:
+                if not isinstance(statement, ast.AnnAssign):
+                    continue
+                if not isinstance(statement.target, ast.Name):
+                    continue
+                if statement.target.id == "product_name":
+                    product_name = _product_identity_field_value(statement.value)
+                if statement.target.id == "product_version":
+                    product_version = _product_identity_field_value(statement.value)
+            if product_name is not None or product_version is not None:
+                identities[node.name] = (product_name, product_version)
+    return identities
+
+
 def evaluate_source_data_product_bindings(
     routes: list[SourceDataProductRoute],
     catalog: tuple[SourceDataProductDefinition, ...] = SOURCE_DATA_PRODUCT_CATALOG,
+    response_model_identities: dict[str, tuple[str | None, str | None]] | None = None,
 ) -> list[str]:
     errors: list[str] = []
+    response_model_identities = response_model_identities or {}
     expected_route_products = {
         f"{product.serving_plane} {route}": product.product_name
         for product in catalog
@@ -157,6 +209,28 @@ def evaluate_source_data_product_bindings(
             errors.append(
                 f"{route.diagnostic_key} must bind source-data product "
                 f"{expected_product_name!r}, found {route.product_name!r}"
+            )
+        if route.response_model is None:
+            errors.append(f"{route.diagnostic_key} must declare a response_model")
+            continue
+        response_identity = response_model_identities.get(route.response_model)
+        if response_identity is None:
+            errors.append(
+                f"{route.diagnostic_key} response model {route.response_model!r} must declare "
+                f"product identity for {expected_product_name!r}"
+            )
+            continue
+        response_product_name, response_product_version = response_identity
+        if response_product_name != expected_product_name:
+            errors.append(
+                f"{route.diagnostic_key} response model {route.response_model!r} must declare "
+                f"product_name {expected_product_name!r}, found {response_product_name!r}"
+            )
+        expected_version = products_by_name[expected_product_name].product_version
+        if response_product_version != expected_version:
+            errors.append(
+                f"{route.diagnostic_key} response model {route.response_model!r} must declare "
+                f"product_version {expected_version!r}, found {response_product_version!r}"
             )
 
     for route in routes:
@@ -181,7 +255,10 @@ def evaluate_source_data_product_bindings(
 
 
 def main() -> int:
-    errors = evaluate_source_data_product_bindings(discover_source_data_product_routes())
+    errors = evaluate_source_data_product_bindings(
+        discover_source_data_product_routes(),
+        response_model_identities=discover_response_model_product_identities(),
+    )
     if errors:
         print("Source-data product contract guard failed:")
         for error in errors:
