@@ -1,0 +1,36 @@
+{
+  "specVersion": "1.0.0",
+  "application": "lotus-core",
+  "governingStandard": "docs/standards/temporal-vocabulary.md",
+  "description": "Current-state legacy temporal field definitions allowed by the RFC-0083 Slice 1 temporal vocabulary guard.",
+  "allowlist": [
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
+      "field": "date",
+      "expectedCount": 4,
+      "ownerSlice": "Slice 3, Slice 6, Slice 7",
+      "reason": "Existing business date, snapshot, and timeseries table columns. New public contracts must use domain-specific temporal names."
+    },
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
+      "field": "source_timestamp",
+      "expectedCount": 8,
+      "ownerSlice": "Slice 7",
+      "reason": "Existing reference and series source-observed timestamp columns. New source-observation fields must use observed_at."
+    },
+    {
+      "path": "src/services/ingestion_service/app/DTOs/reference_data_dto.py",
+      "field": "source_timestamp",
+      "expectedCount": 8,
+      "ownerSlice": "Slice 7",
+      "reason": "Existing reference-data ingestion DTO fields. New source-observation fields must use observed_at."
+    },
+    {
+      "path": "src/services/query_service/app/dtos/reference_integration_dto.py",
+      "field": "source_timestamp",
+      "expectedCount": 2,
+      "ownerSlice": "Slice 7",
+      "reason": "Existing reference integration DTO fields. New source-observation fields must use observed_at."
+    }
+  ]
+}

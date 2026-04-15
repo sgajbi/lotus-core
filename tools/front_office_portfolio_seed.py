@@ -4,6 +4,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -31,6 +32,24 @@ FRONT_OFFICE_SEED_CONTRACT = load_front_office_seed_contract()
 DEFAULT_PORTFOLIO_ID = FRONT_OFFICE_SEED_CONTRACT.portfolio_id
 DEFAULT_BENCHMARK_ID = FRONT_OFFICE_SEED_CONTRACT.benchmark_id
 DEFAULT_POSTGRES_CONTAINER = "lotus-core-app-local-postgres-1"
+DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
+    "IDX_GLOBAL_EQUITY_TR",
+    "IDX_GLOBAL_BOND_TR",
+)
+
+GLOBAL_PROCESSED_EVENT_RESET_PATTERNS = (
+    ("position-calculator", "transaction_processing.ready-%"),
+    ("position-calculator", "transactions.cost.processed-%"),
+    ("cost-calculator", "transactions.persisted-%"),
+    ("cashflow-calculator", "transactions.persisted-%"),
+    ("cashflow-calculator", "transactions.cost.processed-%"),
+    ("pipeline-orchestrator-processed-txn", "transactions.cost.processed-%"),
+    ("persistence-portfolios", "portfolios.raw.received-%"),
+    ("persistence-instruments", "instruments.received-%"),
+    ("persistence-market-prices", "market_prices.raw.received-%"),
+    ("persistence-fx-rates", "fx_rates.raw.received-%"),
+    ("persistence-business-dates", "business_dates.raw.received-%"),
+)
 
 
 @dataclass(frozen=True)
@@ -62,16 +81,27 @@ FRONT_OFFICE_EXPECTATION = _build_front_office_expectation(FRONT_OFFICE_SEED_CON
 
 
 def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
+    """
+    Build the destructive local reseed cleanup SQL for the canonical front-office seed.
+
+    The global processed-event reset is intentionally broader than a single portfolio because
+    local Docker restarts can reset Kafka offsets while the persisted idempotency table survives.
+    For shared raw-topic services that key idempotency by topic/partition/offset only, a clean
+    local reseed must clear those offset-based markers or the canonical ingest will be skipped.
+    """
+    global_processed_event_filter = " or ".join(
+        (
+            f"(service_name = '{service_name}' and event_id like '{event_pattern}')"
+            for service_name, event_pattern in GLOBAL_PROCESSED_EVENT_RESET_PATTERNS
+        )
+    )
     return "\n".join(
         [
             (
                 "delete from financial_reconciliation_findings "
                 f"where portfolio_id = '{portfolio_id}';"
             ),
-            (
-                "delete from financial_reconciliation_runs "
-                f"where portfolio_id = '{portfolio_id}';"
-            ),
+            (f"delete from financial_reconciliation_runs where portfolio_id = '{portfolio_id}';"),
             f"delete from simulation_changes where portfolio_id = '{portfolio_id}';",
             f"delete from simulation_sessions where portfolio_id = '{portfolio_id}';",
             f"delete from analytics_export_jobs where portfolio_id = '{portfolio_id}';",
@@ -91,6 +121,7 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             ),
             f"delete from pipeline_stage_state where portfolio_id = '{portfolio_id}';",
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
+            (f"delete from processed_events where ({global_processed_event_filter});"),
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
             f"delete from transactions where portfolio_id = '{portfolio_id}';",
@@ -101,12 +132,18 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
 
 
 def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+    benchmark_index_id_list = ", ".join(
+        f"'{index_id}'" for index_id in DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS
+    )
     return "\n".join(
         [
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             f"delete from benchmark_composition_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_return_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_definitions where benchmark_id = '{benchmark_id}';",
+            f"delete from index_price_series where index_id in ({benchmark_index_id_list});",
+            f"delete from index_return_series where index_id in ({benchmark_index_id_list});",
+            f"delete from index_definitions where index_id in ({benchmark_index_id_list});",
         ]
     )
 
@@ -154,6 +191,10 @@ def _interpolate_prices(
         price = start_price + ((end_price - start_price) * weight)
         values.append(format(price.quantize(Decimal(precision)), "f"))
     return values
+
+
+def _invert_rate(rate: str, precision: str = "0.000001") -> str:
+    return format((Decimal("1") / Decimal(rate)).quantize(Decimal(precision)), "f")
 
 
 def _tx(
@@ -219,9 +260,7 @@ def _cash_tx(
     )
 
 
-def _paired_internal_leg_metadata(
-    *, portfolio_id: str, event_code: str
-) -> dict[str, str]:
+def _paired_internal_leg_metadata(*, portfolio_id: str, event_code: str) -> dict[str, str]:
     normalized_code = event_code.strip().upper().replace(" ", "-")
     return {
         "economic_event_id": f"EVT-{portfolio_id}-{normalized_code}",
@@ -276,9 +315,7 @@ def _validate_front_office_cash_transactions(transactions: list[dict[str, Any]])
         trade_currency = str(transaction["trade_currency"])
 
         if price != Decimal("1"):
-            raise ValueError(
-                f"{transaction_id} must use price=1 for cash-book transaction rows."
-            )
+            raise ValueError(f"{transaction_id} must use price=1 for cash-book transaction rows.")
         if quantity != gross:
             raise ValueError(
                 f"{transaction_id} must use quantity equal to gross_transaction_amount "
@@ -318,8 +355,7 @@ def _validate_front_office_internal_transaction_pairs(
 
         if product_leg.get("economic_event_id") != cash_leg.get("economic_event_id"):
             raise ValueError(
-                f"{product_transaction_id} and {cash_transaction_id} must share "
-                "economic_event_id."
+                f"{product_transaction_id} and {cash_transaction_id} must share economic_event_id."
             )
         if product_leg.get("linked_transaction_group_id") != cash_leg.get(
             "linked_transaction_group_id"
@@ -391,6 +427,31 @@ def build_front_office_portfolio_bundle(
             0,
             0,
             tzinfo=UTC,
+        )
+
+    eur_usd = _interpolate_prices(
+        dates=fx_calendar_dates,
+        start_price=Decimal("1.072500"),
+        end_price=Decimal("1.110000"),
+        precision="0.000001",
+    )
+    eur_usd_by_date = dict(zip(fx_calendar_dates, eur_usd, strict=True))
+
+    def fx_rate_for_transaction(
+        when: datetime,
+        *,
+        from_currency: str,
+        to_currency: str = "USD",
+    ) -> str:
+        transaction_date = when.date().isoformat()
+        if from_currency == to_currency:
+            return "1.000000"
+        if from_currency == "EUR" and to_currency == "USD":
+            return eur_usd_by_date[transaction_date]
+        if from_currency == "USD" and to_currency == "EUR":
+            return _invert_rate(eur_usd_by_date[transaction_date])
+        raise ValueError(
+            f"Unsupported transaction FX pair for front-office seed: {from_currency}/{to_currency}"
         )
 
     portfolios = [
@@ -635,6 +696,7 @@ def build_front_office_portfolio_bundle(
             trade_currency="EUR",
             settlement_cash_account_id="CASH-ACC-EUR-001",
             movement_direction="INFLOW",
+            transaction_fx_rate=fx_rate_for_transaction(tx_dt(2, 9), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
         ),
         _tx(
@@ -650,9 +712,7 @@ def build_front_office_portfolio_bundle(
             gross="77490.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-AAPL-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-AAPL-001"),
         ),
         _tx(
             "TXN-CASH-BUY-AAPL-001",
@@ -668,9 +728,7 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-AAPL-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-AAPL-001"),
         ),
         _tx(
             "TXN-BUY-MSFT-001",
@@ -685,9 +743,7 @@ def build_front_office_portfolio_bundle(
             gross="104325.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-MSFT-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-MSFT-001"),
         ),
         _tx(
             "TXN-CASH-BUY-MSFT-001",
@@ -703,9 +759,7 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-MSFT-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-MSFT-001"),
         ),
         _tx(
             "TXN-BUY-SAP-001",
@@ -719,10 +773,9 @@ def build_front_office_portfolio_bundle(
             price="121.40",
             gross="82552.00",
             trade_currency="EUR",
+            transaction_fx_rate=fx_rate_for_transaction(tx_dt(20), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-SAP-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-SAP-001"),
         ),
         _tx(
             "TXN-CASH-BUY-SAP-001",
@@ -737,10 +790,9 @@ def build_front_office_portfolio_bundle(
             gross="82552.00",
             trade_currency="EUR",
             settlement_cash_account_id="CASH-ACC-EUR-001",
+            transaction_fx_rate=fx_rate_for_transaction(tx_dt(20), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-SAP-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-SAP-001"),
         ),
         _tx(
             "TXN-BUY-WORLD-ETF-001",
@@ -789,6 +841,7 @@ def build_front_office_portfolio_bundle(
             price="107.25",
             gross="158730.00",
             trade_currency="EUR",
+            transaction_fx_rate=fx_rate_for_transaction(tx_dt(49), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
                 portfolio_id=portfolio_id, event_code="BUY-BLK-ALLOC-001"
@@ -807,6 +860,7 @@ def build_front_office_portfolio_bundle(
             gross="158730.00",
             trade_currency="EUR",
             settlement_cash_account_id="CASH-ACC-EUR-001",
+            transaction_fx_rate=fx_rate_for_transaction(tx_dt(49), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
                 portfolio_id=portfolio_id, event_code="BUY-BLK-ALLOC-001"
@@ -860,9 +914,7 @@ def build_front_office_portfolio_bundle(
             gross="178704.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-UST-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-UST-001"),
         ),
         _tx(
             "TXN-CASH-BUY-UST-001",
@@ -878,9 +930,7 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="BUY-UST-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-UST-001"),
         ),
         _tx(
             "TXN-BUY-SIEMENS-BOND-001",
@@ -894,6 +944,7 @@ def build_front_office_portfolio_bundle(
             price="985.50",
             gross="73912.50",
             trade_currency="EUR",
+            transaction_fx_rate=fx_rate_for_transaction(tx_dt(118), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
                 portfolio_id=portfolio_id, event_code="BUY-SIEMENS-BOND-001"
@@ -912,6 +963,7 @@ def build_front_office_portfolio_bundle(
             gross="73912.50",
             trade_currency="EUR",
             settlement_cash_account_id="CASH-ACC-EUR-001",
+            transaction_fx_rate=fx_rate_for_transaction(tx_dt(118), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
                 portfolio_id=portfolio_id, event_code="BUY-SIEMENS-BOND-001"
@@ -965,9 +1017,7 @@ def build_front_office_portfolio_bundle(
             gross="850.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="DIV-AAPL-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="DIV-AAPL-001"),
         ),
         _tx(
             "TXN-CASH-DIV-AAPL-001",
@@ -983,9 +1033,7 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="DIV-AAPL-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="DIV-AAPL-001"),
         ),
         _tx(
             "TXN-INT-UST-001",
@@ -1004,9 +1052,7 @@ def build_front_office_portfolio_bundle(
             other_interest_deductions_amount="12.00",
             net_interest_amount="1187.00",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="INT-UST-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="INT-UST-001"),
         ),
         _tx(
             "TXN-CASH-INT-UST-001",
@@ -1022,9 +1068,7 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="INT-UST-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="INT-UST-001"),
         ),
         _tx(
             "TXN-DEP-USD-TOPUP-001",
@@ -1068,9 +1112,7 @@ def build_front_office_portfolio_bundle(
             gross="22814.00",
             trade_currency="USD",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="SELL-AAPL-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="SELL-AAPL-001"),
         ),
         _tx(
             "TXN-CASH-SELL-AAPL-001",
@@ -1086,9 +1128,7 @@ def build_front_office_portfolio_bundle(
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             source_system="LOTUS_FRONT_OFFICE_SEED",
-            **_paired_internal_leg_metadata(
-                portfolio_id=portfolio_id, event_code="SELL-AAPL-001"
-            ),
+            **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="SELL-AAPL-001"),
         ),
         _tx(
             "TXN-WITHDRAWAL-PLANNED-001",
@@ -1245,18 +1285,9 @@ def build_front_office_portfolio_bundle(
                 }
             )
 
-    eur_usd = _interpolate_prices(
-        dates=fx_calendar_dates,
-        start_price=Decimal("1.072500"),
-        end_price=Decimal("1.110000"),
-        precision="0.000001",
-    )
     fx_rates: list[dict[str, Any]] = []
     for current_date, eur_usd_rate in zip(fx_calendar_dates, eur_usd, strict=True):
-        inverse_rate = format(
-            (Decimal("1") / Decimal(eur_usd_rate)).quantize(Decimal("0.000001")),
-            "f",
-        )
+        inverse_rate = _invert_rate(eur_usd_rate)
         fx_rates.extend(
             [
                 {
@@ -1290,23 +1321,30 @@ def build_front_office_portfolio_bundle(
     }
 
 
-def _build_portfolio_bundle_payload(bundle: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "source_system": bundle["source_system"],
-        "mode": bundle["mode"],
-        "business_dates": bundle["business_dates"],
-        "portfolios": bundle["portfolios"],
-        "instruments": bundle["instruments"],
-        "transactions": bundle["transactions"],
-        "market_prices": bundle["market_prices"],
-        "fx_rates": bundle["fx_rates"],
-        "as_of_date": bundle["as_of_date"],
-    }
-
-
 def _portfolio_exists(query_base_url: str, portfolio_id: str) -> bool:
     _, payload = _request_json("GET", f"{query_base_url}/portfolios?portfolio_id={portfolio_id}")
     return any(item.get("portfolio_id") == portfolio_id for item in payload.get("portfolios") or [])
+
+
+def _wait_for_portfolio_persistence(
+    *,
+    query_base_url: str,
+    portfolio_id: str,
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    while datetime.now(tz=UTC) <= deadline:
+        if _portfolio_exists(query_base_url, portfolio_id):
+            return
+        LOGGER.info(
+            "Waiting for portfolio %s to persist before ingesting dependent reference data.",
+            portfolio_id,
+        )
+        time.sleep(poll_interval_seconds)
+    raise TimeoutError(
+        f"Portfolio {portfolio_id} was not visible in query service within {wait_seconds} seconds."
+    )
 
 
 def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
@@ -1335,6 +1373,35 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
     )
     for endpoint, payload in reference_payloads:
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
+
+
+def _ingest_front_office_core_data(
+    *,
+    ingestion_base_url: str,
+    query_base_url: str,
+    bundle: dict[str, Any],
+    portfolio_id: str,
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    core_payloads = (
+        ("/ingest/business-dates", {"business_dates": bundle["business_dates"]}),
+        ("/ingest/portfolios", {"portfolios": bundle["portfolios"]}),
+        ("/ingest/instruments", {"instruments": bundle["instruments"]}),
+        ("/ingest/fx-rates", {"fx_rates": bundle["fx_rates"]}),
+        ("/ingest/market-prices", {"market_prices": bundle["market_prices"]}),
+        ("/ingest/transactions", {"transactions": bundle["transactions"]}),
+    )
+
+    for endpoint, payload in core_payloads:
+        _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
+        if endpoint == "/ingest/portfolios":
+            _wait_for_portfolio_persistence(
+                query_base_url=query_base_url,
+                portfolio_id=portfolio_id,
+                wait_seconds=wait_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
 
 
 def _reprocess_front_office_transactions(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
@@ -1412,9 +1479,7 @@ def _extract_support_overview_summary(overview_payload: dict[str, Any]) -> dict[
             "stale_processing_aggregation_jobs"
         ),
         "failed_aggregation_jobs": overview_payload.get("failed_aggregation_jobs"),
-        "oldest_pending_aggregation_date": overview_payload.get(
-            "oldest_pending_aggregation_date"
-        ),
+        "oldest_pending_aggregation_date": overview_payload.get("oldest_pending_aggregation_date"),
         "latest_booked_transaction_date": overview_payload.get("latest_booked_transaction_date"),
         "latest_booked_position_snapshot_date": overview_payload.get(
             "latest_booked_position_snapshot_date"
@@ -1653,9 +1718,7 @@ def _verify_front_office_portfolio(
                 "activity_buckets": len(activity_rows),
                 "projected_cashflow_points": len(projected_cashflow_points),
                 "benchmark_code": performance_summary.get("benchmark_code"),
-                "analytics_performance_end_date": analytics_reference.get(
-                    "performance_end_date"
-                ),
+                "analytics_performance_end_date": analytics_reference.get("performance_end_date"),
                 "performance_report_end_date": performance_summary.get("report_end_date"),
                 "return_path_latest_available_date": (
                     performance_summary.get("capabilities", {})
@@ -1756,8 +1819,14 @@ def main() -> int:
         if not should_ingest:
             should_ingest = not _portfolio_exists(query_base_url, args.portfolio_id)
         if should_ingest:
-            payload = _build_portfolio_bundle_payload(bundle)
-            _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
+            _ingest_front_office_core_data(
+                ingestion_base_url=ingestion_base_url,
+                query_base_url=query_base_url,
+                bundle=bundle,
+                portfolio_id=args.portfolio_id,
+                wait_seconds=args.wait_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
         _ingest_reference_data(ingestion_base_url, bundle)
         if should_ingest and not args.skip_reprocess:
             _reprocess_front_office_transactions(ingestion_base_url, bundle)

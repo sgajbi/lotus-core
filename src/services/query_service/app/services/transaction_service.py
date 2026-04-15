@@ -3,8 +3,10 @@ import logging
 from datetime import date
 from typing import Optional
 
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.transaction_dto import PaginatedTransactionResponse, TransactionRecord
 from ..repositories.transaction_repository import TransactionRepository
 
@@ -19,6 +21,19 @@ class TransactionService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = TransactionRepository(db)
+
+    @staticmethod
+    def _ledger_data_quality_status(
+        *,
+        total_count: int,
+        returned_count: int,
+        skip: int,
+    ) -> str:
+        if total_count <= 0:
+            return UNKNOWN
+        if skip > 0 or returned_count < total_count:
+            return PARTIAL
+        return COMPLETE
 
     async def get_transactions(
         self,
@@ -53,41 +68,32 @@ class TransactionService:
         if effective_as_of_date is None and not include_projected:
             effective_as_of_date = await self.repo.get_latest_business_date() or date.today()
 
-        total_count = await self.repo.get_transactions_count(
-            portfolio_id=portfolio_id,
-            instrument_id=instrument_id,
-            security_id=security_id,
-            transaction_type=transaction_type,
-            component_type=component_type,
-            linked_transaction_group_id=linked_transaction_group_id,
-            fx_contract_id=fx_contract_id,
-            swap_event_id=swap_event_id,
-            near_leg_group_id=near_leg_group_id,
-            far_leg_group_id=far_leg_group_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=effective_as_of_date,
-        )
+        ledger_filters = {
+            "portfolio_id": portfolio_id,
+            "instrument_id": instrument_id,
+            "security_id": security_id,
+            "transaction_type": transaction_type,
+            "component_type": component_type,
+            "linked_transaction_group_id": linked_transaction_group_id,
+            "fx_contract_id": fx_contract_id,
+            "swap_event_id": swap_event_id,
+            "near_leg_group_id": near_leg_group_id,
+            "far_leg_group_id": far_leg_group_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "as_of_date": effective_as_of_date,
+        }
+
+        total_count = await self.repo.get_transactions_count(**ledger_filters)
 
         db_results = await self.repo.get_transactions(
-            portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
             sort_by=sort_by,
             sort_order=sort_order,
-            instrument_id=instrument_id,
-            security_id=security_id,
-            transaction_type=transaction_type,
-            component_type=component_type,
-            linked_transaction_group_id=linked_transaction_group_id,
-            fx_contract_id=fx_contract_id,
-            swap_event_id=swap_event_id,
-            near_leg_group_id=near_leg_group_id,
-            far_leg_group_id=far_leg_group_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=effective_as_of_date,
+            **ledger_filters,
         )
+        latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(**ledger_filters)
 
         transactions = []
         for transaction in db_results:
@@ -103,4 +109,13 @@ class TransactionService:
             skip=skip,
             limit=limit,
             transactions=transactions,
+            **source_data_product_runtime_metadata(
+                as_of_date=effective_as_of_date or end_date or date.today(),
+                data_quality_status=self._ledger_data_quality_status(
+                    total_count=total_count,
+                    returned_count=len(transactions),
+                    skip=skip,
+                ),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+            ),
         )

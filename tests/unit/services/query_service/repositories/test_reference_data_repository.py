@@ -220,6 +220,100 @@ async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> No
 
 
 @pytest.mark.asyncio
+async def test_catalog_methods_return_latest_effective_row_per_business_key() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    effective_from=date(2025, 1, 1),
+                    classification_labels={"strategy": "old"},
+                ),
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    effective_from=date(2025, 4, 1),
+                    classification_labels={"strategy": "current"},
+                ),
+                SimpleNamespace(
+                    benchmark_id="B2",
+                    effective_from=date(2025, 1, 1),
+                    classification_labels={"strategy": "other"},
+                ),
+            ]
+        ),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(
+                    index_id="IDX_GLOBAL_EQUITY_TR",
+                    effective_from=date(2025, 1, 6),
+                    classification_labels={"asset_class": "equity"},
+                ),
+                SimpleNamespace(
+                    index_id="IDX_GLOBAL_EQUITY_TR",
+                    effective_from=date(2025, 4, 15),
+                    classification_labels={
+                        "asset_class": "equity",
+                        "sector": "broad_market_equity",
+                    },
+                ),
+                SimpleNamespace(
+                    index_id="IDX_GLOBAL_BOND_TR",
+                    effective_from=date(2025, 1, 6),
+                    classification_labels={
+                        "asset_class": "fixed_income",
+                        "sector": "broad_market_fixed_income",
+                    },
+                ),
+            ]
+        ),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    index_id="IDX_1",
+                    composition_effective_from=date(2025, 1, 1),
+                    composition_weight=Decimal("0.60"),
+                ),
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    index_id="IDX_1",
+                    composition_effective_from=date(2025, 3, 1),
+                    composition_weight=Decimal("0.55"),
+                ),
+                SimpleNamespace(
+                    benchmark_id="B1",
+                    index_id="IDX_2",
+                    composition_effective_from=date(2025, 1, 1),
+                    composition_weight=Decimal("0.40"),
+                ),
+            ]
+        ),
+    ]
+    repo = ReferenceDataRepository(db)
+
+    benchmarks = await repo.list_benchmark_definitions(date(2026, 4, 10))
+    indices = await repo.list_index_definitions(date(2026, 4, 10))
+    components = await repo.list_benchmark_components("B1", date(2026, 4, 10))
+
+    assert [(row.benchmark_id, row.classification_labels) for row in benchmarks] == [
+        ("B1", {"strategy": "current"}),
+        ("B2", {"strategy": "other"}),
+    ]
+    assert [(row.index_id, row.classification_labels) for row in indices] == [
+        (
+            "IDX_GLOBAL_BOND_TR",
+            {"asset_class": "fixed_income", "sector": "broad_market_fixed_income"},
+        ),
+        ("IDX_GLOBAL_EQUITY_TR", {"asset_class": "equity", "sector": "broad_market_equity"}),
+    ]
+    assert [(row.index_id, row.composition_weight) for row in components] == [
+        ("IDX_1", Decimal("0.55")),
+        ("IDX_2", Decimal("0.40")),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing() -> None:
     repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
     repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -82,6 +82,8 @@ def _snapshot(
     quantity: str = "1",
     valuation_status: str | None = "VALUED",
     snapshot_date: date = date(2026, 3, 27),
+    created_at: datetime | None = None,
+    updated_at: datetime | None = None,
 ):
     return SimpleNamespace(
         security_id=security_id,
@@ -90,6 +92,8 @@ def _snapshot(
         market_value_local=Decimal(market_value_local or market_value),
         quantity=Decimal(quantity),
         valuation_status=valuation_status,
+        created_at=created_at,
+        updated_at=updated_at,
     )
 
 
@@ -183,7 +187,12 @@ async def test_get_cash_balances_returns_cash_accounts_and_totals() -> None:
     repo.list_latest_snapshot_rows.return_value = [
         ReportingSnapshotRow(
             portfolio=portfolio,
-            snapshot=_snapshot("CASH_USD", market_value="250", market_value_local="250"),
+            snapshot=_snapshot(
+                "CASH_USD",
+                market_value="250",
+                market_value_local="250",
+                updated_at=datetime(2026, 3, 27, 11, 15, tzinfo=UTC),
+            ),
             instrument=_instrument(
                 "CASH_USD",
                 name="USD Cash Account",
@@ -216,6 +225,15 @@ async def test_get_cash_balances_returns_cash_accounts_and_totals() -> None:
     assert response.totals.total_balance_portfolio_currency == Decimal("250")
     assert response.totals.total_balance_reporting_currency == Decimal("300.0")
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.product_name == "HoldingsAsOf"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 15, tzinfo=UTC)
+    assert response.correlation_id is None
 
 
 async def test_get_cash_balances_prefers_cash_account_master_and_keeps_zero_balance_accounts() -> (
@@ -347,7 +365,11 @@ async def test_get_holdings_snapshot_restates_reporting_currency_and_region() ->
     repo.list_latest_snapshot_rows.return_value = [
         ReportingSnapshotRow(
             portfolio=portfolio,
-            snapshot=_snapshot("SEC1", market_value="100"),
+            snapshot=_snapshot(
+                "SEC1",
+                market_value="100",
+                updated_at=datetime(2026, 3, 27, 12, 10, tzinfo=UTC),
+            ),
             instrument=_instrument(
                 "SEC1",
                 asset_class="EQUITY",
@@ -386,6 +408,15 @@ async def test_get_holdings_snapshot_restates_reporting_currency_and_region() ->
     assert len(response.positions) == 1
     assert response.positions[0].region == "North America"
     assert response.positions[0].weight == Decimal("1")
+    assert response.product_name == "HoldingsAsOf"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 12, 10, tzinfo=UTC)
+    assert response.correlation_id is None
 
 
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:
@@ -521,6 +552,7 @@ async def test_get_income_summary_returns_requested_window_and_ytd_amounts() -> 
             ytd_other_deductions=Decimal("0"),
             requested_net_amount=Decimal("50"),
             ytd_net_amount=Decimal("80"),
+            latest_evidence_timestamp=datetime(2026, 3, 27, 10, 0, tzinfo=UTC),
         ),
         IncomeSummaryAggregateRow(
             portfolio_id="P1",
@@ -539,6 +571,7 @@ async def test_get_income_summary_returns_requested_window_and_ytd_amounts() -> 
             ytd_other_deductions=Decimal("1"),
             requested_net_amount=Decimal("26"),
             ytd_net_amount=Decimal("26"),
+            latest_evidence_timestamp=datetime(2026, 3, 27, 10, 5, tzinfo=UTC),
         ),
     ]
 
@@ -558,6 +591,15 @@ async def test_get_income_summary_returns_requested_window_and_ytd_amounts() -> 
     assert response.totals.requested_window.gross_amount_portfolio_currency == Decimal("80")
     assert response.totals.requested_window.net_amount_reporting_currency == Decimal("76")
     assert response.totals.year_to_date.gross_amount_reporting_currency == Decimal("110")
+    assert response.product_name == "TransactionLedgerWindow"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 10, 5, tzinfo=UTC)
+    assert response.correlation_id is None
     interest_bucket = next(
         bucket for bucket in response.portfolios[0].income_types if bucket.income_type == "INTEREST"
     )
@@ -580,6 +622,7 @@ async def test_get_activity_summary_returns_flow_buckets_with_reporting_conversi
             ytd_transaction_count=2,
             requested_amount=Decimal("1000"),
             ytd_amount=Decimal("1500"),
+            latest_evidence_timestamp=datetime(2026, 3, 27, 9, 30, tzinfo=UTC),
         ),
         ActivitySummaryAggregateRow(
             portfolio_id="P1",
@@ -592,6 +635,7 @@ async def test_get_activity_summary_returns_flow_buckets_with_reporting_conversi
             ytd_transaction_count=1,
             requested_amount=Decimal("25"),
             ytd_amount=Decimal("25"),
+            latest_evidence_timestamp=datetime(2026, 3, 27, 9, 45, tzinfo=UTC),
         ),
     ]
     repo.get_latest_fx_rate.side_effect = lambda **kwargs: Decimal("1.2")
@@ -619,3 +663,12 @@ async def test_get_activity_summary_returns_flow_buckets_with_reporting_conversi
     assert inflows_bucket.year_to_date.amount_reporting_currency == Decimal("1800.0")
     assert fees_bucket.requested_window.amount_reporting_currency == Decimal("30.0")
     assert taxes_bucket.requested_window.amount_reporting_currency == Decimal("0")
+    assert response.product_name == "TransactionLedgerWindow"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 9, 45, tzinfo=UTC)
+    assert response.correlation_id is None

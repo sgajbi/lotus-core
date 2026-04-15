@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import Depends
 from portfolio_common.db import get_async_db_session
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.core_snapshot_dto import (
@@ -28,6 +29,7 @@ from ..dtos.core_snapshot_dto import (
     CoreSnapshotValuationContext,
 )
 from ..dtos.integration_dto import InstrumentEnrichmentRecord
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.fx_rate_repository import FxRateRepository
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.portfolio_repository import PortfolioRepository
@@ -82,6 +84,24 @@ class CoreSnapshotService:
         return md5(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+
+    @staticmethod
+    def _snapshot_data_quality_status(
+        *,
+        freshness: CoreSnapshotFreshnessMetadata,
+        baseline_count: int,
+    ) -> str:
+        if baseline_count <= 0:
+            return UNKNOWN
+        if freshness.freshness_status == "HISTORICAL_FALLBACK":
+            return PARTIAL
+        if (
+            freshness.freshness_status == "CURRENT_SNAPSHOT"
+            and freshness.snapshot_timestamp is not None
+            and freshness.snapshot_epoch is not None
+        ):
+            return COMPLETE
+        return PARTIAL
 
     async def get_core_snapshot(
         self,
@@ -256,11 +276,12 @@ class CoreSnapshotService:
             }
         )
 
+        generated_at = datetime.now(UTC)
+        resolved_tenant_id = governance.tenant_id if governance is not None else request.tenant_id
+
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
             snapshot_mode=request.snapshot_mode,
-            generated_at=datetime.now(UTC),
             contract_version="rfc_081_v1",
             request_fingerprint=request_fingerprint,
             freshness=freshness_meta,
@@ -285,6 +306,17 @@ class CoreSnapshotService:
             ),
             simulation=simulation_metadata,
             sections=sections_payload,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+                tenant_id=resolved_tenant_id,
+                data_quality_status=self._snapshot_data_quality_status(
+                    freshness=freshness_meta,
+                    baseline_count=len(baseline_positions),
+                ),
+                latest_evidence_timestamp=freshness_meta.snapshot_timestamp,
+                policy_version=policy_provenance.policy_version,
+            ),
         )
 
     async def _resolve_baseline_positions(
@@ -368,11 +400,36 @@ class CoreSnapshotService:
         freshness = CoreSnapshotFreshnessMetadata(
             freshness_status=("CURRENT_SNAPSHOT" if use_snapshot else "HISTORICAL_FALLBACK"),
             baseline_source=source,
-            snapshot_timestamp=None,
-            snapshot_epoch=None,
+            snapshot_timestamp=(self._latest_snapshot_timestamp(rows) if use_snapshot else None),
+            snapshot_epoch=(
+                self._single_resolved_epoch(rows) if use_snapshot and baseline else None
+            ),
             fallback_reason=(None if use_snapshot else "NO_CURRENT_POSITION_STATE_ROWS"),
         )
         return dict(sorted(baseline.items(), key=lambda item: item[0])), freshness
+
+    @staticmethod
+    def _latest_snapshot_timestamp(rows: list[Any]) -> datetime | None:
+        timestamps: list[datetime] = []
+        for row, _instrument, state in rows:
+            for candidate in (
+                getattr(row, "updated_at", None),
+                getattr(row, "created_at", None),
+                getattr(state, "updated_at", None),
+                getattr(state, "created_at", None),
+            ):
+                if isinstance(candidate, datetime):
+                    timestamps.append(candidate)
+        return max(timestamps) if timestamps else None
+
+    @staticmethod
+    def _single_resolved_epoch(rows: list[Any]) -> int | None:
+        epochs = {
+            int(state.epoch)
+            for _row, _instrument, state in rows
+            if getattr(state, "epoch", None) is not None
+        }
+        return next(iter(epochs)) if len(epochs) == 1 else None
 
     async def _resolve_projected_positions(
         self,

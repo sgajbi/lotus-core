@@ -1,9 +1,15 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 
 
 class CoreSnapshotMode(str, Enum):
@@ -77,8 +83,7 @@ class CoreSnapshotRequest(BaseModel):
     reporting_currency: Optional[str] = Field(
         None,
         description=(
-            "ISO currency code for reporting conversion. "
-            "Defaults to portfolio base currency."
+            "ISO currency code for reporting conversion. Defaults to portfolio base currency."
         ),
         examples=["USD"],
     )
@@ -477,7 +482,9 @@ class CoreSnapshotSections(BaseModel):
     )
 
 
-class CoreSnapshotResponse(BaseModel):
+class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["PortfolioStateSnapshot"] = product_name_field("PortfolioStateSnapshot")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ...,
         description="Portfolio identifier for the generated snapshot.",

@@ -47,6 +47,9 @@ class QueryServiceSettings:
     has_database_url: bool
     enterprise_policy_version: str
     enterprise_enforce_authz: bool
+    enterprise_enforce_read_authz: bool
+    enterprise_audit_reads: bool
+    enterprise_require_capability_rules: bool
     enterprise_enforce_runtime_config: bool
     enterprise_primary_key_id: str
     enterprise_secret_rotation_days: int
@@ -67,6 +70,9 @@ def load_query_service_settings() -> QueryServiceSettings:
         has_database_url=bool(os.getenv("HOST_DATABASE_URL") or os.getenv("DATABASE_URL")),
         enterprise_policy_version=env_str("ENTERPRISE_POLICY_VERSION", "1.0.0"),
         enterprise_enforce_authz=env_bool("ENTERPRISE_ENFORCE_AUTHZ", False),
+        enterprise_enforce_read_authz=env_bool("ENTERPRISE_ENFORCE_READ_AUTHZ", False),
+        enterprise_audit_reads=env_bool("ENTERPRISE_AUDIT_READS", False),
+        enterprise_require_capability_rules=env_bool("ENTERPRISE_REQUIRE_CAPABILITY_RULES", False),
         enterprise_enforce_runtime_config=env_bool("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", False),
         enterprise_primary_key_id=env_str("ENTERPRISE_PRIMARY_KEY_ID", ""),
         enterprise_secret_rotation_days=env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90),

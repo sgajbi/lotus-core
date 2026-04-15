@@ -196,6 +196,7 @@ async def test_reporting_repository_income_summary_uses_grouped_window_aggregati
     assert "transactions.transaction_type IN ('DIVIDEND', 'INTEREST')" in compiled
     assert "transactions.transaction_date >= '2026-01-01 00:00:00'" in compiled
     assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
+    assert "max(transactions.updated_at)" in compiled.lower()
     assert "GROUP BY portfolios.portfolio_id" in compiled
 
 
@@ -221,3 +222,4 @@ async def test_reporting_repository_activity_summary_uses_union_for_withholding_
     assert "transactions.withholding_tax_amount IS NOT NULL" in compiled
     assert "transactions.transaction_type = 'FEE'" in compiled
     assert "transactions.transaction_type = 'TAX'" in compiled
+    assert "max(anon_1.latest_evidence_timestamp)" in normalized

@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.position_dto import PortfolioPositionHistoryResponse, PortfolioPositionsResponse
@@ -88,6 +89,7 @@ async def get_position_history(
         "Returns latest current-epoch positions for a portfolio. "
         "Used by holdings screens and downstream review/analytics flows."
     ),
+    openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
 async def get_latest_positions(
     portfolio_id: str = Path(

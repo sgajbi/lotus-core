@@ -3,10 +3,29 @@ from unittest.mock import patch
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.source_data_products import QUERY_SERVICE, SOURCE_DATA_PRODUCT_CATALOG
+from portfolio_common.source_data_security import (
+    get_source_data_security_profile,
+    required_source_data_capability,
+)
 
 from src.services.query_service.app.main import app, lifespan
 
 pytestmark = pytest.mark.asyncio
+
+SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
+    "tenant_id",
+    "generated_at",
+    "as_of_date",
+    "restatement_version",
+    "reconciliation_status",
+    "data_quality_status",
+    "latest_evidence_timestamp",
+    "source_batch_fingerprint",
+    "snapshot_id",
+    "policy_version",
+    "correlation_id",
+}
 
 
 @pytest_asyncio.fixture
@@ -23,6 +42,114 @@ async def test_middleware_preserves_incoming_correlation_id(async_test_client):
 
     assert response.status_code == 200
     assert response.headers["X-Correlation-ID"] == "corr-123"
+
+
+async def test_openapi_binds_query_service_source_data_products(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        if product.serving_plane != QUERY_SERVICE:
+            continue
+        for route in product.current_routes:
+            operation = schema["paths"][route].get("post") or schema["paths"][route].get("get")
+            assert operation is not None
+            extension = operation["x-lotus-source-data-product"]
+            assert extension["product_name"] == product.product_name
+            assert extension["product_version"] == product.product_version
+            assert extension["route_family"] == product.route_family
+            assert extension["serving_plane"] == product.serving_plane
+            assert extension["owner"] == product.owner
+            assert extension["consumers"] == list(product.consumers)
+            assert extension["current_routes"] == list(product.current_routes)
+            security_extension = operation["x-lotus-source-data-security"]
+            profile = get_source_data_security_profile(product.product_name)
+            assert security_extension["product_name"] == product.product_name
+            assert security_extension["tenant_required"] == profile.tenant_required
+            assert security_extension["entitlement_required"] == profile.entitlement_required
+            assert security_extension["access_classification"] == profile.access_classification
+            assert security_extension["audit_requirement"] == profile.audit_requirement
+            assert security_extension["required_capability"] == required_source_data_capability(
+                product.product_name
+            )
+            assert security_extension["operator_only"] == profile.operator_only
+
+
+async def test_openapi_binds_query_service_source_data_product_response_identity(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    components = schema["components"]["schemas"]
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        if product.serving_plane != QUERY_SERVICE:
+            continue
+        for route in product.current_routes:
+            operation = schema["paths"][route].get("post") or schema["paths"][route].get("get")
+            response_schema_ref = operation["responses"]["200"]["content"]["application/json"][
+                "schema"
+            ]["$ref"]
+            response_schema_name = response_schema_ref.rsplit("/", maxsplit=1)[-1]
+            response_schema = components[response_schema_name]
+
+            assert response_schema["properties"]["product_name"]["default"] == product.product_name
+            assert (
+                response_schema["properties"]["product_version"]["default"]
+                == product.product_version
+            )
+
+
+async def test_openapi_exposes_holdings_as_of_runtime_supportability_metadata(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    holdings_response_schemas = [
+        components["PortfolioPositionsResponse"],
+        components["CashBalancesResponse"],
+        components["HoldingsSnapshotResponse"],
+    ]
+
+    for response_schema in holdings_response_schemas:
+        assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(response_schema["properties"])
+        assert response_schema["properties"]["product_name"]["default"] == "HoldingsAsOf"
+        assert response_schema["properties"]["product_version"]["default"] == "v1"
+
+
+async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadata(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    ledger_response_schemas = [
+        components["PaginatedTransactionResponse"],
+        components["IncomeSummaryResponse"],
+        components["ActivitySummaryResponse"],
+    ]
+
+    for response_schema in ledger_response_schemas:
+        assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(response_schema["properties"])
+        assert response_schema["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
+        assert response_schema["properties"]["product_version"]["default"] == "v1"
+
+
+async def test_openapi_excludes_control_plane_analytics_input_contracts(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+
+    assert "/integration/portfolios/{portfolio_id}/analytics/reference" not in paths
+    assert "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries" not in paths
+    assert "/integration/portfolios/{portfolio_id}/analytics/position-timeseries" not in paths
+    assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
+    assert "/integration/positions/{portfolio_id}/timeseries" not in paths
 
 
 async def test_middleware_generates_correlation_id_when_missing(async_test_client):
@@ -171,6 +298,34 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/portfolios/{portfolio_id}/cash-accounts" in paths
 
 
+async def test_openapi_deprecates_reporting_convenience_shapes(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+
+    deprecated_routes = {
+        route: product.product_name
+        for product in SOURCE_DATA_PRODUCT_CATALOG
+        for route in product.replaces_convenience_shapes
+        if route.startswith("/reporting/")
+    }
+
+    assert deprecated_routes == {
+        "/reporting/cash-balances/query": "HoldingsAsOf",
+        "/reporting/holdings-snapshot/query": "HoldingsAsOf",
+        "/reporting/income-summary/query": "TransactionLedgerWindow",
+        "/reporting/activity-summary/query": "TransactionLedgerWindow",
+    }
+    for route, target_product in deprecated_routes.items():
+        operation = paths[route]["post"]
+        assert operation["deprecated"] is True
+        assert target_product in operation["description"]
+
+    assert paths["/reporting/assets-under-management/query"]["post"].get("deprecated") is not True
+    assert paths["/reporting/asset-allocation/query"]["post"].get("deprecated") is not True
+    assert paths["/reporting/portfolio-summary/query"]["post"].get("deprecated") is not True
+
+
 async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
@@ -224,6 +379,8 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
         "Applied look-through mode"
     )
     assert cash_response["properties"]["totals"]["description"] == "Portfolio-level cash totals."
+    assert cash_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
+    assert cash_response["properties"]["product_version"]["default"] == "v1"
     assert (
         portfolio_summary_response["properties"]["snapshot_metadata"]["description"]
         == "Resolved snapshot metadata for the summary query."
@@ -231,10 +388,13 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert holdings_snapshot_response["properties"]["positions"]["description"].startswith(
         "Holdings snapshot rows"
     )
+    assert holdings_snapshot_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert income_response["properties"]["totals"]["description"] == "Scope-level income totals."
+    assert income_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
     assert (
         activity_response["properties"]["totals"]["description"] == "Scope-level activity totals."
     )
+    assert activity_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
     assert cash_account_query_response["properties"]["cash_accounts"]["description"] == (
         "Canonical cash accounts linked to the portfolio."
     )
@@ -252,6 +412,7 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
     schema = response.json()
 
     transactions = schema["paths"]["/portfolios/{portfolio_id}/transactions"]["get"]
+    transaction_response = schema["components"]["schemas"]["PaginatedTransactionResponse"]
 
     portfolio_param = next(
         parameter for parameter in transactions["parameters"] if parameter["name"] == "portfolio_id"
@@ -281,9 +442,7 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
     )
     assert instrument_id["description"] == "Filter by a specific instrument identifier."
     security_id = next(
-        parameter
-        for parameter in transactions["parameters"]
-        if parameter["name"] == "security_id"
+        parameter for parameter in transactions["parameters"] if parameter["name"] == "security_id"
     )
     assert security_id["description"] == (
         "Filter by a specific security identifier for holdings drill-down and latest "
@@ -305,6 +464,10 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         == "Canonical settlement timestamp when known. Use alongside transaction_date to "
         "differentiate trade booking from contractual or effective cash/value settlement."
     )
+    assert transaction_response["properties"]["product_name"]["default"] == (
+        "TransactionLedgerWindow"
+    )
+    assert transaction_response["properties"]["product_version"]["default"] == "v1"
 
     not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"
@@ -317,6 +480,7 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
 
     latest_positions = schema["paths"]["/portfolios/{portfolio_id}/positions"]["get"]
     position_history = schema["paths"]["/portfolios/{portfolio_id}/position-history"]["get"]
+    positions_response = schema["components"]["schemas"]["PortfolioPositionsResponse"]
 
     positions_portfolio_id = next(
         parameter
@@ -351,6 +515,8 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     ]
     assert positions_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
     assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+    assert positions_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
+    assert positions_response["properties"]["product_version"]["default"] == "v1"
 
 
 async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):

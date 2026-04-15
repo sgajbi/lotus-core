@@ -12,6 +12,9 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
     for name in (
         "ENTERPRISE_POLICY_VERSION",
         "ENTERPRISE_ENFORCE_AUTHZ",
+        "ENTERPRISE_ENFORCE_READ_AUTHZ",
+        "ENTERPRISE_AUDIT_READS",
+        "ENTERPRISE_REQUIRE_CAPABILITY_RULES",
         "ENTERPRISE_ENFORCE_RUNTIME_CONFIG",
         "ENTERPRISE_PRIMARY_KEY_ID",
         "ENTERPRISE_SECRET_ROTATION_DAYS",
@@ -25,6 +28,9 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
 
     assert settings.enterprise_policy_version == "1.0.0"
     assert settings.enterprise_enforce_authz is False
+    assert settings.enterprise_enforce_read_authz is False
+    assert settings.enterprise_audit_reads is False
+    assert settings.enterprise_require_capability_rules is False
     assert settings.enterprise_enforce_runtime_config is False
     assert settings.enterprise_primary_key_id == ""
     assert settings.enterprise_secret_rotation_days == 90
@@ -36,6 +42,9 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
 def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "2.3.1")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_AUDIT_READS", "yes")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "on")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", "yes")
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
     monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "45")
@@ -53,6 +62,9 @@ def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
 
     assert settings.enterprise_policy_version == "2.3.1"
     assert settings.enterprise_enforce_authz is True
+    assert settings.enterprise_enforce_read_authz is True
+    assert settings.enterprise_audit_reads is True
+    assert settings.enterprise_require_capability_rules is True
     assert settings.enterprise_enforce_runtime_config is True
     assert settings.enterprise_primary_key_id == "kms-key-1"
     assert settings.enterprise_secret_rotation_days == 45

@@ -6,6 +6,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
+
 
 class IntegrationWindow(BaseModel):
     start_date: date = Field(
@@ -56,7 +62,9 @@ class BenchmarkAssignmentRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkAssignmentResponse(BaseModel):
+class BenchmarkAssignmentResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["BenchmarkAssignment"] = product_name_field("BenchmarkAssignment")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ...,
         description="Canonical portfolio identifier.",
@@ -168,7 +176,11 @@ class BenchmarkComponentResponse(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkCompositionWindowResponse(BaseModel):
+class BenchmarkCompositionWindowResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["BenchmarkConstituentWindow"] = product_name_field(
+        "BenchmarkConstituentWindow"
+    )
+    product_version: Literal["v1"] = product_version_field()
     benchmark_id: str = Field(
         ...,
         description="Canonical benchmark identifier.",
@@ -256,7 +268,7 @@ class BenchmarkDefinitionResponse(BaseModel):
     classification_labels: dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "Canonical benchmark classification labels " "(asset_class, sector, region, style)."
+            "Canonical benchmark classification labels (asset_class, sector, region, style)."
         ),
         examples=[{"asset_class": "multi_asset", "region": "global"}],
     )
@@ -498,8 +510,7 @@ class ReferencePageMetadata(BaseModel):
     next_page_token: str | None = Field(
         None,
         description=(
-            "Opaque continuation token for the next page, null when no additional "
-            "pages remain."
+            "Opaque continuation token for the next page, null when no additional pages remain."
         ),
         examples=["eyJwIjp7Imxhc3RfaW5kZXhfaWQiOiJJRFhfTVNDSSJ9LCJzIjoiLi4uIn0="],
     )
@@ -524,8 +535,7 @@ class BenchmarkMarketSeriesRequest(SeriesRequest):
     page: ReferencePageRequest = Field(
         default_factory=ReferencePageRequest,
         description=(
-            "Optional deterministic paging controls for large benchmark component "
-            "universes."
+            "Optional deterministic paging controls for large benchmark component universes."
         ),
     )
 
@@ -547,9 +557,7 @@ class BenchmarkMarketSeriesRequest(SeriesRequest):
             raise ValueError("series_fields must contain at least one supported value.")
         invalid = sorted({field for field in requested_fields if field not in supported_fields})
         if invalid:
-            raise ValueError(
-                "Unsupported series_fields requested: " + ", ".join(invalid)
-            )
+            raise ValueError("Unsupported series_fields requested: " + ", ".join(invalid))
         if "fx_rate" in requested_fields and not self.target_currency:
             raise ValueError("target_currency is required when series_fields includes fx_rate.")
         self.series_fields = requested_fields
@@ -613,7 +621,9 @@ class ComponentSeriesResponse(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkMarketSeriesResponse(BaseModel):
+class BenchmarkMarketSeriesResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["MarketDataWindow"] = product_name_field("MarketDataWindow")
+    product_version: Literal["v1"] = product_version_field()
     benchmark_id: str = Field(
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )
@@ -665,8 +675,7 @@ class BenchmarkMarketSeriesResponse(BaseModel):
     normalization_status: str = Field(
         ...,
         description=(
-            "Status of the optional benchmark-to-target FX context attached to "
-            "this response."
+            "Status of the optional benchmark-to-target FX context attached to this response."
         ),
         examples=["native_component_series_with_benchmark_to_target_fx_context"],
     )
@@ -767,7 +776,9 @@ class BenchmarkReturnSeriesPoint(BaseModel):
     model_config = ConfigDict()
 
 
-class IndexPriceSeriesResponse(BaseModel):
+class IndexPriceSeriesResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
@@ -783,7 +794,9 @@ class IndexPriceSeriesResponse(BaseModel):
     model_config = ConfigDict()
 
 
-class IndexReturnSeriesResponse(BaseModel):
+class IndexReturnSeriesResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     as_of_date: date = Field(
         ...,
@@ -860,7 +873,9 @@ class RiskFreeSeriesPoint(BaseModel):
     model_config = ConfigDict()
 
 
-class RiskFreeSeriesResponse(BaseModel):
+class RiskFreeSeriesResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["RiskFreeSeriesWindow"] = product_name_field("RiskFreeSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     currency: str = Field(..., description="Series currency code.", examples=["USD"])
     as_of_date: date = Field(
         ...,
@@ -897,7 +912,11 @@ class CoverageRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class CoverageResponse(BaseModel):
+class CoverageResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["DataQualityCoverageReport"] = product_name_field(
+        "DataQualityCoverageReport"
+    )
+    product_version: Literal["v1"] = product_version_field()
     request_fingerprint: str = Field(
         ...,
         description="Deterministic request fingerprint for the coverage diagnostics scope.",
@@ -989,7 +1008,11 @@ class ClassificationTaxonomyEntry(BaseModel):
     model_config = ConfigDict()
 
 
-class ClassificationTaxonomyResponse(BaseModel):
+class ClassificationTaxonomyResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["InstrumentReferenceBundle"] = product_name_field(
+        "InstrumentReferenceBundle"
+    )
+    product_version: Literal["v1"] = product_version_field()
     as_of_date: date = Field(
         ...,
         description="As-of date used for taxonomy response.",

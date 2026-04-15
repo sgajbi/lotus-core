@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -43,6 +43,7 @@ from ..dtos.reporting_dto import (
     ReportingPortfolioSummary,
     ReportingScope,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.reporting_repository import (
     ActivitySummaryAggregateRow,
     IncomeSummaryAggregateRow,
@@ -167,15 +168,11 @@ class ReportingService:
         views = [
             AllocationView(
                 dimension=view.dimension,
-                total_market_value_reporting_currency=(
-                    view.total_market_value_reporting_currency
-                ),
+                total_market_value_reporting_currency=(view.total_market_value_reporting_currency),
                 buckets=[
                     AllocationBucket(
                         dimension_value=bucket.dimension_value,
-                        market_value_reporting_currency=(
-                            bucket.market_value_reporting_currency
-                        ),
+                        market_value_reporting_currency=(bucket.market_value_reporting_currency),
                         weight=bucket.weight,
                         position_count=bucket.position_count,
                     )
@@ -238,6 +235,10 @@ class ReportingService:
                 total_balance_reporting_currency=total_reporting_currency,
             ),
             cash_accounts=account_records,
+            **source_data_product_runtime_metadata(
+                as_of_date=resolved_as_of_date,
+                latest_evidence_timestamp=self._latest_snapshot_evidence_timestamp(cash_rows),
+            ),
         )
 
     async def get_portfolio_summary(
@@ -401,6 +402,10 @@ class ReportingService:
             total_market_value_portfolio_currency=total_portfolio_value,
             total_market_value_reporting_currency=total_reporting_value,
             positions=holdings,
+            **source_data_product_runtime_metadata(
+                as_of_date=resolved_as_of_date,
+                latest_evidence_timestamp=self._latest_snapshot_evidence_timestamp(rows),
+            ),
         )
 
     async def _build_cash_account_balance_records(
@@ -773,6 +778,10 @@ class ReportingService:
                 ),
             ),
             portfolios=portfolio_rows,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.window.end_date,
+                latest_evidence_timestamp=self._latest_aggregate_evidence_timestamp(rows),
+            ),
         )
 
     async def get_activity_summary(
@@ -887,6 +896,10 @@ class ReportingService:
                 ],
             ),
             portfolios=portfolio_rows,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.window.end_date,
+                latest_evidence_timestamp=self._latest_aggregate_evidence_timestamp(rows),
+            ),
         )
 
     async def _resolve_scope_portfolios_and_date(
@@ -970,6 +983,28 @@ class ReportingService:
             "net_portfolio": ZERO,
             "net_reporting": ZERO,
         }
+
+    @staticmethod
+    def _latest_snapshot_evidence_timestamp(rows: list[Any]) -> datetime | None:
+        timestamps: list[datetime] = []
+        for row in rows:
+            snapshot = getattr(row, "snapshot", None)
+            for candidate in (
+                getattr(snapshot, "updated_at", None),
+                getattr(snapshot, "created_at", None),
+            ):
+                if isinstance(candidate, datetime):
+                    timestamps.append(candidate)
+        return max(timestamps) if timestamps else None
+
+    @staticmethod
+    def _latest_aggregate_evidence_timestamp(rows: list[Any]) -> datetime | None:
+        timestamps = [
+            timestamp
+            for row in rows
+            if isinstance(timestamp := getattr(row, "latest_evidence_timestamp", None), datetime)
+        ]
+        return max(timestamps) if timestamps else None
 
     @staticmethod
     def _new_flow_metric() -> dict[str, Decimal | int]:

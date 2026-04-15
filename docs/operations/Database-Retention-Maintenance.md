@@ -10,7 +10,7 @@ This runbook defines safe cleanup of high-churn terminal tables in Lotus-Core to
 The script targets only terminal/archival-safe rows:
 - `processed_events`
 - `outbox_events` where `status = PROCESSED`
-- `portfolio_valuation_jobs` where `status in (COMPLETE, FAILED, SKIPPED_NO_POSITION)`
+- `portfolio_valuation_jobs` where `status in (COMPLETE, FAILED, SKIPPED_NO_POSITION, SKIPPED_SUPERSEDED)`
 - `portfolio_aggregation_jobs` where `status in (COMPLETE, FAILED)`
 - `analytics_export_jobs` where `status in (completed, failed)`
 - `consumer_dlq_replay_audit` where `completed_at is not null`

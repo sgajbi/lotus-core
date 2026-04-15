@@ -146,6 +146,12 @@ The seed must make the following product surfaces materially usable.
   - benchmark return
   - active return
   - money-weighted return
+- canonical benchmark component classifications:
+  - `IDX_GLOBAL_EQUITY_TR` uses `sector=broad_market_equity`
+  - `IDX_GLOBAL_BOND_TR` uses `sector=broad_market_fixed_income`
+  - these broad-market sector labels are source-owned inputs for downstream
+    benchmark exposure grouping; downstream services should not infer sector
+    labels for canonical benchmark components
 - analysis detail:
   - return path chart
   - multi-horizon panel

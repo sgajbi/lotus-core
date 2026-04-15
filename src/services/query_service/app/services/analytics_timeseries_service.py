@@ -22,6 +22,12 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_PAGE_DEPTH,
     ANALYTICS_EXPORT_RESULT_BYTES,
 )
+from portfolio_common.reconciliation_quality import (
+    COMPLETE,
+    DataQualityCoverageSignal,
+    PARTIAL,
+    classify_data_quality_coverage,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.analytics_input_dto import (
@@ -43,6 +49,7 @@ from ..dtos.analytics_input_dto import (
     PositionTimeseriesRow,
     QualityDiagnostics,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.analytics_export_repository import AnalyticsExportRepository
 from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from ..settings import load_query_service_settings
@@ -251,6 +258,67 @@ class AnalyticsTimeseriesService:
             )
         return flows_by_key
 
+    @staticmethod
+    def _has_external_flow(cash_flows: list[CashFlowObservation]) -> bool:
+        return any(flow.flow_scope == "external" for flow in cash_flows)
+
+    @staticmethod
+    def _has_only_internal_flows(cash_flows: list[CashFlowObservation]) -> bool:
+        return bool(cash_flows) and all(flow.flow_scope == "internal" for flow in cash_flows)
+
+    @staticmethod
+    def _is_cash_book_position(row: object) -> bool:
+        asset_class = str(getattr(row, "asset_class", "") or "").casefold()
+        security_id = str(getattr(row, "security_id", "") or "").upper()
+        return asset_class == "cash" or security_id.startswith("CASH_")
+
+    @staticmethod
+    def _effective_beginning_market_value(
+        row: object,
+        *,
+        previous_eod_market_value: Decimal | None,
+        cash_flows: list[CashFlowObservation],
+        has_portfolio_external_flow: bool,
+    ) -> Decimal:
+        stored_beginning = Decimal(row.bod_market_value)
+        ending = Decimal(row.eod_market_value)
+        bod_position_flow = Decimal(getattr(row, "bod_cashflow_position", 0) or 0)
+
+        if (
+            previous_eod_market_value is not None
+            and previous_eod_market_value != 0
+            and bod_position_flow == 0
+        ):
+            return previous_eod_market_value
+
+        has_internal_position_flow = AnalyticsTimeseriesService._has_only_internal_flows(cash_flows)
+        if (
+            AnalyticsTimeseriesService._is_cash_book_position(row)
+            and not has_portfolio_external_flow
+            and has_internal_position_flow
+        ):
+            return ending
+
+        if (
+            previous_eod_market_value is not None
+            and stored_beginning == 0
+            and bod_position_flow != 0
+            and not has_portfolio_external_flow
+            and has_internal_position_flow
+        ):
+            return previous_eod_market_value + bod_position_flow
+
+        no_prior_capital = previous_eod_market_value is None or previous_eod_market_value == 0
+        if (
+            no_prior_capital
+            and ending != 0
+            and not has_portfolio_external_flow
+            and has_internal_position_flow
+        ):
+            return ending
+
+        return stored_beginning
+
     async def _portfolio_observation_rows(
         self,
         *,
@@ -312,6 +380,13 @@ class AnalyticsTimeseriesService:
             portfolio_currency=portfolio_currency,
             fx_rates=portfolio_to_reporting_rates,
         )
+        position_cashflow_rows = await self.repo.list_position_cashflow_rows(
+            portfolio_id=portfolio_id,
+            security_ids=sorted({str(row.security_id) for row in position_rows}),
+            valuation_dates=page_dates,
+            snapshot_epoch=snapshot_epoch,
+        )
+        position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
 
         row_buckets: dict[date, list[object]] = defaultdict(list)
         for row in position_rows:
@@ -320,6 +395,13 @@ class AnalyticsTimeseriesService:
 
         observations: list[PortfolioTimeseriesObservation] = []
         quality_distribution: dict[str, int] = {}
+        previous_eod_by_security = {
+            str(row.security_id): Decimal(row.eod_market_value)
+            for row in sorted(
+                position_rows, key=lambda item: (item.valuation_date, item.security_id)
+            )
+            if row.valuation_date < page_dates[0]
+        }
         for valuation_date in page_dates:
             conversion_rate = Decimal("1")
             if reporting_currency != portfolio_currency:
@@ -334,6 +416,9 @@ class AnalyticsTimeseriesService:
             beginning_market_value = Decimal("0")
             ending_market_value = Decimal("0")
             quality = "final"
+            portfolio_cashflows = portfolio_cashflows_by_date.get(valuation_date, [])
+            has_portfolio_external_flow = self._has_external_flow(portfolio_cashflows)
+            current_eod_by_security: dict[str, Decimal] = {}
             for row in row_buckets.get(valuation_date, []):
                 position_currency = str(getattr(row, "position_currency", "") or "")
                 position_to_portfolio_rate = Decimal("1")
@@ -346,14 +431,25 @@ class AnalyticsTimeseriesService:
                             f"{position_currency}/{portfolio_currency} on {valuation_date}.",
                         )
                     position_to_portfolio_rate = rate_map[valuation_date]
+                cash_flows = position_cashflows_by_key.get(
+                    (str(row.security_id), valuation_date), []
+                )
+                beginning_market_value_position = self._effective_beginning_market_value(
+                    row,
+                    previous_eod_market_value=previous_eod_by_security.get(str(row.security_id)),
+                    cash_flows=cash_flows,
+                    has_portfolio_external_flow=has_portfolio_external_flow,
+                )
                 beginning_market_value += (
-                    Decimal(row.bod_market_value) * position_to_portfolio_rate * conversion_rate
+                    beginning_market_value_position * position_to_portfolio_rate * conversion_rate
                 )
                 ending_market_value += (
                     Decimal(row.eod_market_value) * position_to_portfolio_rate * conversion_rate
                 )
+                current_eod_by_security[str(row.security_id)] = Decimal(row.eod_market_value)
                 if int(row.epoch) > 0:
                     quality = "restated"
+            previous_eod_by_security = current_eod_by_security
 
             quality_distribution[quality] = quality_distribution.get(quality, 0) + 1
             observations.append(
@@ -362,7 +458,7 @@ class AnalyticsTimeseriesService:
                     beginning_market_value=beginning_market_value,
                     ending_market_value=ending_market_value,
                     valuation_status=quality,
-                    cash_flows=portfolio_cashflows_by_date.get(valuation_date, []),
+                    cash_flows=portfolio_cashflows,
                     cash_flow_currency=reporting_currency,
                 )
             )
@@ -526,6 +622,12 @@ class AnalyticsTimeseriesService:
         stale_points_count = sum(
             count for status_name, count in quality_distribution.items() if status_name != "final"
         )
+        data_quality_status = self._timeseries_data_quality_status(
+            required_count=len(expected_business_dates),
+            observed_count=len(observed_dates),
+            stale_count=stale_points_count,
+            warning_issue_count=1 if next_page_token else 0,
+        )
         fingerprint = self._request_fingerprint(
             {
                 "endpoint": "portfolio-timeseries",
@@ -533,6 +635,7 @@ class AnalyticsTimeseriesService:
                 "request": request.model_dump(mode="json"),
             }
         )
+        generated_at = datetime.now(UTC)
         return PortfolioAnalyticsTimeseriesResponse(
             portfolio_id=portfolio_id,
             portfolio_currency=portfolio.base_currency,
@@ -544,7 +647,7 @@ class AnalyticsTimeseriesService:
             frequency=request.frequency,
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
-                generated_at=datetime.now(UTC),
+                generated_at=generated_at,
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
@@ -565,6 +668,11 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             observations=observations,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+                data_quality_status=data_quality_status,
+            ),
         )
 
     async def get_position_timeseries(
@@ -665,10 +773,46 @@ class AnalyticsTimeseriesService:
                 snapshot_epoch=snapshot_epoch,
             )
             position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
+        portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]] = {}
+        if rows_page and hasattr(self.repo, "list_portfolio_cashflow_rows"):
+            portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
+                portfolio_id=portfolio_id,
+                valuation_dates=sorted({row.valuation_date for row in rows_page}),
+                snapshot_epoch=snapshot_epoch,
+            )
+            portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
+                portfolio_cashflow_rows,
+                reporting_currency=portfolio.base_currency,
+                portfolio_currency=portfolio.base_currency,
+                fx_rates={},
+            )
 
         quality_distribution: dict[str, int] = {}
         response_rows: list[PositionTimeseriesRow] = []
+        previous_eod_by_security: dict[str, Decimal] = {}
+        if rows_page and hasattr(self.repo, "list_latest_position_timeseries_before"):
+            first_page_date = min(row.valuation_date for row in rows_page)
+            previous_rows = await self.repo.list_latest_position_timeseries_before(
+                portfolio_id=portfolio_id,
+                before_date=first_page_date,
+                security_ids=sorted({str(row.security_id) for row in rows_page}),
+                snapshot_epoch=snapshot_epoch,
+            )
+            previous_eod_by_security = {
+                str(row.security_id): Decimal(row.eod_market_value)
+                for row in previous_rows
+                if row.valuation_date == first_page_date - timedelta(days=1)
+            }
+        current_valuation_date: date | None = None
+        current_eod_by_security: dict[str, Decimal] = {}
         for row in rows_page:
+            if current_valuation_date is None:
+                current_valuation_date = row.valuation_date
+            elif row.valuation_date != current_valuation_date:
+                previous_eod_by_security = current_eod_by_security
+                current_eod_by_security = {}
+                current_valuation_date = row.valuation_date
+
             quality = self._quality_status_from_epoch(int(row.epoch))
             quality_distribution[quality] = quality_distribution.get(quality, 0) + 1
             position_currency = row.position_currency or portfolio.base_currency
@@ -693,7 +837,19 @@ class AnalyticsTimeseriesService:
                     )
                 portfolio_to_reporting_rate = fx_rates[row.valuation_date]
 
-            beginning_market_value_position = Decimal(row.bod_market_value)
+            cash_flows = (
+                position_cashflows_by_key.get((str(row.security_id), row.valuation_date), [])
+                if request.include_cash_flows
+                else []
+            )
+            beginning_market_value_position = self._effective_beginning_market_value(
+                row,
+                previous_eod_market_value=previous_eod_by_security.get(str(row.security_id)),
+                cash_flows=cash_flows,
+                has_portfolio_external_flow=self._has_external_flow(
+                    portfolio_cashflows_by_date.get(row.valuation_date, [])
+                ),
+            )
             ending_market_value_position = Decimal(row.eod_market_value)
             beginning_market_value_portfolio = (
                 beginning_market_value_position * position_to_portfolio_rate
@@ -704,11 +860,6 @@ class AnalyticsTimeseriesService:
 
             position_id = f"{portfolio_id}:{row.security_id}"
             dimensions = {dim: getattr(row, dim, None) for dim in request.dimensions}
-            cash_flows = (
-                position_cashflows_by_key.get((str(row.security_id), row.valuation_date), [])
-                if request.include_cash_flows
-                else []
-            )
 
             response_rows.append(
                 PositionTimeseriesRow(
@@ -735,6 +886,7 @@ class AnalyticsTimeseriesService:
                     cash_flows=cash_flows,
                 )
             )
+            current_eod_by_security[str(row.security_id)] = ending_market_value_position
 
         next_page_token: str | None = None
         if has_more and rows_page:
@@ -748,6 +900,16 @@ class AnalyticsTimeseriesService:
                 }
             )
 
+        stale_points_count = sum(
+            count for status_name, count in quality_distribution.items() if status_name != "final"
+        )
+        data_quality_status = self._timeseries_data_quality_status(
+            required_count=len(response_rows),
+            observed_count=len(response_rows),
+            stale_count=stale_points_count,
+            warning_issue_count=1 if next_page_token else 0,
+        )
+
         fingerprint = self._request_fingerprint(
             {
                 "endpoint": "position-timeseries",
@@ -755,6 +917,7 @@ class AnalyticsTimeseriesService:
                 "request": request.model_dump(mode="json"),
             }
         )
+        generated_at = datetime.now(UTC)
         return PositionAnalyticsTimeseriesResponse(
             portfolio_id=portfolio_id,
             portfolio_currency=portfolio.base_currency,
@@ -763,14 +926,14 @@ class AnalyticsTimeseriesService:
             frequency=request.frequency,
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
-                generated_at=datetime.now(UTC),
+                generated_at=generated_at,
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
             diagnostics=QualityDiagnostics(
                 quality_status_distribution=quality_distribution,
                 missing_dates_count=0,
-                stale_points_count=0,
+                stale_points_count=stale_points_count,
                 requested_dimensions=list(request.dimensions),
                 cash_flows_included=request.include_cash_flows,
             ),
@@ -783,6 +946,11 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             rows=response_rows,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+                data_quality_status=data_quality_status,
+            ),
         )
 
     async def get_portfolio_reference(
@@ -805,6 +973,7 @@ class AnalyticsTimeseriesService:
         performance_end_date = (
             min(latest_date, request.as_of_date) if latest_date is not None else None
         )
+        generated_at = datetime.now(UTC)
         return PortfolioAnalyticsReferenceResponse(
             portfolio_id=portfolio.portfolio_id,
             resolved_as_of_date=request.as_of_date,
@@ -819,11 +988,49 @@ class AnalyticsTimeseriesService:
             reference_state_policy="current_portfolio_reference_state",
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
-                generated_at=datetime.now(UTC),
+                generated_at=generated_at,
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+                data_quality_status=self._portfolio_reference_data_quality_status(
+                    performance_end_date=performance_end_date,
+                ),
+                latest_evidence_timestamp=self._portfolio_reference_evidence_timestamp(portfolio),
+            ),
         )
+
+    @staticmethod
+    def _timeseries_data_quality_status(
+        *,
+        required_count: int,
+        observed_count: int,
+        stale_count: int,
+        warning_issue_count: int = 0,
+    ) -> str:
+        return classify_data_quality_coverage(
+            DataQualityCoverageSignal(
+                required_count=required_count,
+                observed_count=observed_count,
+                stale_count=stale_count,
+                warning_issue_count=warning_issue_count,
+            )
+        )
+
+    @staticmethod
+    def _portfolio_reference_data_quality_status(*, performance_end_date: date | None) -> str:
+        return COMPLETE if performance_end_date is not None else PARTIAL
+
+    @staticmethod
+    def _portfolio_reference_evidence_timestamp(portfolio: object) -> datetime | None:
+        timestamps = [
+            timestamp
+            for field_name in ("source_timestamp", "updated_at", "created_at")
+            if isinstance(timestamp := getattr(portfolio, field_name, None), datetime)
+        ]
+        return max(timestamps) if timestamps else None
 
     @staticmethod
     def _export_result_endpoint(job_id: str) -> str:

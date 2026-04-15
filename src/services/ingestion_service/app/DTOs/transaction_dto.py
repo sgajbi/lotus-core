@@ -49,14 +49,22 @@ class Transaction(BaseModel):
     )
     currency: str = Field(
         description=(
-            "Canonical transaction currency retained for compatibility " "with downstream ledgers."
+            "Canonical transaction currency retained for compatibility with downstream ledgers."
         ),
         json_schema_extra={"example": "USD"},
+    )
+    transaction_fx_rate: Optional[condecimal(gt=Decimal(0))] = Field(
+        default=None,
+        description=(
+            "Historical FX rate used to translate the transaction from trade currency into "
+            "portfolio base currency when the transaction is cross-currency."
+        ),
+        json_schema_extra={"example": "1.074352"},
     )
     trade_fee: Optional[condecimal(ge=Decimal(0))] = Field(
         default=Decimal(0),
         description=(
-            "Aggregate trade fee applied to the transaction when fee " "breakdown is not split out."
+            "Aggregate trade fee applied to the transaction when fee breakdown is not split out."
         ),
         json_schema_extra={"example": "5.0"},
     )
@@ -91,7 +99,7 @@ class Transaction(BaseModel):
     settlement_date: Optional[datetime] = Field(
         default=None,
         description=(
-            "Optional settlement timestamp used for cash-leg timing and " "operations monitoring."
+            "Optional settlement timestamp used for cash-leg timing and operations monitoring."
         ),
         json_schema_extra={"example": "2023-01-17T10:00:00Z"},
     )
@@ -107,7 +115,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "LTG-2026-00456"},
         description=(
-            "Canonical linkage group identifier shared by related product " "and cash-leg entries."
+            "Canonical linkage group identifier shared by related product and cash-leg entries."
         ),
     )
     calculation_policy_id: Optional[str] = Field(
@@ -137,7 +145,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "CASH-ENTRY-2026-0001"},
         description=(
-            "Upstream cash transaction identifier when cash_entry_mode is " "UPSTREAM_PROVIDED."
+            "Upstream cash transaction identifier when cash_entry_mode is UPSTREAM_PROVIDED."
         ),
     )
     settlement_cash_account_id: Optional[str] = Field(
@@ -188,15 +196,14 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "REC-2026-0001"},
         description=(
-            "Optional reconciliation key shared by paired or grouped " "dual-leg transactions."
+            "Optional reconciliation key shared by paired or grouped dual-leg transactions."
         ),
     )
     interest_direction: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "INCOME"},
         description=(
-            "Semantic direction for INTEREST transactions. Supported values are "
-            "INCOME and EXPENSE."
+            "Semantic direction for INTEREST transactions. Supported values are INCOME and EXPENSE."
         ),
     )
     withholding_tax_amount: Optional[condecimal(ge=Decimal(0))] = Field(
@@ -270,8 +277,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "QUOTE_PER_BASE"},
         description=(
-            "Explicit quote convention used to interpret contract_rate, for "
-            "example QUOTE_PER_BASE."
+            "Explicit quote convention used to interpret contract_rate, for example QUOTE_PER_BASE."
         ),
     )
     buy_currency: Optional[str] = Field(
@@ -298,8 +304,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "1.095"},
         description=(
-            "Contractual FX rate agreed for the deal, interpreted using "
-            "fx_rate_quote_convention."
+            "Contractual FX rate agreed for the deal, interpreted using fx_rate_quote_convention."
         ),
     )
     fx_contract_id: Optional[str] = Field(
@@ -356,7 +361,7 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "NONE"},
         description=(
-            "Policy-driven spot exposure model. Supported values are NONE and " "FX_CONTRACT."
+            "Policy-driven spot exposure model. Supported values are NONE and FX_CONTRACT."
         ),
     )
     fx_realized_pnl_mode: Optional[str] = Field(
@@ -379,14 +384,14 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "1250.00"},
         description=(
-            "Realized FX P&L in local currency for the transaction or " "settlement component."
+            "Realized FX P&L in local currency for the transaction or settlement component."
         ),
     )
     realized_total_pnl_local: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "1250.00"},
         description=(
-            "Total realized P&L in local currency after combining capital and " "FX components."
+            "Total realized P&L in local currency after combining capital and FX components."
         ),
     )
     realized_capital_pnl_base: Optional[condecimal()] = Field(
@@ -507,14 +512,14 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "2026-03-15"},
         description=(
-            "Effective business date of the synthetic flow used in " "corporate-action analytics."
+            "Effective business date of the synthetic flow used in corporate-action analytics."
         ),
     )
     synthetic_flow_amount_local: Optional[condecimal()] = Field(
         default=None,
         json_schema_extra={"example": "-10000.00"},
         description=(
-            "Synthetic flow amount in the local flow currency before base " "currency translation."
+            "Synthetic flow amount in the local flow currency before base currency translation."
         ),
     )
     synthetic_flow_currency: Optional[str] = Field(
@@ -617,6 +622,6 @@ class TransactionIngestionRequest(BaseModel):
                     "trade_fee": "5.0",
                     "settlement_date": "2023-01-17T10:00:00Z",
                 }
-            ]
+            ],
         ],
     )

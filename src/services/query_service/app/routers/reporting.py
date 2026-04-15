@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import (
@@ -76,8 +77,12 @@ async def query_asset_allocation(
     description=(
         "Returns portfolio cash accounts, native balances, and translated totals in portfolio "
         "currency and reporting currency for UI and reporting workflows. "
-        "For large-scale export workflows, prefer a dedicated async export contract."
+        "This route is a pre-live convenience shape for the RFC-0083 HoldingsAsOf source-data "
+        "product. New consumers should bind to the named source-data product contract when it is "
+        "available. For large-scale export workflows, prefer a dedicated async export contract."
     ),
+    deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
 async def query_cash_balances(
     request: CashBalancesQueryRequest,
@@ -117,8 +122,13 @@ async def query_portfolio_summary(
     description=(
         "Returns a true historical as-of holdings snapshot for one portfolio with reporting-"
         "currency restatement and portfolio-workspace classifications. Use this contract for "
-        "UI holdings views and reporting extracts that need region-aware, restated holdings rows."
+        "UI holdings views and reporting extracts that need region-aware, restated holdings rows. "
+        "This route is a pre-live convenience shape for the RFC-0083 HoldingsAsOf source-data "
+        "product. New consumers should bind to the named source-data product contract when it is "
+        "available."
     ),
+    deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
 async def query_holdings_snapshot(
     request: HoldingsSnapshotQueryRequest,
@@ -137,8 +147,12 @@ async def query_holdings_snapshot(
     description=(
         "Returns income totals for the requested reporting window and year-to-date, with values "
         "in portfolio currency and reporting currency. Income is grouped by canonical Lotus "
-        "income transaction types such as dividend, interest, and cash-in-lieu."
+        "income transaction types such as dividend, interest, and cash-in-lieu. This route is a "
+        "pre-live convenience shape for the RFC-0083 TransactionLedgerWindow source-data product. "
+        "New consumers should bind to the named source-data product contract when it is available."
     ),
+    deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def query_income_summary(
     request: IncomeSummaryQueryRequest,
@@ -157,8 +171,12 @@ async def query_income_summary(
     description=(
         "Returns portfolio-level flow buckets for the requested reporting window and year-to-date. "
         "The summary is intentionally scoped to portfolio flows: inflows, outflows, fees, and "
-        "taxes, with values translated to portfolio currency and reporting currency."
+        "taxes, with values translated to portfolio currency and reporting currency. This route is "
+        "a pre-live convenience shape for the RFC-0083 TransactionLedgerWindow source-data product. "
+        "New consumers should bind to the named source-data product contract when it is available."
     ),
+    deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def query_activity_summary(
     request: ActivitySummaryQueryRequest,

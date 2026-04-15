@@ -438,9 +438,8 @@ class ValuationRepositoryBase:
     async def get_job_queue_stats(self) -> Dict[str, Any]:
         newer_epoch = aliased(PortfolioValuationJob)
         actionable_pending = (
-            (PortfolioValuationJob.status == "PENDING")
-            & ~self._newer_epoch_exists(PortfolioValuationJob, newer_epoch)
-        )
+            PortfolioValuationJob.status == "PENDING"
+        ) & ~self._newer_epoch_exists(PortfolioValuationJob, newer_epoch)
         stmt = select(
             func.count().filter(actionable_pending).label("pending_count"),
             func.count().filter(PortfolioValuationJob.status == "FAILED").label("failed_count"),
@@ -551,9 +550,11 @@ class ValuationRepositoryBase:
         self, timeout_minutes: int = 15, max_attempts: int = 3
     ) -> int:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+        newer_epoch = aliased(PortfolioValuationJob)
         stale_jobs_stmt = select(
             PortfolioValuationJob.id,
             PortfolioValuationJob.attempt_count,
+            self._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label("has_newer_epoch"),
         ).where(
             PortfolioValuationJob.status == "PROCESSING",
             PortfolioValuationJob.updated_at < stale_threshold,
@@ -562,8 +563,33 @@ class ValuationRepositoryBase:
         if not stale_rows:
             return 0
 
-        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
-        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
+        superseded_job_ids = [
+            row.id for row in stale_rows if getattr(row, "has_newer_epoch", False)
+        ]
+        remaining_rows = [row for row in stale_rows if row.id not in superseded_job_ids]
+        failed_job_ids = [row.id for row in remaining_rows if row.attempt_count >= max_attempts]
+        reset_job_ids = [row.id for row in remaining_rows if row.attempt_count < max_attempts]
+
+        if superseded_job_ids:
+            superseded_stmt = (
+                update(PortfolioValuationJob)
+                .where(
+                    PortfolioValuationJob.id.in_(superseded_job_ids),
+                    PortfolioValuationJob.status == "PROCESSING",
+                    PortfolioValuationJob.updated_at < stale_threshold,
+                )
+                .values(
+                    status="SKIPPED_SUPERSEDED",
+                    failure_reason="Superseded by newer valuation epoch.",
+                    updated_at=func.now(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.execute(superseded_stmt)
+            logger.warning(
+                "Marked stale superseded valuation jobs as SKIPPED_SUPERSEDED.",
+                extra={"job_ids": superseded_job_ids},
+            )
 
         if failed_job_ids:
             failure_stmt = (

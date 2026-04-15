@@ -12,10 +12,13 @@ from .ca_bundle_a_ordering import (
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
 
 
-class BusinessDateEvent(BaseModel):
+class CoreEventModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+
+
+class BusinessDateEvent(CoreEventModel):
     """Event model for a raw business date."""
 
-    model_config = ConfigDict(from_attributes=True)
     business_date: date = Field(...)
     calendar_code: str = Field("GLOBAL")
     market_code: Optional[str] = Field(None)
@@ -23,12 +26,10 @@ class BusinessDateEvent(BaseModel):
     source_batch_id: Optional[str] = Field(None)
 
 
-class PortfolioEvent(BaseModel):
+class PortfolioEvent(CoreEventModel):
     """
     Event model for raw portfolio data.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str = Field(...)
     base_currency: str = Field(...)
@@ -51,30 +52,24 @@ class PortfolioEvent(BaseModel):
         return normalize_cost_basis_method(value)
 
 
-class FxRateEvent(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class FxRateEvent(CoreEventModel):
     from_currency: str = Field(...)
     to_currency: str = Field(...)
     rate_date: date = Field(...)
     rate: Decimal
 
 
-class MarketPriceEvent(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class MarketPriceEvent(CoreEventModel):
     security_id: str = Field(...)
     price_date: date = Field(...)
     price: Decimal
     currency: str
 
 
-class MarketPricePersistedEvent(BaseModel):
+class MarketPricePersistedEvent(CoreEventModel):
     """
     Event published after a market price has been successfully persisted.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     security_id: str
     price_date: date
@@ -82,9 +77,7 @@ class MarketPricePersistedEvent(BaseModel):
     currency: str
 
 
-class InstrumentEvent(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class InstrumentEvent(CoreEventModel):
     security_id: str = Field(...)
     name: str
     isin: str
@@ -111,9 +104,7 @@ class InstrumentEvent(BaseModel):
     ultimate_parent_issuer_name: Optional[str] = Field(None)
 
 
-class TransactionEvent(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class TransactionEvent(CoreEventModel):
     transaction_id: str
     portfolio_id: str
     instrument_id: str
@@ -241,13 +232,11 @@ def transaction_event_ordering_key(
     )
 
 
-class DailyPositionSnapshotPersistedEvent(BaseModel):
+class DailyPositionSnapshotPersistedEvent(CoreEventModel):
     """
     Event published after a daily position snapshot has been created or updated.
     This is the definitive trigger for time series generation.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: int
     portfolio_id: str
@@ -256,9 +245,7 @@ class DailyPositionSnapshotPersistedEvent(BaseModel):
     epoch: int
 
 
-class CashflowCalculatedEvent(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class CashflowCalculatedEvent(CoreEventModel):
     cashflow_id: int = Field(...)
     transaction_id: str
     portfolio_id: str
@@ -274,39 +261,33 @@ class CashflowCalculatedEvent(BaseModel):
     calculation_type: str = Field(...)
 
 
-class PositionTimeseriesGeneratedEvent(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class PositionTimeseriesGeneratedEvent(CoreEventModel):
     portfolio_id: str
     security_id: str
     date: date
 
 
-class PortfolioTimeseriesGeneratedEvent(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class PortfolioTimeseriesGeneratedEvent(CoreEventModel):
     portfolio_id: str
     date: date
 
 
-class PortfolioAggregationRequiredEvent(BaseModel):
+class PortfolioAggregationRequiredEvent(CoreEventModel):
     """
     Event published by the AggregationScheduler to trigger a portfolio
     time series calculation for a specific portfolio and date.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     aggregation_date: date
     correlation_id: Optional[str] = None
 
 
-class PortfolioValuationRequiredEvent(BaseModel):
+class PortfolioValuationRequiredEvent(CoreEventModel):
     """
     Event published by the ValuationScheduler to trigger a position valuation
     for a specific portfolio, security, and date.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     security_id: str
@@ -315,15 +296,13 @@ class PortfolioValuationRequiredEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class TransactionProcessingCompletedEvent(BaseModel):
+class TransactionProcessingCompletedEvent(CoreEventModel):
     """
     Stage-gate event emitted when transaction processing prerequisites are satisfied.
     Current prerequisite pair:
     - processed transaction record is available
     - cashflow calculation record is available
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     transaction_id: str
     portfolio_id: str
@@ -337,13 +316,11 @@ class TransactionProcessingCompletedEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class PortfolioDayReadyForValuationEvent(BaseModel):
+class PortfolioDayReadyForValuationEvent(CoreEventModel):
     """
     Stage-gate event emitted when a portfolio-security business day is ready
     for valuation scheduling.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     security_id: str
@@ -353,13 +330,11 @@ class PortfolioDayReadyForValuationEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class ValuationDayCompletedEvent(BaseModel):
+class ValuationDayCompletedEvent(CoreEventModel):
     """
     Stage-gate completion event emitted after valuation persistence for a
     portfolio-security business day.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     daily_position_snapshot_id: int
     portfolio_id: str
@@ -370,13 +345,11 @@ class ValuationDayCompletedEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class PositionTimeseriesDayCompletedEvent(BaseModel):
+class PositionTimeseriesDayCompletedEvent(CoreEventModel):
     """
     Completion event emitted once position-timeseries persistence is complete
     for a portfolio-security business day.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     security_id: str
@@ -385,13 +358,11 @@ class PositionTimeseriesDayCompletedEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class PortfolioAggregationDayCompletedEvent(BaseModel):
+class PortfolioAggregationDayCompletedEvent(CoreEventModel):
     """
     Completion event emitted when portfolio aggregation is complete for a
     portfolio business day.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     aggregation_date: date
@@ -399,13 +370,11 @@ class PortfolioAggregationDayCompletedEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class FinancialReconciliationRequestedEvent(BaseModel):
+class FinancialReconciliationRequestedEvent(CoreEventModel):
     """
     Control-plane event emitted when a portfolio-day is ready for automated
     reconciliation execution.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     business_date: date
@@ -422,14 +391,12 @@ class FinancialReconciliationRequestedEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class FinancialReconciliationCompletedEvent(BaseModel):
+class FinancialReconciliationCompletedEvent(CoreEventModel):
     """
     Outcome event emitted after an automatic portfolio-day reconciliation bundle
     finishes. The outcome is deterministic and replay-safe for a given
     `(portfolio_id, business_date, epoch)` scope.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     business_date: date
@@ -445,12 +412,10 @@ class FinancialReconciliationCompletedEvent(BaseModel):
     correlation_id: Optional[str] = None
 
 
-class PortfolioDayControlsEvaluatedEvent(BaseModel):
+class PortfolioDayControlsEvaluatedEvent(CoreEventModel):
     """
     Canonical orchestrator-owned control-stage outcome for a portfolio business day.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     portfolio_id: str
     business_date: date

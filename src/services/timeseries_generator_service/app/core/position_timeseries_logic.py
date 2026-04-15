@@ -40,6 +40,7 @@ class PositionTimeseriesLogic:
 
         bod_cf_pos, eod_cf_pos = Decimal(0), Decimal(0)
         bod_cf_port, eod_cf_port = Decimal(0), Decimal(0)
+        total_fees = Decimal(0)
 
         for cf in cashflows:
             if cf.is_position_flow:
@@ -58,6 +59,9 @@ class PositionTimeseriesLogic:
                 else:  # EOD
                     eod_cf_port += cf.amount
 
+            if str(cf.classification).upper() == "EXPENSE":
+                total_fees += abs(Decimal(cf.amount))
+
         return PositionTimeseries(
             portfolio_id=current_snapshot.portfolio_id,
             security_id=current_snapshot.security_id,
@@ -69,7 +73,7 @@ class PositionTimeseriesLogic:
             bod_cashflow_portfolio=bod_cf_port,
             eod_cashflow_portfolio=eod_cf_port,
             eod_market_value=eod_market_value,
-            fees=Decimal(0),
+            fees=total_fees,
             quantity=eod_quantity,
             cost=eod_avg_cost,
         )

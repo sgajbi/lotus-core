@@ -68,10 +68,20 @@ def test_logic_with_portfolio_and_position_flows(current_snapshot, previous_day_
     cashflows = [
         # A BUY: only a position flow
         Cashflow(
-            amount=Decimal(1000), timing="BOD", is_position_flow=True, is_portfolio_flow=False
+            amount=Decimal(1000),
+            timing="BOD",
+            classification="CASHFLOW_IN",
+            is_position_flow=True,
+            is_portfolio_flow=False,
         ),
         # A FEE: both a position and portfolio flow
-        Cashflow(amount=Decimal(-50), timing="EOD", is_position_flow=True, is_portfolio_flow=True),
+        Cashflow(
+            amount=Decimal(-50),
+            timing="EOD",
+            classification="EXPENSE",
+            is_position_flow=True,
+            is_portfolio_flow=True,
+        ),
     ]
 
     # ACT
@@ -89,6 +99,7 @@ def test_logic_with_portfolio_and_position_flows(current_snapshot, previous_day_
     assert new_record.bod_cashflow_portfolio == Decimal("0")
     assert new_record.eod_cashflow_position == Decimal("-50")
     assert new_record.eod_cashflow_portfolio == Decimal("-50")
+    assert new_record.fees == Decimal("50")
 
 
 def test_logic_normalizes_product_leg_position_flow_signs_for_attribution(
@@ -128,3 +139,34 @@ def test_logic_normalizes_product_leg_position_flow_signs_for_attribution(
     assert new_record.bod_cashflow_position == Decimal("1000")
     # income is a position credit on the product leg; cash settlement remains transfer-signed
     assert new_record.eod_cashflow_position == Decimal("-1250")
+
+
+def test_logic_tracks_expense_fees_without_reclassifying_external_withdrawals(
+    current_snapshot, previous_day_snapshot
+):
+    cashflows = [
+        Cashflow(
+            amount=Decimal("-25000"),
+            classification="CASHFLOW_OUT",
+            timing="EOD",
+            is_position_flow=True,
+            is_portfolio_flow=True,
+        ),
+        Cashflow(
+            amount=Decimal("-275"),
+            classification="EXPENSE",
+            timing="EOD",
+            is_position_flow=True,
+            is_portfolio_flow=True,
+        ),
+    ]
+
+    new_record = PositionTimeseriesLogic.calculate_daily_record(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_day_snapshot,
+        cashflows=cashflows,
+        epoch=14,
+    )
+
+    assert new_record.eod_cashflow_portfolio == Decimal("-25275")
+    assert new_record.fees == Decimal("275")

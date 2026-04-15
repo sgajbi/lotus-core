@@ -58,6 +58,10 @@ async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
 
     assert "FROM daily_position_snapshots, portfolio_aggregation_jobs" not in compiled_query
     assert "FROM position_timeseries, portfolio_aggregation_jobs" not in compiled_query
+    assert (
+        "daily_position_snapshots.date <= portfolio_aggregation_jobs.aggregation_date"
+        in compiled_query
+    )
 
 
 async def test_find_and_reset_stale_jobs_refreshes_updated_at(
@@ -136,3 +140,22 @@ async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
         "failed_count": 1,
         "oldest_pending_created_at": date(2025, 1, 1),
     }
+
+
+async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_within_target_epoch(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.get_all_position_timeseries_for_date("P1", date(2025, 1, 10), 14)
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "position_timeseries.date <= '2025-01-10'" in compiled_query
+    assert "position_timeseries.epoch <= 14" in compiled_query
+    assert (
+        "row_number() OVER (PARTITION BY position_timeseries.security_id ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)"
+        in compiled_query
+    )
+    assert "anon_1.rn = 1" in compiled_query

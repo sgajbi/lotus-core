@@ -179,6 +179,28 @@ def test_transaction_model_accepts_slice1_canonical_metadata_fields():
     assert model.calculation_policy_id == "BUY_DEFAULT_POLICY"
 
 
+def test_transaction_model_accepts_cross_currency_transaction_fx_rate() -> None:
+    payload = {
+        "transaction_id": "BUY_EUR_001",
+        "portfolio_id": "PORT_META_001",
+        "instrument_id": "SAP",
+        "security_id": "SEC_SAP",
+        "transaction_date": "2025-04-20T10:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": "10.0",
+        "price": "121.4",
+        "gross_transaction_amount": "1214.0",
+        "trade_currency": "EUR",
+        "currency": "EUR",
+        "transaction_fx_rate": "1.074352",
+    }
+
+    model = Transaction(**payload)
+
+    assert model.trade_currency == "EUR"
+    assert model.transaction_fx_rate == Decimal("1.074352")
+
+
 def test_transaction_model_accepts_cash_entry_mode_and_external_cash_link() -> None:
     payload = {
         "transaction_id": "DIV_CASH_MODE_001",

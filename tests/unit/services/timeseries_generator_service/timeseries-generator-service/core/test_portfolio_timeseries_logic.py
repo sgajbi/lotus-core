@@ -63,6 +63,7 @@ async def test_portfolio_logic_aggregates_correctly_with_epoch(
             eod_market_value=Decimal("50000"),
             bod_cashflow_portfolio=Decimal(-25),
             eod_cashflow_portfolio=Decimal(0),
+            fees=Decimal("25"),
             date=test_date,
         ),
         PositionTimeseries(
@@ -94,6 +95,8 @@ async def test_portfolio_logic_aggregates_correctly_with_epoch(
     assert result.epoch == target_epoch
     assert result.bod_market_value == Decimal("67000")
     assert result.eod_market_value == Decimal("67000")
+    assert result.bod_cashflow == Decimal("-25")
+    assert result.fees == Decimal("25")
 
 
 async def test_portfolio_logic_raises_error_if_fx_rate_is_missing(
@@ -211,3 +214,98 @@ async def test_portfolio_logic_uses_position_timeseries_for_bod_and_eod_reconcil
     assert result.eod_market_value == Decimal("15000")
     mock_repo.get_last_portfolio_timeseries_before.assert_not_awaited()
     mock_repo.get_latest_snapshots_for_date.assert_not_awaited()
+
+
+async def test_portfolio_logic_uses_explicit_fee_field_not_negative_external_flow_signs(
+    mock_repo: AsyncMock, sample_portfolio: Portfolio
+):
+    test_date = date(2026, 3, 26)
+    position_ts_list = [
+        PositionTimeseries(
+            security_id="CASH_USD",
+            date=test_date,
+            bod_market_value=Decimal("100000"),
+            eod_market_value=Decimal("75000"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("-25000"),
+            fees=Decimal("0"),
+        ),
+        PositionTimeseries(
+            security_id="FEE_LEDGER",
+            date=test_date,
+            bod_market_value=Decimal("0"),
+            eod_market_value=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("-275"),
+            fees=Decimal("275"),
+        ),
+    ]
+
+    mock_repo.get_instruments_by_ids.return_value = [
+        Instrument(security_id="CASH_USD", currency="USD"),
+        Instrument(security_id="FEE_LEDGER", currency="USD"),
+    ]
+
+    result = await PortfolioTimeseriesLogic.calculate_daily_record(
+        portfolio=sample_portfolio,
+        a_date=test_date,
+        epoch=14,
+        position_timeseries_list=position_ts_list,
+        repo=mock_repo,
+    )
+
+    assert result.eod_cashflow == Decimal("-25275")
+    assert result.fees == Decimal("275")
+
+
+async def test_portfolio_logic_uses_position_row_date_for_carried_forward_fx_conversion(
+    mock_repo: AsyncMock, sample_portfolio: Portfolio
+):
+    target_date = date(2026, 3, 12)
+    carried_forward_date = date(2026, 3, 9)
+    position_ts_list = [
+        PositionTimeseries(
+            security_id="EUR_FUND",
+            date=carried_forward_date,
+            bod_market_value=Decimal("159900"),
+            eod_market_value=Decimal("159901.568"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            fees=Decimal("0"),
+        ),
+        PositionTimeseries(
+            security_id="USD_CASH",
+            date=target_date,
+            bod_market_value=Decimal("144622"),
+            eod_market_value=Decimal("144347"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("-275"),
+            fees=Decimal("275"),
+        ),
+    ]
+
+    mock_repo.get_instruments_by_ids.return_value = [
+        Instrument(security_id="EUR_FUND", currency="EUR"),
+        Instrument(security_id="USD_CASH", currency="USD"),
+    ]
+
+    async def get_fx_rate_side_effect(from_currency: str, to_currency: str, fx_date: date):
+        assert from_currency == "EUR"
+        assert to_currency == "USD"
+        assert fx_date == carried_forward_date
+        return SimpleNamespace(rate=Decimal("1.104259"))
+
+    mock_repo.get_fx_rate.side_effect = get_fx_rate_side_effect
+
+    result = await PortfolioTimeseriesLogic.calculate_daily_record(
+        portfolio=sample_portfolio,
+        a_date=target_date,
+        epoch=14,
+        position_timeseries_list=position_ts_list,
+        repo=mock_repo,
+    )
+
+    assert result.eod_market_value == Decimal("320919.745578112")
+    assert result.eod_cashflow == Decimal("-275")
+    assert result.fees == Decimal("275")
+    mock_repo.get_fx_rate.assert_awaited_once_with("EUR", "USD", carried_forward_date)

@@ -9,9 +9,11 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
     AnalyticsWindow,
+    CashFlowObservation,
     PageRequest,
     PortfolioAnalyticsReferenceRequest,
     PortfolioAnalyticsTimeseriesRequest,
@@ -116,18 +118,29 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
     assert response.observations[0].cash_flows[0].flow_scope == "external"
     assert response.observations[0].cash_flows[1].cash_flow_type == "transfer"
     assert response.observations[0].cash_flows[1].flow_scope == "external"
-    assert response.observations[0].cash_flows[2].cash_flow_type == "expense"
+    assert response.observations[0].cash_flows[2].cash_flow_type == "fee"
     assert response.observations[0].cash_flows[2].source_classification == "EXPENSE"
     assert response.observations[0].cash_flow_currency == "EUR"
     assert response.diagnostics.expected_business_dates_count == 1
     assert response.diagnostics.returned_observation_dates_count == 1
     assert response.diagnostics.cash_flows_included is True
     assert response.page.sort_key == "valuation_date:asc"
+    assert response.product_name == "PortfolioTimeseriesInput"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2025, 12, 31)
+    assert response.generated_at == response.lineage.generated_at
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "COMPLETE"
+    assert response.tenant_id is None
+    assert response.snapshot_id is None
+    assert response.policy_version is None
 
 
 @pytest.mark.asyncio
-async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_reporting_currency(
-) -> None:
+async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_reporting_currency() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -185,6 +198,7 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
     assert response.observations[0].cash_flow_currency == "USD"
     assert response.diagnostics.missing_dates_count == 1
     assert response.diagnostics.stale_points_count == 1
+    assert response.data_quality_status == "STALE"
 
 
 @pytest.mark.asyncio
@@ -293,8 +307,9 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
 
 
 @pytest.mark.asyncio
-async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_next_page_token(
-) -> None:
+async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_next_page_token() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=4),
@@ -338,6 +353,7 @@ async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_n
                 )
             ]
         ),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(
             side_effect=[
                 {date(2025, 1, 1): Decimal("1.2")},
@@ -346,16 +362,20 @@ async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_n
         ),
     )
 
-    observations, quality_distribution, observed_dates, snapshot_epoch, next_page_token = (
-        await service._portfolio_observation_rows(  # pylint: disable=protected-access
-            portfolio_id="P1",
-            portfolio_currency="USD",
-            reporting_currency="SGD",
-            resolved_window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
-            page_size=1,
-            cursor_date=None,
-            request_scope_fingerprint="scope-1",
-        )
+    (
+        observations,
+        quality_distribution,
+        observed_dates,
+        snapshot_epoch,
+        next_page_token,
+    ) = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="SGD",
+        resolved_window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
+        page_size=1,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
     )
 
     assert snapshot_epoch == 4
@@ -369,6 +389,226 @@ async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_n
     token_payload = service._decode_page_token(next_page_token)  # pylint: disable=protected-access
     assert token_payload["valuation_date"] == "2025-01-01"
     assert token_payload["snapshot_epoch"] == 4
+
+
+@pytest.mark.asyncio
+async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuity() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 18),
+                    bod_market_value=Decimal("95"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 18),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("0"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 18),
+                    bod_market_value=Decimal("70"),
+                    eod_market_value=Decimal("75"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("105"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("50"),
+                    bod_cashflow_position=Decimal("50"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("101"),
+                    bod_cashflow_position=Decimal("25"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("-50"),
+                    classification="INVESTMENT_OUTFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("25"),
+                    classification="INVESTMENT_INFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    observations, _, _, _, _ = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date="2025-05-18", end_date="2025-05-19"),
+        page_size=10,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
+    )
+
+    second_observation = next(
+        observation
+        for observation in observations
+        if observation.valuation_date == date(2025, 5, 19)
+    )
+    assert second_observation.beginning_market_value == Decimal("250")
+    assert second_observation.ending_market_value == Decimal("256")
+
+
+@pytest.mark.asyncio
+async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlement() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2026, 2, 27),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=14,
+                    asset_class="Equity",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="CASH_USD_BOOK_OPERATING",
+                    valuation_date=date(2026, 2, 27),
+                    bod_market_value=Decimal("-100"),
+                    eod_market_value=Decimal("-100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=14,
+                    asset_class="Cash",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2026, 2, 28),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=14,
+                    asset_class="Equity",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="CASH_USD_BOOK_OPERATING",
+                    valuation_date=date(2026, 2, 28),
+                    bod_market_value=Decimal("-100"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("200"),
+                    epoch=14,
+                    asset_class="Cash",
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="CASH_USD_BOOK_OPERATING",
+                    valuation_date=date(2026, 2, 28),
+                    amount=Decimal("-200"),
+                    classification="INVESTMENT_OUTFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    observations, _, _, _, _ = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date="2026-02-27", end_date="2026-02-28"),
+        page_size=10,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
+    )
+
+    second_observation = next(
+        observation
+        for observation in observations
+        if observation.valuation_date == date(2026, 2, 28)
+    )
+    assert second_observation.beginning_market_value == Decimal("200")
+    assert second_observation.ending_market_value == Decimal("200")
+
+
+def test_effective_beginning_market_value_keeps_cash_book_fee_drag_explicit() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        security_id="CASH_USD_BOOK_OPERATING",
+        asset_class="Cash",
+        bod_market_value=Decimal("100"),
+        eod_market_value=Decimal("99.725"),
+        bod_cashflow_position=Decimal("0"),
+    )
+    fee_flow = CashFlowObservation(
+        amount=Decimal("-0.275"),
+        timing="eod",
+        cash_flow_type="fee",
+        flow_scope="operational",
+        source_classification="EXPENSE",
+    )
+
+    result = service._effective_beginning_market_value(  # pylint: disable=protected-access
+        row,
+        previous_eod_market_value=Decimal("100"),
+        cash_flows=[fee_flow],
+        has_portfolio_external_flow=False,
+    )
+
+    assert result == Decimal("100")
 
 
 @pytest.mark.asyncio
@@ -389,6 +629,7 @@ async def test_portfolio_observation_rows_raises_when_position_fx_missing() -> N
             ]
         ),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(side_effect=[{}, {}]),
     )
 
@@ -446,6 +687,25 @@ def test_position_cash_flows_for_keys_preserves_non_position_amounts() -> None:
 
     assert result[("SEC_A", date(2025, 1, 1))][0].amount == Decimal("5")
     assert result[("SEC_A", date(2025, 1, 1))][0].cash_flow_type == "transfer"
+
+
+def test_timeseries_data_quality_status_classifies_empty_and_missing_windows() -> None:
+    assert (
+        AnalyticsTimeseriesService._timeseries_data_quality_status(  # pylint: disable=protected-access
+            required_count=0,
+            observed_count=0,
+            stale_count=0,
+        )
+        == "UNKNOWN"
+    )
+    assert (
+        AnalyticsTimeseriesService._timeseries_data_quality_status(  # pylint: disable=protected-access
+            required_count=3,
+            observed_count=2,
+            stale_count=0,
+        )
+        == "PARTIAL"
+    )
 
 
 def test_resolve_window_supports_long_periods_and_clamps_to_inception() -> None:
@@ -617,6 +877,16 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
     assert "scope_fingerprint" in token_payload
+    assert response.product_name == "PositionTimeseriesInput"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2025, 12, 31)
+    assert response.generated_at == response.lineage.generated_at
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "PARTIAL"
+    assert response.tenant_id is None
+    assert response.snapshot_id is None
+    assert response.policy_version is None
 
 
 @pytest.mark.asyncio
@@ -826,6 +1096,7 @@ async def test_get_portfolio_reference_success() -> None:
                 booking_center_code="SGPB",
                 portfolio_type="advisory",
                 objective="Growth",
+                updated_at=datetime(2025, 12, 30, 9, 0, tzinfo=UTC),
             )
         ),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
@@ -839,6 +1110,12 @@ async def test_get_portfolio_reference_success() -> None:
     assert response.performance_end_date == date(2025, 12, 31)
     assert response.reference_state_policy == "current_portfolio_reference_state"
     assert response.supported_grouping_dimensions == ["asset_class", "sector", "country"]
+    assert response.product_name == "PortfolioAnalyticsReference"
+    assert response.product_version == "v1"
+    assert response.generated_at == response.lineage.generated_at
+    assert response.as_of_date == date(2025, 12, 31)
+    assert response.data_quality_status == COMPLETE
+    assert response.latest_evidence_timestamp == datetime(2025, 12, 30, 9, 0, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -864,6 +1141,34 @@ async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date
         request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-06-30"),
     )
     assert response.performance_end_date == date(2025, 6, 30)
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_reference_marks_missing_performance_horizon_partial() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+                client_id="CIF_1",
+                booking_center_code="SGPB",
+                portfolio_type="advisory",
+                objective="Growth",
+            )
+        ),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=None),
+    )
+    response = await service.get_portfolio_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-06-30"),
+    )
+
+    assert response.performance_end_date is None
+    assert response.data_quality_status == PARTIAL
+    assert response.latest_evidence_timestamp is None
 
 
 @pytest.mark.asyncio
@@ -996,16 +1301,19 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     assert response.rows[0].cash_flows[0].flow_scope == "internal"
     assert response.rows[0].cash_flows[1].cash_flow_type == "external_flow"
     assert response.rows[0].cash_flows[1].flow_scope == "external"
-    assert response.rows[0].cash_flows[2].cash_flow_type == "expense"
+    assert response.rows[0].cash_flows[2].cash_flow_type == "fee"
     assert response.diagnostics.cash_flows_included is True
     assert response.diagnostics.requested_dimensions == ["asset_class", "sector", "country"]
+    assert response.diagnostics.stale_points_count == 1
+    assert response.data_quality_status == "STALE"
     assert response.rows[0].cash_flow_currency == "USD"
     assert response.rows[0].portfolio_to_reporting_fx_rate == Decimal("1.2")
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_distinguishes_internal_trade_flows_from_external_funding(
-) -> None:
+async def test_get_position_timeseries_distinguishes_internal_trade_flows_from_external_funding() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -1110,6 +1418,250 @@ async def test_get_position_timeseries_distinguishes_internal_trade_flows_from_e
         (Decimal("20000"), "external_flow", "external"),
         (Decimal("-5500"), "internal_trade_flow", "internal"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_repairs_beginning_values_for_continuity() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("105"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("10"),
+                    epoch=1,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("50"),
+                    bod_cashflow_position=Decimal("50"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("5"),
+                    epoch=1,
+                    asset_class="Fund",
+                    sector=None,
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("101"),
+                    bod_cashflow_position=Decimal("25"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("1"),
+                    epoch=1,
+                    asset_class="Fund",
+                    sector=None,
+                    country="US",
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 18),
+                    eod_market_value=Decimal("100"),
+                    epoch=1,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 18),
+                    eod_market_value=Decimal("0"),
+                    epoch=1,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 18),
+                    eod_market_value=Decimal("75"),
+                    epoch=1,
+                ),
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("-50"),
+                    classification="INVESTMENT_OUTFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("25"),
+                    classification="INVESTMENT_INFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-05-19",
+            window=AnalyticsWindow(start_date="2025-05-19", end_date="2025-05-19"),
+            include_cash_flows=True,
+        ),
+    )
+
+    existing = next(row for row in response.rows if row.security_id == "SEC_EXISTING")
+    new_internal = next(row for row in response.rows if row.security_id == "SEC_NEW_INTERNAL")
+    internal_bod_carry = next(
+        row for row in response.rows if row.security_id == "SEC_INTERNAL_BOD_CARRY"
+    )
+
+    assert existing.beginning_market_value_position_currency == Decimal("100")
+    assert existing.ending_market_value_position_currency == Decimal("105")
+    assert new_internal.beginning_market_value_position_currency == Decimal("50")
+    assert new_internal.ending_market_value_position_currency == Decimal("50")
+    assert internal_bod_carry.beginning_market_value_position_currency == Decimal("100")
+    assert internal_bod_carry.ending_market_value_position_currency == Decimal("101")
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_does_not_carry_beginning_across_absent_dates() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_GAPPED",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("95"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("10"),
+                    epoch=1,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_OTHER",
+                    valuation_date=date(2025, 5, 20),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("10"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("1"),
+                    epoch=1,
+                    asset_class="Cash",
+                    sector=None,
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_GAPPED",
+                    valuation_date=date(2025, 5, 21),
+                    bod_market_value=Decimal("120"),
+                    eod_market_value=Decimal("50"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("5"),
+                    epoch=1,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_GAPPED",
+                    valuation_date=date(2025, 5, 21),
+                    amount=Decimal("50"),
+                    classification="INVESTMENT_INFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                )
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-05-21",
+            window=AnalyticsWindow(start_date="2025-05-19", end_date="2025-05-21"),
+            include_cash_flows=True,
+        ),
+    )
+
+    reappearing = next(
+        row
+        for row in response.rows
+        if row.security_id == "SEC_GAPPED" and row.valuation_date == date(2025, 5, 21)
+    )
+
+    assert reappearing.beginning_market_value_position_currency == Decimal("50")
+    assert reappearing.ending_market_value_position_currency == Decimal("50")
 
 
 @pytest.mark.asyncio
@@ -1336,8 +1888,9 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_converts_position_values_to_portfolio_and_reporting_currency(
-) -> None:
+async def test_get_position_timeseries_converts_position_values_to_portfolio_and_reporting_currency() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -1938,15 +2491,21 @@ async def test_get_export_result_json_success_and_export_job_state_helpers() -> 
     assert response.result_row_count == 1
 
     assert await service._mark_export_job_running("aexp_ok") is running_row  # pylint: disable=protected-access
-    assert await service._mark_export_job_completed(  # pylint: disable=protected-access
-        "aexp_ok",
-        result_payload=completed_row.result_payload,
-        result_row_count=1,
-    ) is running_row
-    assert await service._mark_export_job_failed(  # pylint: disable=protected-access
-        "aexp_ok",
-        error_message="boom",
-    ) is running_row
+    assert (
+        await service._mark_export_job_completed(  # pylint: disable=protected-access
+            "aexp_ok",
+            result_payload=completed_row.result_payload,
+            result_row_count=1,
+        )
+        is running_row
+    )
+    assert (
+        await service._mark_export_job_failed(  # pylint: disable=protected-access
+            "aexp_ok",
+            error_message="boom",
+        )
+        is running_row
+    )
     service.export_repo.mark_running.assert_awaited_once_with(running_row)
     service.export_repo.mark_completed.assert_awaited_once()
     service.export_repo.mark_failed.assert_awaited_once_with(running_row, error_message="boom")

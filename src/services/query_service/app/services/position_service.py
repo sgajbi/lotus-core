@@ -1,9 +1,10 @@
 # src/services/query_service/app/services/position_service.py
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.position_dto import (
@@ -12,6 +13,7 @@ from ..dtos.position_dto import (
     Position,
     PositionHistoryRecord,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.valuation_dto import ValuationData
 from ..repositories.position_repository import PositionRepository
 
@@ -159,7 +161,9 @@ class PositionService:
                 cost_basis=position_row.cost_basis,
                 cost_basis_local=position_row.cost_basis_local,
                 instrument_name=instrument.name if instrument else "N/A",
-                position_date=(position_row.date if is_snapshot_row else position_row.position_date),
+                position_date=(
+                    position_row.date if is_snapshot_row else position_row.position_date
+                ),
                 asset_class=instrument.asset_class if instrument else None,
                 isin=instrument.isin if instrument else None,
                 currency=instrument.currency if instrument else None,
@@ -215,4 +219,53 @@ class PositionService:
                     (security_id, epoch), default_date
                 )
 
-        return PortfolioPositionsResponse(portfolio_id=portfolio_id, positions=positions)
+        response_as_of_date = effective_as_of_date or max(
+            (position.position_date for position in positions), default=date.today()
+        )
+        return PortfolioPositionsResponse(
+            portfolio_id=portfolio_id,
+            positions=positions,
+            **source_data_product_runtime_metadata(
+                as_of_date=response_as_of_date,
+                data_quality_status=self._holdings_data_quality_status(
+                    positions=positions,
+                    history_supplements=history_supplements,
+                ),
+                latest_evidence_timestamp=self._latest_holdings_evidence_timestamp(db_results),
+            ),
+        )
+
+    @staticmethod
+    def _holdings_data_quality_status(
+        *,
+        positions: list[Position],
+        history_supplements: list[tuple[Any, Any, Any]],
+    ) -> str:
+        if not positions:
+            return UNKNOWN
+        normalized_statuses = [
+            (position.reprocessing_status or "").strip().upper() for position in positions
+        ]
+        if any(not status for status in normalized_statuses):
+            return UNKNOWN
+        if any(status != "CURRENT" for status in normalized_statuses):
+            return STALE
+        if history_supplements:
+            return PARTIAL
+        return COMPLETE
+
+    @staticmethod
+    def _latest_holdings_evidence_timestamp(
+        db_results: list[tuple[Any, Any, Any]],
+    ) -> datetime | None:
+        timestamps: list[datetime] = []
+        for position_row, _instrument, pos_state in db_results:
+            for candidate in (
+                getattr(position_row, "updated_at", None),
+                getattr(position_row, "created_at", None),
+                getattr(pos_state, "updated_at", None),
+                getattr(pos_state, "created_at", None),
+            ):
+                if isinstance(candidate, datetime):
+                    timestamps.append(candidate)
+        return max(timestamps) if timestamps else None

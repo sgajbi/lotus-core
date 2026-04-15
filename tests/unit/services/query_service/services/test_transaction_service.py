@@ -1,10 +1,11 @@
 # tests/unit/services/query_service/services/test_transaction_service.py
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from portfolio_common.database_models import Cashflow, Transaction
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
@@ -55,6 +56,7 @@ def mock_transaction_repo() -> AsyncMock:
         ),
     ]
     repo.get_transactions_count.return_value = 25
+    repo.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
     return repo
 
@@ -113,6 +115,21 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
             **params,
             as_of_date=date(2025, 1, 15),
         )
+        mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once_with(
+            portfolio_id=params["portfolio_id"],
+            instrument_id=params["instrument_id"],
+            security_id=params["security_id"],
+            transaction_type=params["transaction_type"],
+            component_type=params["component_type"],
+            linked_transaction_group_id=params["linked_transaction_group_id"],
+            fx_contract_id=params["fx_contract_id"],
+            swap_event_id=params["swap_event_id"],
+            near_leg_group_id=params["near_leg_group_id"],
+            far_leg_group_id=params["far_leg_group_id"],
+            start_date=params["start_date"],
+            end_date=params["end_date"],
+            as_of_date=date(2025, 1, 15),
+        )
 
         assert response_dto.total == 25
         assert response_dto.skip == 5
@@ -130,6 +147,85 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.transactions[1].withholding_tax_amount == Decimal("10")
         assert response_dto.transactions[1].other_interest_deductions_amount == Decimal("5")
         assert response_dto.transactions[1].net_interest_amount == Decimal("110")
+        assert response_dto.product_name == "TransactionLedgerWindow"
+        assert response_dto.product_version == "v1"
+        assert response_dto.as_of_date == date(2025, 1, 15)
+        assert response_dto.generated_at.tzinfo is not None
+        assert response_dto.restatement_version == "current"
+        assert response_dto.reconciliation_status == "UNKNOWN"
+        assert response_dto.data_quality_status == PARTIAL
+        assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+        assert response_dto.correlation_id is None
+
+
+async def test_ledger_data_quality_status_classifies_complete_partial_and_empty_windows() -> None:
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=2,
+            returned_count=2,
+            skip=0,
+        )
+        == COMPLETE
+    )
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=25,
+            returned_count=10,
+            skip=0,
+        )
+        == PARTIAL
+    )
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=25,
+            returned_count=10,
+            skip=10,
+        )
+        == PARTIAL
+    )
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=0,
+            returned_count=0,
+            skip=0,
+        )
+        == UNKNOWN
+    )
+
+
+async def test_get_transactions_classifies_complete_window(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transactions_count.return_value = 2
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    assert response_dto.data_quality_status == COMPLETE
+
+
+async def test_get_transactions_classifies_empty_window_as_unknown(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transactions.return_value = []
+    mock_transaction_repo.get_transactions_count.return_value = 0
+    mock_transaction_repo.get_latest_evidence_timestamp.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    assert response_dto.data_quality_status == UNKNOWN
+    assert response_dto.latest_evidence_timestamp is None
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):
@@ -185,6 +281,7 @@ async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_rep
         assert retrieved_cashflow.is_position_flow is True
         assert retrieved_cashflow.is_portfolio_flow is True
         assert hasattr(retrieved_cashflow, "level") is False
+        assert response_dto.as_of_date == date(2025, 1, 15)
 
 
 async def test_get_transactions_raises_when_portfolio_missing(mock_transaction_repo: AsyncMock):
@@ -217,6 +314,21 @@ async def test_get_transactions_include_projected_skips_business_date_default(
 
         mock_transaction_repo.get_latest_business_date.assert_not_awaited()
         mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
+            portfolio_id="P1",
+            instrument_id=None,
+            security_id=None,
+            transaction_type=None,
+            component_type=None,
+            linked_transaction_group_id=None,
+            fx_contract_id=None,
+            swap_event_id=None,
+            near_leg_group_id=None,
+            far_leg_group_id=None,
+            start_date=None,
+            end_date=None,
+            as_of_date=None,
+        )
+        mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once_with(
             portfolio_id="P1",
             instrument_id=None,
             security_id=None,

@@ -6,6 +6,9 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+)
 from src.services.query_service.app.main import app
 from src.services.query_service.app.routers.positions import PositionService, get_position_service
 
@@ -74,12 +77,18 @@ async def test_get_latest_positions_success(async_test_client):
                 "reprocessing_status": "CURRENT",
             }
         ],
+        **source_data_product_runtime_metadata(as_of_date=date(2025, 1, 1)),
     }
 
     response = await client.get("/portfolios/P1/positions")
 
     assert response.status_code == 200
-    assert response.json()["portfolio_id"] == "P1"
+    payload = response.json()
+    assert payload["portfolio_id"] == "P1"
+    assert payload["product_name"] == "HoldingsAsOf"
+    assert payload["product_version"] == "v1"
+    assert payload["as_of_date"] == "2025-01-01"
+    assert payload["generated_at"]
     mock_service.get_portfolio_positions.assert_awaited_once_with(
         portfolio_id="P1",
         as_of_date=None,
@@ -119,13 +128,20 @@ async def test_get_latest_positions_not_found_maps_to_404(async_test_client):
 
 async def test_get_latest_positions_forwards_as_of_and_include_projected(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_portfolio_positions.return_value = {"portfolio_id": "P1", "positions": []}
+    mock_service.get_portfolio_positions.return_value = {
+        "portfolio_id": "P1",
+        "positions": [],
+        **source_data_product_runtime_metadata(as_of_date=date(2026, 2, 28)),
+    }
 
     response = await client.get(
         "/portfolios/P1/positions?as_of_date=2026-02-28&include_projected=true"
     )
 
     assert response.status_code == 200
+    payload = response.json()
+    assert payload["product_name"] == "HoldingsAsOf"
+    assert payload["as_of_date"] == "2026-02-28"
     mock_service.get_portfolio_positions.assert_awaited_once_with(
         portfolio_id="P1",
         as_of_date=date(2026, 2, 28),

@@ -1,9 +1,18 @@
 import pytest
 from pydantic import ValidationError
 
+from src.services.query_service.app.dtos.integration_dto import InstrumentEnrichmentBulkResponse
 from src.services.query_service.app.dtos.reference_integration_dto import (
+    BenchmarkAssignmentResponse,
+    BenchmarkCompositionWindowResponse,
     BenchmarkMarketSeriesRequest,
+    BenchmarkMarketSeriesResponse,
+    ClassificationTaxonomyResponse,
+    CoverageResponse,
+    IndexPriceSeriesResponse,
+    IndexReturnSeriesResponse,
     IntegrationWindow,
+    RiskFreeSeriesResponse,
 )
 
 
@@ -37,3 +46,27 @@ def test_benchmark_market_series_request_requires_target_currency_for_fx() -> No
             frequency="daily",
             series_fields=["fx_rate"],
         )
+
+
+@pytest.mark.parametrize(
+    ("response_model", "product_name"),
+    [
+        (BenchmarkAssignmentResponse, "BenchmarkAssignment"),
+        (BenchmarkCompositionWindowResponse, "BenchmarkConstituentWindow"),
+        (BenchmarkMarketSeriesResponse, "MarketDataWindow"),
+        (IndexPriceSeriesResponse, "IndexSeriesWindow"),
+        (IndexReturnSeriesResponse, "IndexSeriesWindow"),
+        (RiskFreeSeriesResponse, "RiskFreeSeriesWindow"),
+        (CoverageResponse, "DataQualityCoverageReport"),
+        (ClassificationTaxonomyResponse, "InstrumentReferenceBundle"),
+        (InstrumentEnrichmentBulkResponse, "InstrumentReferenceBundle"),
+    ],
+)
+def test_source_data_product_responses_declare_product_identity_defaults(
+    response_model, product_name
+) -> None:
+    product_field = response_model.model_fields["product_name"]
+    version_field = response_model.model_fields["product_version"]
+
+    assert product_field.default == product_name
+    assert version_field.default == "v1"

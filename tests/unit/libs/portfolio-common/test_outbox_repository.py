@@ -3,7 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import OutboxEvent
-from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.events import CashflowCalculatedEvent
+from portfolio_common.outbox_repository import EVENT_SCHEMA_VERSION, OutboxRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -52,8 +53,14 @@ async def test_create_outbox_event_success(
     assert isinstance(added_object, OutboxEvent)
     assert added_object.aggregate_id == event_details["aggregate_id"]
     assert added_object.topic == event_details["topic"]
-    assert added_object.payload == event_details["payload"]
+    assert added_object.payload == {
+        "data": "value",
+        "event_type": "TestEvent",
+        "schema_version": EVENT_SCHEMA_VERSION,
+        "correlation_id": "corr-123",
+    }
     assert added_object.status == "PENDING"
+    assert event_details["payload"] == {"data": "value"}
 
 
 async def test_create_outbox_event_raises_type_error_for_bad_payload(repository: OutboxRepository):
@@ -89,3 +96,63 @@ async def test_create_outbox_event_normalizes_sentinel_correlation(
     )
 
     assert event.correlation_id is None
+    assert event.payload["correlation_id"] is None
+
+
+async def test_create_outbox_event_rejects_conflicting_payload_event_type(
+    repository: OutboxRepository,
+) -> None:
+    with pytest.raises(ValueError, match="payload event_type 'OtherEvent'"):
+        await repository.create_outbox_event(
+            aggregate_type="portfolio",
+            aggregate_id="P1",
+            event_type="ExpectedEvent",
+            payload={"event_type": "OtherEvent"},
+            topic="topic-1",
+        )
+
+
+async def test_create_outbox_event_rejects_conflicting_payload_correlation_id(
+    repository: OutboxRepository,
+) -> None:
+    with pytest.raises(ValueError, match="payload correlation_id 'payload-corr'"):
+        await repository.create_outbox_event(
+            aggregate_type="portfolio",
+            aggregate_id="P1",
+            event_type="ExpectedEvent",
+            payload={"correlation_id": "payload-corr"},
+            topic="topic-1",
+            correlation_id="outbox-corr",
+        )
+
+
+async def test_enriched_payload_remains_compatible_with_event_models(
+    repository: OutboxRepository,
+) -> None:
+    event = await repository.create_outbox_event(
+        aggregate_type="Cashflow",
+        aggregate_id="P1",
+        event_type="CashflowCalculated",
+        payload={
+            "cashflow_id": 101,
+            "transaction_id": "T1",
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "cashflow_date": "2026-04-10",
+            "amount": "12.34",
+            "currency": "USD",
+            "classification": "DIVIDEND",
+            "timing": "eod",
+            "is_position_flow": True,
+            "is_portfolio_flow": False,
+            "calculation_type": "standard",
+        },
+        topic="cashflows.calculated",
+        correlation_id="corr-123",
+    )
+
+    parsed = CashflowCalculatedEvent.model_validate(event.payload)
+
+    assert parsed.transaction_id == "T1"
+    assert event.payload["event_type"] == "CashflowCalculated"
+    assert event.payload["schema_version"] == EVENT_SCHEMA_VERSION

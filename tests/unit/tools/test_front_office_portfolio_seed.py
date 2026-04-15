@@ -15,7 +15,9 @@ from tools.front_office_portfolio_seed import (
     _extract_readiness_summary,
     _extract_support_overview_summary,
     _front_office_analytics_are_fresh,
+    _ingest_front_office_core_data,
     _reprocess_front_office_transactions,
+    _wait_for_portfolio_persistence,
     build_portfolio_seed_cleanup_sql,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
@@ -65,10 +67,7 @@ def test_front_office_bundle_carries_meaningful_classification_metadata():
     assert by_security["FO_BOND_UST_2030"]["rating"] == "AA+"
     assert by_security["FO_ETF_MSCI_WORLD"]["liquidity_tier"] == "L1"
     assert by_security["FO_FUND_PIMCO_INC"]["liquidity_tier"] == "L3"
-    assert (
-        by_security["FO_BOND_SIEMENS_2031"]["ultimate_parent_issuer_name"]
-        == "Siemens AG"
-    )
+    assert by_security["FO_BOND_SIEMENS_2031"]["ultimate_parent_issuer_name"] == "Siemens AG"
     assert by_security["FO_PRIV_PRIVATE_CREDIT_A"]["liquidity_tier"] == "L5"
     assert by_security["FO_PRIV_PRIVATE_CREDIT_A"]["sector"] == "Private Credit"
 
@@ -128,10 +127,7 @@ def test_front_office_bundle_pairs_internal_transactions_under_shared_event_link
         cash_leg = by_txn[cash_transaction_id]
 
         assert product_leg["economic_event_id"] == cash_leg["economic_event_id"]
-        assert (
-            product_leg["linked_transaction_group_id"]
-            == cash_leg["linked_transaction_group_id"]
-        )
+        assert product_leg["linked_transaction_group_id"] == cash_leg["linked_transaction_group_id"]
 
 
 def test_front_office_bundle_internal_pairs_economically_net_to_zero():
@@ -172,6 +168,24 @@ def test_front_office_bundle_keeps_eur_sleeve_funded():
     assert eur_funding > eur_buys
 
 
+def test_front_office_bundle_populates_historical_fx_on_cross_currency_transactions():
+    bundle = _build_bundle()
+    by_txn = {transaction["transaction_id"]: transaction for transaction in bundle["transactions"]}
+
+    cross_currency_transaction_ids = (
+        "TXN-DEP-EUR-001",
+        "TXN-BUY-SAP-001",
+        "TXN-CASH-BUY-SAP-001",
+        "TXN-BUY-BLK-ALLOC-001",
+        "TXN-CASH-BUY-BLK-ALLOC-001",
+        "TXN-BUY-SIEMENS-BOND-001",
+        "TXN-CASH-BUY-SIEMENS-BOND-001",
+    )
+
+    for transaction_id in cross_currency_transaction_ids:
+        assert Decimal(by_txn[transaction_id]["transaction_fx_rate"]) > Decimal("0")
+
+
 def test_front_office_bundle_places_income_and_activity_inside_current_reporting_window():
     bundle = _build_bundle()
     by_txn = {transaction["transaction_id"]: transaction for transaction in bundle["transactions"]}
@@ -204,9 +218,7 @@ def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
     bundle = _build_bundle()
 
     private_credit_prices = [
-        row
-        for row in bundle["market_prices"]
-        if row["security_id"] == "FO_PRIV_PRIVATE_CREDIT_A"
+        row for row in bundle["market_prices"] if row["security_id"] == "FO_PRIV_PRIVATE_CREDIT_A"
     ]
     assert private_credit_prices
     assert private_credit_prices[-1]["price_date"] == bundle["as_of_date"]
@@ -237,8 +249,7 @@ def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
 def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     bundle = _build_bundle()
     cash_security_ids = {
-        account["security_id"]: account["account_currency"]
-        for account in bundle["cash_accounts"]
+        account["security_id"]: account["account_currency"] for account in bundle["cash_accounts"]
     }
     cash_balance_by_currency = {currency: Decimal("0") for currency in cash_security_ids.values()}
 
@@ -252,7 +263,9 @@ def test_front_office_bundle_cash_economics_are_plausible_by_currency():
         elif transaction["transaction_type"] in {"SELL", "FEE", "WITHDRAWAL"}:
             cash_balance_by_currency[currency] -= amount
         else:
-            raise AssertionError(f"Unexpected cash transaction type: {transaction['transaction_type']}")
+            raise AssertionError(
+                f"Unexpected cash transaction type: {transaction['transaction_type']}"
+            )
 
     assert cash_balance_by_currency["USD"] > Decimal("0")
     assert cash_balance_by_currency["EUR"] > Decimal("0")
@@ -327,6 +340,14 @@ def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_
         DEFAULT_BENCHMARK_ID.lower()
     )
     assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-05-10"
+    sector_by_index = {
+        index["index_id"]: index["classification_labels"].get("sector")
+        for index in bundle["indices"]
+    }
+    assert sector_by_index == {
+        "IDX_GLOBAL_EQUITY_TR": "broad_market_equity",
+        "IDX_GLOBAL_BOND_TR": "broad_market_fixed_income",
+    }
 
 
 def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically():
@@ -339,6 +360,11 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "delete from benchmark_composition_series" in sql
     assert "delete from benchmark_return_series" in sql
     assert "delete from benchmark_definitions" in sql
+    assert "delete from index_price_series where index_id in" in sql
+    assert "delete from index_return_series where index_id in" in sql
+    assert "delete from index_definitions where index_id in" in sql
+    assert "IDX_GLOBAL_EQUITY_TR" in sql
+    assert "IDX_GLOBAL_BOND_TR" in sql
     assert "PB_SG_GLOBAL_BAL_001" in sql
     assert DEFAULT_BENCHMARK_ID in sql
 
@@ -351,6 +377,59 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
+    assert "service_name = 'position-calculator'" in sql
+    assert "event_id like 'transaction_processing.ready-%'" in sql
+    assert "event_id like 'transactions.cost.processed-%'" in sql
+    assert "service_name = 'cost-calculator'" in sql
+    assert "service_name = 'cashflow-calculator'" in sql
+    assert "service_name = 'pipeline-orchestrator-processed-txn'" in sql
+    assert "service_name = 'persistence-portfolios'" in sql
+    assert "event_id like 'portfolios.raw.received-%'" in sql
+
+
+def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
+    bundle = _build_bundle()
+    calls = []
+    waits = []
+
+    def capture_request(method, url, *, payload=None):
+        calls.append((method, url, payload))
+        return 202, {"accepted_count": 1}
+
+    def capture_wait(**kwargs):
+        waits.append(kwargs)
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", capture_request)
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._wait_for_portfolio_persistence",
+        capture_wait,
+    )
+
+    _ingest_front_office_core_data(
+        ingestion_base_url="http://ingestion.dev.lotus",
+        query_base_url="http://query.dev.lotus",
+        bundle=bundle,
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        wait_seconds=90,
+        poll_interval_seconds=3,
+    )
+
+    assert [call[1] for call in calls] == [
+        "http://ingestion.dev.lotus/ingest/business-dates",
+        "http://ingestion.dev.lotus/ingest/portfolios",
+        "http://ingestion.dev.lotus/ingest/instruments",
+        "http://ingestion.dev.lotus/ingest/fx-rates",
+        "http://ingestion.dev.lotus/ingest/market-prices",
+        "http://ingestion.dev.lotus/ingest/transactions",
+    ]
+    assert waits == [
+        {
+            "query_base_url": "http://query.dev.lotus",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "wait_seconds": 90,
+            "poll_interval_seconds": 3,
+        }
+    ]
 
 
 def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeypatch):
@@ -378,8 +457,13 @@ def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
 def test_front_office_runtime_expectation_is_derived_from_contract() -> None:
     assert FRONT_OFFICE_EXPECTATION.portfolio_id == FRONT_OFFICE_SEED_CONTRACT.portfolio_id
     assert FRONT_OFFICE_EXPECTATION.min_transactions == FRONT_OFFICE_SEED_CONTRACT.min_transactions
-    assert FRONT_OFFICE_EXPECTATION.min_cash_accounts == FRONT_OFFICE_SEED_CONTRACT.min_cash_accounts
-    assert FRONT_OFFICE_EXPECTATION.min_allocation_views == FRONT_OFFICE_SEED_CONTRACT.min_allocation_views
+    assert (
+        FRONT_OFFICE_EXPECTATION.min_cash_accounts == FRONT_OFFICE_SEED_CONTRACT.min_cash_accounts
+    )
+    assert (
+        FRONT_OFFICE_EXPECTATION.min_allocation_views
+        == FRONT_OFFICE_SEED_CONTRACT.min_allocation_views
+    )
     assert (
         FRONT_OFFICE_EXPECTATION.min_projected_cashflow_points
         == FRONT_OFFICE_SEED_CONTRACT.min_projected_cashflow_points
@@ -425,11 +509,41 @@ def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
             "http://ingestion.dev.lotus/reprocess/transactions",
             {
                 "transaction_ids": [
-                    transaction["transaction_id"]
-                    for transaction in bundle["transactions"]
+                    transaction["transaction_id"] for transaction in bundle["transactions"]
                 ]
             },
         )
+    ]
+
+
+def test_front_office_seed_waits_for_portfolio_persistence_before_reference_ingest(monkeypatch):
+    observed_calls = []
+    portfolio_exists_responses = iter([False, False, True])
+
+    def fake_portfolio_exists(query_base_url: str, portfolio_id: str) -> bool:
+        observed_calls.append((query_base_url, portfolio_id))
+        return next(portfolio_exists_responses)
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._portfolio_exists",
+        fake_portfolio_exists,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.time.sleep",
+        lambda _: None,
+    )
+
+    _wait_for_portfolio_persistence(
+        query_base_url="http://query.dev.lotus",
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        wait_seconds=3,
+        poll_interval_seconds=0,
+    )
+
+    assert observed_calls == [
+        ("http://query.dev.lotus", "PB_SG_GLOBAL_BAL_001"),
+        ("http://query.dev.lotus", "PB_SG_GLOBAL_BAL_001"),
+        ("http://query.dev.lotus", "PB_SG_GLOBAL_BAL_001"),
     ]
 
 

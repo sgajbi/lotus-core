@@ -7,7 +7,7 @@ AnalyticsCashFlowType = Literal[
     "external_flow",
     "internal_trade_flow",
     "income",
-    "expense",
+    "fee",
     "transfer",
     "other",
 ]
@@ -54,6 +54,6 @@ def classify_analytics_cash_flow(
         return ("income", "operational")
 
     if classification == "EXPENSE":
-        return ("expense", "operational")
+        return ("fee", "operational")
 
     return ("other", "operational")

@@ -61,6 +61,7 @@ def mock_kafka_message(mock_event: DailyPositionSnapshotPersistedEvent) -> Magic
 @pytest.fixture
 def mock_dependencies():
     mock_repo = AsyncMock(spec=TimeseriesRepository)
+    mock_repo.get_next_snapshot_after.return_value = None
     mock_outbox_repo = AsyncMock(spec=OutboxRepository)
 
     mock_db_session = AsyncMock(spec=AsyncSession)
@@ -128,6 +129,18 @@ async def test_process_message_success(
 
         # ASSERT
         mock_fencer_class.assert_not_called()
+        mock_repo.get_last_snapshot_before.assert_awaited_once_with(
+            portfolio_id=mock_event.portfolio_id,
+            security_id=mock_event.security_id,
+            a_date=mock_event.date,
+            epoch=mock_event.epoch,
+        )
+        mock_repo.get_all_cashflows_for_security_date.assert_awaited_once_with(
+            mock_event.portfolio_id,
+            mock_event.security_id,
+            mock_event.date,
+            mock_event.epoch,
+        )
         mock_repo.upsert_position_timeseries.assert_awaited_once()
         mock_outbox_repo.create_outbox_event.assert_awaited_once()
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
@@ -309,9 +322,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     finally:
         correlation_id_var.reset(token)
 
-    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
-        "ts-corr-id"
-    )
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == ("ts-corr-id")
 
 
 async def test_process_message_skips_downstream_fanout_for_identical_timeseries(
@@ -363,6 +374,118 @@ async def test_process_message_skips_downstream_fanout_for_identical_timeseries(
 
     mock_repo.upsert_position_timeseries.assert_not_awaited()
     mock_outbox_repo.create_outbox_event.assert_not_awaited()
+
+
+async def test_process_message_recalculates_dependent_next_day_bod(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    current_snapshot = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1100"),
+    )
+    next_snapshot = DailyPositionSnapshot(
+        id=124,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 13),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1150"),
+    )
+
+    mock_repo.get_instrument.return_value = Instrument(
+        security_id=mock_event.security_id, currency="USD"
+    )
+    mock_db_session.get.return_value = current_snapshot
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal("1050")
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.side_effect = [
+        None,
+        MagicMock(
+            bod_market_value=Decimal("0"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("1150"),
+            fees=Decimal("0"),
+            quantity=Decimal("100"),
+            cost=Decimal("10"),
+        ),
+    ]
+    mock_repo.get_next_snapshot_after.side_effect = [next_snapshot, None]
+
+    await consumer._process_message_with_retry(mock_kafka_message)
+
+    assert mock_repo.upsert_position_timeseries.await_count == 2
+    propagated_record = mock_repo.upsert_position_timeseries.await_args_list[1].args[0]
+    assert propagated_record.date == date(2025, 8, 13)
+    assert propagated_record.bod_market_value == Decimal("1100")
+    assert propagated_record.eod_market_value == Decimal("1150")
+    assert mock_outbox_repo.create_outbox_event.await_count == 2
+    assert mock_dependencies["db_session"].execute.await_count == 2
+
+
+async def test_process_message_does_not_precompute_absent_dependent_day(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    current_snapshot = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1100"),
+    )
+    next_snapshot = DailyPositionSnapshot(
+        id=124,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 13),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1150"),
+    )
+
+    mock_repo.get_instrument.return_value = Instrument(
+        security_id=mock_event.security_id, currency="USD"
+    )
+    mock_db_session.get.return_value = current_snapshot
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal("1050")
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.side_effect = [None, None]
+    mock_repo.get_next_snapshot_after.return_value = next_snapshot
+
+    await consumer._process_message_with_retry(mock_kafka_message)
+
+    mock_repo.upsert_position_timeseries.assert_awaited_once()
+    created_record = mock_repo.upsert_position_timeseries.await_args.args[0]
+    assert created_record.date == mock_event.date
+    mock_outbox_repo.create_outbox_event.assert_awaited_once()
 
 
 async def test_stage_aggregation_job_rearms_completed_job_for_late_material_input(

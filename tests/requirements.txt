@@ -1,7 +1,7 @@
 # tests/requirements.txt
 
 # Core testing library
-pytest==8.2.2
+pytest==9.0.3
 pytest-cov==5.0.0
 pytest-dependency==0.6.1
 hypothesis==6.140.2

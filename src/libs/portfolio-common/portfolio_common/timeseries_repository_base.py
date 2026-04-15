@@ -2,7 +2,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
-from sqlalchemy import and_, exists, func, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,34 +111,68 @@ class TimeseriesRepositoryBase:
         dps = DailyPositionSnapshot
         position_ts = PositionTimeseries
 
-        latest_snapshot_epochs = (
+        latest_asof_snapshots = (
             select(
                 dps.security_id.label("security_id"),
+                dps.date.label("date"),
                 func.max(dps.epoch).label("epoch"),
             )
             .where(
                 dps.portfolio_id == p1.portfolio_id,
-                dps.date == p1.aggregation_date,
+                dps.date <= p1.aggregation_date,
             )
-            .group_by(dps.security_id)
+            .group_by(dps.security_id, dps.date)
+            .correlate(p1)
+            .subquery()
+        )
+
+        ranked_asof_snapshots = (
+            select(
+                latest_asof_snapshots.c.security_id,
+                latest_asof_snapshots.c.date,
+                latest_asof_snapshots.c.epoch,
+                func.row_number()
+                .over(
+                    partition_by=latest_asof_snapshots.c.security_id,
+                    order_by=(
+                        latest_asof_snapshots.c.date.desc(),
+                        latest_asof_snapshots.c.epoch.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .correlate(p1)
+            .subquery()
+        )
+
+        authoritative_snapshots = (
+            select(
+                ranked_asof_snapshots.c.security_id,
+                ranked_asof_snapshots.c.date,
+                ranked_asof_snapshots.c.epoch,
+            )
+            .where(ranked_asof_snapshots.c.rn == 1)
             .correlate(p1)
             .subquery()
         )
 
         expected_snapshot_count_subq = (
-            select(func.count()).select_from(latest_snapshot_epochs).scalar_subquery().correlate(p1)
+            select(func.count())
+            .select_from(authoritative_snapshots)
+            .scalar_subquery()
+            .correlate(p1)
         )
 
         actual_position_timeseries_count_subq = (
             select(func.count())
-            .select_from(latest_snapshot_epochs)
+            .select_from(authoritative_snapshots)
             .join(
                 position_ts,
                 and_(
                     position_ts.portfolio_id == p1.portfolio_id,
-                    position_ts.date == p1.aggregation_date,
-                    position_ts.security_id == latest_snapshot_epochs.c.security_id,
-                    position_ts.epoch == latest_snapshot_epochs.c.epoch,
+                    position_ts.security_id == authoritative_snapshots.c.security_id,
+                    position_ts.date == authoritative_snapshots.c.date,
+                    position_ts.epoch == authoritative_snapshots.c.epoch,
                 ),
             )
             .scalar_subquery()
@@ -220,31 +254,40 @@ class TimeseriesRepositoryBase:
     async def get_all_position_timeseries_for_date(
         self, portfolio_id: str, a_date: date, epoch: int
     ) -> List[PositionTimeseries]:
-        latest_snapshot_epochs = (
+        ranked_position_rows = (
             select(
-                DailyPositionSnapshot.security_id.label("security_id"),
-                func.max(DailyPositionSnapshot.epoch).label("epoch"),
+                PositionTimeseries.portfolio_id.label("portfolio_id"),
+                PositionTimeseries.security_id.label("security_id"),
+                PositionTimeseries.date.label("date"),
+                PositionTimeseries.epoch.label("epoch"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionTimeseries.security_id,),
+                    order_by=(PositionTimeseries.date.desc(), PositionTimeseries.epoch.desc()),
+                )
+                .label("rn"),
             )
             .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.date == a_date,
+                PositionTimeseries.portfolio_id == portfolio_id,
+                PositionTimeseries.date <= a_date,
+                PositionTimeseries.epoch <= epoch,
             )
-            .group_by(DailyPositionSnapshot.security_id)
             .subquery()
         )
 
         stmt = (
             select(PositionTimeseries)
             .join(
-                latest_snapshot_epochs,
+                ranked_position_rows,
                 and_(
-                    PositionTimeseries.security_id == latest_snapshot_epochs.c.security_id,
-                    PositionTimeseries.epoch == latest_snapshot_epochs.c.epoch,
+                    PositionTimeseries.portfolio_id == ranked_position_rows.c.portfolio_id,
+                    PositionTimeseries.security_id == ranked_position_rows.c.security_id,
+                    PositionTimeseries.date == ranked_position_rows.c.date,
+                    PositionTimeseries.epoch == ranked_position_rows.c.epoch,
                 ),
             )
             .where(
-                PositionTimeseries.portfolio_id == portfolio_id,
-                PositionTimeseries.date == a_date,
+                ranked_position_rows.c.rn == 1,
             )
             .order_by(PositionTimeseries.security_id)
         )
@@ -253,10 +296,31 @@ class TimeseriesRepositoryBase:
 
     @async_timed(repository="TimeseriesRepository", method="get_all_cashflows_for_security_date")
     async def get_all_cashflows_for_security_date(
-        self, portfolio_id: str, security_id: str, a_date: date
+        self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> List[Cashflow]:
-        stmt = select(Cashflow).filter_by(
-            portfolio_id=portfolio_id, security_id=security_id, cashflow_date=a_date
+        ranked_cashflows = (
+            select(
+                Cashflow.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=(Cashflow.transaction_id,),
+                    order_by=(Cashflow.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .where(
+                Cashflow.portfolio_id == portfolio_id,
+                Cashflow.security_id == security_id,
+                Cashflow.cashflow_date == a_date,
+                Cashflow.epoch <= epoch,
+            )
+            .subquery()
+        )
+        stmt = (
+            select(Cashflow)
+            .join(ranked_cashflows, Cashflow.id == ranked_cashflows.c.id)
+            .where(ranked_cashflows.c.rn == 1)
+            .order_by(Cashflow.timing.asc(), Cashflow.transaction_id.asc())
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -283,28 +347,45 @@ class TimeseriesRepositoryBase:
         latest_snapshot_epochs = (
             select(
                 DailyPositionSnapshot.security_id.label("security_id"),
+                DailyPositionSnapshot.date.label("date"),
                 func.max(DailyPositionSnapshot.epoch).label("epoch"),
             )
             .where(
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.date == a_date,
+                DailyPositionSnapshot.date <= a_date,
             )
-            .group_by(DailyPositionSnapshot.security_id)
+            .group_by(DailyPositionSnapshot.security_id, DailyPositionSnapshot.date)
             .subquery()
         )
+
+        ranked_snapshots = select(
+            latest_snapshot_epochs.c.security_id,
+            latest_snapshot_epochs.c.date,
+            latest_snapshot_epochs.c.epoch,
+            func.row_number()
+            .over(
+                partition_by=latest_snapshot_epochs.c.security_id,
+                order_by=(
+                    latest_snapshot_epochs.c.date.desc(),
+                    latest_snapshot_epochs.c.epoch.desc(),
+                ),
+            )
+            .label("rn"),
+        ).subquery()
 
         stmt = (
             select(DailyPositionSnapshot)
             .join(
-                latest_snapshot_epochs,
+                ranked_snapshots,
                 and_(
-                    DailyPositionSnapshot.security_id == latest_snapshot_epochs.c.security_id,
-                    DailyPositionSnapshot.epoch == latest_snapshot_epochs.c.epoch,
+                    DailyPositionSnapshot.security_id == ranked_snapshots.c.security_id,
+                    DailyPositionSnapshot.date == ranked_snapshots.c.date,
+                    DailyPositionSnapshot.epoch == ranked_snapshots.c.epoch,
                 ),
             )
             .where(
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.date == a_date,
+                ranked_snapshots.c.rn == 1,
             )
             .order_by(DailyPositionSnapshot.security_id)
         )
@@ -399,9 +480,27 @@ class TimeseriesRepositoryBase:
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
                 DailyPositionSnapshot.security_id == security_id,
                 DailyPositionSnapshot.date < a_date,
-                DailyPositionSnapshot.epoch == epoch,
+                DailyPositionSnapshot.epoch <= epoch,
             )
-            .order_by(DailyPositionSnapshot.date.desc())
+            .order_by(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.epoch.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
+    @async_timed(repository="TimeseriesRepository", method="get_next_snapshot_after")
+    async def get_next_snapshot_after(
+        self, portfolio_id: str, security_id: str, a_date: date, epoch: int
+    ) -> Optional[DailyPositionSnapshot]:
+        stmt = (
+            select(DailyPositionSnapshot)
+            .filter(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.security_id == security_id,
+                DailyPositionSnapshot.date > a_date,
+                DailyPositionSnapshot.epoch <= epoch,
+            )
+            .order_by(DailyPositionSnapshot.date.asc(), DailyPositionSnapshot.epoch.desc())
             .limit(1)
         )
         result = await self.db.execute(stmt)

@@ -9,8 +9,24 @@ Platform architecture governance source:
 
 Local architecture direction and restructuring plan:
 - `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
+- `../lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+- `../lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
 - `docs/architecture/lotus-core-target-architecture.md`
+- `docs/architecture/RFC-0082-contract-family-inventory.md`
+- `docs/architecture/RFC-0083-target-state-gap-analysis.md`
+- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
+- `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
+- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
+- `docs/architecture/RFC-0083-source-data-product-catalog.md`
+- `docs/architecture/RFC-0083-market-reference-data-target-model.md`
+- `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
+- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
+- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
+- `docs/architecture/RFC-0083-production-readiness-closure.md`
+- `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
+- `docs/standards/route-contract-family-registry.json`
 - `docs/standards/layering-boundaries.md`
+- `docs/standards/temporal-vocabulary.md`
 
 Query-service PB/WM reporting contract guide:
 - `docs/features/query_service/WEALTH-REPORTING-API-GUIDE.md`
@@ -39,8 +55,90 @@ The system follows a microservices architecture, where each service is responsib
         * **ValuationScheduler**: Creates backfill valuation jobs, advances watermarks, and creates durable jobs for large-scale price reprocessing events.
         * **ReprocessingWorker**: Consumes the durable reprocessing jobs to fan-out watermark resets in a controlled, scalable manner, mitigating the "Thundering Herd" problem.
     * **Cashflow Calculator**: Calculates cash flows based on transactions.
-4.  **Timeseries Generator Service**: Aggregates daily position data into position-level and portfolio-level time series.
-5.  **Query Service**: Provides a rich FastAPI interface for read operations including foundational datasets (portfolios, positions, transactions, prices, fx rates), operational APIs, integration policy metadata, and simulation workflows.
+4.  **Timeseries and Aggregation Services**: Materialize position-level and portfolio-level time series through explicit worker and aggregation boundaries.
+5.  **Query Service**: Provides the operational read plane for foundational datasets such as portfolios, positions, transactions, prices, FX rates, instruments, lookups, and reporting-oriented source-data queries.
+6.  **Query Control-Plane Service**: Provides governed downstream contract surfaces for analytics inputs, core snapshots, simulation sessions, integration policy, capabilities, support, lineage, and export lifecycles.
+7.  **Event Replay and Financial Reconciliation Services**: Provide replay, DLQ, ingestion-health, reconciliation, and control-execution surfaces outside the ingestion write path.
+
+### RFC-0082 Contract Families
+
+Downstream-facing API ownership is governed by platform RFC-0082 and the local contract-family inventory:
+
+- `docs/architecture/RFC-0082-contract-family-inventory.md`
+
+The active families are:
+
+1. `query_service`: operational reads.
+2. `query_control_plane_service`: analytics inputs, snapshot/simulation, support, lineage, integration policy, and capability contracts.
+3. `ingestion_service`: write ingress and adapter ingestion contracts.
+4. `event_replay_service`: replay, DLQ, ingestion health, and operations control-plane contracts.
+5. `financial_reconciliation_service`: reconciliation and control execution contracts.
+
+`lotus-core` owns canonical source data and analytics inputs. It does not own downstream performance or risk analytics conclusions.
+
+### RFC-0083 Target-State Gap Analysis
+
+RFC-0083 is the master target architecture blueprint for hardening the current `lotus-core` into the
+banking-grade system of record. The local Slice 0 implementation map is:
+
+- `docs/architecture/RFC-0083-target-state-gap-analysis.md`
+
+It identifies the current route, model, temporal, source-data product, ingestion, reconciliation,
+security, and observability gaps that should drive the next implementation slices.
+
+RFC-0083 Slice 1 temporal vocabulary and schema policy is documented in:
+
+- `docs/standards/temporal-vocabulary.md`
+
+RFC-0083 Slice 2 route family enforcement is documented in:
+
+- `docs/standards/route-contract-family-registry.json`
+- `scripts/route_contract_family_guard.py`
+
+RFC-0083 Slice 3 portfolio reconstruction target state is documented in:
+
+- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/reconstruction_identity.py`
+
+RFC-0083 Slice 4 ingestion source-lineage target state is documented in:
+
+- `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/ingestion_evidence.py`
+
+RFC-0083 Slice 5 reconciliation and data-quality target state is documented in:
+
+- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/reconciliation_quality.py`
+
+RFC-0083 Slice 6 source-data product catalog target state is documented in:
+
+- `docs/architecture/RFC-0083-source-data-product-catalog.md`
+- `src/libs/portfolio-common/portfolio_common/source_data_products.py`
+
+RFC-0083 Slice 7 market and reference data target state is documented in:
+
+- `docs/architecture/RFC-0083-market-reference-data-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/market_reference_quality.py`
+
+RFC-0083 Slice 8 endpoint consolidation disposition is documented in:
+
+- `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
+
+RFC-0083 Slice 9 security, tenancy, and lifecycle target state is documented in:
+
+- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/source_data_security.py`
+
+RFC-0083 Slice 10 eventing and supportability target state is documented in:
+
+- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
+- `src/libs/portfolio-common/portfolio_common/event_supportability.py`
+
+RFC-0083 Slice 11 production-readiness closure is documented in:
+
+- `docs/architecture/RFC-0083-production-readiness-closure.md`
+- `docs/standards/rfc-0083-implementation-ledger.json`
+- `scripts/rfc0083_closure_guard.py`
 
 ### Key Architectural Patterns
 
@@ -139,7 +237,7 @@ Machine-readable compose contract:
     # Terminal 2: Position Calculator Service
     python -m src.services.calculators.position_calculator.app.main
 
-    # Terminal 3: Position Valuation Calculator Service (includes scheduler and worker)
+    # Terminal 3: Position Valuation Calculator Service
     python -m src.services.calculators.position_valuation_calculator.app.main
 
     # Terminal 4: Timeseries Generator Service
@@ -148,7 +246,10 @@ Machine-readable compose contract:
     # Terminal 5: Query Service (API)
     python -m src.services.query_service.app.main
 
-    # Terminal 6: Ingestion Service (API)
+    # Terminal 6: Query Control-Plane Service (integration, support, simulation)
+    python -m src.services.query_control_plane_service.app.main
+
+    # Terminal 7: Ingestion Service (API)
     python -m src.services.ingestion_service.app.main
     ```
 
@@ -258,7 +359,7 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     DEMO_DATA_PACK_ENABLED=false docker compose up -d
 
     # Run manually against a running stack
-    python -m tools.demo_data_pack --ingestion-base-url http://core-ingestion.dev.lotus --query-base-url http://core-query.dev.lotus --query-control-plane-base-url http://core-query.dev.lotus
+    python -m tools.demo_data_pack --ingestion-base-url http://core-ingestion.dev.lotus --query-base-url http://core-query.dev.lotus --query-control-plane-base-url http://core-control.dev.lotus
     ```
 
     The current flagship performance demo pack seeds:
@@ -270,11 +371,11 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     Verify benchmark discovery and assignment:
 
     ```bash
-    curl -X POST "http://core-query.dev.lotus/integration/benchmarks/catalog" \
+    curl -X POST "http://core-control.dev.lotus/integration/benchmarks/catalog" \
       -H "Content-Type: application/json" \
       -d '{"as_of_date":"2026-03-27","benchmark_currency":"USD","benchmark_status":"active","benchmark_type":"composite"}'
 
-    curl -X POST "http://core-query.dev.lotus/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
+    curl -X POST "http://core-control.dev.lotus/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
       -H "Content-Type: application/json" \
       -d '{"as_of_date":"2026-03-27"}'
     ```
@@ -303,12 +404,15 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
       -F "file=@./samples/transactions.csv"
     ```
 
-    For lotus-performance/lotus-manage style integration contracts, lotus-core query-service supports:
+    For lotus-performance/lotus-manage style integration contracts, use the
+    query control plane. `core-query.dev.lotus` is the operational read plane;
+    `core-control.dev.lotus` owns governed analytics-input, policy, support,
+    lineage, and simulation contracts.
 
     ```bash
-    curl "http://core-query.dev.lotus/integration/policy/effective?consumer_system=lotus-performance&tenant_id=default&include_sections=OVERVIEW&include_sections=HOLDINGS"
+    curl "http://core-control.dev.lotus/integration/policy/effective?consumer_system=lotus-performance&tenant_id=default&include_sections=OVERVIEW&include_sections=HOLDINGS"
 
-    curl "http://core-query.dev.lotus/integration/capabilities?consumer_system=lotus-gateway&tenant_id=default"
+    curl "http://core-control.dev.lotus/integration/capabilities?consumer_system=lotus-gateway&tenant_id=default"
     ```
 
     Integration policy controls (optional):
@@ -340,23 +444,24 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     Once the services have processed the data, you can query the `query-service` API endpoints.
 
       * API Docs: `http://core-query.dev.lotus/docs`
+      * Query control plane API Docs: `http://core-control.dev.lotus/docs`
 
 3.  **Use Support and Lineage APIs (Preferred over direct DB access)**:
-    Use the query-service operational APIs for support diagnostics.
+    Use the query control plane support APIs for diagnostics.
 
     ```bash
     # Portfolio-level support overview
-    curl "http://core-query.dev.lotus/support/portfolios/PORT001/overview"
+    curl "http://core-control.dev.lotus/support/portfolios/PORT001/overview"
 
     # Key-level lineage (epoch/watermark + latest artifacts)
-    curl "http://core-query.dev.lotus/lineage/portfolios/PORT001/securities/SEC001"
+    curl "http://core-control.dev.lotus/lineage/portfolios/PORT001/securities/SEC001"
 
     # Portfolio lineage key listing for support dashboards
-    curl "http://core-query.dev.lotus/lineage/portfolios/PORT001/keys?reprocessing_status=CURRENT&skip=0&limit=100"
+    curl "http://core-control.dev.lotus/lineage/portfolios/PORT001/keys?reprocessing_status=CURRENT&skip=0&limit=100"
 
     # Valuation and aggregation support job queues
-    curl "http://core-query.dev.lotus/support/portfolios/PORT001/valuation-jobs?status=PENDING&skip=0&limit=100"
-    curl "http://core-query.dev.lotus/support/portfolios/PORT001/aggregation-jobs?status=PROCESSING&skip=0&limit=100"
+    curl "http://core-control.dev.lotus/support/portfolios/PORT001/valuation-jobs?status=PENDING&skip=0&limit=100"
+    curl "http://core-control.dev.lotus/support/portfolios/PORT001/aggregation-jobs?status=PROCESSING&skip=0&limit=100"
     ```
 
 ## Code Quality

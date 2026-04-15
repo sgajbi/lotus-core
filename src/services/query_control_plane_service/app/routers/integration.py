@@ -2,6 +2,7 @@ from typing import cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.core_snapshot_dto import (
@@ -156,6 +157,7 @@ async def get_effective_integration_policy(
         "When: Used by downstream systems that need policy-aware positions, totals, "
         "delta, or enrichment views without direct query-service coupling."
     ),
+    openapi_extra=source_data_product_openapi_extra("PortfolioStateSnapshot"),
 )
 async def create_core_snapshot(
     request: CoreSnapshotRequest,
@@ -253,6 +255,7 @@ async def create_core_snapshot(
         "Records are deterministic and preserve request order. Unknown securities are returned "
         "with null issuer fields."
     ),
+    openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )
 async def get_instrument_enrichment_bulk(
     request: InstrumentEnrichmentBulkRequest,
@@ -279,8 +282,10 @@ async def get_instrument_enrichment_bulk(
         "What: Resolve benchmark assignment for a portfolio as-of a point-in-time date.\n"
         "How: Applies effective-dating and assignment version ordering to return "
         "deterministic match.\n"
-        "When: Used by lotus-performance before benchmark analytics workflows."
+        "When: Used by lotus-performance, lotus-risk, and reporting workflows before "
+        "benchmark-aware analytics or evidence generation."
     ),
+    openapi_extra=source_data_product_openapi_extra("BenchmarkAssignment"),
 )
 async def resolve_portfolio_benchmark_assignment(
     request: BenchmarkAssignmentRequest,
@@ -329,6 +334,7 @@ async def resolve_portfolio_benchmark_assignment(
         "When: Used by lotus-performance and other downstream consumers to calculate benchmark "
         "returns across rebalance windows."
     ),
+    openapi_extra=source_data_product_openapi_extra("BenchmarkConstituentWindow"),
 )
 async def fetch_benchmark_composition_window(
     request: BenchmarkCompositionWindowRequest,
@@ -353,8 +359,7 @@ async def fetch_benchmark_composition_window(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                "No overlapping benchmark definition found for benchmark_id and "
-                "requested window."
+                "No overlapping benchmark definition found for benchmark_id and requested window."
             ),
         )
     return response
@@ -456,8 +461,10 @@ async def fetch_index_catalog(
         "What: Return benchmark market series inputs required by lotus-performance.\n"
         "How: Resolves components and returns aligned raw series honoring requested "
         "series_fields, deterministic paging, and benchmark-to-target FX context semantics.\n"
-        "When: Used for benchmark analytics and replay-safe portfolio attribution calculations."
+        "When: Used by lotus-performance and lotus-risk for benchmark analytics and replay-safe "
+        "portfolio or risk attribution calculations."
     ),
+    openapi_extra=source_data_product_openapi_extra("MarketDataWindow"),
 )
 async def fetch_benchmark_market_series(
     request: BenchmarkMarketSeriesRequest,
@@ -488,6 +495,7 @@ async def fetch_benchmark_market_series(
         "How: Reads canonical time series records with deterministic ordering.\n"
         "When: Used by downstream analytics pipelines requiring raw index price inputs."
     ),
+    openapi_extra=source_data_product_openapi_extra("IndexSeriesWindow"),
 )
 async def fetch_index_price_series(
     request: IndexSeriesRequest,
@@ -513,6 +521,7 @@ async def fetch_index_price_series(
         "How: Reads canonical index return records with explicit convention fields.\n"
         "When: Used by lotus-performance for return-based benchmark processing."
     ),
+    openapi_extra=source_data_product_openapi_extra("IndexSeriesWindow"),
 )
 async def fetch_index_return_series(
     request: IndexSeriesRequest,
@@ -564,8 +573,10 @@ async def fetch_benchmark_return_series(
     description=(
         "What: Return raw risk-free reference series for requested currency and window.\n"
         "How: Serves canonical risk-free records with convention metadata and lineage.\n"
-        "When: Used by lotus-performance for excess return and risk-adjusted analytics inputs."
+        "When: Used by lotus-performance and lotus-risk for excess return, Sharpe, and "
+        "risk-adjusted analytics inputs."
     ),
+    openapi_extra=source_data_product_openapi_extra("RiskFreeSeriesWindow"),
 )
 async def fetch_risk_free_series(
     request: RiskFreeSeriesRequest,
@@ -584,8 +595,10 @@ async def fetch_risk_free_series(
     description=(
         "What: Return effective classification taxonomy records.\n"
         "How: Applies as-of effective dating and optional scope filtering.\n"
-        "When: Used by lotus-performance attribution workflows to enforce shared domain labels."
+        "When: Used by lotus-performance, lotus-risk, lotus-gateway, and lotus-advise to enforce "
+        "shared classification labels instead of local taxonomy drift."
     ),
+    openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )
 async def fetch_classification_taxonomy(
     request: ClassificationTaxonomyRequest,
@@ -610,6 +623,7 @@ async def fetch_classification_taxonomy(
         "quality distribution.\n"
         "When: Used by ops monitoring and pre-run validation before analytics processing."
     ),
+    openapi_extra=source_data_product_openapi_extra("DataQualityCoverageReport"),
 )
 async def get_benchmark_coverage(
     request: CoverageRequest,
@@ -640,6 +654,7 @@ async def get_benchmark_coverage(
         "quality distribution.\n"
         "When: Used by ops monitoring and analytics readiness checks."
     ),
+    openapi_extra=source_data_product_openapi_extra("DataQualityCoverageReport"),
 )
 async def get_risk_free_coverage(
     currency: str = Query(..., description="Risk-free series currency.", examples=["USD"]),

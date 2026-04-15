@@ -166,6 +166,53 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
     assert "daily_position_snapshots.security_id AS security_id" in compiled_query
 
 
+async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_latest_rows(
+    repository: PositionRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.mappings.return_value.all.return_value = [
+        {
+            "security_id": "SEC_A",
+            "market_price": 101.0,
+            "market_value": 1212.0,
+            "unrealized_gain_loss": 112.0,
+            "market_value_local": 1212.0,
+            "unrealized_gain_loss_local": 112.0,
+        },
+        {
+            "security_id": None,
+            "market_price": 1.0,
+            "market_value": 1.0,
+            "unrealized_gain_loss": 1.0,
+            "market_value_local": 1.0,
+            "unrealized_gain_loss_local": 1.0,
+        },
+    ]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    valuation_map = await repository.get_latest_snapshot_valuation_map_as_of_date(
+        "P1", date(2025, 1, 31)
+    )
+
+    assert valuation_map == {
+        "SEC_A": {
+            "market_price": 101.0,
+            "market_value": 1212.0,
+            "unrealized_gain_loss": 112.0,
+            "market_value_local": 1212.0,
+            "unrealized_gain_loss_local": 112.0,
+        }
+    }
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "daily_position_snapshots.date <= '2025-01-31'" in compiled_query
+    assert "row_number() OVER (PARTITION BY daily_position_snapshots.security_id" in compiled_query
+    assert (
+        "ORDER BY daily_position_snapshots.date DESC, daily_position_snapshots.id DESC"
+        in compiled_query
+    )
+
+
 async def test_portfolio_exists_true(repository: PositionRepository, mock_db_session: AsyncMock):
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = "P1"

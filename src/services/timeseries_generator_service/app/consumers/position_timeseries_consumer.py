@@ -27,6 +27,7 @@ from ..repositories.timeseries_repository import TimeseriesRepository
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "timeseries-generator"
+MAX_DEPENDENT_PROPAGATION_ROWS = 500
 
 
 class InstrumentNotFoundError(Exception):
@@ -146,6 +147,122 @@ class PositionTimeseriesConsumer(BaseConsumer):
             a_date,
         )
 
+    async def _materialize_position_timeseries(
+        self,
+        repo: TimeseriesRepository,
+        *,
+        current_snapshot: DailyPositionSnapshot,
+        previous_snapshot: DailyPositionSnapshot | None,
+        epoch: int,
+        require_existing: bool = False,
+    ) -> tuple[bool, object]:
+        cashflows = await repo.get_all_cashflows_for_security_date(
+            current_snapshot.portfolio_id,
+            current_snapshot.security_id,
+            current_snapshot.date,
+            epoch,
+        )
+        existing_timeseries = await repo.get_position_timeseries(
+            current_snapshot.portfolio_id,
+            current_snapshot.security_id,
+            current_snapshot.date,
+            epoch,
+        )
+        if require_existing and existing_timeseries is None:
+            return False, None
+
+        new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
+            current_snapshot=current_snapshot,
+            previous_snapshot=previous_snapshot,
+            cashflows=cashflows,
+            epoch=epoch,
+        )
+        if not self._has_material_change(existing_timeseries, new_timeseries_record):
+            return False, new_timeseries_record
+
+        await repo.upsert_position_timeseries(new_timeseries_record)
+        return True, new_timeseries_record
+
+    async def _publish_position_timeseries_completed(
+        self,
+        outbox_repo: OutboxRepository,
+        *,
+        portfolio_id: str,
+        security_id: str,
+        timeseries_date: date,
+        epoch: int,
+        correlation_id: str,
+    ) -> None:
+        position_completion_event = PositionTimeseriesDayCompletedEvent(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            timeseries_date=timeseries_date,
+            epoch=epoch,
+            correlation_id=correlation_id,
+        )
+        await outbox_repo.create_outbox_event(
+            aggregate_type="PositionTimeseriesStage",
+            aggregate_id=f"{portfolio_id}:{security_id}:{timeseries_date}:{epoch}",
+            event_type="PositionTimeseriesDayCompleted",
+            topic=KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC,
+            payload=position_completion_event.model_dump(mode="json"),
+            correlation_id=correlation_id,
+        )
+
+    async def _propagate_dependent_position_timeseries(
+        self,
+        db_session,
+        repo: TimeseriesRepository,
+        outbox_repo: OutboxRepository,
+        *,
+        current_snapshot: DailyPositionSnapshot,
+        epoch: int,
+        correlation_id: str,
+    ) -> None:
+        previous_snapshot = current_snapshot
+        for _ in range(MAX_DEPENDENT_PROPAGATION_ROWS):
+            next_snapshot = await repo.get_next_snapshot_after(
+                previous_snapshot.portfolio_id,
+                previous_snapshot.security_id,
+                previous_snapshot.date,
+                epoch,
+            )
+            if next_snapshot is None:
+                return
+
+            changed, _ = await self._materialize_position_timeseries(
+                repo,
+                current_snapshot=next_snapshot,
+                previous_snapshot=previous_snapshot,
+                epoch=epoch,
+                require_existing=True,
+            )
+            if not changed:
+                return
+
+            await self._stage_aggregation_job(
+                db_session,
+                next_snapshot.portfolio_id,
+                next_snapshot.date,
+                correlation_id,
+            )
+            await self._publish_position_timeseries_completed(
+                outbox_repo,
+                portfolio_id=next_snapshot.portfolio_id,
+                security_id=next_snapshot.security_id,
+                timeseries_date=next_snapshot.date,
+                epoch=epoch,
+                correlation_id=correlation_id,
+            )
+            previous_snapshot = next_snapshot
+
+        logger.warning(
+            "Stopped dependent position-timeseries propagation after %s rows for %s/%s.",
+            MAX_DEPENDENT_PROPAGATION_ROWS,
+            current_snapshot.portfolio_id,
+            current_snapshot.security_id,
+        )
+
     async def _process_message_with_retry(self, msg: Message):
         try:
             event_data = json.loads(msg.value().decode("utf-8"))
@@ -195,54 +312,50 @@ class PositionTimeseriesConsumer(BaseConsumer):
                             epoch=event.epoch,
                         )
 
-                        cashflows = await repo.get_all_cashflows_for_security_date(
-                            event.portfolio_id, event.security_id, event.date
-                        )
-
-                        existing_timeseries = await repo.get_position_timeseries(
-                            event.portfolio_id, event.security_id, event.date, event.epoch
-                        )
-
-                        new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
+                        changed, _ = await self._materialize_position_timeseries(
+                            repo,
                             current_snapshot=current_snapshot,
                             previous_snapshot=previous_snapshot,
-                            cashflows=cashflows,
                             epoch=event.epoch,
                         )
 
-                        if not self._has_material_change(
-                            existing_timeseries, new_timeseries_record
-                        ):
+                        if not changed:
                             logger.info(
                                 (
                                     "Position timeseries already up to date for %s on %s epoch %s. "
-                                    "Skipping downstream fan-out."
+                                    "Checking dependent rows before skipping downstream fan-out."
                                 ),
                                 event.security_id,
                                 event.date,
                                 event.epoch,
                             )
+                            await self._propagate_dependent_position_timeseries(
+                                db,
+                                repo,
+                                outbox_repo,
+                                current_snapshot=current_snapshot,
+                                epoch=event.epoch,
+                                correlation_id=correlation_id,
+                            )
                             return
 
-                        await repo.upsert_position_timeseries(new_timeseries_record)
                         await self._stage_aggregation_job(
                             db, event.portfolio_id, event.date, correlation_id
                         )
-                        position_completion_event = PositionTimeseriesDayCompletedEvent(
+                        await self._publish_position_timeseries_completed(
+                            outbox_repo,
                             portfolio_id=event.portfolio_id,
                             security_id=event.security_id,
                             timeseries_date=event.date,
                             epoch=event.epoch,
                             correlation_id=correlation_id,
                         )
-                        await outbox_repo.create_outbox_event(
-                            aggregate_type="PositionTimeseriesStage",
-                            aggregate_id=(
-                                f"{event.portfolio_id}:{event.security_id}:{event.date}:{event.epoch}"
-                            ),
-                            event_type="PositionTimeseriesDayCompleted",
-                            topic=KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC,
-                            payload=position_completion_event.model_dump(mode="json"),
+                        await self._propagate_dependent_position_timeseries(
+                            db,
+                            repo,
+                            outbox_repo,
+                            current_snapshot=current_snapshot,
+                            epoch=event.epoch,
                             correlation_id=correlation_id,
                         )
 

@@ -35,7 +35,7 @@ def test_normalize_position_flow_amount(classification: str, amount: Decimal, ex
         ("TRANSFER", False, True, ("transfer", "external")),
         ("TRANSFER", False, False, ("transfer", "internal")),
         ("INCOME", True, True, ("income", "operational")),
-        ("EXPENSE", True, True, ("expense", "operational")),
+        ("EXPENSE", True, True, ("fee", "operational")),
         ("UNKNOWN_CLASSIFICATION", False, False, ("other", "operational")),
     ],
 )

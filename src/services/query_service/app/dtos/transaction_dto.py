@@ -1,11 +1,16 @@
 # services/query-service/app/dtos/transaction_dto.py
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .cashflow_dto import CashflowRecord
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 
 
 class TransactionCostRecord(BaseModel):
@@ -120,7 +125,7 @@ class TransactionRecord(BaseModel):
     external_cash_transaction_id: Optional[str] = Field(
         None,
         description=(
-            "Linked upstream cash transaction id when cash_entry_mode is " "UPSTREAM_PROVIDED."
+            "Linked upstream cash transaction id when cash_entry_mode is UPSTREAM_PROVIDED."
         ),
         examples=["CASH-ENTRY-2026-0001"],
     )
@@ -431,11 +436,13 @@ class TransactionRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class PaginatedTransactionResponse(BaseModel):
+class PaginatedTransactionResponse(SourceDataProductRuntimeMetadata):
     """
     Represents the paginated API response for a transaction query.
     """
 
+    product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="The ID of the portfolio.")
     total: int = Field(..., description="The total number of transactions matching the query.")
     skip: int = Field(..., description="The number of records skipped (offset).")

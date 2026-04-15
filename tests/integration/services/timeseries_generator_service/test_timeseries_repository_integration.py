@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
+    Cashflow,
     DailyPositionSnapshot,
     Instrument,
     Portfolio,
@@ -10,6 +11,7 @@ from portfolio_common.database_models import (
     PortfolioTimeseries,
     PositionState,
     PositionTimeseries,
+    Transaction,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -58,6 +60,29 @@ def _position_ts(
         fees=Decimal("0"),
         quantity=Decimal("10"),
         cost=Decimal("100"),
+    )
+
+
+def _transaction(
+    transaction_id: str,
+    portfolio_id: str,
+    security_id: str,
+    transaction_date: date,
+    *,
+    transaction_type: str = "BUY",
+) -> Transaction:
+    return Transaction(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id=security_id,
+        security_id=security_id,
+        transaction_date=transaction_date,
+        transaction_type=transaction_type,
+        quantity=Decimal("1"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        currency="USD",
     )
 
 
@@ -227,6 +252,7 @@ async def test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_h
         session.add(_snapshot(portfolio_id, "CASH_USD_FIRST", first_day, epoch=0))
         session.add(_position_ts(portfolio_id, "CASH_USD_FIRST", first_day, epoch=0))
         session.commit()
+    await async_db_session.rollback()
 
     repo = TimeseriesRepository(async_db_session)
     claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
@@ -495,3 +521,251 @@ async def test_find_and_claim_eligible_jobs_does_not_need_prior_day_when_current
 
     assert len(claimed_jobs) == 1
     assert claimed_jobs[0].aggregation_date == target_day
+
+
+async def test_get_all_position_timeseries_for_date_returns_one_authoritative_asof_row_per_security(
+    db_engine, clean_db, async_db_session: AsyncSession
+):
+    portfolio_id = "PTS_ASOF_PORT"
+    target_date = date(2025, 8, 20)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.add_all(
+            [
+                Instrument(
+                    security_id="SEC_A",
+                    name="Sec A",
+                    isin="ISIN_A",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+                Instrument(
+                    security_id="SEC_B",
+                    name="Sec B",
+                    isin="ISIN_B",
+                    currency="USD",
+                    product_type="EQ",
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                PositionTimeseries(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_A",
+                    date=date(2025, 8, 18),
+                    epoch=1,
+                    bod_market_value=Decimal("10"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    eod_market_value=Decimal("11"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("1"),
+                    cost=Decimal("10"),
+                ),
+                PositionTimeseries(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_A",
+                    date=date(2025, 8, 19),
+                    epoch=1,
+                    bod_market_value=Decimal("20"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    eod_market_value=Decimal("21"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("2"),
+                    cost=Decimal("20"),
+                ),
+                PositionTimeseries(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_A",
+                    date=date(2025, 8, 19),
+                    epoch=2,
+                    bod_market_value=Decimal("30"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    eod_market_value=Decimal("31"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("3"),
+                    cost=Decimal("30"),
+                ),
+                PositionTimeseries(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_B",
+                    date=date(2025, 8, 17),
+                    epoch=4,
+                    bod_market_value=Decimal("40"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    eod_market_value=Decimal("41"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("4"),
+                    cost=Decimal("40"),
+                ),
+                PositionTimeseries(
+                    portfolio_id=portfolio_id,
+                    security_id="SEC_B",
+                    date=date(2025, 8, 21),
+                    epoch=1,
+                    bod_market_value=Decimal("50"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    eod_market_value=Decimal("51"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("5"),
+                    cost=Decimal("50"),
+                ),
+            ]
+        )
+        session.commit()
+    await async_db_session.rollback()
+
+    repo = TimeseriesRepository(async_db_session)
+
+    rows = await repo.get_all_position_timeseries_for_date(portfolio_id, target_date, 4)
+
+    assert [(row.security_id, row.date, row.epoch) for row in rows] == [
+        ("SEC_A", date(2025, 8, 19), 2),
+        ("SEC_B", date(2025, 8, 17), 4),
+    ]
+    assert len(rows) == 2
+
+
+async def test_get_all_cashflows_for_security_date_returns_latest_restatement_per_transaction_id(
+    db_engine, clean_db, async_db_session: AsyncSession
+):
+    portfolio_id = "CF_ASOF_PORT"
+    security_id = "CASH_USD"
+    cashflow_date = date(2025, 8, 20)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.add(
+            Instrument(
+                security_id=security_id,
+                name="Cash USD",
+                isin="CASH_USD",
+                currency="USD",
+                product_type="Cash",
+            )
+        )
+        session.add_all(
+            [
+                _transaction("TXN_RESTATED", portfolio_id, security_id, cashflow_date),
+                _transaction("TXN_SECOND", portfolio_id, security_id, cashflow_date),
+                _transaction("TXN_FUTURE", portfolio_id, security_id, cashflow_date),
+            ]
+        )
+        session.add_all(
+            [
+                Cashflow(
+                    transaction_id="TXN_RESTATED",
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    cashflow_date=cashflow_date,
+                    epoch=1,
+                    amount=Decimal("100"),
+                    currency="USD",
+                    classification="CASHFLOW_OUT",
+                    timing="BOD",
+                    calculation_type="NET",
+                    is_position_flow=False,
+                    is_portfolio_flow=True,
+                ),
+                Cashflow(
+                    transaction_id="TXN_RESTATED",
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    cashflow_date=cashflow_date,
+                    epoch=2,
+                    amount=Decimal("100"),
+                    currency="USD",
+                    classification="EXPENSE",
+                    timing="EOD",
+                    calculation_type="NET",
+                    is_position_flow=False,
+                    is_portfolio_flow=False,
+                ),
+                Cashflow(
+                    transaction_id="TXN_SECOND",
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    cashflow_date=cashflow_date,
+                    epoch=1,
+                    amount=Decimal("250"),
+                    currency="USD",
+                    classification="CASHFLOW_IN",
+                    timing="BOD",
+                    calculation_type="NET",
+                    is_position_flow=False,
+                    is_portfolio_flow=True,
+                ),
+                Cashflow(
+                    transaction_id="TXN_FUTURE",
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    cashflow_date=cashflow_date,
+                    epoch=3,
+                    amount=Decimal("999"),
+                    currency="USD",
+                    classification="CASHFLOW_IN",
+                    timing="BOD",
+                    calculation_type="NET",
+                    is_position_flow=False,
+                    is_portfolio_flow=True,
+                ),
+            ]
+        )
+        session.commit()
+    await async_db_session.rollback()
+
+    repo = TimeseriesRepository(async_db_session)
+
+    rows = await repo.get_all_cashflows_for_security_date(
+        portfolio_id, security_id, cashflow_date, 2
+    )
+
+    assert [(row.transaction_id, row.epoch) for row in rows] == [
+        ("TXN_SECOND", 1),
+        ("TXN_RESTATED", 2),
+    ]
+    restated_row = next(row for row in rows if row.transaction_id == "TXN_RESTATED")
+    assert restated_row.classification == "EXPENSE"
+    assert restated_row.timing == "EOD"
+    assert restated_row.is_portfolio_flow is False
+    assert all(row.transaction_id != "TXN_FUTURE" for row in rows)

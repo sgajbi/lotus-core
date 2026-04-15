@@ -6,6 +6,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
+
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
 IncomeType = Literal["DIVIDEND", "INTEREST", "CASH_IN_LIEU"]
 ActivityBucketType = Literal["INFLOWS", "OUTFLOWS", "FEES", "TAXES"]
@@ -442,7 +448,9 @@ class CashBalancesTotals(BaseModel):
     )
 
 
-class CashBalancesResponse(BaseModel):
+class CashBalancesResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.")
     portfolio_currency: str = Field(..., description="Portfolio base currency.")
     reporting_currency: str = Field(..., description="Effective reporting currency.")
@@ -537,7 +545,9 @@ class HoldingSnapshotRecord(BaseModel):
     valuation_status: str | None = Field(None, description="Snapshot valuation status.")
 
 
-class HoldingsSnapshotResponse(BaseModel):
+class HoldingsSnapshotResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-001"])
     portfolio_currency: str = Field(..., description="Portfolio base currency.", examples=["USD"])
     reporting_currency: str = Field(
@@ -637,7 +647,9 @@ class IncomeSummaryTotals(BaseModel):
     )
 
 
-class IncomeSummaryResponse(BaseModel):
+class IncomeSummaryResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
+    product_version: Literal["v1"] = product_version_field()
     scope_type: ReportingScopeType = Field(..., description="Resolved reporting scope type.")
     scope: ReportingScope = Field(..., description="Echoed scope payload.")
     resolved_window: ReportingWindow = Field(..., description="Effective reporting window used.")
@@ -691,7 +703,9 @@ class ActivitySummaryTotals(BaseModel):
     )
 
 
-class ActivitySummaryResponse(BaseModel):
+class ActivitySummaryResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
+    product_version: Literal["v1"] = product_version_field()
     scope_type: ReportingScopeType = Field(..., description="Resolved reporting scope type.")
     scope: ReportingScope = Field(..., description="Echoed scope payload.")
     resolved_window: ReportingWindow = Field(..., description="Effective reporting window used.")

@@ -85,12 +85,33 @@ The portfolio companion endpoint now has a stronger contract baseline as well.
    - `cash_flow_type`
    - `flow_scope`
    - `source_classification`
-5. Portfolio diagnostics are endpoint-specific and include:
+5. The governed analytics cash-flow vocabulary is:
+   - `external_flow` for portfolio-level deposits, withdrawals, and external funding
+   - `internal_trade_flow` for internal settlement, trade, FX, and position-reallocation legs
+   - `income` for operational income
+   - `fee` for persisted `EXPENSE` classifications, including advisory, custody, tax, and other fee-like charges
+   - `transfer` for transfer movements that are not normalized to internal trade flow
+   - `other` for unsupported or residual classifications that still need provenance
+6. Portfolio diagnostics are endpoint-specific and include:
    - `expected_business_dates_count`
    - `returned_observation_dates_count`
    - `missing_dates_count`
    - `stale_points_count`
    - `cash_flows_included`
+
+### Day-boundary capital continuity
+The query-control-plane analytics input contract serves TWR-safe beginning capital. When persisted
+position timeseries rows contain stale BOD values, the serving path derives the effective beginning
+market value from immediately preceding active EOD position state unless a BOD position flow
+explicitly changes the opening state. Positions that reappear after an absent date are not carried
+from stale historical rows. If internal position-flow evidence explains the reappearance and there
+is no portfolio-level external flow, the serving path treats the position's EOD value as beginning
+capital rather than publishing an artificial return from zero. Portfolio-level external flows remain
+authoritative and are not converted into beginning capital. Cash-book positions with only internal
+trade-settlement flows are also neutralized to their EOD value for beginning-capital purposes, because
+cash settlement legs rebalance internal capital rather than generate investment return. Operational
+fees are not internal flows; they are emitted as `cash_flow_type="fee"` and should remain visible to
+downstream net/gross TWR treatment.
 
 ### Why this matters
 This endpoint feeds stateful TWR and MWR. The contract now states clearly:

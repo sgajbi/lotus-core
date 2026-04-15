@@ -6,6 +6,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
+
 
 class AnalyticsWindow(BaseModel):
     start_date: date = Field(
@@ -94,8 +100,7 @@ class PageMetadata(BaseModel):
     snapshot_epoch: int = Field(
         ...,
         description=(
-            "Snapshot epoch pinned for the paged traversal to keep pages internally "
-            "consistent."
+            "Snapshot epoch pinned for the paged traversal to keep pages internally consistent."
         ),
         examples=[7],
     )
@@ -134,8 +139,7 @@ class QualityDiagnostics(BaseModel):
     cash_flows_included: bool = Field(
         False,
         description=(
-            "Whether the response rows include canonical per-position cash_flow "
-            "observations."
+            "Whether the response rows include canonical per-position cash_flow observations."
         ),
         examples=[True],
     )
@@ -196,7 +200,7 @@ class CashFlowObservation(BaseModel):
         "external_flow",
         "internal_trade_flow",
         "income",
-        "expense",
+        "fee",
         "transfer",
         "other",
     ] = Field(
@@ -312,7 +316,11 @@ class PortfolioTimeseriesObservation(BaseModel):
     model_config = ConfigDict()
 
 
-class PortfolioAnalyticsTimeseriesResponse(BaseModel):
+class PortfolioAnalyticsTimeseriesResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["PortfolioTimeseriesInput"] = product_name_field(
+        "PortfolioTimeseriesInput"
+    )
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
@@ -542,7 +550,9 @@ class PositionTimeseriesRow(BaseModel):
     model_config = ConfigDict()
 
 
-class PositionAnalyticsTimeseriesResponse(BaseModel):
+class PositionAnalyticsTimeseriesResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["PositionTimeseriesInput"] = product_name_field("PositionTimeseriesInput")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
@@ -599,7 +609,11 @@ class PortfolioAnalyticsReferenceRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class PortfolioAnalyticsReferenceResponse(BaseModel):
+class PortfolioAnalyticsReferenceResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["PortfolioAnalyticsReference"] = product_name_field(
+        "PortfolioAnalyticsReference"
+    )
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
@@ -623,9 +637,7 @@ class PortfolioAnalyticsReferenceResponse(BaseModel):
     )
     performance_end_date: date | None = Field(
         None,
-        description=(
-            "Latest available portfolio valuation date, bounded by resolved_as_of_date."
-        ),
+        description=("Latest available portfolio valuation date, bounded by resolved_as_of_date."),
         examples=["2025-12-31"],
     )
     client_id: str = Field(
@@ -782,7 +794,9 @@ class AnalyticsExportJobResponse(BaseModel):
     result_endpoint: str = Field(
         ...,
         description="Deterministic result retrieval path for this export job.",
-        examples=["/integration/exports/analytics-timeseries/jobs/aexp_7e8ad3e7bc6f4d3b97de66f1/result"],
+        examples=[
+            "/integration/exports/analytics-timeseries/jobs/aexp_7e8ad3e7bc6f4d3b97de66f1/result"
+        ],
     )
     result_format: Literal["json", "ndjson"] = Field(
         ...,

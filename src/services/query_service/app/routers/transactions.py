@@ -4,6 +4,7 @@ from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dependencies import pagination_params, sorting_params
@@ -32,6 +33,7 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-TXN-00
         "the portfolio. Results default to latest-first ordering by `transaction_date` "
         "descending unless `sort_by` and `sort_order` are provided explicitly."
     ),
+    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def get_transactions(
     portfolio_id: str = Path(
@@ -108,8 +110,7 @@ async def get_transactions(
     include_projected: bool = Query(
         False,
         description=(
-            "When true, includes future-dated projected transactions "
-            "beyond current business_date."
+            "When true, includes future-dated projected transactions beyond current business_date."
         ),
         examples=[False],
     ),

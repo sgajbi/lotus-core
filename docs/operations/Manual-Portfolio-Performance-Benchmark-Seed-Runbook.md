@@ -66,7 +66,7 @@ The following services must already be running:
 Expected local endpoints:
 
 - ingestion: `http://core-ingestion.dev.lotus`
-- query control plane: `http://core-query.dev.lotus`
+- query control plane: `http://core-control.dev.lotus`
 - gateway: `http://gateway.dev.lotus`
 
 The following portfolio must already exist from the manual portfolio bootstrap:
@@ -173,7 +173,7 @@ Run these checks after the seed completes.
 
 ### 1. Benchmark assignment resolves
 
-`POST http://core-query.dev.lotus/integration/portfolios/MANUAL_PB_USD_001/benchmark-assignment`
+`POST http://core-control.dev.lotus/integration/portfolios/MANUAL_PB_USD_001/benchmark-assignment`
 
 Pass criteria:
 
@@ -189,7 +189,7 @@ Fail criteria:
 
 ### 2. Portfolio analytics timeseries resolves
 
-`POST http://core-query.dev.lotus/integration/portfolios/MANUAL_PB_USD_001/analytics/portfolio-timeseries`
+`POST http://core-control.dev.lotus/integration/portfolios/MANUAL_PB_USD_001/analytics/portfolio-timeseries`
 
 Pass criteria:
 
