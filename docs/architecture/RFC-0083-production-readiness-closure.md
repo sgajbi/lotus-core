@@ -90,6 +90,17 @@ The canonical reference-data issue proof completed on 2026-04-15:
 4. live `POST /integration/indices/catalog` returned only the canonical component records for
    `IDX_GLOBAL_EQUITY_TR` and `IDX_GLOBAL_BOND_TR`, each with governed broad-market sector labels.
 
+Additional live source-data coverage proof completed on 2026-04-16:
+
+1. live `POST /integration/portfolios/PB_SG_GLOBAL_BAL_001/benchmark-assignment` resolved
+   `BMK_PB_GLOBAL_BALANCED_60_40` for governed `as_of_date=2026-04-10`,
+2. live `POST /integration/benchmarks/BMK_PB_GLOBAL_BALANCED_60_40/coverage` returned
+   `data_quality_status=COMPLETE`, `total_points=270`, and `missing_dates_count=0` for
+   `2026-01-01` through `2026-03-31`,
+3. live `POST /integration/reference/risk-free-series/coverage?currency=USD` returned
+   `data_quality_status=COMPLETE`, `total_points=90`, and `missing_dates_count=0` for the same
+   window.
+
 ## Validation
 
 Slice 11 validation is:
