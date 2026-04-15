@@ -39,6 +39,8 @@ class EnterpriseSettings(Protocol):
     enterprise_enforce_read_authz: bool
     enterprise_audit_reads: bool
     enterprise_require_capability_rules: bool
+    enterprise_secret_rotation_days: int
+    enterprise_max_write_payload_bytes: int
     enterprise_feature_flags: dict[str, Any]
     enterprise_capability_rules: dict[str, Any]
 
@@ -62,6 +64,15 @@ class EnterpriseReadinessRuntime:
             return bool(getattr(self.load_settings(), settings_attr))
         return self.env_bool(name, default.strip().lower() in {"1", "true", "yes", "on"})
 
+    def env_integer(self, name: str, default: int) -> int:
+        settings_attr = {
+            "ENTERPRISE_SECRET_ROTATION_DAYS": "enterprise_secret_rotation_days",
+            "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES": "enterprise_max_write_payload_bytes",
+        }.get(name)
+        if settings_attr:
+            return int(getattr(self.load_settings(), settings_attr))
+        return self.env_int(name, default)
+
     def load_json_map(self, name: str) -> dict[str, Any]:
         settings = self.load_settings()
         if name == "ENTERPRISE_FEATURE_FLAGS_JSON":
@@ -80,11 +91,11 @@ class EnterpriseReadinessRuntime:
         if not self.enterprise_policy_version().strip():
             issues.append("missing_policy_version")
 
-        rotation_days = self.env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90)
+        rotation_days = self.env_integer("ENTERPRISE_SECRET_ROTATION_DAYS", 90)
         if rotation_days <= 0 or rotation_days > 90:
             issues.append("secret_rotation_days_out_of_range")
 
-        max_write_payload_bytes = self.env_int("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576)
+        max_write_payload_bytes = self.env_integer("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576)
         if max_write_payload_bytes <= 0:
             issues.append("max_write_payload_bytes_out_of_range")
 
@@ -265,7 +276,9 @@ def build_enterprise_audit_middleware(
     audit_emitter: AuditEmitter,
 ) -> MiddlewareCallable:
     async def middleware(request: Request, call_next: MiddlewareNext) -> Response:
-        max_write_payload_bytes = runtime.env_int("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576)
+        max_write_payload_bytes = runtime.env_integer(
+            "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576
+        )
         try:
             content_length = int(request.headers.get("content-length", "0"))
         except ValueError:

@@ -20,6 +20,8 @@ class _Settings:
     enterprise_enforce_read_authz: bool = False
     enterprise_audit_reads: bool = False
     enterprise_require_capability_rules: bool = False
+    enterprise_secret_rotation_days: int = 90
+    enterprise_max_write_payload_bytes: int = 1_048_576
     enterprise_feature_flags: dict[str, object] | None = None
     enterprise_capability_rules: dict[str, object] | None = None
 
@@ -56,6 +58,12 @@ def _runtime(
         enterprise_require_capability_rules=(
             require_capability_rules or settings.enterprise_require_capability_rules
         ),
+        enterprise_secret_rotation_days=settings.enterprise_secret_rotation_days,
+        enterprise_max_write_payload_bytes=(
+            max_payload_bytes
+            if max_payload_bytes != 1_048_576
+            else settings.enterprise_max_write_payload_bytes
+        ),
         enterprise_feature_flags=settings.enterprise_feature_flags,
         enterprise_capability_rules=settings.enterprise_capability_rules,
     )
@@ -64,8 +72,6 @@ def _runtime(
         return default
 
     def _env_int(name: str, default: int) -> int:
-        if name == "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES":
-            return max_payload_bytes
         return default
 
     return EnterpriseReadinessRuntime(
@@ -119,6 +125,23 @@ def test_runtime_uses_typed_settings_for_enterprise_flags() -> None:
     assert runtime.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false") is True
     assert runtime.env_enabled("ENTERPRISE_AUDIT_READS", "false") is True
     assert runtime.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false") is True
+
+
+def test_runtime_uses_typed_settings_for_enterprise_integer_knobs() -> None:
+    settings = _Settings(
+        enterprise_secret_rotation_days=30,
+        enterprise_max_write_payload_bytes=2048,
+    )
+    runtime = EnterpriseReadinessRuntime(
+        service_name="lotus-core-test",
+        load_settings=lambda: settings,
+        env_bool=lambda _name, default: default,
+        env_int=lambda _name, _default: 1,
+        logger=Mock(),
+    )
+
+    assert runtime.env_integer("ENTERPRISE_SECRET_ROTATION_DAYS", 90) == 30
+    assert runtime.env_integer("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576) == 2048
 
 
 def test_feature_flags_fail_closed_for_invalid_shapes() -> None:
