@@ -477,10 +477,10 @@ access classification, sensitivity classification, retention requirement, audit 
 PII/client-sensitive fields, and operator-only evidence posture. The helper validates that every
 source-data product has a profile and emits `x-lotus-source-data-security` OpenAPI metadata for
 catalog-backed routes. Shared enterprise-readiness runtime support now removes duplicated
-query-service and query-control-plane write authorization, capability-rule, policy-header, and audit
-middleware logic while preserving service-local settings and wrapper functions. This slice does not
-introduce new entitlement policy semantics, persistence changes, or downstream response payload shape
-changes.
+query-service and query-control-plane write authorization, capability-rule, policy-header, write
+audit, and opt-in read audit middleware logic while preserving service-local settings and wrapper
+functions. This slice does not introduce new entitlement policy semantics, persistence changes, or
+downstream response payload shape changes.
 
 ## Slice 10 Completion Note
 

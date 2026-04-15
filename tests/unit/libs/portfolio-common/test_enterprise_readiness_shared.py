@@ -36,11 +36,14 @@ def _runtime(
     *,
     settings: _Settings = _Settings(),
     authz_enabled: bool = False,
+    read_audit_enabled: bool = False,
     max_payload_bytes: int = 1_048_576,
 ) -> EnterpriseReadinessRuntime:
     def _env_bool(name: str, default: bool) -> bool:
         if name == "ENTERPRISE_ENFORCE_AUTHZ":
             return authz_enabled
+        if name == "ENTERPRISE_AUDIT_READS":
+            return read_audit_enabled
         return default
 
     def _env_int(name: str, default: int) -> int:
@@ -163,4 +166,76 @@ async def test_shared_enterprise_middleware_adds_policy_header_and_audits_write(
         role="portfolio_ops",
         correlation_id="corr-1",
         metadata={"status_code": 202},
+    )
+
+
+@pytest.mark.asyncio
+async def test_shared_enterprise_middleware_does_not_audit_reads_by_default() -> None:
+    runtime = _runtime()
+    audit_emitter = Mock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=audit_emitter,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/portfolios",
+            "headers": [(b"x-correlation-id", b"corr-read")],
+            "query_string": b"tenant_id=tenant-1",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    async def _call_next(_: Request) -> Response:
+        return Response(status_code=200)
+
+    response = await middleware(request, _call_next)
+
+    assert response.status_code == 200
+    audit_emitter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_shared_enterprise_middleware_audits_reads_when_enabled() -> None:
+    runtime = _runtime(read_audit_enabled=True)
+    audit_emitter = Mock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=audit_emitter,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/portfolios",
+            "headers": [
+                (b"x-actor-id", b"advisor-1"),
+                (b"x-tenant-id", b"tenant-1"),
+                (b"x-role", b"portfolio_viewer"),
+                (b"x-correlation-id", b"corr-read"),
+            ],
+            "query_string": b"client_email=sensitive@example.com",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    async def _call_next(_: Request) -> Response:
+        return Response(status_code=200)
+
+    response = await middleware(request, _call_next)
+
+    assert response.status_code == 200
+    audit_emitter.assert_called_once_with(
+        action="GET /api/v1/portfolios",
+        actor_id="advisor-1",
+        tenant_id="tenant-1",
+        role="portfolio_viewer",
+        correlation_id="corr-read",
+        metadata={"status_code": 200, "access_type": "read"},
     )

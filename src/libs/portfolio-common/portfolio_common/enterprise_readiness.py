@@ -17,6 +17,7 @@ MiddlewareCallable = Callable[[Request, MiddlewareNext], Awaitable[Response]]
 AuditEmitter = Callable[..., None]
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+READ_AUDIT_METHODS = {"GET", "HEAD"}
 REQUIRED_HEADERS = {"x-actor-id", "x-tenant-id", "x-role", "x-correlation-id"}
 REDACT_FIELDS = {
     "password",
@@ -220,6 +221,20 @@ def build_enterprise_audit_middleware(
                 role=request.headers.get("X-Role", "unknown"),
                 correlation_id=write_correlation_id,
                 metadata={"status_code": response.status_code},
+            )
+        elif request.method in READ_AUDIT_METHODS and runtime.env_enabled(
+            "ENTERPRISE_AUDIT_READS", "false"
+        ):
+            read_correlation_id = _request_correlation_id(
+                request, response.headers.get("X-Correlation-ID")
+            )
+            audit_emitter(
+                action=f"{request.method} {request.url.path}",
+                actor_id=request.headers.get("X-Actor-Id", "unknown"),
+                tenant_id=request.headers.get("X-Tenant-Id", "default"),
+                role=request.headers.get("X-Role", "unknown"),
+                correlation_id=read_correlation_id,
+                metadata={"status_code": response.status_code, "access_type": "read"},
             )
         return response
 

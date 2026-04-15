@@ -110,12 +110,18 @@ readiness proof, not runtime authorization enforcement.
 `query_service` and `query_control_plane_service` now use the shared
 `portfolio_common.enterprise_readiness` runtime for enterprise policy version headers, write payload
 limits, optional write authorization checks, capability-rule matching, feature-flag lookup,
-sensitive audit metadata redaction, and write audit event emission.
+sensitive audit metadata redaction, write audit event emission, and opt-in read audit event emission
+when `ENTERPRISE_AUDIT_READS=true`.
 
 Each service keeps a local `enterprise_readiness.py` wrapper so existing imports, tests, settings,
 and service-specific patch points remain stable. The shared helper removes duplicated middleware
 logic and gives future runtime security work one implementation point, but it does not by itself
 claim production entitlement enforcement closure.
+
+Read auditing is intentionally disabled by default until platform ingress and gateway policy decide
+the production audit volume and storage posture. When enabled, the middleware records the route path,
+status code, actor, tenant, role, correlation id, and access type without copying request bodies or
+query-string values into audit metadata.
 
 ## Validation
 
