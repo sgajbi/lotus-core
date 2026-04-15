@@ -63,6 +63,23 @@ def test_evaluate_source_data_product_bindings_rejects_missing_catalog_route_met
     assert "must bind source-data product 'PortfolioTimeseriesInput', found None" in errors[0]
 
 
+def test_evaluate_source_data_product_bindings_rejects_invalid_catalog() -> None:
+    catalog = (
+        _product("PortfolioTimeseriesInput", "/integration/example"),
+        _product("PortfolioTimeseriesInput", "/integration/duplicate"),
+    )
+    routes = [
+        _route(QUERY_SERVICE, "/integration/example", "PortfolioTimeseriesInput"),
+        _route(QUERY_SERVICE, "/integration/duplicate", "PortfolioTimeseriesInput"),
+    ]
+    identities = {"ExampleResponse": ("PortfolioTimeseriesInput", "v1")}
+
+    errors = guard.evaluate_source_data_product_bindings(routes, catalog, identities)
+
+    assert errors[0].startswith("source-data product catalog is invalid:")
+    assert "Duplicate source-data product" in errors[0]
+
+
 def test_evaluate_source_data_product_bindings_rejects_wrong_catalog_route_product() -> None:
     catalog = (
         _product("PortfolioTimeseriesInput", "/integration/example"),

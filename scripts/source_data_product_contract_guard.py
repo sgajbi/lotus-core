@@ -11,6 +11,7 @@ from portfolio_common.source_data_products import (
     SOURCE_DATA_PRODUCT_CATALOG,
     SourceDataProductDefinition,
     source_data_product_openapi_extra,
+    validate_source_data_product_catalog,
 )
 from portfolio_common.source_data_security import get_source_data_security_profile
 
@@ -193,6 +194,11 @@ def evaluate_source_data_product_bindings(
     response_model_identities: dict[str, tuple[str | None, str | None]] | None = None,
 ) -> list[str]:
     errors: list[str] = []
+    try:
+        validate_source_data_product_catalog(catalog)
+    except ValueError as exc:
+        errors.append(f"source-data product catalog is invalid: {exc}")
+
     response_model_identities = response_model_identities or {}
     expected_route_products = {
         f"{product.serving_plane} {route}": product.product_name

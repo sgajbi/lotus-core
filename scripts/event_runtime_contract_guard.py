@@ -8,8 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from portfolio_common import config
-from portfolio_common.event_supportability import EVENT_FAMILY_DEFINITIONS
+from portfolio_common import config, events
+from portfolio_common.event_supportability import (
+    EVENT_FAMILY_DEFINITIONS,
+    EventFamilyDefinition,
+    validate_event_supportability_catalog,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -158,11 +162,23 @@ def _source_label(source_file: Path, source_root: Path) -> str:
 
 def evaluate_outbox_event_contracts(
     emissions: tuple[OutboxEventEmission, ...] | None = None,
+    event_definitions: tuple[EventFamilyDefinition, ...] = EVENT_FAMILY_DEFINITIONS,
 ) -> list[str]:
     errors: list[str] = []
+    available_models = {
+        name for name in dir(events) if name.endswith("Event") or name.endswith("EventModel")
+    }
+    try:
+        validate_event_supportability_catalog(
+            event_definitions,
+            available_schema_models=available_models,
+        )
+    except ValueError as exc:
+        errors.append(f"event supportability catalog is invalid: {exc}")
+
     emissions = discover_outbox_event_emissions() if emissions is None else emissions
     definitions_by_event_type = {
-        definition.event_type: definition for definition in EVENT_FAMILY_DEFINITIONS
+        definition.event_type: definition for definition in event_definitions
     }
 
     for emission in emissions:

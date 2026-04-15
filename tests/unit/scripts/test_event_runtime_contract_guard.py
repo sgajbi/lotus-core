@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from portfolio_common.event_supportability import EventFamilyDefinition
 from scripts import event_runtime_contract_guard as guard
 
 
@@ -35,6 +36,42 @@ def test_evaluate_outbox_event_contracts_rejects_missing_catalog_event() -> None
     assert errors == [
         "src/example.py:publish: UnknownEvent emits an outbox event missing from the "
         "RFC-0083 event supportability catalog"
+    ]
+
+
+def test_evaluate_outbox_event_contracts_rejects_invalid_event_catalog() -> None:
+    invalid_definitions = (
+        EventFamilyDefinition(
+            event_type="CashflowCalculated",
+            schema_model="MissingCashflowEvent",
+            family="domain_state_event",
+            direction="outbound",
+            aggregate_type="cashflow",
+            topic="cashflows.calculated",
+            producer_service="cashflow_calculator_service",
+            consumer_services=("pipeline_orchestrator_service",),
+            idempotency_required=True,
+            correlation_required=True,
+            schema_version_required=True,
+            source_data_products=("TransactionLedgerWindow",),
+        ),
+    )
+
+    errors = guard.evaluate_outbox_event_contracts(
+        (
+            guard.OutboxEventEmission(
+                source="src/example.py",
+                function_name="publish",
+                event_type="CashflowCalculated",
+                topic="cashflows.calculated",
+            ),
+        ),
+        event_definitions=invalid_definitions,
+    )
+
+    assert errors == [
+        "event supportability catalog is invalid: CashflowCalculated references missing "
+        "schema model: MissingCashflowEvent"
     ]
 
 
