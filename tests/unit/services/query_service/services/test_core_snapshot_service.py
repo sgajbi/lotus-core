@@ -152,6 +152,17 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.governance.consumer_system == "lotus-performance"
     assert response.governance.tenant_id == "default"
     assert response.governance.policy_provenance.policy_version == "snapshot.policy.inline.default"
+    assert response.product_name == "PortfolioStateSnapshot"
+    assert response.product_version == "v1"
+    assert response.tenant_id == "default"
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.latest_evidence_timestamp is None
+    assert response.source_batch_fingerprint is None
+    assert response.snapshot_id is None
+    assert response.policy_version == "snapshot.policy.inline.default"
+    assert response.correlation_id is None
 
 
 async def test_get_instrument_enrichment_bulk_preserves_order_and_unknowns(mock_dependencies):
@@ -208,6 +219,8 @@ async def test_core_snapshot_simulation_success(mock_dependencies):
     assert response.sections.positions_projected is not None
     assert response.sections.positions_delta is not None
     assert response.sections.positions_projected[0].quantity == Decimal("15")
+    assert response.tenant_id == "default"
+    assert response.policy_version == "snapshot.policy.inline.default"
 
 
 async def test_core_snapshot_rejects_projected_sections_in_baseline_mode(mock_dependencies):

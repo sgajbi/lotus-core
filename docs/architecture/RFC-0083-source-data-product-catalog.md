@@ -154,15 +154,16 @@ The operational read DTO-envelope binding adds `product_name` and `product_versi
 These fields cover the canonical positions and transaction ledger responses plus the pre-live
 reporting convenience shapes that are already deprecated toward those target products.
 
-The first operational runtime metadata binding adds the required supportability fields to the
-`HoldingsAsOf` and `TransactionLedgerWindow` response envelopes:
+The first runtime metadata binding adds the required supportability fields to the
+`HoldingsAsOf`, `TransactionLedgerWindow`, and `PortfolioStateSnapshot` response envelopes:
 
 1. `PortfolioPositionsResponse`,
 2. `CashBalancesResponse`,
 3. `HoldingsSnapshotResponse`,
 4. `PaginatedTransactionResponse`,
 5. `IncomeSummaryResponse`,
-6. `ActivitySummaryResponse`.
+6. `ActivitySummaryResponse`,
+7. `CoreSnapshotResponse`.
 
 The binding populates `generated_at`, `as_of_date`, `restatement_version`, and `correlation_id`
 from runtime request context and deterministic defaults. It leaves
@@ -171,6 +172,11 @@ from runtime request context and deterministic defaults. It leaves
 and policy versioning are wired for these products. `reconciliation_status` and
 `data_quality_status` remain `UNKNOWN` until the reconciliation and data-quality evidence models are
 joined into operational product responses.
+
+`PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
+integration governance context because those values already exist in the core snapshot assembly
+path. It leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs
+for deterministic snapshot identity.
 
 The snapshot DTO-envelope binding adds `product_name` and `product_version` to
 `PortfolioStateSnapshot` on the core snapshot response. The existing route-level

@@ -28,6 +28,7 @@ from ..dtos.core_snapshot_dto import (
     CoreSnapshotValuationContext,
 )
 from ..dtos.integration_dto import InstrumentEnrichmentRecord
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.fx_rate_repository import FxRateRepository
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.portfolio_repository import PortfolioRepository
@@ -256,11 +257,12 @@ class CoreSnapshotService:
             }
         )
 
+        generated_at = datetime.now(UTC)
+        resolved_tenant_id = governance.tenant_id if governance is not None else request.tenant_id
+
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
             snapshot_mode=request.snapshot_mode,
-            generated_at=datetime.now(UTC),
             contract_version="rfc_081_v1",
             request_fingerprint=request_fingerprint,
             freshness=freshness_meta,
@@ -285,6 +287,12 @@ class CoreSnapshotService:
             ),
             simulation=simulation_metadata,
             sections=sections_payload,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+                tenant_id=resolved_tenant_id,
+                policy_version=policy_provenance.policy_version,
+            ),
         )
 
     async def _resolve_baseline_positions(

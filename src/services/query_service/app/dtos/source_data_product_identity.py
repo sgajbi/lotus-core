@@ -87,18 +87,23 @@ def source_data_product_runtime_metadata(
     *,
     as_of_date: date,
     generated_at: datetime | None = None,
+    tenant_id: str | None = None,
+    latest_evidence_timestamp: datetime | None = None,
+    source_batch_fingerprint: str | None = None,
+    snapshot_id: str | None = None,
+    policy_version: str | None = None,
 ) -> dict[str, object]:
     resolved_generated_at = generated_at or datetime.now(UTC)
     return {
-        "tenant_id": None,
+        "tenant_id": normalize_lineage_value(tenant_id),
         "generated_at": resolved_generated_at,
         "as_of_date": as_of_date,
         "restatement_version": CURRENT_RESTATEMENT_VERSION,
         "reconciliation_status": UNKNOWN,
         "data_quality_status": UNKNOWN,
-        "latest_evidence_timestamp": None,
-        "source_batch_fingerprint": None,
-        "snapshot_id": None,
-        "policy_version": None,
+        "latest_evidence_timestamp": latest_evidence_timestamp,
+        "source_batch_fingerprint": normalize_lineage_value(source_batch_fingerprint),
+        "snapshot_id": normalize_lineage_value(snapshot_id),
+        "policy_version": normalize_lineage_value(policy_version),
         "correlation_id": normalize_lineage_value(correlation_id_var.get()),
     }

@@ -5,7 +5,11 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .source_data_product_identity import product_name_field, product_version_field
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 
 
 class CoreSnapshotMode(str, Enum):
@@ -478,7 +482,7 @@ class CoreSnapshotSections(BaseModel):
     )
 
 
-class CoreSnapshotResponse(BaseModel):
+class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["PortfolioStateSnapshot"] = product_name_field("PortfolioStateSnapshot")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(

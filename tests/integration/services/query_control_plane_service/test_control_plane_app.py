@@ -12,6 +12,20 @@ from src.services.query_control_plane_service.app.main import app, lifespan
 
 pytestmark = pytest.mark.asyncio
 
+SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
+    "tenant_id",
+    "generated_at",
+    "as_of_date",
+    "restatement_version",
+    "reconciliation_status",
+    "data_quality_status",
+    "latest_evidence_timestamp",
+    "source_batch_fingerprint",
+    "snapshot_id",
+    "policy_version",
+    "correlation_id",
+}
+
 
 @pytest_asyncio.fixture
 async def async_test_client():
@@ -1178,6 +1192,7 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "PortfolioStateSnapshot"
     )
     assert core_snapshot_response["properties"]["product_version"]["default"] == "v1"
+    assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(core_snapshot_response["properties"])
     assert core_snapshot_response["properties"]["request_fingerprint"]["description"] == (
         "Deterministic fingerprint of the full core snapshot request contract."
     )
