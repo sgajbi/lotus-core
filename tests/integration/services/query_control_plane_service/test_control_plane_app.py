@@ -416,10 +416,22 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert lineage_keys["properties"]["items"]["description"] == "Current lineage key states."
     assert lineage_keys["properties"]["product_name"]["default"] == "IngestionEvidenceBundle"
+    assert lineage_keys["properties"]["generated_at"]["description"] == (
+        "UTC timestamp when this source-data product response was generated."
+    )
+    assert lineage_keys["properties"]["as_of_date"]["description"] == (
+        "Business as-of date used to resolve this source-data product."
+    )
+    assert lineage_keys["properties"]["latest_evidence_timestamp"]["description"] == (
+        "Latest linked evidence timestamp available for this product scope."
+    )
     assert reprocessing_jobs_schema["properties"]["product_name"]["default"] == (
         "IngestionEvidenceBundle"
     )
     assert reprocessing_jobs_schema["properties"]["product_version"]["default"] == "v1"
+    assert reprocessing_jobs_schema["properties"]["generated_at"]["description"] == (
+        "UTC timestamp when this source-data product response was generated."
+    )
     assert "product_name" not in support_jobs["properties"]
     assert support_jobs["properties"]["items"]["description"] == (
         "Operational jobs for support workflows."
@@ -839,6 +851,15 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         "ReconciliationEvidenceBundle"
     )
     assert reconciliation_run_schema["properties"]["product_version"]["default"] == "v1"
+    assert reconciliation_run_schema["properties"]["generated_at"]["description"] == (
+        "UTC timestamp when this source-data product response was generated."
+    )
+    assert reconciliation_run_schema["properties"]["as_of_date"]["description"] == (
+        "Business as-of date used to resolve this source-data product."
+    )
+    assert reconciliation_run_schema["properties"]["latest_evidence_timestamp"]["description"] == (
+        "Latest linked evidence timestamp available for this product scope."
+    )
     assert reconciliation_run_schema["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this reconciliation-run support snapshot was generated."
     )
@@ -865,6 +886,9 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
     )
     assert reconciliation_finding_schema["properties"]["product_name"]["default"] == (
         "ReconciliationEvidenceBundle"
+    )
+    assert reconciliation_finding_schema["properties"]["generated_at"]["description"] == (
+        "UTC timestamp when this source-data product response was generated."
     )
     assert reconciliation_finding_schema["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this reconciliation-finding support snapshot was generated."
@@ -909,6 +933,9 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         "IngestionEvidenceBundle"
     )
     assert reprocessing_key_schema["properties"]["product_version"]["default"] == "v1"
+    assert reprocessing_key_schema["properties"]["generated_at"]["description"] == (
+        "UTC timestamp when this source-data product response was generated."
+    )
     assert reprocessing_key_schema["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale support rows in this listing."
     )

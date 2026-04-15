@@ -15,6 +15,25 @@ from src.services.query_control_plane_service.app.routers.operations import (
 pytestmark = pytest.mark.asyncio
 
 
+def _source_data_product_metadata(
+    as_of_date: str,
+    latest_evidence_timestamp: str | None = None,
+) -> dict[str, str | None]:
+    return {
+        "tenant_id": None,
+        "generated_at": "2026-03-14T10:50:00Z",
+        "as_of_date": as_of_date,
+        "restatement_version": "current",
+        "reconciliation_status": "UNKNOWN",
+        "data_quality_status": "UNKNOWN",
+        "latest_evidence_timestamp": latest_evidence_timestamp,
+        "source_batch_fingerprint": None,
+        "snapshot_id": None,
+        "policy_version": None,
+        "correlation_id": None,
+    }
+
+
 @pytest_asyncio.fixture
 async def async_test_client():
     mock_operations_service = AsyncMock()
@@ -292,9 +311,7 @@ async def test_calculator_slos_success(async_test_client):
     assert response.json()["valuation"]["pending_jobs"] == 2
     assert response.json()["valuation"]["oldest_open_job_id"] == 8801
     assert response.json()["valuation"]["oldest_open_job_correlation_id"] == "corr-val-8801"
-    assert (
-        response.json()["aggregation"]["oldest_open_job_correlation_id"] == "corr-agg-4401"
-    )
+    assert response.json()["aggregation"]["oldest_open_job_correlation_id"] == "corr-agg-4401"
     mock_service.get_calculator_slos.assert_awaited_once_with(
         portfolio_id="P1",
         stale_threshold_minutes=15,
@@ -370,6 +387,7 @@ async def test_get_operations_service_dependency_factory():
 async def test_lineage_keys_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage_keys.return_value = {
+        **_source_data_product_metadata("2025-08-31"),
         "generated_at_utc": "2026-03-14T10:50:00Z",
         "portfolio_id": "P1",
         "total": 1,
@@ -396,6 +414,8 @@ async def test_lineage_keys_success(async_test_client):
     response = await client.get("/lineage/portfolios/P1/keys?reprocessing_status=CURRENT")
 
     assert response.status_code == 200
+    assert response.json()["generated_at"] == "2026-03-14T10:50:00Z"
+    assert response.json()["as_of_date"] == "2025-08-31"
     assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["security_id"] == "S1"
     assert response.json()["items"][0]["latest_valuation_job_id"] == 101
@@ -670,6 +690,9 @@ async def test_analytics_export_jobs_not_found_maps_to_404(async_test_client):
 async def test_reconciliation_runs_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reconciliation_runs.return_value = {
+        **_source_data_product_metadata(
+            "2026-03-13", latest_evidence_timestamp="2026-03-13T10:15:09Z"
+        ),
         "portfolio_id": "P1",
         "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
@@ -704,6 +727,9 @@ async def test_reconciliation_runs_success(async_test_client):
     )
 
     assert response.status_code == 200
+    assert response.json()["generated_at"] == "2026-03-14T10:50:00Z"
+    assert response.json()["as_of_date"] == "2026-03-13"
+    assert response.json()["latest_evidence_timestamp"] == "2026-03-13T10:15:09Z"
     assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["run_id"] == "recon_1234567890abcdef"
     assert response.json()["items"][0]["status"] == "FAILED"
@@ -754,6 +780,9 @@ async def test_reconciliation_runs_unexpected_maps_to_500(async_test_client):
 async def test_reconciliation_findings_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reconciliation_findings.return_value = {
+        **_source_data_product_metadata(
+            "2026-03-13", latest_evidence_timestamp="2026-03-13T10:15:09Z"
+        ),
         "run_id": "recon_1234567890abcdef",
         "generated_at_utc": "2026-03-14T10:50:00Z",
         "total": 1,
@@ -782,6 +811,9 @@ async def test_reconciliation_findings_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["run_id"] == "recon_1234567890abcdef"
+    assert response.json()["generated_at"] == "2026-03-14T10:50:00Z"
+    assert response.json()["as_of_date"] == "2026-03-13"
+    assert response.json()["latest_evidence_timestamp"] == "2026-03-13T10:15:09Z"
     assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["finding_id"] == "rf_1234567890abcdef"
     assert response.json()["items"][0]["is_blocking"] is True
@@ -898,6 +930,9 @@ async def test_portfolio_control_stages_unexpected_maps_to_500(async_test_client
 async def test_reprocessing_keys_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reprocessing_keys.return_value = {
+        **_source_data_product_metadata(
+            "2026-03-10", latest_evidence_timestamp="2026-03-13T10:15:09Z"
+        ),
         "portfolio_id": "P1",
         "stale_threshold_minutes": 30,
         "generated_at_utc": "2026-03-14T10:50:00Z",
@@ -926,6 +961,9 @@ async def test_reprocessing_keys_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["generated_at"] == "2026-03-14T10:50:00Z"
+    assert response.json()["as_of_date"] == "2026-03-10"
+    assert response.json()["latest_evidence_timestamp"] == "2026-03-13T10:15:09Z"
     assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"
     assert response.json()["items"][0]["created_at"] == "2026-03-13T10:05:00Z"
@@ -965,6 +1003,9 @@ async def test_reprocessing_keys_unexpected_maps_to_500(async_test_client):
 async def test_reprocessing_jobs_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_reprocessing_jobs.return_value = {
+        **_source_data_product_metadata(
+            "2026-03-10", latest_evidence_timestamp="2026-03-13T10:15:09Z"
+        ),
         "portfolio_id": "P1",
         "stale_threshold_minutes": 30,
         "generated_at_utc": "2026-03-14T10:50:00Z",
@@ -1000,6 +1041,9 @@ async def test_reprocessing_jobs_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
+    assert response.json()["generated_at"] == "2026-03-14T10:50:00Z"
+    assert response.json()["as_of_date"] == "2026-03-10"
+    assert response.json()["latest_evidence_timestamp"] == "2026-03-13T10:15:09Z"
     assert response.json()["stale_threshold_minutes"] == 30
     assert response.json()["items"][0]["job_type"] == "RESET_WATERMARKS"
     assert response.json()["items"][0]["security_id"] == "SEC-US-IBM"

@@ -171,12 +171,8 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.controls_business_date == date(2025, 8, 30)
     assert response.controls_stage_id == 701
     assert response.controls_last_source_event_type == "portfolio_day.reconciliation.completed"
-    assert response.controls_created_at == datetime(
-        2025, 8, 30, 10, 10, tzinfo=timezone.utc
-    )
-    assert response.controls_ready_emitted_at == datetime(
-        2025, 8, 30, 10, 14, tzinfo=timezone.utc
-    )
+    assert response.controls_created_at == datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc)
+    assert response.controls_ready_emitted_at == datetime(2025, 8, 30, 10, 14, tzinfo=timezone.utc)
     assert response.controls_epoch == 2
     assert response.controls_status == "COMPLETED"
     assert response.controls_failure_reason is None
@@ -184,10 +180,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.controls_latest_reconciliation_type == "transaction_cashflow"
     assert response.controls_latest_reconciliation_status == "COMPLETED"
     assert response.controls_latest_reconciliation_correlation_id == "corr-recon-20250830-001"
-    assert (
-        response.controls_latest_reconciliation_requested_by
-        == "pipeline_orchestrator_service"
-    )
+    assert response.controls_latest_reconciliation_requested_by == "pipeline_orchestrator_service"
     assert (
         response.controls_latest_reconciliation_dedupe_key
         == "recon:transaction_cashflow:P1:2025-08-30:2"
@@ -199,9 +192,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert response.controls_latest_blocking_finding_type == "missing_cashflow"
     assert response.controls_latest_blocking_finding_security_id == "SEC-US-IBM"
     assert response.controls_latest_blocking_finding_transaction_id == "txn_0001"
-    assert response.controls_last_updated_at == datetime(
-        2025, 8, 30, 10, 15, tzinfo=timezone.utc
-    )
+    assert response.controls_last_updated_at == datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc)
     assert response.controls_blocking is False
     assert response.publish_allowed is True
     mock_ops_repo.get_position_snapshot_history_mismatch_count.assert_awaited_once_with(
@@ -210,9 +201,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     mock_ops_repo.get_current_portfolio_epoch.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
-    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(
-        as_of=response.generated_at_utc
-    )
+    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(as_of=response.generated_at_utc)
     mock_ops_repo.get_latest_transaction_date.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
@@ -365,6 +354,9 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     )
 
     assert response.generated_at_utc.tzinfo == timezone.utc
+    assert response.generated_at == response.generated_at_utc
+    assert response.as_of_date == date(2025, 8, 31)
+    assert response.latest_evidence_timestamp is None
     assert response.total == 1
     assert response.items[0].security_id == "S1"
     assert response.items[0].reprocessing_status == "CURRENT"
@@ -652,6 +644,9 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
+    assert response.generated_at == response.generated_at_utc
+    assert response.as_of_date == date(2025, 8, 15)
+    assert response.latest_evidence_timestamp == updated_at
     assert response.total == 1
     assert response.items[0].job_id == 303
     assert response.items[0].job_type == "RESET_WATERMARKS"
@@ -1164,6 +1159,9 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
 
     assert response.total == 1
     assert response.generated_at_utc.tzinfo == timezone.utc
+    assert response.generated_at == response.generated_at_utc
+    assert response.as_of_date == date(2026, 3, 13)
+    assert response.latest_evidence_timestamp == completed_at
     assert response.items[0].run_id == "recon_1234567890abcdef"
     assert response.items[0].reconciliation_type == "transaction_cashflow"
     assert response.items[0].status == "FAILED"
@@ -1293,8 +1291,7 @@ async def test_support_job_operational_state_branches():
     )
     assert OperationsService._get_support_job_operational_state("PENDING", updated_at) == "PENDING"
     assert (
-        OperationsService._get_support_job_operational_state("COMPLETE", updated_at)
-        == "COMPLETED"
+        OperationsService._get_support_job_operational_state("COMPLETE", updated_at) == "COMPLETED"
     )
 
 
@@ -1302,8 +1299,7 @@ async def test_analytics_export_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
     assert OperationsService._normalize_analytics_export_status(None) is None
     assert (
-        OperationsService._get_analytics_export_operational_state("FAILED", updated_at)
-        == "FAILED"
+        OperationsService._get_analytics_export_operational_state("FAILED", updated_at) == "FAILED"
     )
     assert (
         OperationsService._get_analytics_export_operational_state("accepted", updated_at)
@@ -1323,8 +1319,7 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
     assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
     assert (
-        OperationsService._get_portfolio_control_stage_operational_state("COMPLETED")
-        == "COMPLETED"
+        OperationsService._get_portfolio_control_stage_operational_state("COMPLETED") == "COMPLETED"
     )
     assert (
         OperationsService._get_reprocessing_key_operational_state("CURRENT", updated_at)
@@ -1332,13 +1327,8 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
     )
     assert OperationsService._is_reconciliation_finding_blocking("ERROR") is True
     assert OperationsService._is_reconciliation_finding_blocking("WARNING") is False
-    assert (
-        OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
-    )
-    assert (
-        OperationsService._get_reconciliation_finding_operational_state("INFO")
-        == "NON_BLOCKING"
-    )
+    assert OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
+    assert OperationsService._get_reconciliation_finding_operational_state("INFO") == "NON_BLOCKING"
 
 
 async def test_stale_detection_helpers_cover_remaining_branches():
@@ -1404,6 +1394,9 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
 
     assert response.run_id == "recon_1234567890abcdef"
     assert response.generated_at_utc.tzinfo == timezone.utc
+    assert response.generated_at == response.generated_at_utc
+    assert response.as_of_date == date(2026, 3, 13)
+    assert response.latest_evidence_timestamp == created_at
     assert response.total == 7
     assert response.items[0].finding_id == "rf_1234567890abcdef"
     assert response.items[0].severity == "ERROR"
@@ -1545,6 +1538,9 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
     assert response.portfolio_id == "P1"
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
+    assert response.generated_at == response.generated_at_utc
+    assert response.as_of_date == date(2026, 3, 10)
+    assert response.latest_evidence_timestamp == updated_at
     assert response.total == 1
     assert response.items[0].security_id == "SEC-US-IBM"
     assert response.items[0].epoch == 3
@@ -1756,9 +1752,7 @@ async def test_get_support_overview_honors_custom_stale_threshold(
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 30)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
-    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
-        2025, 8, 30
-    )
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
     mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
@@ -2005,23 +1999,15 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
 
     assert response.controls_stage_id == 702
     assert response.controls_last_source_event_type == "portfolio_day.reconciliation.completed"
-    assert response.controls_created_at == datetime(
-        2025, 8, 30, 10, 40, tzinfo=timezone.utc
-    )
+    assert response.controls_created_at == datetime(2025, 8, 30, 10, 40, tzinfo=timezone.utc)
     assert response.controls_ready_emitted_at is None
     assert response.controls_status == "FAILED"
     assert response.controls_failure_reason == "Tolerance exceeded for portfolio totals."
     assert response.controls_latest_reconciliation_run_id == "recon_failed_20250830"
     assert response.controls_latest_reconciliation_type == "transaction_cashflow"
     assert response.controls_latest_reconciliation_status == "FAILED"
-    assert (
-        response.controls_latest_reconciliation_correlation_id
-        == "corr-recon-20250830-failed"
-    )
-    assert (
-        response.controls_latest_reconciliation_requested_by
-        == "pipeline_orchestrator_service"
-    )
+    assert response.controls_latest_reconciliation_correlation_id == "corr-recon-20250830-failed"
+    assert response.controls_latest_reconciliation_requested_by == "pipeline_orchestrator_service"
     assert (
         response.controls_latest_reconciliation_dedupe_key
         == "recon:transaction_cashflow:P1:2025-08-30:2"
@@ -2036,9 +2022,7 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     assert response.controls_latest_blocking_finding_type == "valuation_mismatch"
     assert response.controls_latest_blocking_finding_security_id == "SEC-US-MSFT"
     assert response.controls_latest_blocking_finding_transaction_id == "txn_0099"
-    assert response.controls_last_updated_at == datetime(
-        2025, 8, 30, 11, 0, tzinfo=timezone.utc
-    )
+    assert response.controls_last_updated_at == datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
     assert response.controls_blocking is True
     assert response.publish_allowed is False
     mock_ops_repo.get_position_snapshot_history_mismatch_count.assert_awaited_once_with(
@@ -2047,9 +2031,7 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
     mock_ops_repo.get_current_portfolio_epoch.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
-    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(
-        as_of=response.generated_at_utc
-    )
+    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(as_of=response.generated_at_utc)
     mock_ops_repo.get_latest_transaction_date.assert_awaited_once_with(
         "P1", as_of=response.generated_at_utc
     )
@@ -2120,21 +2102,17 @@ async def test_get_portfolio_readiness_surfaces_missing_historical_fx_as_blockin
     mock_ops_repo.get_latest_transaction_date.return_value = date(2026, 3, 28)
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2026, 3, 28)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2026, 3, 28)
-    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
-        2026, 3, 28
-    )
-    mock_ops_repo.get_snapshot_valuation_coverage_summary.return_value = (
-        type(
-            "SnapshotCoverageStub",
-            (),
-            {
-                "snapshot_date": date(2026, 3, 28),
-                "total_positions": 2,
-                "valued_positions": 2,
-                "unvalued_positions": 0,
-            },
-        )()
-    )
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2026, 3, 28)
+    mock_ops_repo.get_snapshot_valuation_coverage_summary.return_value = type(
+        "SnapshotCoverageStub",
+        (),
+        {
+            "snapshot_date": date(2026, 3, 28),
+            "total_positions": 2,
+            "valued_positions": 2,
+            "unvalued_positions": 0,
+        },
+    )()
     mock_ops_repo.get_missing_historical_fx_dependency_summary.return_value = type(
         "MissingFxSummaryStub",
         (),
@@ -2196,8 +2174,7 @@ async def test_get_portfolio_readiness_surfaces_missing_historical_fx_as_blockin
     assert response.missing_historical_fx_dependencies.missing_count == 2
     assert response.missing_historical_fx_dependencies.sample_records[0].transaction_id == "TXN-1"
     assert any(
-        reason.code == "MISSING_HISTORICAL_FX_PREREQUISITE"
-        for reason in response.blocking_reasons
+        reason.code == "MISSING_HISTORICAL_FX_PREREQUISITE" for reason in response.blocking_reasons
     )
     mock_ops_repo.get_missing_historical_fx_dependency_summary.assert_awaited_once_with(
         "P1",
@@ -2254,9 +2231,7 @@ async def test_get_portfolio_readiness_marks_pending_when_snapshots_lag_transact
     mock_ops_repo.get_latest_transaction_date.return_value = date(2026, 3, 28)
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2026, 3, 28)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2026, 3, 27)
-    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
-        2026, 3, 27
-    )
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2026, 3, 27)
     mock_ops_repo.get_snapshot_valuation_coverage_summary.return_value = type(
         "SnapshotCoverageStub",
         (),
@@ -2289,13 +2264,9 @@ async def test_get_portfolio_readiness_marks_pending_when_snapshots_lag_transact
     assert response.transactions.status == "READY"
     assert response.snapshot_valuation_unvalued_positions == 1
     assert any(
-        reason.code == "SNAPSHOT_BEHIND_TRANSACTION_LEDGER"
-        for reason in response.holdings.reasons
+        reason.code == "SNAPSHOT_BEHIND_TRANSACTION_LEDGER" for reason in response.holdings.reasons
     )
-    assert any(
-        reason.code == "UNVALUED_POSITIONS_REMAIN"
-        for reason in response.pricing.reasons
-    )
+    assert any(reason.code == "UNVALUED_POSITIONS_REMAIN" for reason in response.pricing.reasons)
 
 
 async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: AsyncMock):
@@ -2360,9 +2331,7 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         2025, 8, 29, 8, 30, tzinfo=timezone.utc
     )
     assert response.reprocessing.backlog_age_days == 12
-    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(
-        as_of=response.generated_at_utc
-    )
+    mock_ops_repo.get_latest_business_date.assert_awaited_once_with(as_of=response.generated_at_utc)
     mock_ops_repo.get_reprocessing_health_summary.assert_awaited_once_with(
         "P1",
         stale_minutes=15,

@@ -3,7 +3,11 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from .source_data_product_identity import product_name_field, product_version_field
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 from ..support_policy import (
     CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
@@ -1015,7 +1019,7 @@ class LineageKeyRecord(BaseModel):
     )
 
 
-class LineageKeyListResponse(BaseModel):
+class LineageKeyListResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["IngestionEvidenceBundle"] = product_name_field("IngestionEvidenceBundle")
     product_version: Literal["v1"] = product_version_field()
     generated_at_utc: datetime = Field(
@@ -1190,7 +1194,7 @@ class SupportJobListResponse(BaseModel):
     )
 
 
-class ReprocessingJobListResponse(SupportJobListResponse):
+class ReprocessingJobListResponse(SupportJobListResponse, SourceDataProductRuntimeMetadata):
     product_name: Literal["IngestionEvidenceBundle"] = product_name_field("IngestionEvidenceBundle")
     product_version: Literal["v1"] = product_version_field()
 
@@ -1402,7 +1406,7 @@ class ReconciliationRunRecord(BaseModel):
     )
 
 
-class ReconciliationRunListResponse(BaseModel):
+class ReconciliationRunListResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["ReconciliationEvidenceBundle"] = product_name_field(
         "ReconciliationEvidenceBundle"
     )
@@ -1505,7 +1509,7 @@ class ReconciliationFindingRecord(BaseModel):
     )
 
 
-class ReconciliationFindingListResponse(BaseModel):
+class ReconciliationFindingListResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["ReconciliationEvidenceBundle"] = product_name_field(
         "ReconciliationEvidenceBundle"
     )
@@ -1687,7 +1691,7 @@ class ReprocessingKeyRecord(BaseModel):
     )
 
 
-class ReprocessingKeyListResponse(BaseModel):
+class ReprocessingKeyListResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["IngestionEvidenceBundle"] = product_name_field("IngestionEvidenceBundle")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])

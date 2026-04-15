@@ -210,6 +210,14 @@ The evidence DTO-envelope binding adds `product_name` and `product_version` to
 dedicated `ReprocessingJobListResponse` envelope so generic valuation and aggregation support-job
 responses do not claim ingestion evidence semantics.
 
+The evidence products also expose runtime supportability metadata. They set top-level
+`generated_at` equal to the existing support snapshot `generated_at_utc`, derive `as_of_date` from
+durable evidence business dates or watermarks when rows are present, and populate
+`latest_evidence_timestamp` from durable update/completion/creation timestamps when available.
+Empty evidence listings fall back to the response generation date for `as_of_date` and leave
+`latest_evidence_timestamp` null. Tenant, source batch, deterministic snapshot, and policy fields
+remain null until those controls are joined to the evidence response path.
+
 The source-data product contract guard statically checks both sides of the binding:
 
 1. every catalog route must carry matching `x-lotus-source-data-product` route metadata,

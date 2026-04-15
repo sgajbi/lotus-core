@@ -28,6 +28,7 @@ from ..dtos.operations_dto import (
     SupportJobRecord,
     SupportOverviewResponse,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.operations_repository import (
     MissingHistoricalFxDependencySummary,
     OperationsRepository,
@@ -43,6 +44,27 @@ from ..support_policy import (
 class OperationsService:
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
+
+    @staticmethod
+    def _evidence_product_runtime_metadata(
+        *,
+        generated_at_utc: datetime,
+        as_of_dates: list[date | None],
+        evidence_timestamps: list[datetime | None],
+    ) -> dict[str, object]:
+        resolved_as_of_dates = [as_of_date for as_of_date in as_of_dates if as_of_date is not None]
+        resolved_timestamps = [
+            evidence_timestamp
+            for evidence_timestamp in evidence_timestamps
+            if evidence_timestamp is not None
+        ]
+        return source_data_product_runtime_metadata(
+            as_of_date=(
+                max(resolved_as_of_dates) if resolved_as_of_dates else generated_at_utc.date()
+            ),
+            generated_at=generated_at_utc,
+            latest_evidence_timestamp=(max(resolved_timestamps) if resolved_timestamps else None),
+        )
 
     @classmethod
     def _get_support_job_operational_state(
@@ -1068,6 +1090,20 @@ class OperationsService:
             ),
         )
         return LineageKeyListResponse(
+            **self._evidence_product_runtime_metadata(
+                generated_at_utc=generated_at_utc,
+                as_of_dates=[
+                    evidence_date
+                    for key in keys
+                    for evidence_date in (
+                        key.get("latest_position_history_date"),
+                        key.get("latest_daily_snapshot_date"),
+                        key.get("latest_valuation_job_date"),
+                        key.get("watermark_date"),
+                    )
+                ],
+                evidence_timestamps=[],
+            ),
             generated_at_utc=generated_at_utc,
             portfolio_id=portfolio_id,
             total=total,
@@ -1319,6 +1355,16 @@ class OperationsService:
             ),
         )
         return ReconciliationRunListResponse(
+            **self._evidence_product_runtime_metadata(
+                generated_at_utc=generated_at_utc,
+                as_of_dates=[
+                    run.business_date
+                    or (run.completed_at.date() if run.completed_at is not None else None)
+                    or run.started_at.date()
+                    for run in runs
+                ],
+                evidence_timestamps=[run.completed_at or run.started_at for run in runs],
+            ),
             portfolio_id=portfolio_id,
             generated_at_utc=generated_at_utc,
             total=total,
@@ -1381,6 +1427,16 @@ class OperationsService:
             ),
         )
         return ReconciliationFindingListResponse(
+            **self._evidence_product_runtime_metadata(
+                generated_at_utc=generated_at_utc,
+                as_of_dates=[
+                    finding.business_date
+                    or getattr(run, "business_date", None)
+                    or finding.created_at.date()
+                    for finding in findings
+                ],
+                evidence_timestamps=[finding.created_at for finding in findings],
+            ),
             run_id=run_id,
             generated_at_utc=generated_at_utc,
             total=total,
@@ -1496,6 +1552,11 @@ class OperationsService:
             ),
         )
         return ReprocessingKeyListResponse(
+            **self._evidence_product_runtime_metadata(
+                generated_at_utc=generated_at_utc,
+                as_of_dates=[key.watermark_date for key in keys],
+                evidence_timestamps=[key.updated_at for key in keys],
+            ),
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             generated_at_utc=generated_at_utc,
@@ -1564,6 +1625,11 @@ class OperationsService:
             ),
         )
         return ReprocessingJobListResponse(
+            **self._evidence_product_runtime_metadata(
+                generated_at_utc=generated_at_utc,
+                as_of_dates=[date.fromisoformat(job.business_date) for job in jobs],
+                evidence_timestamps=[job.updated_at or job.created_at for job in jobs],
+            ),
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             generated_at_utc=generated_at_utc,
