@@ -766,5 +766,6 @@ For a route to be considered production-grade, all of the following must hold:
 1. Add downstream workflow tests as `lotus-manage` and `lotus-report` begin direct use of support/evidence products.
 2. Keep `SOURCE_DATA_PRODUCT_CATALOG`, OpenAPI operation descriptions, and this audit synchronized whenever route consumers change.
 3. Avoid adding downstream UI features that imply backend capability until the relevant source-data product has live validation evidence.
-4. Complete PR Merge Gates and production authorization/entitlement proof before claiming full production runtime closure.
+4. Keep the portfolio workspace `Performance Snapshot` on the correct side of the boundary: its calculated return, benchmark, excess-return, and sparkline payload belong in `lotus-performance`, not `lotus-core`.
+5. Complete PR Merge Gates and production authorization/entitlement proof before claiming full production runtime closure.
 
