@@ -567,6 +567,10 @@ Related downstream follow-up remains valid:
 | `lotus-gateway #109` | Downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. | Keep open in gateway. |
 | `lotus-gateway #73` | Platform capabilities latency issue in gateway aggregation, not a lotus-core publication defect. | Keep open in gateway. |
 
+The same certification lane now also protects the adjacent policy/effective and
+instrument-enrichment contract families with recursive OpenAPI schema-family guards, so nested
+policy provenance and enrichment fields do not regress silently while core-snapshot evolves.
+
 ## Certified Endpoint Slice: Core Snapshot
 
 This certification pass covers:

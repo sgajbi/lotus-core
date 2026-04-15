@@ -120,6 +120,17 @@ CORE_SNAPSHOT_SCHEMA_ROOTS = {
     "CoreSnapshotResponse",
 }
 
+INTEGRATION_POLICY_SCHEMA_ROOTS = {
+    "PolicyProvenanceMetadata",
+    "EffectiveIntegrationPolicyResponse",
+}
+
+INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS = {
+    "InstrumentEnrichmentBulkRequest",
+    "InstrumentEnrichmentRecord",
+    "InstrumentEnrichmentBulkResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1474,6 +1485,19 @@ async def test_openapi_fully_documents_core_snapshot_schema_family(async_test_cl
     schema = response.json()
 
     _assert_schema_properties_are_documented_and_exampled(schema, CORE_SNAPSHOT_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_policy_and_enrichment_schema_families(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(
+        schema, INTEGRATION_POLICY_SCHEMA_ROOTS
+    )
+    _assert_schema_properties_are_documented_and_exampled(
+        schema, INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS
+    )
 
 
 async def test_openapi_describes_benchmark_reference_parameters(async_test_client):
