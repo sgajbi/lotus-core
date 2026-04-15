@@ -1350,6 +1350,18 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "InstrumentReferenceBundle"
     )
     assert benchmark_assignment_response["properties"]["product_version"]["default"] == "v1"
+    source_data_product_reference_responses = [
+        benchmark_assignment_response,
+        benchmark_composition_window_response,
+        benchmark_market_series_response,
+        index_price_series_response,
+        index_return_series_response,
+        risk_free_series_response,
+        coverage_response,
+        classification_taxonomy_response,
+    ]
+    for response_schema in source_data_product_reference_responses:
+        assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(response_schema["properties"])
     assert benchmark_market_series_response["properties"]["quality_status_summary"]["examples"] == [
         {"accepted": 31, "estimated": 2}
     ]

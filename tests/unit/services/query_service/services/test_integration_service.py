@@ -428,6 +428,11 @@ async def test_reference_contract_methods() -> None:
     assignment = await service.resolve_benchmark_assignment("P1", date(2026, 1, 1))
     assert assignment is not None
     assert assignment.benchmark_id == "B1"
+    assert assignment.product_name == "BenchmarkAssignment"
+    assert assignment.generated_at.tzinfo is not None
+    assert assignment.restatement_version == "current"
+    assert assignment.reconciliation_status == "UNKNOWN"
+    assert assignment.data_quality_status == "UNKNOWN"
 
     definition = await service.get_benchmark_definition("B1", date(2026, 1, 1))
     assert definition is not None
@@ -442,6 +447,8 @@ async def test_reference_contract_methods() -> None:
     assert composition_window is not None
     assert composition_window.benchmark_currency == "USD"
     assert composition_window.segments[0].index_id == "IDX1"
+    assert composition_window.product_name == "BenchmarkConstituentWindow"
+    assert composition_window.as_of_date == date(2026, 3, 31)
 
     benchmark_catalog = await service.list_benchmark_catalog(date(2026, 1, 1), None, None, None)
     assert benchmark_catalog.records == []
@@ -477,6 +484,10 @@ async def test_reference_contract_methods() -> None:
     assert market_series.page.returned_component_count == 1
     assert market_series.page.request_scope_fingerprint == market_series.request_fingerprint
     assert market_series.page.next_page_token is None
+    assert market_series.product_name == "MarketDataWindow"
+    assert market_series.as_of_date == date(2026, 1, 1)
+    assert market_series.reconciliation_status == "UNKNOWN"
+    assert market_series.data_quality_status == "UNKNOWN"
 
     index_price = await service.get_index_price_series(
         index_id="IDX1",
@@ -486,6 +497,8 @@ async def test_reference_contract_methods() -> None:
         ),
     )
     assert index_price.points
+    assert index_price.product_name == "IndexSeriesWindow"
+    assert index_price.as_of_date == date(2026, 1, 2)
 
     index_return = await service.get_index_return_series(
         index_id="IDX1",
@@ -498,6 +511,7 @@ async def test_reference_contract_methods() -> None:
     assert index_return.points
     assert index_return.as_of_date == date(2026, 1, 1)
     assert index_return.request_fingerprint
+    assert index_return.product_name == "IndexSeriesWindow"
 
     benchmark_return = await service.get_benchmark_return_series(
         benchmark_id="B1",
@@ -523,18 +537,25 @@ async def test_reference_contract_methods() -> None:
     assert risk_free.points
     assert risk_free.as_of_date == date(2026, 1, 1)
     assert risk_free.request_fingerprint
+    assert risk_free.product_name == "RiskFreeSeriesWindow"
 
     coverage = await service.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
     assert coverage.total_points == 10
     assert coverage.request_fingerprint
+    assert coverage.product_name == "DataQualityCoverageReport"
+    assert coverage.as_of_date == date(2026, 1, 3)
 
     rf_coverage = await service.get_risk_free_coverage("USD", date(2026, 1, 1), date(2026, 1, 3))
     assert rf_coverage.total_points == 10
     assert rf_coverage.request_fingerprint
+    assert rf_coverage.product_name == "DataQualityCoverageReport"
+    assert rf_coverage.as_of_date == date(2026, 1, 3)
 
     taxonomy = await service.get_classification_taxonomy(as_of_date=date(2026, 1, 1))
     assert taxonomy.records[0].dimension_name == "sector"
     assert taxonomy.request_fingerprint
+    assert taxonomy.product_name == "InstrumentReferenceBundle"
+    assert taxonomy.restatement_version == "current"
 
 
 @pytest.mark.asyncio

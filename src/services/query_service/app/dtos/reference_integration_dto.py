@@ -6,7 +6,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .source_data_product_identity import product_name_field, product_version_field
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 
 
 class IntegrationWindow(BaseModel):
@@ -58,7 +62,7 @@ class BenchmarkAssignmentRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkAssignmentResponse(BaseModel):
+class BenchmarkAssignmentResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["BenchmarkAssignment"] = product_name_field("BenchmarkAssignment")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
@@ -172,7 +176,7 @@ class BenchmarkComponentResponse(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkCompositionWindowResponse(BaseModel):
+class BenchmarkCompositionWindowResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["BenchmarkConstituentWindow"] = product_name_field(
         "BenchmarkConstituentWindow"
     )
@@ -617,7 +621,7 @@ class ComponentSeriesResponse(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkMarketSeriesResponse(BaseModel):
+class BenchmarkMarketSeriesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["MarketDataWindow"] = product_name_field("MarketDataWindow")
     product_version: Literal["v1"] = product_version_field()
     benchmark_id: str = Field(
@@ -772,7 +776,7 @@ class BenchmarkReturnSeriesPoint(BaseModel):
     model_config = ConfigDict()
 
 
-class IndexPriceSeriesResponse(BaseModel):
+class IndexPriceSeriesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
     product_version: Literal["v1"] = product_version_field()
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
@@ -790,7 +794,7 @@ class IndexPriceSeriesResponse(BaseModel):
     model_config = ConfigDict()
 
 
-class IndexReturnSeriesResponse(BaseModel):
+class IndexReturnSeriesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
     product_version: Literal["v1"] = product_version_field()
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
@@ -869,7 +873,7 @@ class RiskFreeSeriesPoint(BaseModel):
     model_config = ConfigDict()
 
 
-class RiskFreeSeriesResponse(BaseModel):
+class RiskFreeSeriesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["RiskFreeSeriesWindow"] = product_name_field("RiskFreeSeriesWindow")
     product_version: Literal["v1"] = product_version_field()
     currency: str = Field(..., description="Series currency code.", examples=["USD"])
@@ -908,7 +912,7 @@ class CoverageRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class CoverageResponse(BaseModel):
+class CoverageResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["DataQualityCoverageReport"] = product_name_field(
         "DataQualityCoverageReport"
     )
@@ -1004,7 +1008,7 @@ class ClassificationTaxonomyEntry(BaseModel):
     model_config = ConfigDict()
 
 
-class ClassificationTaxonomyResponse(BaseModel):
+class ClassificationTaxonomyResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["InstrumentReferenceBundle"] = product_name_field(
         "InstrumentReferenceBundle"
     )

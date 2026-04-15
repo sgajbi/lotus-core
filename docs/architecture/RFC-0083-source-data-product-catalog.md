@@ -155,8 +155,8 @@ These fields cover the canonical positions and transaction ledger responses plus
 reporting convenience shapes that are already deprecated toward those target products.
 
 The first runtime metadata binding adds the required supportability fields to the
-`HoldingsAsOf`, `TransactionLedgerWindow`, `PortfolioStateSnapshot`, and analytics-input response
-envelopes:
+`HoldingsAsOf`, `TransactionLedgerWindow`, `PortfolioStateSnapshot`, analytics-input, and
+market/reference response envelopes:
 
 1. `PortfolioPositionsResponse`,
 2. `CashBalancesResponse`,
@@ -166,7 +166,15 @@ envelopes:
 6. `ActivitySummaryResponse`,
 7. `CoreSnapshotResponse`,
 8. `PortfolioAnalyticsTimeseriesResponse`,
-9. `PositionAnalyticsTimeseriesResponse`.
+9. `PositionAnalyticsTimeseriesResponse`,
+10. `BenchmarkAssignmentResponse`,
+11. `BenchmarkCompositionWindowResponse`,
+12. `BenchmarkMarketSeriesResponse`,
+13. `IndexPriceSeriesResponse`,
+14. `IndexReturnSeriesResponse`,
+15. `RiskFreeSeriesResponse`,
+16. `CoverageResponse`,
+17. `ClassificationTaxonomyResponse`.
 
 The binding populates `generated_at`, `as_of_date`, `restatement_version`, and `correlation_id`
 from runtime request context and deterministic defaults. It leaves
@@ -185,6 +193,11 @@ The analytics-input timeseries products reuse their existing `lineage.generated_
 the top-level `generated_at` supportability field so lineage and envelope metadata stay internally
 consistent. They leave tenant, evidence, snapshot, and policy fields null until those controls are
 resolved in the analytics-input contract path.
+
+The market/reference products populate top-level `as_of_date` from their explicit as-of request
+where one exists, or from the resolved window end date for window-only products. They preserve
+existing lineage dictionaries and leave evidence, snapshot, and policy fields null until reference
+source-batch and quality evidence are joined into those contracts.
 
 The snapshot DTO-envelope binding adds `product_name` and `product_version` to
 `PortfolioStateSnapshot` on the core snapshot response. The existing route-level

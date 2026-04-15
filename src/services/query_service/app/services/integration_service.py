@@ -39,6 +39,7 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesResponse,
     SeriesPoint,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..settings import load_query_service_settings
 
@@ -72,6 +73,16 @@ class IntegrationService:
         if isinstance(value, Decimal):
             return value
         return Decimal(str(value))
+
+    @staticmethod
+    def _runtime_metadata(as_of_date: date) -> dict[str, object]:
+        return source_data_product_runtime_metadata(as_of_date=as_of_date)
+
+    @staticmethod
+    def _runtime_metadata_for_existing_as_of_date(as_of_date: date) -> dict[str, object]:
+        metadata = source_data_product_runtime_metadata(as_of_date=as_of_date)
+        metadata.pop("as_of_date")
+        return metadata
 
     @staticmethod
     def _canonical_consumer_system(value: str | None) -> str:
@@ -298,6 +309,7 @@ class IntegrationService:
             source_system=row.source_system,
             assignment_recorded_at=row.assignment_recorded_at,
             assignment_version=int(row.assignment_version),
+            **self._runtime_metadata_for_existing_as_of_date(as_of_date),
         )
 
     async def get_benchmark_definition(
@@ -389,6 +401,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.benchmark_composition_window",
             },
+            **self._runtime_metadata(request.window.end_date),
         )
 
     async def list_benchmark_catalog(
@@ -586,12 +599,9 @@ class IntegrationService:
                 benchmark_return_row = benchmark_return_by_date.get(current_date)
                 component_weight = None
                 for segment in component_segments_by_index.get(index_id, []):
-                    if (
-                        segment.composition_effective_from <= current_date
-                        and (
-                            segment.composition_effective_to is None
-                            or segment.composition_effective_to >= current_date
-                        )
+                    if segment.composition_effective_from <= current_date and (
+                        segment.composition_effective_to is None
+                        or segment.composition_effective_to >= current_date
                     ):
                         component_weight = self._as_decimal(segment.composition_weight)
                         break
@@ -606,10 +616,7 @@ class IntegrationService:
                         series_currency=(
                             (price_row and price_row.series_currency)
                             or (return_row and return_row.series_currency)
-                            or (
-                                benchmark_return_row
-                                and benchmark_return_row.series_currency
-                            )
+                            or (benchmark_return_row and benchmark_return_row.series_currency)
                         ),
                         index_price=(
                             self._as_decimal(price_row.index_price)
@@ -690,6 +697,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.market_series",
             },
+            **self._runtime_metadata_for_existing_as_of_date(request.as_of_date),
         )
 
     async def get_index_price_series(
@@ -722,6 +730,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_price_series",
             },
+            **self._runtime_metadata(getattr(request, "as_of_date", request.window.end_date)),
         )
 
     async def get_index_return_series(
@@ -763,6 +772,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_return_series",
             },
+            **self._runtime_metadata_for_existing_as_of_date(request.as_of_date),
         )
 
     async def get_benchmark_return_series(
@@ -846,6 +856,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.risk_free_series",
             },
+            **self._runtime_metadata_for_existing_as_of_date(request.as_of_date),
         )
 
     async def get_benchmark_coverage(
@@ -936,6 +947,7 @@ class IntegrationService:
                 for row in rows
             ],
             request_fingerprint=request_fingerprint,
+            **self._runtime_metadata_for_existing_as_of_date(as_of_date),
         )
 
     @staticmethod
@@ -954,9 +966,7 @@ class IntegrationService:
         observed_start = coverage.get("observed_start_date")
         observed_end = coverage.get("observed_end_date")
         observed_dates = {
-            value
-            for value in coverage.get("observed_dates", [])
-            if isinstance(value, date)
+            value for value in coverage.get("observed_dates", []) if isinstance(value, date)
         }
         if not observed_dates and observed_start and observed_end:
             observed_cursor = observed_start
@@ -975,4 +985,5 @@ class IntegrationService:
             missing_dates_count=len(missing_dates),
             missing_dates_sample=missing_dates[:10],
             quality_status_distribution=dict(coverage.get("quality_status_counts", {})),
+            **IntegrationService._runtime_metadata(end_date),
         )
