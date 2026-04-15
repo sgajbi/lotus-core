@@ -352,6 +352,12 @@ If the answer pattern is mostly `2` through `5`, use `query_control_plane_servic
 If the endpoint returns performance, risk, attribution, active-risk, or advisory
 interpretation owned by another Lotus service, do not add it to `lotus-core`.
 
+That rule includes lightweight workspace or cockpit summaries. For example, a portfolio
+`Performance Snapshot` that exposes calculated portfolio return, benchmark return, excess return,
+or compact return-path outputs remains owned by `lotus-performance`. `lotus-core` may publish the
+governed source inputs and readiness evidence for that feature, but it must not publish the
+calculated performance snapshot itself.
+
 ## Practical Guardrail
 
 `query_control_plane_service` should not become the default home for every important read API.

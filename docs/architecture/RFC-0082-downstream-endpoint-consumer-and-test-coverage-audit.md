@@ -25,6 +25,15 @@ Current posture:
 | Test pyramid | Strong at catalog/static guard and core integration-test levels. Direct downstream client tests exist for the active consumers found during review. |
 | Platform live proof | Passed on 2026-04-15 for `PB_SG_GLOBAL_BAL_001`; see `docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md`. |
 
+Important boundary reminder:
+
+1. `lotus-core` publishes source-data products and evidence for downstream analytics workflows.
+2. `lotus-core` does not own downstream performance-output contracts such as a portfolio workspace
+   `Performance Snapshot`.
+3. Portfolio return, benchmark return, excess return, attribution totals, and similar
+   calculation outputs remain owned by the authoritative downstream analytics service, usually
+   `lotus-performance`.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |

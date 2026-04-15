@@ -47,3 +47,19 @@ def test_downstream_endpoint_audit_records_validation_posture():
     )
 
     assert missing_evidence == []
+
+
+def test_downstream_endpoint_audit_preserves_performance_output_boundary():
+    audit_text = AUDIT_DOC.read_text(encoding="utf-8").lower()
+
+    required_boundary_lines = {
+        "performance snapshot",
+        "portfolio return",
+        "benchmark return",
+        "excess return",
+        "lotus-performance",
+    }
+
+    missing_lines = sorted(line for line in required_boundary_lines if line not in audit_text)
+
+    assert missing_lines == []
