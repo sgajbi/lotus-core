@@ -99,6 +99,51 @@ async def async_test_client():
             ),
         }
     )
+    mock_integration_service.get_risk_free_series = AsyncMock(
+        return_value={
+            "currency": "USD",
+            "as_of_date": "2026-01-31",
+            "series_mode": "annualized_rate_series",
+            "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "request_fingerprint": "fp-risk-free-1",
+            "points": [],
+            "lineage": {"contract_version": "rfc_062_v1", "source_system": "lotus-core"},
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
+    mock_integration_service.get_risk_free_coverage = AsyncMock(
+        return_value={
+            "request_fingerprint": "fp-risk-free-coverage-1",
+            "observed_start_date": None,
+            "observed_end_date": None,
+            "expected_start_date": "2026-01-01",
+            "expected_end_date": "2026-01-31",
+            "total_points": 0,
+            "missing_dates_count": 31,
+            "missing_dates_sample": [],
+            "quality_status_distribution": {},
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
+    mock_integration_service.get_classification_taxonomy = AsyncMock(
+        return_value={
+            "as_of_date": "2026-01-31",
+            "records": [],
+            "taxonomy_version": "rfc_062_v1",
+            "request_fingerprint": "fp-taxonomy-1",
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
@@ -201,4 +246,75 @@ async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
     assert response.status_code == 404
     assert response.json()["detail"] == (
         "No effective benchmark assignment found for portfolio and as_of_date."
+    )
+
+
+async def test_risk_free_series_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/reference/risk-free-series",
+        json={
+            "as_of_date": "2026-01-31",
+            "window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "currency": "USD",
+            "series_mode": "annualized_rate_series",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "RiskFreeSeriesWindow"
+    assert body["product_version"] == "v1"
+    assert body["currency"] == "USD"
+    assert body["as_of_date"] == "2026-01-31"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_risk_free_series.assert_awaited_once()
+
+
+async def test_risk_free_coverage_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/reference/risk-free-series/coverage?currency=USD",
+        json={"window": {"start_date": "2026-01-01", "end_date": "2026-01-31"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "DataQualityCoverageReport"
+    assert body["product_version"] == "v1"
+    assert body["total_points"] == 0
+    assert body["missing_dates_count"] == 31
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_risk_free_coverage.assert_awaited_once_with(
+        currency="USD",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
+
+
+async def test_classification_taxonomy_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/reference/classification-taxonomy",
+        json={"as_of_date": "2026-01-31"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "InstrumentReferenceBundle"
+    assert body["product_version"] == "v1"
+    assert body["as_of_date"] == "2026-01-31"
+    assert body["taxonomy_version"] == "rfc_062_v1"
+    assert body["request_fingerprint"] == "fp-taxonomy-1"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_classification_taxonomy.assert_awaited_once_with(
+        as_of_date=date(2026, 1, 31),
+        taxonomy_scope=None,
     )

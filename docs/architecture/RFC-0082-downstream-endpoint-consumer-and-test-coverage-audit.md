@@ -156,6 +156,12 @@ For this endpoint, Swagger now makes the following explicit:
 Automated proof now includes a benchmark-assignment schema-family completeness assertion in
 `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
 
+The dependency lane now also exercises the ASGI surface for benchmark-assignment and adjacent
+shared reference-source routes used by `lotus-performance` and `lotus-risk`, including raw
+risk-free series, risk-free coverage, and classification taxonomy. That closes the previous gap
+where these contracts had router-function and OpenAPI proof but lighter HTTP-level dependency
+coverage.
+
 ### Issue Disposition For This Endpoint
 
 Reviewed open benchmark-assignment-related issues:
