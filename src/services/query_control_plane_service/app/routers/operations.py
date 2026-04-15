@@ -226,7 +226,9 @@ async def get_portfolio_readiness(
         "portfolio.\n"
         "How: Aggregate valuation/aggregation job states and reprocessing key counts in a single "
         "support payload.\n"
-        "When: Use before scaling actions, during incidents, and for daily operational SLO checks."
+        "When: Use before scaling actions, during incidents, and for daily operational SLO checks. "
+        "Use this route for fleet-health baselining; drill into valuation, aggregation, replay, "
+        "or export-job listings when specific stuck workloads need investigation."
     ),
 )
 async def get_calculator_slos(
@@ -466,7 +468,9 @@ async def get_reprocessing_jobs(
         "What: List valuation jobs for a portfolio with support filters.\n"
         "How: Query valuation job records with pagination and optional id, date, security, "
         "status, and correlation filtering.\n"
-        "When: Use to triage stuck valuation workloads and verify drain progress."
+        "When: Use to triage stuck valuation workloads and verify drain progress after "
+        "`overview`, `calculator-slos`, or readiness evidence suggests pricing publication is "
+        "lagging. This is operator support evidence, not a front-office analytics contract."
     ),
 )
 async def get_valuation_jobs(
@@ -538,7 +542,9 @@ async def get_valuation_jobs(
         "What: List portfolio aggregation jobs for support workflows.\n"
         "How: Query aggregation job records with pagination and optional id, date, status, "
         "and correlation filtering.\n"
-        "When: Use when portfolio rollups are stale or downstream timeseries appears delayed."
+        "When: Use when portfolio rollups are stale or downstream timeseries appears delayed, "
+        "typically after `overview` or `calculator-slos` indicates aggregation backlog. "
+        "This is operator support evidence, not a front-office analytics contract."
     ),
 )
 async def get_aggregation_jobs(
@@ -600,7 +606,9 @@ async def get_aggregation_jobs(
     description=(
         "What: List durable analytics export jobs for a portfolio with support filters.\n"
         "How: Query export job lifecycle records with pagination and optional status filtering.\n"
-        "When: Use to investigate stuck, failed, or repeated analytics export requests."
+        "When: Use to investigate stuck, failed, or repeated analytics export requests after "
+        "large-window extraction or support escalation. This is operator support evidence, not "
+        "a front-office analytics contract."
     ),
 )
 async def get_analytics_export_jobs(

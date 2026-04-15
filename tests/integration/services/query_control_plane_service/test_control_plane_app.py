@@ -397,11 +397,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         ]["parameters"]
         if parameter["name"] == "job_id"
     )
+    valuation_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"]["get"]
+    aggregation_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"]["get"]
     control_stage_id = next(
         parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_id"
     )
     assert control_stage_id["description"] == "Optional durable control-stage row id filter."
     assert valuation_job_id["description"] == "Optional durable valuation job id filter."
+    assert "calculator-slos" in valuation_jobs["description"]
+    assert "operator support evidence" in valuation_jobs["description"]
     valuation_business_date = next(
         parameter
         for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
@@ -465,6 +469,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         aggregation_correlation_id["description"]
         == "Optional durable aggregation correlation identifier filter."
     )
+    assert "calculator-slos" in aggregation_jobs["description"]
+    assert "operator support evidence" in aggregation_jobs["description"]
 
     analytics_export_job_id = next(
         parameter
@@ -483,6 +489,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert (
         analytics_export_request_fingerprint["description"]
         == "Optional analytics export request fingerprint filter."
+    )
+    assert "large-window extraction or support escalation" in analytics_export_jobs["description"]
+    assert "operator support evidence" in analytics_export_jobs["description"]
+    assert "fleet-health baselining" in calculator_slos["description"]
+    assert (
+        "valuation, aggregation, replay, or export-job listings" in calculator_slos["description"]
     )
 
     control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
