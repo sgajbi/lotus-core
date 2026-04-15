@@ -798,6 +798,12 @@ async def test_index_price_series_success(async_test_client):
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     mock_integration_service.get_index_price_series.assert_awaited_once()
+    index_price_call = mock_integration_service.get_index_price_series.await_args.kwargs
+    assert index_price_call["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert index_price_call["request"].as_of_date == date(2026, 1, 31)
+    assert index_price_call["request"].window.start_date == date(2026, 1, 1)
+    assert index_price_call["request"].window.end_date == date(2026, 1, 31)
+    assert index_price_call["request"].frequency == "daily"
 
 
 async def test_index_return_series_success(async_test_client):
@@ -823,6 +829,12 @@ async def test_index_return_series_success(async_test_client):
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     mock_integration_service.get_index_return_series.assert_awaited_once()
+    index_return_call = mock_integration_service.get_index_return_series.await_args.kwargs
+    assert index_return_call["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert index_return_call["request"].as_of_date == date(2026, 1, 31)
+    assert index_return_call["request"].window.start_date == date(2026, 1, 1)
+    assert index_return_call["request"].window.end_date == date(2026, 1, 31)
+    assert index_return_call["request"].frequency == "daily"
 
 
 async def test_benchmark_return_series_success(async_test_client):
@@ -874,6 +886,13 @@ async def test_risk_free_series_success(async_test_client):
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     mock_integration_service.get_risk_free_series.assert_awaited_once()
+    risk_free_call = mock_integration_service.get_risk_free_series.await_args.kwargs
+    assert risk_free_call["request"].as_of_date == date(2026, 1, 31)
+    assert risk_free_call["request"].window.start_date == date(2026, 1, 1)
+    assert risk_free_call["request"].window.end_date == date(2026, 1, 31)
+    assert risk_free_call["request"].currency == "USD"
+    assert risk_free_call["request"].series_mode == "annualized_rate_series"
+    assert risk_free_call["request"].frequency == "daily"
 
 
 async def test_benchmark_coverage_success(async_test_client):
