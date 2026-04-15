@@ -179,7 +179,7 @@ class EnterpriseReadinessRuntime:
 
     def required_capability(self, method: str, path: str) -> str | None:
         method = method.upper()
-        for key, capability in self.load_capability_rules().items():
+        for key, capability in _rules_by_specificity(self.load_capability_rules()):
             prefix = f"{method} "
             if key.upper().startswith(prefix) and _path_matches_rule(path, key[len(prefix) :]):
                 return capability
@@ -249,6 +249,10 @@ def _normalize_capability_rule(key: Any, capability: Any) -> tuple[str, str] | N
     ):
         return None
     return f"{method} {path.rstrip('/') or '/'}", normalized_capability
+
+
+def _rules_by_specificity(rules: dict[str, str]) -> list[tuple[str, str]]:
+    return sorted(rules.items(), key=lambda item: len(item[0].split(maxsplit=1)[1]), reverse=True)
 
 
 def build_enterprise_audit_middleware(

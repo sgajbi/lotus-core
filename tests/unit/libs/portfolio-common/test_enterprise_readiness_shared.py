@@ -231,6 +231,22 @@ def test_required_capability_matches_only_path_segments() -> None:
     assert runtime.required_capability("GET", "/portfolios-v2/P1") is None
 
 
+def test_required_capability_prefers_more_specific_rule() -> None:
+    runtime = _runtime(
+        settings=_Settings(
+            enterprise_capability_rules={
+                "GET /portfolios": "portfolios.read",
+                "GET /portfolios/P1/analytics": "portfolio.analytics.read",
+            }
+        ),
+    )
+
+    assert (
+        runtime.required_capability("GET", "/portfolios/P1/analytics/reference")
+        == "portfolio.analytics.read"
+    )
+
+
 def test_capability_rules_keep_only_actionable_method_path_mappings() -> None:
     runtime = _runtime(
         settings=_Settings(
