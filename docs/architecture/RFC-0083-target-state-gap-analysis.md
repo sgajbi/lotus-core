@@ -484,13 +484,16 @@ Slice 10 eventing and supportability target modeling is recorded in:
 - `tests/unit/libs/portfolio-common/test_event_supportability.py`
 - `scripts/event_runtime_contract_guard.py`
 - `tests/unit/scripts/test_event_runtime_contract_guard.py`
+- `src/libs/portfolio-common/portfolio_common/outbox_repository.py`
+- `tests/unit/libs/portfolio-common/test_outbox_repository.py`
 
 The model defines event family governance, event schema-governance requirements, supportability
 surface posture, operator-only diagnostics, and evidence bundle linkage. The helper validates event
 family definitions, schema model bindings, required idempotency/correlation/schema version posture,
 operator supportability surfaces, and actual outbox `event_type`/topic alignment against runtime
-emissions. This slice does not change runtime event emission behavior, Kafka topics, schemas, generated
-OpenAPI, persistence, or downstream contract shape.
+emissions. `OutboxRepository` now centrally enriches payloads with `event_type`, `schema_version`, and
+`correlation_id` supportability metadata and rejects conflicting caller-supplied metadata. This slice
+does not change Kafka topics, generated OpenAPI, persistence schema, or downstream contract shape.
 
 ## Slice 11 Completion Note
 

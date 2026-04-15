@@ -75,6 +75,8 @@ EXPECTED_SLICE_ARTIFACTS = {
         "tests/unit/libs/portfolio-common/test_event_supportability.py",
         "scripts/event_runtime_contract_guard.py",
         "tests/unit/scripts/test_event_runtime_contract_guard.py",
+        "src/libs/portfolio-common/portfolio_common/outbox_repository.py",
+        "tests/unit/libs/portfolio-common/test_outbox_repository.py",
     },
     11: {
         "docs/architecture/RFC-0083-production-readiness-closure.md",

@@ -15,6 +15,8 @@ The executable helper is:
 2. `tests/unit/libs/portfolio-common/test_event_supportability.py`
 3. `scripts/event_runtime_contract_guard.py`
 4. `tests/unit/scripts/test_event_runtime_contract_guard.py`
+5. `src/libs/portfolio-common/portfolio_common/outbox_repository.py`
+6. `tests/unit/libs/portfolio-common/test_outbox_repository.py`
 
 ## Target Principle
 
@@ -71,9 +73,18 @@ against existing event model names when supplied by tests.
 The runtime contract guard parses source files for literal `OutboxRepository.create_outbox_event(...)`
 calls and outbox-details dictionaries. Every discovered runtime `event_type` and topic pair must exist
 in the event supportability catalog with the same topic. This catches accidental Kafka topic drift,
-renamed outbox event types, or new emissions that bypass governance. The guard intentionally does not
-claim full payload-envelope proof; schema-version and correlation payload behavior still require
-runtime validation when event payloads change.
+renamed outbox event types, or new emissions that bypass governance. Payload envelope proof is owned by
+the centralized outbox repository tests because that repository constructs the emitted Kafka payload.
+
+`OutboxRepository` now centrally enriches emitted payloads with governed envelope metadata:
+
+1. `event_type`,
+2. `schema_version`,
+3. `correlation_id`.
+
+The repository rejects payload metadata that conflicts with the outbox row metadata. Producers should
+continue passing domain payloads and let the repository add the supportability envelope; this keeps
+event metadata consistent without duplicating envelope code in each service.
 
 ## Supportability Surfaces
 
@@ -98,9 +109,8 @@ vocabulary as the route contract-family registry. The accepted Slice 10 values a
 
 Future runtime slices must:
 
-1. add explicit schema-version fields or envelope metadata where current event payloads do not carry
-   them,
-2. make correlation and idempotency visible in emitted events and replay evidence,
+1. keep schema-version envelope metadata centralized in `OutboxRepository`,
+2. make idempotency visible in emitted events and replay evidence,
 3. keep Kafka topic names and outbox `event_type` values aligned with the guarded catalog,
 4. emit or persist supportability recovery events where replay, DLQ, repair, or duplicate-blocking
    behavior changes,
@@ -112,8 +122,8 @@ Future runtime slices must:
 Slice 10 validation is:
 
 1. `python scripts/event_runtime_contract_guard.py`,
-2. `python -m pytest tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py -q`,
-3. `python -m ruff check src/libs/portfolio-common/portfolio_common/event_supportability.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py --ignore E501,I001`,
-4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/event_supportability.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py`,
+2. `python -m pytest tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py -q`,
+3. `python -m ruff check src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/outbox_repository.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py --ignore E501,I001`,
+4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/outbox_repository.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py`,
 5. `git diff --check`,
 6. `make lint`.
