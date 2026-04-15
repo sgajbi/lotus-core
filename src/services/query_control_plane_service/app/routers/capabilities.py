@@ -24,8 +24,10 @@ def get_capabilities_service() -> CapabilitiesService:
         "How: Applies environment and tenant-policy overrides, then derives workflow states from "
         "canonical feature dependencies. Callers should use the canonical snake_case query "
         "parameters `consumer_system` and `tenant_id`.\n"
-        "When: Used by downstream services and UI clients to enable only supported lotus-core "
-        "integration paths."
+        "When: Used directly by lotus-gateway platform capability aggregation and other "
+        "downstream discovery clients to enable only supported lotus-core integration paths. "
+        "This route is a control-plane discovery contract, not a substitute for endpoint-specific "
+        "OpenAPI or source-data product contracts."
     ),
 )
 async def get_integration_capabilities(

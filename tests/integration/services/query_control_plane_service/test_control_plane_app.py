@@ -1409,8 +1409,14 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert consumer_system["description"] == (
         "Downstream consumer system requesting policy resolution."
     )
-    assert "gateway, operator tooling, and downstream clients" in effective_policy["description"]
+    assert (
+        "Used directly by lotus-gateway platform/bootstrap flows"
+        in (effective_policy["description"])
+    )
     assert "`include_sections`" in effective_policy["description"]
+    assert (
+        "does not publish portfolio state or analytics inputs" in (effective_policy["description"])
+    )
 
     portfolio_param = next(
         parameter
@@ -1972,8 +1978,13 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert consumer_system["schema"]["default"] == "lotus-gateway"
     assert tenant_id["description"] == "Tenant or client identifier for policy resolution."
     assert tenant_id["schema"]["default"] == "default"
+    assert (
+        "Used directly by lotus-gateway platform capability aggregation"
+        in (capabilities["description"])
+    )
     assert "supported lotus-core integration paths" in capabilities["description"]
     assert "snake_case query parameters" in capabilities["description"]
+    assert "not a substitute for endpoint-specific OpenAPI" in capabilities["description"]
 
     components = schema["components"]["schemas"]
     feature_capability = components["FeatureCapability"]

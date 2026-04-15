@@ -99,9 +99,11 @@ def get_core_snapshot_service(
         "context.\n"
         "How: Resolves the canonical policy rule, reports policy provenance, and optionally "
         "evaluates requested snapshot sections through `include_sections`.\n"
-        "When: Used by gateway, operator tooling, and downstream clients that need to inspect "
-        "lotus-core section policy before calling governed source-data routes such as "
-        "`/integration/portfolios/{portfolio_id}/core-snapshot`."
+        "When: Used directly by lotus-gateway platform/bootstrap flows, operator tooling, and "
+        "other downstream clients that need to inspect lotus-core section policy before calling "
+        "governed source-data routes such as "
+        "`/integration/portfolios/{portfolio_id}/core-snapshot`. This route returns policy "
+        "diagnostics only; it does not publish portfolio state or analytics inputs."
     ),
 )
 async def get_effective_integration_policy(
