@@ -8,6 +8,7 @@ from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_service.app.enterprise_readiness import (
     _load_json_map,
+    authorize_request,
     authorize_write_request,
     build_enterprise_audit_middleware,
     emit_audit_event,
@@ -152,6 +153,59 @@ def test_authorize_write_request_requires_service_identity_when_headers_present(
     allowed, reason = authorize_write_request("POST", "/transactions", headers)
     assert allowed is False
     assert reason == "missing_service_identity"
+
+
+def test_authorize_request_enforces_read_capability_rules_at_service_boundary(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv(
+        "ENTERPRISE_CAPABILITY_RULES_JSON",
+        json.dumps({"GET /portfolios": "portfolios.read"}),
+    )
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-gateway",
+        "X-Capabilities": "transactions.read",
+    }
+
+    denied, denied_reason = authorize_request("GET", "/portfolios/PB1", headers)
+    assert denied is False
+    assert denied_reason == "missing_capability:portfolios.read"
+
+    headers["X-Capabilities"] = "transactions.read,portfolios.read"
+    allowed, allowed_reason = authorize_request("GET", "/portfolios/PB1", headers)
+    assert allowed is True
+    assert allowed_reason is None
+
+
+def test_authorize_request_requires_read_capability_rule_when_strict(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-gateway",
+    }
+
+    allowed, reason = authorize_request("GET", "/portfolios/PB1", headers)
+    assert allowed is False
+    assert reason == "missing_capability_rule"
+
+
+def test_validate_enterprise_runtime_config_reports_strict_read_rules_gap(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+
+    issues = validate_enterprise_runtime_config()
+
+    assert "missing_capability_rules" in issues
+    assert "missing_primary_key_id" not in issues
 
 
 @pytest.mark.asyncio

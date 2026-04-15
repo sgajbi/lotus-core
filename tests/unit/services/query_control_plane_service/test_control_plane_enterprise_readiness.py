@@ -1,11 +1,15 @@
+import json
+
 import pytest
 from fastapi import Request
 from fastapi.responses import Response
 from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_control_plane_service.app.enterprise_readiness import (
+    authorize_request,
     build_enterprise_audit_middleware,
     emit_audit_event,
+    validate_enterprise_runtime_config,
 )
 
 
@@ -98,3 +102,62 @@ def test_control_plane_emit_audit_event_preserves_none_correlation():
 
     audit_payload = logger_info.call_args.kwargs["extra"]["audit"]
     assert audit_payload["correlation_id"] is None
+
+
+def test_control_plane_authorize_request_enforces_read_capability_rules(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv(
+        "ENTERPRISE_CAPABILITY_RULES_JSON",
+        json.dumps({"GET /integration/portfolios": "analytics.reference.read"}),
+    )
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "analytics-service",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-performance",
+        "X-Capabilities": "positions.read",
+    }
+
+    denied, denied_reason = authorize_request(
+        "GET", "/integration/portfolios/PB1/analytics/reference", headers
+    )
+    assert denied is False
+    assert denied_reason == "missing_capability:analytics.reference.read"
+
+    headers["X-Capabilities"] = "positions.read,analytics.reference.read"
+    allowed, allowed_reason = authorize_request(
+        "GET", "/integration/portfolios/PB1/analytics/reference", headers
+    )
+    assert allowed is True
+    assert allowed_reason is None
+
+
+def test_control_plane_authorize_request_requires_read_rule_when_strict(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "analytics-service",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-performance",
+    }
+
+    allowed, reason = authorize_request(
+        "GET", "/integration/portfolios/PB1/analytics/reference", headers
+    )
+    assert allowed is False
+    assert reason == "missing_capability_rule"
+
+
+def test_control_plane_runtime_config_reports_strict_read_rules_gap(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+
+    issues = validate_enterprise_runtime_config()
+
+    assert "missing_capability_rules" in issues
+    assert "missing_primary_key_id" not in issues
