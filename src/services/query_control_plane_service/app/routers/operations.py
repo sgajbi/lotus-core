@@ -30,6 +30,7 @@ from src.services.query_service.app.support_policy import (
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
 )
+from .response_helpers import problem_response
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,6 @@ RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
 }
 T = TypeVar("T")
-
-
-def problem_response(description: str, example: dict[str, str]) -> dict[str, object]:
-    return {"description": description, "content": {"application/json": {"example": example}}}
 
 
 def portfolio_not_found_response(

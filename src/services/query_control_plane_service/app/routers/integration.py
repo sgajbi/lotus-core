@@ -49,6 +49,7 @@ from src.services.query_service.app.services.core_snapshot_service import (
     SnapshotGovernanceContext,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+from .response_helpers import problem_response
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -75,10 +76,6 @@ BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = {
     "detail": "No overlapping benchmark definition found for benchmark_id and requested window."
 }
 HTTP_422_UNPROCESSABLE_CONTENT = 422
-
-
-def problem_response(description: str, example: dict[str, str]) -> dict[str, object]:
-    return {"description": description, "content": {"application/json": {"example": example}}}
 
 
 def get_integration_service(
