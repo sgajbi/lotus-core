@@ -15,7 +15,9 @@ The executable helpers are:
 3. `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`
 4. `tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py`
 5. `src/services/query_service/app/enterprise_readiness.py`
-6. `src/services/query_control_plane_service/app/enterprise_readiness.py`
+6. `tests/unit/services/query_service/test_enterprise_readiness.py`
+7. `src/services/query_control_plane_service/app/enterprise_readiness.py`
+8. `tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py`
 
 ## Target Principle
 

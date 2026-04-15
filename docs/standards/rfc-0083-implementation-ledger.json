@@ -131,7 +131,9 @@
         "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
         "tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py",
         "src/services/query_service/app/enterprise_readiness.py",
-        "src/services/query_control_plane_service/app/enterprise_readiness.py"
+        "tests/unit/services/query_service/test_enterprise_readiness.py",
+        "src/services/query_control_plane_service/app/enterprise_readiness.py",
+        "tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py"
       ]
     },
     {
