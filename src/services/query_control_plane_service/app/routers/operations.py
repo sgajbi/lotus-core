@@ -16,6 +16,7 @@ from src.services.query_service.app.dtos.operations_dto import (
     PortfolioReadinessResponse,
     ReconciliationFindingListResponse,
     ReconciliationRunListResponse,
+    ReprocessingJobListResponse,
     ReprocessingKeyListResponse,
     SupportJobListResponse,
     SupportOverviewResponse,
@@ -360,7 +361,7 @@ async def get_reprocessing_keys(
 
 @router.get(
     "/support/portfolios/{portfolio_id}/reprocessing-jobs",
-    response_model=SupportJobListResponse,
+    response_model=ReprocessingJobListResponse,
     responses={
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",

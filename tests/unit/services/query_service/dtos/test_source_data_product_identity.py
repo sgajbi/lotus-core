@@ -5,6 +5,13 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
     PositionAnalyticsTimeseriesResponse,
 )
 from src.services.query_service.app.dtos.core_snapshot_dto import CoreSnapshotResponse
+from src.services.query_service.app.dtos.operations_dto import (
+    LineageKeyListResponse,
+    ReconciliationFindingListResponse,
+    ReconciliationRunListResponse,
+    ReprocessingJobListResponse,
+    ReprocessingKeyListResponse,
+)
 from src.services.query_service.app.dtos.position_dto import PortfolioPositionsResponse
 from src.services.query_service.app.dtos.reporting_dto import (
     ActivitySummaryResponse,
@@ -21,6 +28,11 @@ from src.services.query_service.app.dtos.transaction_dto import PaginatedTransac
         (PortfolioAnalyticsTimeseriesResponse, "PortfolioTimeseriesInput"),
         (PositionAnalyticsTimeseriesResponse, "PositionTimeseriesInput"),
         (CoreSnapshotResponse, "PortfolioStateSnapshot"),
+        (LineageKeyListResponse, "IngestionEvidenceBundle"),
+        (ReprocessingJobListResponse, "IngestionEvidenceBundle"),
+        (ReprocessingKeyListResponse, "IngestionEvidenceBundle"),
+        (ReconciliationRunListResponse, "ReconciliationEvidenceBundle"),
+        (ReconciliationFindingListResponse, "ReconciliationEvidenceBundle"),
         (PortfolioPositionsResponse, "HoldingsAsOf"),
         (CashBalancesResponse, "HoldingsAsOf"),
         (HoldingsSnapshotResponse, "HoldingsAsOf"),

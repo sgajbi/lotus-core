@@ -3,6 +3,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from .source_data_product_identity import product_name_field, product_version_field
 from ..support_policy import (
     CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
@@ -72,8 +73,7 @@ class SupportOverviewResponse(BaseModel):
     oldest_reprocessing_epoch: Optional[int] = Field(
         None,
         description=(
-            "Current epoch of the oldest portfolio-security key currently marked "
-            "REPROCESSING."
+            "Current epoch of the oldest portfolio-security key currently marked REPROCESSING."
         ),
         examples=[3],
     )
@@ -139,8 +139,7 @@ class SupportOverviewResponse(BaseModel):
     oldest_pending_valuation_correlation_id: Optional[str] = Field(
         None,
         description=(
-            "Durable correlation identifier for the oldest open valuation job in the "
-            "backlog."
+            "Durable correlation identifier for the oldest open valuation job in the backlog."
         ),
         examples=["corr-val-20260313-001"],
     )
@@ -195,8 +194,7 @@ class SupportOverviewResponse(BaseModel):
     oldest_pending_aggregation_correlation_id: Optional[str] = Field(
         None,
         description=(
-            "Durable correlation identifier for the oldest open aggregation job in the "
-            "backlog."
+            "Durable correlation identifier for the oldest open aggregation job in the backlog."
         ),
         examples=["corr-agg-20260313-001"],
     )
@@ -272,8 +270,7 @@ class SupportOverviewResponse(BaseModel):
     latest_booked_transaction_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent transaction business date observed for the portfolio "
-            "up to business_date."
+            "Most recent transaction business date observed for the portfolio up to business_date."
         ),
         examples=["2025-12-30"],
     )
@@ -288,7 +285,7 @@ class SupportOverviewResponse(BaseModel):
     latest_booked_position_snapshot_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent daily position snapshot date in the current epoch " "up to business_date."
+            "Most recent daily position snapshot date in the current epoch up to business_date."
         ),
         examples=["2025-12-30"],
     )
@@ -343,7 +340,7 @@ class SupportOverviewResponse(BaseModel):
     controls_epoch: Optional[int] = Field(
         None,
         description=(
-            "Epoch associated with the latest portfolio-day financial " "reconciliation stage."
+            "Epoch associated with the latest portfolio-day financial reconciliation stage."
         ),
         examples=[3],
     )
@@ -526,8 +523,7 @@ class PortfolioReadinessReason(BaseModel):
     affected_transaction_ids: list[str] = Field(
         default_factory=list,
         description=(
-            "Affected transaction identifiers when the readiness reason is "
-            "transaction-scoped."
+            "Affected transaction identifiers when the readiness reason is transaction-scoped."
         ),
         examples=[["TXN-20260328-0001", "TXN-20260328-0002"]],
     )
@@ -645,8 +641,7 @@ class PortfolioReadinessResponse(BaseModel):
     latest_booked_position_snapshot_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent current-epoch position snapshot date on or before "
-            "resolved_as_of_date."
+            "Most recent current-epoch position snapshot date on or before resolved_as_of_date."
         ),
         examples=["2026-03-28"],
     )
@@ -671,8 +666,7 @@ class PortfolioReadinessResponse(BaseModel):
     snapshot_valuation_valued_positions: int = Field(
         ...,
         description=(
-            "Current-epoch positions on the latest booked snapshot date with "
-            "non-UNVALUED coverage."
+            "Current-epoch positions on the latest booked snapshot date with non-UNVALUED coverage."
         ),
         examples=[7],
     )
@@ -687,8 +681,7 @@ class PortfolioReadinessResponse(BaseModel):
     controls_status: Optional[str] = Field(
         None,
         description=(
-            "Latest financial reconciliation control status relevant to reporting "
-            "readiness."
+            "Latest financial reconciliation control status relevant to reporting readiness."
         ),
         examples=["COMPLETED"],
     )
@@ -750,8 +743,7 @@ class CalculatorSloBucket(BaseModel):
     oldest_open_job_correlation_id: Optional[str] = Field(
         None,
         description=(
-            "Durable correlation identifier for the oldest open job contributing to this "
-            "backlog."
+            "Durable correlation identifier for the oldest open job contributing to this backlog."
         ),
         examples=["corr-val-20260313-001"],
     )
@@ -1024,6 +1016,8 @@ class LineageKeyRecord(BaseModel):
 
 
 class LineageKeyListResponse(BaseModel):
+    product_name: Literal["IngestionEvidenceBundle"] = product_name_field("IngestionEvidenceBundle")
+    product_version: Literal["v1"] = product_version_field()
     generated_at_utc: datetime = Field(
         ...,
         description="UTC timestamp when this lineage key snapshot was generated.",
@@ -1082,8 +1076,7 @@ class SupportJobRecord(BaseModel):
     security_id: Optional[str] = Field(
         None,
         description=(
-            "Security identifier for security-scoped work such as valuation or durable replay "
-            "jobs."
+            "Security identifier for security-scoped work such as valuation or durable replay jobs."
         ),
         examples=["AAPL.OQ", "SEC-US-IBM"],
     )
@@ -1195,6 +1188,11 @@ class SupportJobListResponse(BaseModel):
             ]
         ],
     )
+
+
+class ReprocessingJobListResponse(SupportJobListResponse):
+    product_name: Literal["IngestionEvidenceBundle"] = product_name_field("IngestionEvidenceBundle")
+    product_version: Literal["v1"] = product_version_field()
 
 
 class AnalyticsExportJobRecord(BaseModel):
@@ -1405,6 +1403,10 @@ class ReconciliationRunRecord(BaseModel):
 
 
 class ReconciliationRunListResponse(BaseModel):
+    product_name: Literal["ReconciliationEvidenceBundle"] = product_name_field(
+        "ReconciliationEvidenceBundle"
+    )
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     generated_at_utc: datetime = Field(
         ...,
@@ -1504,6 +1506,10 @@ class ReconciliationFindingRecord(BaseModel):
 
 
 class ReconciliationFindingListResponse(BaseModel):
+    product_name: Literal["ReconciliationEvidenceBundle"] = product_name_field(
+        "ReconciliationEvidenceBundle"
+    )
+    product_version: Literal["v1"] = product_version_field()
     run_id: str = Field(
         ..., description="Reconciliation run identifier.", examples=["recon_1234567890abcdef"]
     )
@@ -1682,6 +1688,8 @@ class ReprocessingKeyRecord(BaseModel):
 
 
 class ReprocessingKeyListResponse(BaseModel):
+    product_name: Literal["IngestionEvidenceBundle"] = product_name_field("IngestionEvidenceBundle")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     stale_threshold_minutes: int = Field(
         ...,

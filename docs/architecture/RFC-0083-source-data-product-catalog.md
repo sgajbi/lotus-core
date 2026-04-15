@@ -159,6 +159,12 @@ The snapshot DTO-envelope binding adds `product_name` and `product_version` to
 `x-lotus-source-data-product` metadata remains the route discovery mechanism; the response fields
 make the resolved product identity visible in generated client models and runtime payloads.
 
+The evidence DTO-envelope binding adds `product_name` and `product_version` to
+`IngestionEvidenceBundle` lineage-key, reprocessing-key, and reprocessing-job responses, and to
+`ReconciliationEvidenceBundle` run and finding responses. The reprocessing-job binding uses a
+dedicated `ReprocessingJobListResponse` envelope so generic valuation and aggregation support-job
+responses do not claim ingestion evidence semantics.
+
 ## Validation
 
 Slice 6 validation is:

@@ -363,6 +363,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     components = schema["components"]["schemas"]
     calculator_slo = components["CalculatorSloResponse"]
     lineage_keys = components["LineageKeyListResponse"]
+    reprocessing_jobs_schema = components["ReprocessingJobListResponse"]
     support_jobs = components["SupportJobListResponse"]
     support_overview = components["SupportOverviewResponse"]
     readiness_response = components["PortfolioReadinessResponse"]
@@ -373,6 +374,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Valuation calculator SLO snapshot for this portfolio."
     )
     assert lineage_keys["properties"]["items"]["description"] == "Current lineage key states."
+    assert lineage_keys["properties"]["product_name"]["default"] == "IngestionEvidenceBundle"
+    assert reprocessing_jobs_schema["properties"]["product_name"]["default"] == (
+        "IngestionEvidenceBundle"
+    )
+    assert reprocessing_jobs_schema["properties"]["product_version"]["default"] == "v1"
+    assert "product_name" not in support_jobs["properties"]
     assert support_jobs["properties"]["items"]["description"] == (
         "Operational jobs for support workflows."
     )
@@ -787,6 +794,10 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
     )
+    assert reconciliation_run_schema["properties"]["product_name"]["default"] == (
+        "ReconciliationEvidenceBundle"
+    )
+    assert reconciliation_run_schema["properties"]["product_version"]["default"] == "v1"
     assert reconciliation_run_schema["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this reconciliation-run support snapshot was generated."
     )
@@ -810,6 +821,9 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
     )
     assert reconciliation_finding_schema["properties"]["items"]["description"] == (
         "Durable reconciliation findings for the requested run."
+    )
+    assert reconciliation_finding_schema["properties"]["product_name"]["default"] == (
+        "ReconciliationEvidenceBundle"
     )
     assert reconciliation_finding_schema["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this reconciliation-finding support snapshot was generated."
@@ -850,6 +864,10 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
     assert reprocessing_key_schema["properties"]["items"]["description"] == (
         "Durable replay key rows for support workflows."
     )
+    assert reprocessing_key_schema["properties"]["product_name"]["default"] == (
+        "IngestionEvidenceBundle"
+    )
+    assert reprocessing_key_schema["properties"]["product_version"]["default"] == "v1"
     assert reprocessing_key_schema["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale support rows in this listing."
     )

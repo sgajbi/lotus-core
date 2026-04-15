@@ -20,6 +20,7 @@ from ..dtos.operations_dto import (
     ReconciliationFindingRecord,
     ReconciliationRunListResponse,
     ReconciliationRunRecord,
+    ReprocessingJobListResponse,
     ReprocessingKeyListResponse,
     ReprocessingKeyRecord,
     ReprocessingSloBucket,
@@ -84,9 +85,7 @@ class OperationsService:
         status = cls._normalize_analytics_export_status(status) or ""
         if status == "failed":
             return "FAILED"
-        if cls._is_analytics_export_job_stale(
-            status, updated_at, now, stale_threshold_minutes
-        ):
+        if cls._is_analytics_export_job_stale(status, updated_at, now, stale_threshold_minutes):
             return "STALE_RUNNING"
         if status == "running":
             return "RUNNING"
@@ -122,9 +121,7 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
-        if cls._is_reprocessing_key_stale(
-            status, updated_at, now, stale_threshold_minutes
-        ):
+        if cls._is_reprocessing_key_stale(status, updated_at, now, stale_threshold_minutes):
             return "STALE_REPROCESSING"
         if status == "REPROCESSING":
             return "REPROCESSING"
@@ -260,9 +257,7 @@ class OperationsService:
         )
 
     @staticmethod
-    def _bucket_status(
-        reasons: list[PortfolioReadinessReason], has_activity: bool
-    ) -> str:
+    def _bucket_status(reasons: list[PortfolioReadinessReason], has_activity: bool) -> str:
         if not has_activity:
             return "NO_ACTIVITY"
         if any(reason.severity == "ERROR" for reason in reasons):
@@ -295,11 +290,7 @@ class OperationsService:
                 record.transaction_id for record in fx_summary.sample_records
             ],
             affected_security_ids=sorted(
-                {
-                    record.security_id
-                    for record in fx_summary.sample_records
-                    if record.security_id
-                }
+                {record.security_id for record in fx_summary.sample_records if record.security_id}
             ),
         )
 
@@ -422,18 +413,14 @@ class OperationsService:
             )
         analytics_export_backlog_age_minutes = None
         if analytics_export_job_health.oldest_open_job_created_at:
-            delta = (
-                generated_at_utc - analytics_export_job_health.oldest_open_job_created_at
-            )
+            delta = generated_at_utc - analytics_export_job_health.oldest_open_job_created_at
             analytics_export_backlog_age_minutes = max(0, int(delta.total_seconds() // 60))
         reprocessing_backlog_age_days = None
         if reprocessing_health.oldest_reprocessing_watermark_date:
             reference_date = latest_business_date or generated_at_utc.date()
             reprocessing_backlog_age_days = max(
                 0,
-                (
-                    reference_date - reprocessing_health.oldest_reprocessing_watermark_date
-                ).days,
+                (reference_date - reprocessing_health.oldest_reprocessing_watermark_date).days,
             )
 
         controls_status = latest_control_stage.status if latest_control_stage else None
@@ -488,9 +475,7 @@ class OperationsService:
             oldest_pending_analytics_export_created_at=(
                 analytics_export_job_health.oldest_open_job_created_at
             ),
-            oldest_pending_analytics_export_job_id=(
-                analytics_export_job_health.oldest_open_job_id
-            ),
+            oldest_pending_analytics_export_job_id=(analytics_export_job_health.oldest_open_job_id),
             oldest_pending_analytics_export_request_fingerprint=(
                 analytics_export_job_health.oldest_open_request_fingerprint
             ),
@@ -507,9 +492,7 @@ class OperationsService:
             controls_last_source_event_type=(
                 latest_control_stage.last_source_event_type if latest_control_stage else None
             ),
-            controls_created_at=(
-                latest_control_stage.created_at if latest_control_stage else None
-            ),
+            controls_created_at=(latest_control_stage.created_at if latest_control_stage else None),
             controls_ready_emitted_at=(
                 latest_control_stage.ready_emitted_at if latest_control_stage else None
             ),
@@ -524,32 +507,22 @@ class OperationsService:
                 latest_reconciliation_run.run_id if latest_reconciliation_run else None
             ),
             controls_latest_reconciliation_type=(
-                latest_reconciliation_run.reconciliation_type
-                if latest_reconciliation_run
-                else None
+                latest_reconciliation_run.reconciliation_type if latest_reconciliation_run else None
             ),
             controls_latest_reconciliation_status=(
                 latest_reconciliation_run.status if latest_reconciliation_run else None
             ),
             controls_latest_reconciliation_correlation_id=(
-                latest_reconciliation_run.correlation_id
-                if latest_reconciliation_run
-                else None
+                latest_reconciliation_run.correlation_id if latest_reconciliation_run else None
             ),
             controls_latest_reconciliation_requested_by=(
-                latest_reconciliation_run.requested_by
-                if latest_reconciliation_run
-                else None
+                latest_reconciliation_run.requested_by if latest_reconciliation_run else None
             ),
             controls_latest_reconciliation_dedupe_key=(
-                latest_reconciliation_run.dedupe_key
-                if latest_reconciliation_run
-                else None
+                latest_reconciliation_run.dedupe_key if latest_reconciliation_run else None
             ),
             controls_latest_reconciliation_failure_reason=(
-                latest_reconciliation_run.failure_reason
-                if latest_reconciliation_run
-                else None
+                latest_reconciliation_run.failure_reason if latest_reconciliation_run else None
             ),
             controls_latest_reconciliation_total_findings=(
                 latest_reconciliation_finding_summary.total_findings
@@ -690,12 +663,9 @@ class OperationsService:
             reporting_reasons.append(missing_fx_reporting)
             holdings_reasons.append(missing_fx_holdings)
 
-        if (
-            latest_booked_transaction_date is not None
-            and (
-                latest_booked_position_snapshot_date is None
-                or latest_booked_position_snapshot_date < latest_booked_transaction_date
-            )
+        if latest_booked_transaction_date is not None and (
+            latest_booked_position_snapshot_date is None
+            or latest_booked_position_snapshot_date < latest_booked_transaction_date
         ):
             holdings_reasons.append(
                 self._reason(
@@ -995,9 +965,7 @@ class OperationsService:
                     reprocessing_health.oldest_reprocessing_security_id
                 ),
                 oldest_reprocessing_epoch=reprocessing_health.oldest_reprocessing_epoch,
-                oldest_reprocessing_updated_at=(
-                    reprocessing_health.oldest_reprocessing_updated_at
-                ),
+                oldest_reprocessing_updated_at=(reprocessing_health.oldest_reprocessing_updated_at),
                 backlog_age_days=reprocessing_backlog_age_days,
             ),
         )
@@ -1043,9 +1011,7 @@ class OperationsService:
         latest_valuation_job_date = (
             latest_valuation_job.valuation_date if latest_valuation_job else None
         )
-        latest_valuation_job_status = (
-            latest_valuation_job.status if latest_valuation_job else None
-        )
+        latest_valuation_job_status = latest_valuation_job.status if latest_valuation_job else None
         has_artifact_gap = self._has_lineage_artifact_gap(
             latest_position_history_date=latest_history_date,
             latest_daily_snapshot_date=latest_snapshot_date,
@@ -1571,7 +1537,7 @@ class OperationsService:
         job_id: int | None = None,
         correlation_id: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
-    ) -> SupportJobListResponse:
+    ) -> ReprocessingJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
@@ -1597,7 +1563,7 @@ class OperationsService:
                 as_of=generated_at_utc,
             ),
         )
-        return SupportJobListResponse(
+        return ReprocessingJobListResponse(
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             generated_at_utc=generated_at_utc,
