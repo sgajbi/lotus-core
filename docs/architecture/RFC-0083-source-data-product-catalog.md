@@ -191,6 +191,12 @@ position-state status are `STALE`; empty holdings or holdings without position-s
 `UNKNOWN`. The response also populates `latest_evidence_timestamp` from durable position-row and
 position-state timestamps when available.
 
+`TransactionLedgerWindow` responses populate `latest_evidence_timestamp` from the latest durable
+transaction-row update timestamp across the filtered ledger window, independent of the requested
+page. They continue to leave reconciliation, data-quality, source-batch, and snapshot fields at
+truthful unresolved defaults until transaction-level reconciliation and source-lineage evidence are
+joined into the ledger response path.
+
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly
 path. It leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs

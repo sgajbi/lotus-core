@@ -1,5 +1,5 @@
 # tests/unit/services/query_service/repositories/test_transaction_repository.py
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -382,3 +382,30 @@ async def test_get_transactions_count_with_fx_filters(
     assert "transactions.swap_event_id = 'FXSWAP-001'" in compiled_query
 
 
+async def test_get_latest_evidence_timestamp_applies_transaction_window_filters(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    updated_at = datetime(2025, 2, 3, 14, 45, tzinfo=UTC)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = updated_at
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    result = await repository.get_latest_evidence_timestamp(
+        portfolio_id="P1",
+        security_id="S1",
+        transaction_type="FX_FORWARD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        as_of_date=date(2025, 1, 15),
+    )
+
+    assert result == updated_at
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "max(transactions.updated_at)" in compiled_query.lower()
+    assert "transactions.portfolio_id = 'P1'" in compiled_query
+    assert "transactions.security_id = 'S1'" in compiled_query
+    assert "transactions.transaction_type = 'FX_FORWARD'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query

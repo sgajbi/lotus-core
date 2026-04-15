@@ -89,6 +89,21 @@ class TransactionService:
             end_date=end_date,
             as_of_date=effective_as_of_date,
         )
+        latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
+            portfolio_id=portfolio_id,
+            instrument_id=instrument_id,
+            security_id=security_id,
+            transaction_type=transaction_type,
+            component_type=component_type,
+            linked_transaction_group_id=linked_transaction_group_id,
+            fx_contract_id=fx_contract_id,
+            swap_event_id=swap_event_id,
+            near_leg_group_id=near_leg_group_id,
+            far_leg_group_id=far_leg_group_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=effective_as_of_date,
+        )
 
         transactions = []
         for transaction in db_results:
@@ -106,5 +121,6 @@ class TransactionService:
             transactions=transactions,
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date or end_date or date.today(),
+                latest_evidence_timestamp=latest_evidence_timestamp,
             ),
         )
