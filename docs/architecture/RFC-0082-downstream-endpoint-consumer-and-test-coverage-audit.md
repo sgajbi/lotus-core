@@ -337,7 +337,7 @@ Automated proof now includes a risk-free schema-family completeness assertion in
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #294` risk-free data missing for USD live window | Still valid. This is a live data-readiness defect, not a route-publication defect. | Keep open until canonical/live source data is present and revalidated. |
+| `lotus-core #294` risk-free data missing for USD live window | Current repo and recorded live evidence indicate this is likely stale rather than a standing publication defect: the canonical front-office seed bundle extends USD risk-free series through `2026-05-10`, and the 2026-04-15 production-readiness closure records live USD coverage of `90` points with zero missing dates for `2026-01-01` to `2026-03-31`. | Closure comment posted with seed and live-evidence references; re-open only if fresh canonical/live probes again show empty USD series for the governed window. |
 | `lotus-risk #77` rolling Sharpe follow-up after upstream fix | Still valid downstream follow-up issue. | Keep open until `lotus-core #294` is closed and live revalidation passes. |
 | `lotus-gateway #112` stale zero-risk-free fallback wording | Still valid product-surface issue in gateway. Core route semantics are now documented truthfully, but gateway messaging still needs to align. | Keep open in gateway. |
 
