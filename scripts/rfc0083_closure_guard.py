@@ -68,6 +68,10 @@ EXPECTED_SLICE_ARTIFACTS = {
         "docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md",
         "src/libs/portfolio-common/portfolio_common/source_data_security.py",
         "tests/unit/libs/portfolio-common/test_source_data_security.py",
+        "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
+        "tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py",
+        "src/services/query_service/app/enterprise_readiness.py",
+        "src/services/query_control_plane_service/app/enterprise_readiness.py",
     },
     10: {
         "docs/architecture/RFC-0083-eventing-supportability-target-model.md",

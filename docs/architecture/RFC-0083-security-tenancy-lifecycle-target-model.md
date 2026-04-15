@@ -3,15 +3,19 @@
 This document is the RFC-0083 Slice 9 target model for source-data product security, tenancy,
 entitlement, audit, sensitivity, and retention posture in `lotus-core`.
 
-It does not change runtime authorization behavior, persistence, DTO payloads, or downstream response
-contracts. The governed profile is exposed in OpenAPI route metadata so consumers and contract guards
-can discover the required tenant, entitlement, audit, sensitivity, and retention posture before
-runtime enforcement moves to gateway/platform ingress or service policy.
+It does not introduce new entitlement policy semantics, persistence changes, DTO payload changes, or
+downstream response contract changes. The governed profile is exposed in OpenAPI route metadata so
+consumers and contract guards can discover the required tenant, entitlement, audit, sensitivity, and
+retention posture before runtime enforcement moves to gateway/platform ingress or service policy.
 
-The executable helper is:
+The executable helpers are:
 
 1. `src/libs/portfolio-common/portfolio_common/source_data_security.py`
 2. `tests/unit/libs/portfolio-common/test_source_data_security.py`
+3. `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`
+4. `tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py`
+5. `src/services/query_service/app/enterprise_readiness.py`
+6. `src/services/query_control_plane_service/app/enterprise_readiness.py`
 
 ## Target Principle
 
@@ -101,15 +105,28 @@ Every catalog-backed source-data product route now exposes two machine-readable 
 `source_data_product_openapi_extra(...)` matches the governed security profile. This is contract
 readiness proof, not runtime authorization enforcement.
 
+## Shared Runtime Support
+
+`query_service` and `query_control_plane_service` now use the shared
+`portfolio_common.enterprise_readiness` runtime for enterprise policy version headers, write payload
+limits, optional write authorization checks, capability-rule matching, feature-flag lookup,
+sensitive audit metadata redaction, and write audit event emission.
+
+Each service keeps a local `enterprise_readiness.py` wrapper so existing imports, tests, settings,
+and service-specific patch points remain stable. The shared helper removes duplicated middleware
+logic and gives future runtime security work one implementation point, but it does not by itself
+claim production entitlement enforcement closure.
+
 ## Validation
 
 Slice 9 validation is:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_security.py -q`,
 2. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py -q`,
-3. `python scripts/source_data_product_contract_guard.py`,
-4. `python -m pytest tests/integration/services/query_service/test_main_app.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`,
-5. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
-6. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
-7. `git diff --check`,
-8. `make lint`.
+3. `python -m pytest tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py -q`,
+4. `python scripts/source_data_product_contract_guard.py`,
+5. `python -m pytest tests/integration/services/query_service/test_main_app.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`,
+6. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/enterprise_readiness.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
+7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/enterprise_readiness.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
+8. `git diff --check`,
+9. `make lint`.

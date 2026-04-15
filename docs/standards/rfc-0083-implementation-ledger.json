@@ -12,7 +12,7 @@
     "full lotus-core PR Merge Gate",
     "affected downstream consumer PR Merge Gates",
     "platform end-to-end validation where canonical product flows depend on core behavior",
-    "runtime authorization and entitlement proof when security controls move from target model to enforcement",
+    "full runtime authorization and entitlement proof when security controls move from target model to production enforcement",
     "full cross-service event replay proof when event payload behavior changes beyond the centrally guarded outbox envelope"
   ],
   "slices": [
@@ -123,11 +123,15 @@
       "slice": 9,
       "title": "Security, tenancy, retention, and entitlement model",
       "status": "completed",
-      "validationLane": "portfolio-common unit tests",
+      "validationLane": "portfolio-common unit tests and enterprise readiness wrapper tests",
       "artifacts": [
         "docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md",
         "src/libs/portfolio-common/portfolio_common/source_data_security.py",
-        "tests/unit/libs/portfolio-common/test_source_data_security.py"
+        "tests/unit/libs/portfolio-common/test_source_data_security.py",
+        "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
+        "tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py",
+        "src/services/query_service/app/enterprise_readiness.py",
+        "src/services/query_control_plane_service/app/enterprise_readiness.py"
       ]
     },
     {

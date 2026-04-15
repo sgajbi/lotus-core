@@ -25,7 +25,7 @@ slice:
 7. source-data product catalog,
 8. market/reference quality model,
 9. endpoint consolidation disposition,
-10. security, tenancy, audit, and lifecycle profiles,
+10. security, tenancy, audit, lifecycle profiles, and shared enterprise-readiness runtime support,
 11. eventing and supportability catalog with runtime outbox event/type topic alignment guard,
 12. production-readiness closure ledger.
 
@@ -43,8 +43,8 @@ Full production runtime closure still requires:
 1. the `lotus-core` PR Merge Gate,
 2. affected downstream consumer PR Merge Gates,
 3. platform end-to-end validation where canonical product flows depend on core behavior,
-4. runtime authorization and entitlement proof when security controls move from target model to
-   enforcement,
+4. full runtime authorization and entitlement proof when security controls move from target model to
+   production enforcement,
 5. full cross-service event replay proof when event payload behavior changes beyond the centrally
    guarded outbox envelope.
 
