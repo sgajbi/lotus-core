@@ -194,13 +194,16 @@ to `HoldingsAsOf`, such as cash balances and holdings snapshots, populate
 `latest_evidence_timestamp` from the returned daily-position snapshot rows while they remain
 available during pre-live endpoint consolidation.
 
-`TransactionLedgerWindow` responses populate `latest_evidence_timestamp` from the latest durable
-transaction-row update timestamp across the filtered ledger window, independent of the requested
-page. They continue to leave reconciliation, data-quality, source-batch, and snapshot fields at
-truthful unresolved defaults until transaction-level reconciliation and source-lineage evidence are
-joined into the ledger response path. Deprecated reporting convenience responses that still map to
-`TransactionLedgerWindow`, such as income and activity summaries, populate the same evidence
-timestamp from the transaction rows included in their year-to-date aggregation windows.
+The canonical `TransactionLedgerWindow` portfolio transaction response populates
+`latest_evidence_timestamp` from the latest durable transaction-row update timestamp across the
+filtered ledger window, independent of the requested page. It derives `data_quality_status` from the
+completeness of the returned ledger window: complete unpaginated windows are `COMPLETE`, paginated
+or offset windows are `PARTIAL`, and empty windows remain `UNKNOWN`. It continues to leave
+reconciliation, source-batch, and snapshot fields at truthful unresolved defaults until
+transaction-level reconciliation and source-lineage evidence are joined into the ledger response
+path. Deprecated reporting convenience responses that still map to `TransactionLedgerWindow`, such
+as income and activity summaries, populate the same evidence timestamp from the transaction rows
+included in their year-to-date aggregation windows while leaving data-quality status unresolved.
 
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly

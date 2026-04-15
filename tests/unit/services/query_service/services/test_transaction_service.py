@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from portfolio_common.database_models import Cashflow, Transaction
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
@@ -152,9 +153,79 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.generated_at.tzinfo is not None
         assert response_dto.restatement_version == "current"
         assert response_dto.reconciliation_status == "UNKNOWN"
-        assert response_dto.data_quality_status == "UNKNOWN"
+        assert response_dto.data_quality_status == PARTIAL
         assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
         assert response_dto.correlation_id is None
+
+
+async def test_ledger_data_quality_status_classifies_complete_partial_and_empty_windows() -> None:
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=2,
+            returned_count=2,
+            skip=0,
+        )
+        == COMPLETE
+    )
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=25,
+            returned_count=10,
+            skip=0,
+        )
+        == PARTIAL
+    )
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=25,
+            returned_count=10,
+            skip=10,
+        )
+        == PARTIAL
+    )
+    assert (
+        TransactionService._ledger_data_quality_status(
+            total_count=0,
+            returned_count=0,
+            skip=0,
+        )
+        == UNKNOWN
+    )
+
+
+async def test_get_transactions_classifies_complete_window(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transactions_count.return_value = 2
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    assert response_dto.data_quality_status == COMPLETE
+
+
+async def test_get_transactions_classifies_empty_window_as_unknown(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transactions.return_value = []
+    mock_transaction_repo.get_transactions_count.return_value = 0
+    mock_transaction_repo.get_latest_evidence_timestamp.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    assert response_dto.data_quality_status == UNKNOWN
+    assert response_dto.latest_evidence_timestamp is None
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):
