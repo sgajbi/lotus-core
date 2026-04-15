@@ -13,7 +13,10 @@ from portfolio_common.source_data_products import (
     source_data_product_openapi_extra,
     validate_source_data_product_catalog,
 )
-from portfolio_common.source_data_security import get_source_data_security_profile
+from portfolio_common.source_data_security import (
+    get_source_data_security_profile,
+    required_source_data_capability,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -277,6 +280,7 @@ def evaluate_source_data_product_bindings(
             "sensitivity_classification": profile.sensitivity_classification,
             "retention_requirement": profile.retention_requirement,
             "audit_requirement": profile.audit_requirement,
+            "required_capability": required_source_data_capability(profile.product_name),
             "pii_fields": list(profile.pii_fields),
             "operator_only": profile.operator_only,
         }

@@ -10,6 +10,8 @@ from portfolio_common.source_data_security import (
     SOURCE_DATA_SECURITY_PROFILES,
     SourceDataSecurityProfile,
     get_source_data_security_profile,
+    required_source_data_capability,
+    source_data_capability_rules,
     source_data_security_openapi_extra,
     validate_source_data_security_profiles,
 )
@@ -123,8 +125,27 @@ def test_source_data_security_openapi_extra_exposes_governed_profile() -> None:
     assert extension["access_classification"] == SYSTEM_ACCESS
     assert extension["sensitivity_classification"] == CLIENT_CONFIDENTIAL
     assert extension["audit_requirement"] == AUDIT_SYSTEM_ACCESS
+    assert extension["required_capability"] == "source_data.portfolio_analytics_reference.read"
     assert {"portfolio_id", "client_id"} <= set(extension["pii_fields"])
     assert extension["operator_only"] is False
+
+
+def test_source_data_products_have_default_read_capability_rules() -> None:
+    rules = source_data_capability_rules()
+
+    assert (
+        rules["POST /integration/portfolios/{portfolio_id}/analytics/reference"]
+        == "source_data.portfolio_analytics_reference.read"
+    )
+    assert (
+        rules["GET /support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings"]
+        == "source_data.reconciliation_evidence_bundle.read"
+    )
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        capability = required_source_data_capability(product.product_name)
+        for route in product.current_routes:
+            assert rules[f"GET {route}"] == capability
+            assert rules[f"POST {route}"] == capability
 
 
 def test_security_profile_validation_rejects_missing_product_profile() -> None:

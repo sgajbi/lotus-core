@@ -191,7 +191,7 @@ def test_authorize_request_requires_read_capability_rule_when_strict(monkeypatch
     assert reason == "missing_capability_rule"
 
 
-def test_validate_enterprise_runtime_config_reports_strict_read_rules_gap(monkeypatch):
+def test_validate_enterprise_runtime_config_accepts_source_data_default_rules(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
@@ -199,7 +199,7 @@ def test_validate_enterprise_runtime_config_reports_strict_read_rules_gap(monkey
 
     issues = validate_enterprise_runtime_config()
 
-    assert "missing_capability_rules" in issues
+    assert "missing_capability_rules" not in issues
     assert "missing_primary_key_id" not in issues
 
 

@@ -52,7 +52,7 @@ The governed query-control-plane routes are expected to meet RFC-0067 documentat
 3. Every response attribute has an explicit description and example where the schema carries example metadata.
 4. 404 and validation examples are present for important operator and integration failure modes.
 5. OpenAPI operations expose `x-lotus-source-data-product` so consumers can discover product name, version, owner, route family, paging/export mode, and intended consumers.
-6. OpenAPI operations expose `x-lotus-source-data-security` so consumers can discover tenant, entitlement, sensitivity, and audit expectations.
+6. OpenAPI operations expose `x-lotus-source-data-security` so consumers can discover tenant, entitlement, required capability, sensitivity, and audit expectations.
 
 Current automated evidence:
 

@@ -91,6 +91,9 @@ def test_source_data_product_openapi_extra_exposes_machine_readable_contract_ide
     assert security_extension["entitlement_required"] is True
     assert security_extension["access_classification"] == "system_access"
     assert security_extension["audit_requirement"] == "audit_system_access"
+    assert (
+        security_extension["required_capability"] == "source_data.portfolio_timeseries_input.read"
+    )
 
 
 def test_holdings_product_records_convenience_shapes_to_consolidate() -> None:

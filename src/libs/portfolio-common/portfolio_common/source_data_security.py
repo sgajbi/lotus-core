@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from portfolio_common.source_data_products import (
@@ -29,6 +30,7 @@ RETAIN_FOR_OPERATIONAL_AUDIT = "retain_for_operational_audit"
 AUDIT_READ_AND_EXPORT = "audit_read_and_export"
 AUDIT_OPERATOR_ACCESS = "audit_operator_access"
 AUDIT_SYSTEM_ACCESS = "audit_system_access"
+SOURCE_DATA_READ_METHODS = ("GET", "POST")
 
 ACCESS_CLASSIFICATION_ROUTE_FAMILIES = {
     BUSINESS_CONSUMER_ACCESS: {OPERATIONAL_READ, SNAPSHOT_AND_SIMULATION},
@@ -232,10 +234,27 @@ def source_data_security_openapi_extra(product_name: str) -> dict[str, dict[str,
             "sensitivity_classification": profile.sensitivity_classification,
             "retention_requirement": profile.retention_requirement,
             "audit_requirement": profile.audit_requirement,
+            "required_capability": required_source_data_capability(profile.product_name),
             "pii_fields": list(profile.pii_fields),
             "operator_only": profile.operator_only,
         }
     }
+
+
+def required_source_data_capability(product_name: str) -> str:
+    get_source_data_security_profile(product_name)
+    normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", product_name).lower()
+    return f"source_data.{normalized}.read"
+
+
+def source_data_capability_rules() -> dict[str, str]:
+    rules: dict[str, str] = {}
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        capability = required_source_data_capability(product.product_name)
+        for route in product.current_routes:
+            for method in SOURCE_DATA_READ_METHODS:
+                rules[f"{method} {route}"] = capability
+    return rules
 
 
 def validate_source_data_security_profiles(

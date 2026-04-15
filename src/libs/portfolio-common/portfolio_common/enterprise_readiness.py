@@ -11,6 +11,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
+from portfolio_common.source_data_security import source_data_capability_rules
 
 MiddlewareNext = Callable[[Request], Awaitable[Response]]
 MiddlewareCallable = Callable[[Request, MiddlewareNext], Awaitable[Response]]
@@ -122,7 +123,10 @@ class EnterpriseReadinessRuntime:
         return self.load_json_map("ENTERPRISE_FEATURE_FLAGS_JSON")
 
     def load_capability_rules(self) -> dict[str, str]:
-        rules = self.load_json_map("ENTERPRISE_CAPABILITY_RULES_JSON")
+        rules = {
+            **source_data_capability_rules(),
+            **self.load_json_map("ENTERPRISE_CAPABILITY_RULES_JSON"),
+        }
         normalized: dict[str, str] = {}
         for key, capability in rules.items():
             normalized_rule = _normalize_capability_rule(key, capability)
@@ -159,11 +163,15 @@ class EnterpriseReadinessRuntime:
         self, method: str, path: str, headers: dict[str, str]
     ) -> tuple[bool, str | None]:
         normalized_method = method.upper()
+        required_capability = self.required_capability(normalized_method, path)
         requires_write_authz = normalized_method in WRITE_METHODS and self.env_enabled(
             "ENTERPRISE_ENFORCE_AUTHZ", "false"
         )
-        requires_read_authz = normalized_method in READ_AUTHZ_METHODS and self.env_enabled(
-            "ENTERPRISE_ENFORCE_READ_AUTHZ", "false"
+        requires_read_authz = (
+            normalized_method in READ_AUTHZ_METHODS or required_capability is not None
+        ) and self.env_enabled(
+            "ENTERPRISE_ENFORCE_READ_AUTHZ",
+            "false",
         )
         if not (requires_write_authz or requires_read_authz):
             return True, None
@@ -176,7 +184,6 @@ class EnterpriseReadinessRuntime:
         if not (normalized.get("x-service-identity") or normalized.get("authorization")):
             return False, "missing_service_identity"
 
-        required_capability = self.required_capability(normalized_method, path)
         if not required_capability and self.env_enabled(
             "ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false"
         ):
@@ -246,6 +253,8 @@ def _path_matches_rule(path: str, rule_path: str) -> bool:
     normalized_rule = rule_path.rstrip("/")
     if not normalized_rule or normalized_rule == "/":
         return True
+    if "{" in normalized_rule and "}" in normalized_rule:
+        return _path_template_matches(path, normalized_rule)
     return path == normalized_rule or path.startswith(f"{normalized_rule}/")
 
 
@@ -264,6 +273,21 @@ def _normalize_capability_rule(key: Any, capability: Any) -> tuple[str, str] | N
     ):
         return None
     return f"{method} {path.rstrip('/') or '/'}", normalized_capability
+
+
+def _path_template_matches(path: str, rule_path: str) -> bool:
+    path_segments = [segment for segment in path.rstrip("/").split("/") if segment]
+    rule_segments = [segment for segment in rule_path.rstrip("/").split("/") if segment]
+    if len(path_segments) < len(rule_segments):
+        return False
+    for path_segment, rule_segment in zip(path_segments, rule_segments):
+        if rule_segment.startswith("{") and rule_segment.endswith("}"):
+            if not path_segment:
+                return False
+            continue
+        if path_segment != rule_segment:
+            return False
+    return True
 
 
 def _rules_by_specificity(rules: dict[str, str]) -> list[tuple[str, str]]:

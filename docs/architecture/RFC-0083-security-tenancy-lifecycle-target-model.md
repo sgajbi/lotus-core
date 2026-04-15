@@ -3,10 +3,10 @@
 This document is the RFC-0083 Slice 9 target model for source-data product security, tenancy,
 entitlement, audit, sensitivity, and retention posture in `lotus-core`.
 
-It does not introduce new entitlement policy semantics, persistence changes, DTO payload changes, or
-downstream response contract changes. The governed profile is exposed in OpenAPI route metadata so
-consumers and contract guards can discover the required tenant, entitlement, audit, sensitivity, and
-retention posture before runtime enforcement moves to gateway/platform ingress or service policy.
+It does not introduce persistence changes, DTO payload changes, or downstream response contract
+changes. The governed profile is exposed in OpenAPI route metadata so consumers and contract guards
+can discover the required tenant, entitlement, capability, audit, sensitivity, and retention posture
+before production enforcement moves to gateway/platform ingress or service policy.
 
 The executable helpers are:
 
@@ -43,8 +43,9 @@ Every source-data product profile must define:
 5. sensitivity classification,
 6. retention requirement,
 7. audit requirement,
-8. PII/client-sensitive fields where applicable,
-9. whether the product is operator-only.
+8. governed read capability,
+9. PII/client-sensitive fields where applicable,
+10. whether the product is operator-only.
 
 The helper validates that every product in the Slice 6 source-data product catalog has a profile and
 emits the `x-lotus-source-data-security` OpenAPI extension for catalog-backed routes. It also
@@ -114,12 +115,12 @@ Every catalog-backed source-data product route now exposes two machine-readable 
 1. `x-lotus-source-data-product` for product identity, ownership, serving plane, consumers, and
    required supportability metadata,
 2. `x-lotus-source-data-security` for tenant scoping, entitlement scoping, access class, sensitivity
-   class, retention requirement, audit requirement, PII/client-sensitive field markers, and
-   operator-only posture.
+   class, retention requirement, audit requirement, governed read capability, PII/client-sensitive
+   field markers, and operator-only posture.
 
 `scripts/source_data_product_contract_guard.py` verifies that the OpenAPI metadata emitted by
 `source_data_product_openapi_extra(...)` matches the governed security profile. This is contract
-readiness proof, not runtime authorization enforcement.
+readiness proof and keeps the published capability requirement aligned with the catalog.
 
 ## Shared Runtime Support
 
@@ -130,6 +131,15 @@ sensitive audit metadata redaction, write audit event emission, opt-in read audi
 when `ENTERPRISE_AUDIT_READS=true`, opt-in read authorization when
 `ENTERPRISE_ENFORCE_READ_AUTHZ=true`, and strict capability-rule enforcement when
 `ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`.
+
+The shared runtime now derives default read capability rules directly from the source-data product
+catalog and security profiles. Each catalog route receives `GET` and `POST` read capability rules
+using `source_data.<product_name_snake_case>.read`, for example
+`source_data.portfolio_analytics_reference.read`. This covers query-style `POST` endpoints such as
+analytics-input routes, so enabling read authorization protects source-data products even when the
+request method is `POST`. `ENTERPRISE_CAPABILITY_RULES_JSON` can still add or override rules, but
+production source-data routes no longer rely on hand-written environment mappings before strict mode
+can be enabled.
 
 Each service keeps a local `enterprise_readiness.py` wrapper so existing imports, tests, settings,
 and service-specific patch points remain stable. The shared helper removes duplicated middleware
@@ -143,17 +153,21 @@ query-string values into audit metadata.
 
 Read authorization is also disabled by default. When enabled, GET and HEAD requests must provide the
 same actor, tenant, role, correlation, and service identity context required for write authorization,
-and may be checked against `ENTERPRISE_CAPABILITY_RULES_JSON` entries such as
-`GET /integration/portfolios`. This is service-policy support; full production entitlement closure
-still requires gateway/platform ingress policy proof and affected-consumer validation.
+and catalog-backed source-data `POST` requests must provide the same context when they match a
+governed source-data product capability rule. Requests may also be checked against
+`ENTERPRISE_CAPABILITY_RULES_JSON` entries such as `GET /integration/portfolios`, but source-data
+products already have catalog-derived defaults. This is service-policy support; full production
+entitlement closure still requires gateway/platform ingress policy proof and affected-consumer
+validation.
 
 When production policy requires explicit entitlement rules, `ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`
 can be enabled alongside read or write authorization. In that mode, any protected request without a
 matching method/path capability rule is denied with `missing_capability_rule`, and runtime
-configuration validation reports `missing_capability_rules` if no actionable capability rules are
-configured. Actionable rules must use a supported read/write method, an absolute route path, and a
-non-empty capability name, for example `GET /integration/portfolios` mapped to
-`analytics.reference.read`.
+configuration validation reports `missing_capability_rules` if no actionable catalog-derived or
+configured capability rules are available. Actionable rules must use a supported read/write method,
+an absolute route path or FastAPI-style path template, and a non-empty capability name, for example
+`GET /integration/portfolios/{portfolio_id}/analytics/reference` mapped to
+`source_data.portfolio_analytics_reference.read`.
 
 ## Validation
 

@@ -192,9 +192,9 @@ def test_control_plane_authorize_request_enforces_read_capability_rules(monkeypa
         "GET", "/integration/portfolios/PB1/analytics/reference", headers
     )
     assert denied is False
-    assert denied_reason == "missing_capability:analytics.reference.read"
+    assert denied_reason == "missing_capability:source_data.portfolio_analytics_reference.read"
 
-    headers["X-Capabilities"] = "positions.read,analytics.reference.read"
+    headers["X-Capabilities"] = "positions.read,source_data.portfolio_analytics_reference.read"
     allowed, allowed_reason = authorize_request(
         "GET", "/integration/portfolios/PB1/analytics/reference", headers
     )
@@ -217,10 +217,30 @@ def test_control_plane_authorize_request_requires_read_rule_when_strict(monkeypa
         "GET", "/integration/portfolios/PB1/analytics/reference", headers
     )
     assert allowed is False
-    assert reason == "missing_capability_rule"
+    assert reason == "missing_capability:source_data.portfolio_analytics_reference.read"
 
 
-def test_control_plane_runtime_config_reports_strict_read_rules_gap(monkeypatch):
+def test_control_plane_authorize_request_uses_source_data_default_capability(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "analytics-service",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-performance",
+        "X-Capabilities": "source_data.portfolio_analytics_reference.read",
+    }
+
+    allowed, reason = authorize_request(
+        "POST", "/integration/portfolios/PB1/analytics/reference", headers
+    )
+
+    assert allowed is True
+    assert reason is None
+
+
+def test_control_plane_runtime_config_accepts_source_data_default_rules(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
@@ -228,5 +248,5 @@ def test_control_plane_runtime_config_reports_strict_read_rules_gap(monkeypatch)
 
     issues = validate_enterprise_runtime_config()
 
-    assert "missing_capability_rules" in issues
+    assert "missing_capability_rules" not in issues
     assert "missing_primary_key_id" not in issues

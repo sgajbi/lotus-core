@@ -192,6 +192,48 @@ def test_authorize_request_allows_read_when_read_authorization_is_disabled() -> 
     assert reason is None
 
 
+def test_authorize_request_enforces_source_data_post_routes_as_read_contracts() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "analytics-service",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-performance",
+        "X-Capabilities": "source_data.portfolio_timeseries_input.read",
+    }
+
+    allowed, reason = runtime.authorize_request(
+        "POST",
+        "/integration/portfolios/PB1/analytics/portfolio-timeseries",
+        headers,
+    )
+
+    assert allowed is True
+    assert reason is None
+
+
+def test_authorize_request_matches_fastapi_path_templates_for_source_data_rules() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-manage",
+        "X-Capabilities": "source_data.reconciliation_evidence_bundle.read",
+    }
+
+    allowed, reason = runtime.authorize_request(
+        "GET",
+        "/support/portfolios/PB1/reconciliation-runs/run-1/findings",
+        headers,
+    )
+
+    assert allowed is True
+    assert reason is None
+
+
 def test_authorize_request_requires_matching_capability_rule_when_configured() -> None:
     runtime = _runtime(
         read_authz_enabled=True,
@@ -284,10 +326,16 @@ def test_capability_rules_keep_only_actionable_method_path_mappings() -> None:
         )
     )
 
-    assert runtime.load_capability_rules() == {"GET /portfolios": "portfolios.read"}
+    assert runtime.load_capability_rules()["GET /portfolios"] == "portfolios.read"
+    assert (
+        runtime.load_capability_rules()[
+            "POST /integration/portfolios/{portfolio_id}/analytics/reference"
+        ]
+        == "source_data.portfolio_analytics_reference.read"
+    )
 
 
-def test_runtime_config_treats_only_invalid_capability_rules_as_missing() -> None:
+def test_runtime_config_uses_source_data_default_capability_rules() -> None:
     runtime = _runtime(
         read_authz_enabled=True,
         require_capability_rules=True,
@@ -297,7 +345,7 @@ def test_runtime_config_treats_only_invalid_capability_rules_as_missing() -> Non
         ),
     )
 
-    assert "missing_capability_rules" in runtime.validate_enterprise_runtime_config()
+    assert "missing_capability_rules" not in runtime.validate_enterprise_runtime_config()
 
 
 def test_validate_enterprise_runtime_config_rejects_nonpositive_payload_limit() -> None:
@@ -312,14 +360,14 @@ def test_validate_enterprise_runtime_config_checks_primary_key_for_read_authoriz
     assert "missing_primary_key_id" in runtime.validate_enterprise_runtime_config()
 
 
-def test_validate_enterprise_runtime_config_reports_missing_capability_rules() -> None:
+def test_validate_enterprise_runtime_config_accepts_source_data_default_rules() -> None:
     runtime = _runtime(
         read_authz_enabled=True,
         require_capability_rules=True,
         settings=_Settings(enterprise_primary_key_id="primary"),
     )
 
-    assert "missing_capability_rules" in runtime.validate_enterprise_runtime_config()
+    assert "missing_capability_rules" not in runtime.validate_enterprise_runtime_config()
 
 
 def test_redact_sensitive_masks_nested_values() -> None:

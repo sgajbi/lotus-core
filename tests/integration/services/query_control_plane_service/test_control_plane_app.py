@@ -7,7 +7,10 @@ from portfolio_common.source_data_products import (
     QUERY_CONTROL_PLANE_SERVICE,
     SOURCE_DATA_PRODUCT_CATALOG,
 )
-from portfolio_common.source_data_security import get_source_data_security_profile
+from portfolio_common.source_data_security import (
+    get_source_data_security_profile,
+    required_source_data_capability,
+)
 
 from src.services.query_control_plane_service.app.main import app, lifespan
 
@@ -75,6 +78,9 @@ async def test_openapi_binds_query_control_plane_source_data_products(async_test
                 == profile.sensitivity_classification
             )
             assert security_extension["audit_requirement"] == profile.audit_requirement
+            assert security_extension["required_capability"] == required_source_data_capability(
+                product.product_name
+            )
             assert security_extension["operator_only"] == profile.operator_only
 
 

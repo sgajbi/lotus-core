@@ -20,7 +20,7 @@
   "remainingRuntimeProof": [
     "full lotus-core PR Merge Gate",
     "affected downstream consumer PR Merge Gates",
-    "full gateway/platform/runtime authorization and entitlement proof when opt-in service-policy controls move to production enforcement",
+    "full gateway/platform authorization and entitlement proof when opt-in service-policy controls move to production enforcement",
     "full cross-service event replay proof when event payload behavior changes beyond the centrally guarded outbox envelope"
   ],
   "slices": [
