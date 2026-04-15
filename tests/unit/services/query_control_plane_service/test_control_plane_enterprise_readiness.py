@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 import pytest
 from fastapi import Request
@@ -36,8 +37,6 @@ async def test_control_plane_enterprise_middleware_omits_not_set_correlation_on_
 
     token = correlation_id_var.set("<not-set>")
     try:
-        from unittest.mock import patch
-
         with patch(
             "src.services.query_control_plane_service.app.enterprise_readiness.emit_audit_event"
         ) as audit:
@@ -72,8 +71,6 @@ async def test_control_plane_enterprise_middleware_omits_not_set_correlation_on_
 
     token = correlation_id_var.set("<not-set>")
     try:
-        from unittest.mock import patch
-
         with patch(
             "src.services.query_control_plane_service.app.enterprise_readiness.emit_audit_event"
         ) as audit:
@@ -85,9 +82,81 @@ async def test_control_plane_enterprise_middleware_omits_not_set_correlation_on_
     assert audit.call_args.kwargs["correlation_id"] is None
 
 
-def test_control_plane_emit_audit_event_preserves_none_correlation():
-    from unittest.mock import patch
+@pytest.mark.asyncio
+async def test_control_plane_enterprise_middleware_denies_read_without_headers_when_enabled(
+    monkeypatch,
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    middleware = build_enterprise_audit_middleware()
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/integration/portfolios/PB1/analytics/reference",
+        "headers": [],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 1234),
+        "scheme": "http",
+    }
+    request = Request(scope)
 
+    async def _call_next(_: Request) -> Response:
+        return Response(status_code=200)
+
+    with patch(
+        "src.services.query_control_plane_service.app.enterprise_readiness.emit_audit_event"
+    ) as audit:
+        response = await middleware(request, _call_next)
+
+    assert response.status_code == 403
+    assert (
+        audit.call_args.kwargs["action"]
+        == "DENY GET /integration/portfolios/PB1/analytics/reference"
+    )
+    assert audit.call_args.kwargs["metadata"]["reason"].startswith("missing_headers:")
+
+
+@pytest.mark.asyncio
+async def test_control_plane_enterprise_middleware_emits_read_audit_when_enabled(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_AUDIT_READS", "true")
+    middleware = build_enterprise_audit_middleware()
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/integration/portfolios/PB1/analytics/reference",
+        "headers": [
+            (b"x-actor-id", b"a1"),
+            (b"x-tenant-id", b"t1"),
+            (b"x-role", b"analytics-service"),
+            (b"x-correlation-id", b"c1"),
+            (b"x-service-identity", b"lotus-performance"),
+        ],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 1234),
+        "scheme": "http",
+    }
+    request = Request(scope)
+
+    async def _call_next(_: Request) -> Response:
+        return Response(status_code=200)
+
+    with patch(
+        "src.services.query_control_plane_service.app.enterprise_readiness.emit_audit_event"
+    ) as audit:
+        response = await middleware(request, _call_next)
+
+    assert response.status_code == 200
+    assert audit.call_args.kwargs["action"] == (
+        "GET /integration/portfolios/PB1/analytics/reference"
+    )
+    assert audit.call_args.kwargs["metadata"] == {
+        "status_code": 200,
+        "access_type": "read",
+    }
+
+
+def test_control_plane_emit_audit_event_preserves_none_correlation():
     with patch(
         "src.services.query_control_plane_service.app.enterprise_readiness.logger.info"
     ) as logger_info:
