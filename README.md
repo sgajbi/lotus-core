@@ -359,7 +359,7 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     DEMO_DATA_PACK_ENABLED=false docker compose up -d
 
     # Run manually against a running stack
-    python -m tools.demo_data_pack --ingestion-base-url http://core-ingestion.dev.lotus --query-base-url http://core-query.dev.lotus --query-control-plane-base-url http://core-query.dev.lotus
+    python -m tools.demo_data_pack --ingestion-base-url http://core-ingestion.dev.lotus --query-base-url http://core-query.dev.lotus --query-control-plane-base-url http://core-control.dev.lotus
     ```
 
     The current flagship performance demo pack seeds:
@@ -371,11 +371,11 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     Verify benchmark discovery and assignment:
 
     ```bash
-    curl -X POST "http://core-query.dev.lotus/integration/benchmarks/catalog" \
+    curl -X POST "http://core-control.dev.lotus/integration/benchmarks/catalog" \
       -H "Content-Type: application/json" \
       -d '{"as_of_date":"2026-03-27","benchmark_currency":"USD","benchmark_status":"active","benchmark_type":"composite"}'
 
-    curl -X POST "http://core-query.dev.lotus/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
+    curl -X POST "http://core-control.dev.lotus/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
       -H "Content-Type: application/json" \
       -d '{"as_of_date":"2026-03-27"}'
     ```
@@ -404,12 +404,15 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
       -F "file=@./samples/transactions.csv"
     ```
 
-    For lotus-performance/lotus-manage style integration contracts, lotus-core query-service supports:
+    For lotus-performance/lotus-manage style integration contracts, use the
+    query control plane. `core-query.dev.lotus` is the operational read plane;
+    `core-control.dev.lotus` owns governed analytics-input, policy, support,
+    lineage, and simulation contracts.
 
     ```bash
-    curl "http://core-query.dev.lotus/integration/policy/effective?consumer_system=lotus-performance&tenant_id=default&include_sections=OVERVIEW&include_sections=HOLDINGS"
+    curl "http://core-control.dev.lotus/integration/policy/effective?consumer_system=lotus-performance&tenant_id=default&include_sections=OVERVIEW&include_sections=HOLDINGS"
 
-    curl "http://core-query.dev.lotus/integration/capabilities?consumer_system=lotus-gateway&tenant_id=default"
+    curl "http://core-control.dev.lotus/integration/capabilities?consumer_system=lotus-gateway&tenant_id=default"
     ```
 
     Integration policy controls (optional):
@@ -441,23 +444,24 @@ python scripts/docker_endpoint_smoke.py --reset-volumes --build
     Once the services have processed the data, you can query the `query-service` API endpoints.
 
       * API Docs: `http://core-query.dev.lotus/docs`
+      * Query control plane API Docs: `http://core-control.dev.lotus/docs`
 
 3.  **Use Support and Lineage APIs (Preferred over direct DB access)**:
-    Use the query-service operational APIs for support diagnostics.
+    Use the query control plane support APIs for diagnostics.
 
     ```bash
     # Portfolio-level support overview
-    curl "http://core-query.dev.lotus/support/portfolios/PORT001/overview"
+    curl "http://core-control.dev.lotus/support/portfolios/PORT001/overview"
 
     # Key-level lineage (epoch/watermark + latest artifacts)
-    curl "http://core-query.dev.lotus/lineage/portfolios/PORT001/securities/SEC001"
+    curl "http://core-control.dev.lotus/lineage/portfolios/PORT001/securities/SEC001"
 
     # Portfolio lineage key listing for support dashboards
-    curl "http://core-query.dev.lotus/lineage/portfolios/PORT001/keys?reprocessing_status=CURRENT&skip=0&limit=100"
+    curl "http://core-control.dev.lotus/lineage/portfolios/PORT001/keys?reprocessing_status=CURRENT&skip=0&limit=100"
 
     # Valuation and aggregation support job queues
-    curl "http://core-query.dev.lotus/support/portfolios/PORT001/valuation-jobs?status=PENDING&skip=0&limit=100"
-    curl "http://core-query.dev.lotus/support/portfolios/PORT001/aggregation-jobs?status=PROCESSING&skip=0&limit=100"
+    curl "http://core-control.dev.lotus/support/portfolios/PORT001/valuation-jobs?status=PENDING&skip=0&limit=100"
+    curl "http://core-control.dev.lotus/support/portfolios/PORT001/aggregation-jobs?status=PROCESSING&skip=0&limit=100"
     ```
 
 ## Code Quality

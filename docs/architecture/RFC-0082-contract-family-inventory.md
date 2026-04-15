@@ -86,6 +86,12 @@ Main risks:
 | `event_replay_service` | `/ingestion/jobs/*`, `/ingestion/health/*`, `/ingestion/dlq/*`, `/ingestion/audit/*`, `/ingestion/ops/*` | Control-Plane And Policy | Correct | operators, automation, QA |
 | `financial_reconciliation_service` | `/reconciliation/*` | Control Execution | Correct | orchestrator, operators, QA |
 
+Local ingress names follow the same split: `core-query.dev.lotus` reaches
+`query_service` on port `8201`, while `core-control.dev.lotus` reaches
+`query_control_plane_service` on port `8202`. Downstream analytics consumers
+must use the control-plane base URL for `/integration/portfolios/*/analytics/*`
+contracts.
+
 ## Detailed Route Inventory
 
 ### `query_service`: Operational Read Contracts

@@ -144,8 +144,17 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/support/portfolios/{portfolio_id}/overview" in paths
     assert "/support/portfolios/{portfolio_id}/readiness" in paths
     assert "/simulation-sessions/{session_id}" in paths
-    assert "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries" in paths
-    assert "/integration/portfolios/{portfolio_id}/analytics/reference" in paths
+    analytics_input_routes = {
+        "/integration/portfolios/{portfolio_id}/analytics/reference",
+        "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
+        "/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
+    }
+    assert analytics_input_routes <= set(paths)
+    for route in analytics_input_routes:
+        assert set(paths[route]) == {"post"}
+
+    assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
+    assert "/integration/positions/{portfolio_id}/timeseries" not in paths
 
 
 async def test_openapi_excludes_core_read_plane_endpoints(async_test_client):

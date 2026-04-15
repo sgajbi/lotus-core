@@ -125,6 +125,18 @@ async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadat
         assert response_schema["properties"]["product_version"]["default"] == "v1"
 
 
+async def test_openapi_excludes_control_plane_analytics_input_contracts(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+
+    assert "/integration/portfolios/{portfolio_id}/analytics/reference" not in paths
+    assert "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries" not in paths
+    assert "/integration/portfolios/{portfolio_id}/analytics/position-timeseries" not in paths
+    assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
+    assert "/integration/positions/{portfolio_id}/timeseries" not in paths
+
+
 async def test_middleware_generates_correlation_id_when_missing(async_test_client):
     with patch(
         "src.services.query_service.app.main.generate_correlation_id", return_value="QRY-abc"
