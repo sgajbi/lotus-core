@@ -39,6 +39,12 @@ ANALYTICS_INPUT_SCHEMA_ROOTS = {
     "PositionAnalyticsTimeseriesResponse",
 }
 
+BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS = {
+    "BenchmarkAssignmentRequest",
+    "BenchmarkAssignmentResponse",
+    "IntegrationPolicyContext",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1384,6 +1390,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Portfolio identifier whose effective benchmark assignment is requested."
     )
     assert "lotus-performance, lotus-risk, and reporting" in benchmark_assignment["description"]
+    assert "portfolio_id and as_of_date" in benchmark_assignment["description"]
 
     assignment_not_found = benchmark_assignment["responses"]["404"]["content"]["application/json"][
         "example"
@@ -1473,6 +1480,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     coverage_response = components["CoverageResponse"]
     classification_taxonomy_response = components["ClassificationTaxonomyResponse"]
     benchmark_component_response = components["BenchmarkComponentResponse"]
+    benchmark_assignment_request = components["BenchmarkAssignmentRequest"]
 
     assert benchmark_catalog["properties"]["records"]["description"] == (
         "Benchmark definition records effective for the requested date."
@@ -1508,6 +1516,18 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "InstrumentReferenceBundle"
     )
     assert benchmark_assignment_response["properties"]["product_version"]["default"] == "v1"
+    assert "does not change benchmark assignment selection" in (
+        benchmark_assignment_request["properties"]["reporting_currency"]["description"]
+    )
+    assert "current implementation still resolves the effective assignment" in (
+        benchmark_assignment_request["properties"]["policy_context"]["description"]
+    )
+    assert benchmark_assignment_response["properties"]["assignment_recorded_at"]["examples"] == [
+        "2026-01-31T09:15:00Z"
+    ]
+    assert benchmark_assignment_response["properties"]["contract_version"]["examples"] == [
+        "rfc_062_v1"
+    ]
     source_data_product_reference_responses = [
         benchmark_assignment_response,
         benchmark_composition_window_response,
@@ -1597,6 +1617,14 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert reference_page_metadata["properties"]["request_scope_fingerprint"]["description"] == (
         "Deterministic fingerprint of the request scope bound to this page sequence."
     )
+
+
+async def test_openapi_fully_documents_benchmark_assignment_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_capabilities_query_parameters(async_test_client):

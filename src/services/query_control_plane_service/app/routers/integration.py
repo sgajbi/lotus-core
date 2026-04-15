@@ -281,7 +281,9 @@ async def get_instrument_enrichment_bulk(
     description=(
         "What: Resolve benchmark assignment for a portfolio as-of a point-in-time date.\n"
         "How: Applies effective-dating and assignment version ordering to return "
-        "deterministic match.\n"
+        "deterministic match. Resolution is keyed by portfolio_id and as_of_date; "
+        "request reporting_currency and policy_context are caller-context fields and do "
+        "not change assignment selection in the current implementation.\n"
         "When: Used by lotus-performance, lotus-risk, and reporting workflows before "
         "benchmark-aware analytics or evidence generation."
     ),

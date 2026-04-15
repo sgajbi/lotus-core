@@ -51,12 +51,20 @@ class BenchmarkAssignmentRequest(BaseModel):
     )
     reporting_currency: str | None = Field(
         None,
-        description="Optional reporting currency for downstream context metadata.",
+        description=(
+            "Optional downstream context currency for caller symmetry and lineage. "
+            "This field does not change benchmark assignment selection in the current "
+            "implementation."
+        ),
         examples=["USD"],
     )
     policy_context: IntegrationPolicyContext | None = Field(
         None,
-        description="Optional tenant/policy context for assignment governance.",
+        description=(
+            "Optional tenant/policy context reserved for governance metadata and future "
+            "policy-bound resolution. The current implementation still resolves the "
+            "effective assignment by portfolio_id and as_of_date."
+        ),
     )
 
     model_config = ConfigDict()
@@ -113,6 +121,7 @@ class BenchmarkAssignmentResponse(SourceDataProductRuntimeMetadata):
     assignment_recorded_at: datetime = Field(
         ...,
         description="Timestamp when assignment record was captured in lotus-core.",
+        examples=["2026-01-31T09:15:00Z"],
     )
     assignment_version: int = Field(
         ...,
@@ -122,6 +131,7 @@ class BenchmarkAssignmentResponse(SourceDataProductRuntimeMetadata):
     contract_version: str = Field(
         "rfc_062_v1",
         description="Query contract version for benchmark assignment integration.",
+        examples=["rfc_062_v1"],
     )
 
     model_config = ConfigDict()

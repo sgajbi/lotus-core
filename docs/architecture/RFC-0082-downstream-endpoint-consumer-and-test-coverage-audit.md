@@ -103,6 +103,73 @@ No new gateway issue is required from this slice. Gateway is using the strategic
 route correctly for source context, and no duplicate or stale gateway usage of legacy analytics
 paths was found during review.
 
+## Certified Endpoint Slice: Benchmark Assignment
+
+This certification pass covers the strategic benchmark-resolution contract:
+
+1. `POST /integration/portfolios/{portfolio_id}/benchmark-assignment`
+
+### Route Contract Decision
+
+This is the correct benchmark-assignment route for downstream consumers that need effective
+portfolio-to-benchmark mapping before benchmark-aware analytics or workspace composition.
+
+The contract is intentionally assignment-resolution only. It does not replace:
+
+1. benchmark definition contracts,
+2. benchmark composition-window contracts,
+3. benchmark market-series contracts,
+4. downstream benchmark math owned by `lotus-performance`.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/portfolios/{portfolio_id}/benchmark-assignment` | `lotus-performance`, `lotus-gateway` | Correct. `lotus-performance` uses the route as benchmark context for stateful benchmark-aware analytics. `lotus-gateway` uses it for workspace composition context. |
+
+Catalog-intended consumers also include `lotus-risk` and `lotus-report`, but no direct active code
+path was found in this pass that should be overstated as live validated.
+
+### Upstream Integration Assessment
+
+The current implementation resolves benchmark assignment by:
+
+1. `portfolio_id`
+2. `as_of_date`
+3. effective-date ordering
+4. assignment-version ordering for ties
+
+`reporting_currency` and `policy_context` are currently caller-context fields, not assignment
+selection keys. This is now documented explicitly in the request schema and route description so
+the public contract is truthful. The endpoint remains correctly placed on the query-control-plane.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. when to use the endpoint;
+2. that assignment resolution is keyed by `portfolio_id` plus `as_of_date`;
+3. that `reporting_currency` and `policy_context` do not currently alter assignment selection;
+4. response field descriptions and examples for assignment-capture metadata such as
+   `assignment_recorded_at` and `contract_version`.
+
+Automated proof now includes a benchmark-assignment schema-family completeness assertion in
+`tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
+
+### Issue Disposition For This Endpoint
+
+Reviewed open benchmark-assignment-related issues:
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `#237` grouped benchmark analytics contract | Valid strategic follow-on. This is broader than assignment resolution and remains open. | Keep open. |
+| `#246` broader benchmark source-contract hardening | Valid broader benchmark-program issue. Not a duplicate of this assignment endpoint slice. | Keep open. |
+| `#249` benchmark-assignment ingest optional timestamp mismatch | Valid ingest-path issue, not a query-control-plane benchmark-assignment publication issue. | Keep open. |
+
+No downstream migration issue is required from this slice. `lotus-performance` and `lotus-gateway`
+are both calling the strategic route, and no duplicate/stale benchmark-assignment consumer path was
+found during review.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |
