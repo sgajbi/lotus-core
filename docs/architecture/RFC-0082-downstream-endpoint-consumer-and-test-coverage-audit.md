@@ -662,6 +662,11 @@ The certification lane now also includes HTTP-level dependency tests for the gat
 and not-found behavior are proven through the ASGI surface rather than only through direct router
 function tests.
 
+That dependency lane now also covers `409` simulation conflict and `422` unavailable-section
+semantics, so downstream consumers can distinguish missing state, conflicting simulation version
+state, policy block, and unfulfillable section requests without collapsing them into one generic
+error path.
+
 ### Downstream Consumer Reality
 
 | Route | Active downstream consumers verified | Integration posture |

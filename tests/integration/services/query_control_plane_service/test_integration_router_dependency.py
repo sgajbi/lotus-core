@@ -10,6 +10,11 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_core_snapshot_service,
     get_integration_service,
 )
+from src.services.query_service.app.services.core_snapshot_service import (
+    CoreSnapshotConflictError,
+    CoreSnapshotNotFoundError,
+    CoreSnapshotUnavailableSectionError,
+)
 from src.services.query_service.app.dtos.integration_dto import (
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
@@ -448,6 +453,80 @@ async def test_core_snapshot_policy_block_maps_to_403(async_test_client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
+
+
+async def test_core_snapshot_not_found_maps_to_404(async_test_client):
+    client, mock_core_snapshot_service, _mock_integration_service = async_test_client
+    mock_core_snapshot_service.get_core_snapshot = AsyncMock(
+        side_effect=CoreSnapshotNotFoundError("Portfolio or simulation session not found.")
+    )
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-404/core-snapshot",
+        json={
+            "as_of_date": "2026-02-27",
+            "snapshot_mode": "BASELINE",
+            "sections": ["positions_baseline"],
+            "consumer_system": "lotus-gateway",
+            "tenant_id": "default",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Portfolio or simulation session not found."
+
+
+async def test_core_snapshot_conflict_maps_to_409(async_test_client):
+    client, mock_core_snapshot_service, _mock_integration_service = async_test_client
+    mock_core_snapshot_service.get_core_snapshot = AsyncMock(
+        side_effect=CoreSnapshotConflictError(
+            "Simulation expected_version mismatch or portfolio/session conflict."
+        )
+    )
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/core-snapshot",
+        json={
+            "as_of_date": "2026-02-27",
+            "snapshot_mode": "SIMULATION",
+            "sections": ["positions_baseline"],
+            "consumer_system": "lotus-gateway",
+            "tenant_id": "default",
+            "simulation": {"session_id": "SIM-20260310-0001", "expected_version": 3},
+        },
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "Simulation expected_version mismatch or portfolio/session conflict."
+    )
+
+
+async def test_core_snapshot_unavailable_section_maps_to_422(async_test_client):
+    client, mock_core_snapshot_service, _mock_integration_service = async_test_client
+    mock_core_snapshot_service.get_core_snapshot = AsyncMock(
+        side_effect=CoreSnapshotUnavailableSectionError(
+            "Section cannot be fulfilled due to missing valuation dependencies."
+        )
+    )
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/core-snapshot",
+        json={
+            "as_of_date": "2026-02-27",
+            "snapshot_mode": "BASELINE",
+            "sections": ["positions_baseline"],
+            "consumer_system": "lotus-gateway",
+            "tenant_id": "default",
+        },
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Section cannot be fulfilled due to missing valuation dependencies."
+    )
 
 
 async def test_benchmark_assignment_success(async_test_client):
