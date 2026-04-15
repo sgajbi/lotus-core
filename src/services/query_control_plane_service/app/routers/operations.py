@@ -113,8 +113,10 @@ def get_operations_service(
         "How: Aggregate reprocessing, valuation, and latest-data availability markers "
         "for the key.\n"
         "When: Use in gateway support panels, operator consoles, and incident workflows to "
-        "quickly assess whether portfolio processing is healthy. This route publishes "
-        "supportability evidence, not business-calculation inputs."
+        "quickly assess whether portfolio processing is healthy, blocked, or backlogged. "
+        "Use this route when backlog, control-stage, or replay evidence matters; use "
+        "`/support/portfolios/{portfolio_id}/readiness` for source-owned readiness signals. "
+        "This route publishes supportability evidence, not business-calculation inputs."
     ),
 )
 async def get_support_overview(
@@ -165,8 +167,10 @@ async def get_support_overview(
         "How: Combine durable support/control state with snapshot and historical-FX dependency "
         "signals to expose explicit readiness reasons.\n"
         "When: Use in gateway/UI and operations flows instead of inferring readiness from row "
-        "counts or indirect heuristics. This route publishes supportability and readiness "
-        "posture, not calculation-grade portfolio analytics."
+        "counts or indirect heuristics. Use this route for front-office readiness indicators "
+        "and workflow gating; use `/support/portfolios/{portfolio_id}/overview` when deeper "
+        "operator backlog or incident evidence is required. This route publishes "
+        "supportability and readiness posture, not calculation-grade portfolio analytics."
     ),
 )
 async def get_portfolio_readiness(

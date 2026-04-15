@@ -584,7 +584,9 @@ runtime maturity. The current contract now states more explicitly that:
 1. reconciliation runs and findings are operator evidence,
 2. replay keys/jobs are operational evidence,
 3. lineage routes are operational lineage evidence,
-4. none of these routes should be treated as business-calculation inputs.
+4. none of these routes should be treated as business-calculation inputs,
+5. `overview` is the backlog/control/replay support surface while `readiness` is the
+   source-owned front-office readiness and workflow-gating surface.
 
 ### Swagger / OpenAPI Assessment
 

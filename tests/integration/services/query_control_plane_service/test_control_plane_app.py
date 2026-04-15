@@ -256,6 +256,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "gateway support panels, operator consoles, and incident workflows"
         in (overview["description"])
     )
+    assert "backlog, control-stage, or replay evidence matters" in overview["description"]
+    assert "/support/portfolios/{portfolio_id}/readiness" in overview["description"]
     assert "supportability evidence, not business-calculation inputs" in (overview["description"])
     assert "400" not in overview["responses"]
 
@@ -265,6 +267,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert readiness_as_of_date["description"] == (
         "Optional as-of date in YYYY-MM-DD format used to scope booked-state readiness."
     )
+    assert "front-office readiness indicators and workflow gating" in readiness["description"]
+    assert "/support/portfolios/{portfolio_id}/overview" in readiness["description"]
     assert "instead of inferring readiness from row counts" in readiness["description"]
     assert "supportability and readiness posture" in readiness["description"]
     assert "not calculation-grade portfolio analytics" in readiness["description"]
