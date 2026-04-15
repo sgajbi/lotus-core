@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import (
@@ -81,6 +82,7 @@ async def query_asset_allocation(
         "available. For large-scale export workflows, prefer a dedicated async export contract."
     ),
     deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
 async def query_cash_balances(
     request: CashBalancesQueryRequest,
@@ -126,6 +128,7 @@ async def query_portfolio_summary(
         "available."
     ),
     deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
 async def query_holdings_snapshot(
     request: HoldingsSnapshotQueryRequest,
@@ -149,6 +152,7 @@ async def query_holdings_snapshot(
         "New consumers should bind to the named source-data product contract when it is available."
     ),
     deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def query_income_summary(
     request: IncomeSummaryQueryRequest,
@@ -172,6 +176,7 @@ async def query_income_summary(
         "New consumers should bind to the named source-data product contract when it is available."
     ),
     deprecated=True,
+    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def query_activity_summary(
     request: ActivitySummaryQueryRequest,

@@ -115,12 +115,13 @@ Future runtime slices must:
 ## Runtime Binding Progress
 
 The first runtime-adjacent binding exposes machine-readable source-data product identity in OpenAPI
-through `x-lotus-source-data-product` for all catalog-backed `query_control_plane_service` routes.
+through `x-lotus-source-data-product` for all catalog-backed `query_control_plane_service` routes and
+the catalog-backed `query_service` operational read routes.
 
 The extension is generated from the executable catalog and includes product name, version, route
 family, serving plane, owner, consumers, current route set, paging mode, export mode, and required
-metadata fields. Contract tests verify that every `query_control_plane_service` route listed in the
-catalog carries matching OpenAPI metadata.
+metadata fields. Contract tests verify that every `query_control_plane_service` and `query_service`
+route listed in the catalog carries matching OpenAPI metadata.
 
 This binding does not change response payloads, persistence, generated events, or downstream runtime
 behavior. It makes the catalog visible to contract consumers and keeps the full DTO-envelope metadata
