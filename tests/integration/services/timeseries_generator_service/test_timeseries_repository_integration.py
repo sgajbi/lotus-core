@@ -252,6 +252,7 @@ async def test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_h
         session.add(_snapshot(portfolio_id, "CASH_USD_FIRST", first_day, epoch=0))
         session.add(_position_ts(portfolio_id, "CASH_USD_FIRST", first_day, epoch=0))
         session.commit()
+    await async_db_session.rollback()
 
     repo = TimeseriesRepository(async_db_session)
     claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
@@ -640,6 +641,7 @@ async def test_get_all_position_timeseries_for_date_returns_one_authoritative_as
             ]
         )
         session.commit()
+    await async_db_session.rollback()
 
     repo = TimeseriesRepository(async_db_session)
 
@@ -750,6 +752,7 @@ async def test_get_all_cashflows_for_security_date_returns_latest_restatement_pe
             ]
         )
         session.commit()
+    await async_db_session.rollback()
 
     repo = TimeseriesRepository(async_db_session)
 
