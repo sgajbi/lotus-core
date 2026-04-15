@@ -174,6 +174,15 @@ def test_authorize_request_requires_matching_capability_rule_when_configured() -
     assert reason == "missing_capability_rule"
 
 
+def test_required_capability_matches_only_path_segments() -> None:
+    runtime = _runtime(
+        settings=_Settings(enterprise_capability_rules={"GET /portfolios": "portfolios.read"}),
+    )
+
+    assert runtime.required_capability("GET", "/portfolios/P1") == "portfolios.read"
+    assert runtime.required_capability("GET", "/portfolios-v2/P1") is None
+
+
 def test_validate_enterprise_runtime_config_checks_primary_key_for_read_authorization() -> None:
     runtime = _runtime(read_authz_enabled=True)
 

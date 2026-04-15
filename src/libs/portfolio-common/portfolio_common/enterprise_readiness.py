@@ -166,7 +166,7 @@ class EnterpriseReadinessRuntime:
         method = method.upper()
         for key, capability in self.load_capability_rules().items():
             prefix = f"{method} "
-            if key.upper().startswith(prefix) and path.startswith(key[len(prefix) :]):
+            if key.upper().startswith(prefix) and _path_matches_rule(path, key[len(prefix) :]):
                 return capability
         return None
 
@@ -210,6 +210,13 @@ def redact_sensitive(value: Any) -> Any:
     if isinstance(value, list):
         return [redact_sensitive(item) for item in value]
     return value
+
+
+def _path_matches_rule(path: str, rule_path: str) -> bool:
+    normalized_rule = rule_path.rstrip("/")
+    if not normalized_rule or normalized_rule == "/":
+        return True
+    return path == normalized_rule or path.startswith(f"{normalized_rule}/")
 
 
 def build_enterprise_audit_middleware(
