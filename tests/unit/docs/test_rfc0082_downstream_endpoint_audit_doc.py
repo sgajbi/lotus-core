@@ -39,6 +39,7 @@ def test_downstream_endpoint_audit_records_validation_posture():
         "python scripts\\analytics_input_consumer_contract_guard.py",
         "PB_SG_GLOBAL_BAL_001",
         "live end-to-end",
+        "RFC-0083-platform-e2e-runtime-validation-evidence.md",
     }
 
     missing_evidence = sorted(

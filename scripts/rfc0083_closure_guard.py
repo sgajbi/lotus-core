@@ -122,6 +122,27 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
             if not isinstance(proof_item, str) or not proof_item.strip():
                 errors.append(f"ledger has invalid remaining runtime proof: {proof_item!r}")
 
+    completed_runtime_proof = payload.get("completedRuntimeProof", [])
+    if not isinstance(completed_runtime_proof, list):
+        errors.append("ledger completedRuntimeProof must be a list when present")
+    else:
+        for proof_item in completed_runtime_proof:
+            if not isinstance(proof_item, dict):
+                errors.append(f"ledger has invalid completed runtime proof: {proof_item!r}")
+                continue
+            proof = proof_item.get("proof")
+            if not isinstance(proof, str) or not proof.strip():
+                errors.append(f"ledger completed runtime proof is missing proof: {proof_item!r}")
+            evidence = proof_item.get("evidence")
+            if not isinstance(evidence, str) or not evidence.strip():
+                errors.append(f"ledger completed runtime proof is missing evidence: {proof_item!r}")
+                continue
+            if Path(evidence).is_absolute():
+                errors.append(f"completed runtime proof evidence must be repo-relative: {evidence}")
+                continue
+            if not (repo_root / evidence).exists():
+                errors.append(f"completed runtime proof evidence does not exist: {evidence}")
+
     slices = payload.get("slices")
     if not isinstance(slices, list):
         return errors + ["ledger slices must be a list"]

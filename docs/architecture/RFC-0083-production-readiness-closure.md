@@ -42,11 +42,21 @@ Full production runtime closure still requires:
 
 1. the `lotus-core` PR Merge Gate,
 2. affected downstream consumer PR Merge Gates,
-3. platform end-to-end validation where canonical product flows depend on core behavior,
-4. full gateway/platform/runtime authorization and entitlement proof when opt-in service-policy
+3. full gateway/platform/runtime authorization and entitlement proof when opt-in service-policy
    controls move to production enforcement,
-5. full cross-service event replay proof when event payload behavior changes beyond the centrally
+4. full cross-service event replay proof when event payload behavior changes beyond the centrally
    guarded outbox envelope.
+
+## Completed Runtime Proof
+
+The canonical front-office platform end-to-end validation for `PB_SG_GLOBAL_BAL_001` completed on
+2026-04-15 and is recorded in:
+
+1. `docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md`
+
+That evidence proves the live canonical Workbench/Gateway/Core/Performance/Risk/Manage/Report flow
+for the governed front-office portfolio. It does not replace the `lotus-core` PR Merge Gate or
+affected downstream PR Merge Gates.
 
 ## Validation
 

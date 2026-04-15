@@ -23,7 +23,7 @@ Current posture:
 | Consumer metadata | Clear. Every catalog product exposes `x-lotus-source-data-product` and `x-lotus-source-data-security` in OpenAPI. |
 | Swagger readability | Strong for the governed routes covered by RFC-0082/RFC-0083. Endpoint descriptions explain when to use the route, intended consumers, request attributes, response attributes, examples, and error examples. |
 | Test pyramid | Strong at catalog/static guard and core integration-test levels. Direct downstream client tests exist for the active consumers found during review. |
-| Remaining proof gap | Full platform live validation is still required before claiming every downstream feature works end-to-end for `PB_SG_GLOBAL_BAL_001`. |
+| Platform live proof | Passed on 2026-04-15 for `PB_SG_GLOBAL_BAL_001`; see `docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md`. |
 
 ## Downstream Consumer Matrix
 
@@ -74,7 +74,7 @@ The current test posture is intentionally layered:
 | OpenAPI integration tests | `tests/integration/services/query_control_plane_service/test_control_plane_app.py` | Strong. Verifies route existence, excluded legacy paths, parameter descriptions, response descriptions, error examples, source-data extensions, and consumer-facing descriptions. |
 | Router/service integration tests | Query-control-plane integration tests and route dependency tests | Adequate to strong for contract shape and dependency wiring. Domain-specific payload economics still require service and canonical data validation. |
 | Downstream client unit tests | `lotus-performance`, `lotus-risk`, `lotus-gateway`, and `lotus-advise` client/service tests found during review | Strong for currently active consumers. Some catalog-intended consumers are intentionally future/feature dependent and should not be overstated as live validated. |
-| Platform E2E | Canonical front-office runtime and live `PB_SG_GLOBAL_BAL_001` probes | Required before final production-grade claim. Not run as part of this documentation slice. |
+| Platform E2E | Canonical front-office runtime and live `PB_SG_GLOBAL_BAL_001` probes | Passed on 2026-04-15 for the canonical front-office flow. This does not replace PR Merge Gates or authorization/entitlement hardening proof. |
 
 ## Production-Grade Expectations
 
@@ -90,7 +90,7 @@ For a route to be considered production-grade, all of the following must hold:
 
 ## Remaining Follow-Ups
 
-1. Run the governed platform live-validation lane for `PB_SG_GLOBAL_BAL_001` before claiming full feature correctness across performance, risk, gateway, advise, and manage.
-2. Add downstream workflow tests as `lotus-manage` and `lotus-report` begin direct use of support/evidence products.
-3. Keep `SOURCE_DATA_PRODUCT_CATALOG`, OpenAPI operation descriptions, and this audit synchronized whenever route consumers change.
-4. Avoid adding downstream UI features that imply backend capability until the relevant source-data product has live validation evidence.
+1. Add downstream workflow tests as `lotus-manage` and `lotus-report` begin direct use of support/evidence products.
+2. Keep `SOURCE_DATA_PRODUCT_CATALOG`, OpenAPI operation descriptions, and this audit synchronized whenever route consumers change.
+3. Avoid adding downstream UI features that imply backend capability until the relevant source-data product has live validation evidence.
+4. Complete PR Merge Gates and production authorization/entitlement proof before claiming full production runtime closure.

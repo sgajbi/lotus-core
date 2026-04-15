@@ -8,10 +8,18 @@
   "closureStatus": "target-model-and-guarded-artifact-closure",
   "runtimeProductionStatus": "not-production-closed",
   "description": "Machine-readable RFC-0083 implementation ledger for lotus-core target-state slices. This ledger records completed target-model and governance artifacts; it does not claim full production runtime closure.",
+  "completedRuntimeProof": [
+    {
+      "proof": "platform end-to-end validation for canonical front-office flow PB_SG_GLOBAL_BAL_001",
+      "evidence": "docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md",
+      "validatedAt": "2026-04-15",
+      "validationCommand": "npm run live:validate",
+      "evidenceOwner": "lotus-workbench"
+    }
+  ],
   "remainingRuntimeProof": [
     "full lotus-core PR Merge Gate",
     "affected downstream consumer PR Merge Gates",
-    "platform end-to-end validation where canonical product flows depend on core behavior",
     "full gateway/platform/runtime authorization and entitlement proof when opt-in service-policy controls move to production enforcement",
     "full cross-service event replay proof when event payload behavior changes beyond the centrally guarded outbox envelope"
   ],
