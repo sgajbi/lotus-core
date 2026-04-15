@@ -130,6 +130,63 @@ async def async_test_client():
             "contract_version": "rfc_062_v1",
         }
     )
+    mock_integration_service.list_benchmark_catalog = AsyncMock(
+        return_value={
+            "as_of_date": "2026-01-31",
+            "records": [
+                {
+                    "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                    "benchmark_name": "Global Balanced 60/40 (TR)",
+                    "benchmark_type": "composite",
+                    "benchmark_currency": "USD",
+                    "return_convention": "total_return_index",
+                    "benchmark_status": "active",
+                    "benchmark_family": "multi_asset_strategic",
+                    "benchmark_provider": "MSCI",
+                    "rebalance_frequency": "quarterly",
+                    "classification_set_id": "wm_global_taxonomy_v1",
+                    "classification_labels": {"asset_class": "multi_asset", "region": "global"},
+                    "effective_from": "2025-01-01",
+                    "effective_to": None,
+                    "quality_status": "accepted",
+                    "source_timestamp": "2026-01-31T08:00:00Z",
+                    "source_vendor": "MSCI",
+                    "source_record_id": "bmk_60_40_v20260131",
+                    "components": [],
+                    "contract_version": "rfc_062_v1",
+                }
+            ],
+        }
+    )
+    mock_integration_service.list_index_catalog = AsyncMock(
+        return_value={
+            "as_of_date": "2026-01-31",
+            "records": [
+                {
+                    "index_id": "IDX_MSCI_WORLD_TR",
+                    "index_name": "MSCI World Total Return",
+                    "index_currency": "USD",
+                    "index_type": "equity_index",
+                    "index_status": "active",
+                    "index_provider": "MSCI",
+                    "index_market": "global_developed",
+                    "classification_set_id": "wm_global_taxonomy_v1",
+                    "classification_labels": {
+                        "asset_class": "equity",
+                        "region": "global",
+                        "sector": "broad_market",
+                    },
+                    "effective_from": "2025-01-01",
+                    "effective_to": None,
+                    "quality_status": "accepted",
+                    "source_timestamp": "2026-01-31T08:00:00Z",
+                    "source_vendor": "MSCI",
+                    "source_record_id": "idx_world_tr_v20260131",
+                    "contract_version": "rfc_062_v1",
+                }
+            ],
+        }
+    )
     mock_integration_service.get_risk_free_series = AsyncMock(
         return_value={
             "currency": "USD",
@@ -459,6 +516,58 @@ async def test_benchmark_definition_not_found_maps_to_404(async_test_client):
     assert response.status_code == 404
     assert response.json()["detail"] == (
         "No effective benchmark definition found for benchmark_id and as_of_date."
+    )
+
+
+async def test_benchmark_catalog_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/benchmarks/catalog",
+        json={
+            "as_of_date": "2026-01-31",
+            "benchmark_type": "composite",
+            "benchmark_currency": "USD",
+            "benchmark_status": "active",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["as_of_date"] == "2026-01-31"
+    assert body["records"][0]["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert body["records"][0]["benchmark_type"] == "composite"
+    mock_integration_service.list_benchmark_catalog.assert_awaited_once_with(
+        as_of_date=date(2026, 1, 31),
+        benchmark_type="composite",
+        benchmark_currency="USD",
+        benchmark_status="active",
+    )
+
+
+async def test_index_catalog_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/indices/catalog",
+        json={
+            "as_of_date": "2026-01-31",
+            "index_currency": "USD",
+            "index_type": "equity_index",
+            "index_status": "active",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["as_of_date"] == "2026-01-31"
+    assert body["records"][0]["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert body["records"][0]["index_type"] == "equity_index"
+    mock_integration_service.list_index_catalog.assert_awaited_once_with(
+        as_of_date=date(2026, 1, 31),
+        index_currency="USD",
+        index_type="equity_index",
+        index_status="active",
     )
 
 

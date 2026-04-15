@@ -244,6 +244,9 @@ integration failures.
 The same dependency lane now also covers the adjacent benchmark-definition and raw index or
 benchmark series contracts that lotus-performance and lotus-risk depend on when they need
 point-in-time reference context or provider-return evidence alongside the strategic source routes.
+Discovery catalog routes for benchmarks and indices are exercised in the same lane so downstream
+lookup and selection workflows are covered before they branch into definition, composition, or
+series retrieval.
 
 ### Issue Disposition For This Endpoint Family
 
