@@ -76,6 +76,15 @@ class EnterpriseReadinessRuntime:
             or self.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false")
         ) and not self.load_settings().enterprise_primary_key_id.strip():
             issues.append("missing_primary_key_id")
+        if (
+            self.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false")
+            and (
+                self.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false")
+                or self.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false")
+            )
+            and not self.load_capability_rules()
+        ):
+            issues.append("missing_capability_rules")
 
         if issues and self.env_enabled("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", "false"):
             raise RuntimeError(f"enterprise_runtime_config_invalid:{','.join(issues)}")
@@ -126,6 +135,10 @@ class EnterpriseReadinessRuntime:
             return False, "missing_service_identity"
 
         required_capability = self.required_capability(normalized_method, path)
+        if not required_capability and self.env_enabled(
+            "ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false"
+        ):
+            return False, "missing_capability_rule"
         if required_capability:
             capabilities = {
                 part.strip()

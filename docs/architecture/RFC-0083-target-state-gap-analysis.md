@@ -479,7 +479,9 @@ source-data product has a profile and emits `x-lotus-source-data-security` OpenA
 catalog-backed routes. Shared enterprise-readiness runtime support now removes duplicated
 query-service and query-control-plane write authorization, capability-rule, policy-header, write
 audit, opt-in read audit, and opt-in read authorization middleware logic while preserving
-service-local settings and wrapper functions. Security profile validation now also prevents operator-only products from being classified
+service-local settings and wrapper functions. It also supports opt-in strict capability-rule
+requirements so protected requests cannot pass on headers alone when production policy requires
+explicit entitlement rules. Security profile validation now also prevents operator-only products from being classified
 outside control-plane and policy route families and constrains business, system, and operator access
 classes, audit requirements, and sensitivity-driven retention requirements to their governed
 RFC-0082/RFC-0083 lanes. This slice does not introduce new entitlement policy semantics, persistence

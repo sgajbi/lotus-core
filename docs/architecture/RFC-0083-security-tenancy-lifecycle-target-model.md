@@ -140,6 +140,11 @@ and may be checked against `ENTERPRISE_CAPABILITY_RULES_JSON` entries such as
 `GET /integration/portfolios`. This is service-policy support; full production entitlement closure
 still requires gateway/platform ingress policy proof and affected-consumer validation.
 
+When production policy requires explicit entitlement rules, `ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`
+can be enabled alongside read or write authorization. In that mode, any protected request without a
+matching method/path capability rule is denied with `missing_capability_rule`, and runtime
+configuration validation reports `missing_capability_rules` if no capability rules are configured.
+
 ## Validation
 
 Slice 9 validation is:

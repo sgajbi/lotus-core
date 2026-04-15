@@ -38,6 +38,7 @@ def _runtime(
     authz_enabled: bool = False,
     read_authz_enabled: bool = False,
     read_audit_enabled: bool = False,
+    require_capability_rules: bool = False,
     max_payload_bytes: int = 1_048_576,
 ) -> EnterpriseReadinessRuntime:
     def _env_bool(name: str, default: bool) -> bool:
@@ -47,6 +48,8 @@ def _runtime(
             return read_authz_enabled
         if name == "ENTERPRISE_AUDIT_READS":
             return read_audit_enabled
+        if name == "ENTERPRISE_REQUIRE_CAPABILITY_RULES":
+            return require_capability_rules
         return default
 
     def _env_int(name: str, default: int) -> int:
@@ -118,10 +121,41 @@ def test_authorize_request_allows_read_when_read_authorization_is_disabled() -> 
     assert reason is None
 
 
+def test_authorize_request_requires_matching_capability_rule_when_configured() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        require_capability_rules=True,
+        settings=_Settings(enterprise_primary_key_id="primary"),
+    )
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-gateway",
+        "X-Capabilities": "portfolios.read",
+    }
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
+
+    assert allowed is False
+    assert reason == "missing_capability_rule"
+
+
 def test_validate_enterprise_runtime_config_checks_primary_key_for_read_authorization() -> None:
     runtime = _runtime(read_authz_enabled=True)
 
     assert "missing_primary_key_id" in runtime.validate_enterprise_runtime_config()
+
+
+def test_validate_enterprise_runtime_config_reports_missing_capability_rules() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        require_capability_rules=True,
+        settings=_Settings(enterprise_primary_key_id="primary"),
+    )
+
+    assert "missing_capability_rules" in runtime.validate_enterprise_runtime_config()
 
 
 def test_redact_sensitive_masks_nested_values() -> None:
