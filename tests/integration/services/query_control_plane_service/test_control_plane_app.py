@@ -345,8 +345,19 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     ]
     assert "not business calculations" in reconciliation_runs["description"]
     assert "not business calculations" in reconciliation_findings["description"]
+    assert "overview` shows control blocking" in reconciliation_runs["description"]
+    assert "front-office readiness indicators" in reconciliation_runs["description"]
     assert "not direct business-calculation inputs" in reprocessing_keys["description"]
     assert "not direct business-calculation inputs" in reprocessing_jobs["description"]
+    assert (
+        "after `overview` or reconciliation evidence points to replay work"
+        in (reprocessing_keys["description"])
+    )
+    assert "front-office readiness indicators" in reprocessing_keys["description"]
+    assert (
+        "after `overview` or reconciliation evidence indicates replay pressure"
+        in (reprocessing_jobs["description"])
+    )
     assert "400" not in reprocessing_jobs["responses"]
     assert "not a business-calculation contract" in lineage["description"]
     assert (
@@ -354,6 +365,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         in schema["paths"]["/lineage/portfolios/{portfolio_id}/keys"]["get"]["description"]
     )
     assert "verify stage progression over time" in control_stages["description"]
+    assert (
+        "after `overview` or `readiness` indicates a blocked or lagging portfolio"
+        in (control_stages["description"])
+    )
+    assert "operator investigation evidence" in control_stages["description"]
+    assert "front-office readiness indicators" in reconciliation_findings["description"]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]

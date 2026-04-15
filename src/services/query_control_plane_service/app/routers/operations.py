@@ -275,7 +275,8 @@ async def get_calculator_slos(
         "What: List durable portfolio-day control stage rows for a portfolio.\n"
         "How: Query control stage records with pagination and optional stage/date/status filters.\n"
         "When: Use to inspect blocking portfolio-day controls and verify stage progression "
-        "over time."
+        "over time after `overview` or `readiness` indicates a blocked or lagging portfolio. "
+        "This is operator investigation evidence, not a front-office analytics contract."
     ),
 )
 async def get_portfolio_control_stages(
@@ -336,8 +337,9 @@ async def get_portfolio_control_stages(
         "How: Query `position_state` rows with pagination and optional status, security, and "
         "watermark-date filters.\n"
         "When: Use to inspect stuck or stale REPROCESSING keys and verify replay normalization "
-        "after recovery. These rows are operational evidence and not direct "
-        "business-calculation inputs."
+        "after recovery, typically after `overview` or reconciliation evidence points to replay "
+        "work. These rows are operational evidence and not direct business-calculation inputs or "
+        "front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
@@ -396,8 +398,9 @@ async def get_reprocessing_keys(
         "How: Query reprocessing jobs linked to the portfolio's replay keys, with pagination and "
         "optional id, status, correlation, and security filters.\n"
         "When: Use to inspect queued, stale, retried, or failed replay jobs without direct "
-        "database access. These jobs are operational evidence and not direct "
-        "business-calculation inputs."
+        "database access, typically after `overview` or reconciliation evidence indicates replay "
+        "pressure. These jobs are operational evidence and not direct business-calculation inputs "
+        "or front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
@@ -654,8 +657,9 @@ async def get_analytics_export_jobs(
         "How: Query reconciliation run records with pagination and optional id, requester, "
         "deduplication key, type, status, and correlation filters.\n"
         "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
-        "unexpected reconciliation failures. These records are operator evidence, not business "
-        "calculations."
+        "unexpected reconciliation failures, usually after `overview` shows control blocking or "
+        "`readiness` exposes unresolved source-owned gaps. These records are operator evidence, "
+        "not business calculations or front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
@@ -728,7 +732,7 @@ async def get_reconciliation_runs(
         "How: Query persisted reconciliation findings scoped to the requested run identifier.\n"
         "When: Use after a control failure or replay requirement to inspect the exact breaches "
         "that blocked publication. These findings are operator evidence, not business "
-        "calculations."
+        "calculations or front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )

@@ -599,6 +599,9 @@ The first-hop gateway or operator routes are now more explicit too:
    consoles, and incident workflows, not as a business-calculation input;
 2. `readiness` is published as source-owned readiness posture for UI and operator flows, not as a
    substitute for calculation-grade portfolio analytics.
+3. deeper control-stage, reconciliation, and replay routes are now explicitly documented as
+   second-hop operator investigation surfaces to use after `overview` or `readiness` exposes
+   blocking, lagging, or replay-related problems.
 
 Malformed operator date filters are now also contractually separated from missing-portfolio
 conditions: support routes that parse caller-supplied dates return `400 Bad Request` with an
