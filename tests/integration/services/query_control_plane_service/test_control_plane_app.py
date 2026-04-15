@@ -1336,6 +1336,10 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         if parameter["name"] == "portfolio_id"
     )
     assert portfolio_param["description"] == "Portfolio identifier for the snapshot request."
+    assert "lotus-gateway workspace state sourcing" in core_snapshot["description"]
+    assert (
+        "lotus-risk concentration or rolling-Sharpe context flows" in core_snapshot["description"]
+    )
     assert not any(
         parameter["name"] == "consumer_system" for parameter in core_snapshot.get("parameters", [])
     )
