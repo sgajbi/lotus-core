@@ -7,7 +7,6 @@ from fastapi.responses import Response
 from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_service.app.enterprise_readiness import (
-    _load_json_map,
     authorize_request,
     authorize_write_request,
     build_enterprise_audit_middleware,
@@ -128,18 +127,14 @@ def test_redact_sensitive_handles_list_values():
     assert redacted[1]["safe"] == 1
 
 
-def test_load_json_map_returns_empty_on_invalid_json(monkeypatch):
+def test_load_feature_flags_returns_empty_on_invalid_json(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_FEATURE_FLAGS_JSON", "{invalid")
-    assert _load_json_map("ENTERPRISE_FEATURE_FLAGS_JSON") == {}
+    assert load_feature_flags() == {}
 
 
 def test_load_feature_flags_returns_empty_for_non_object_payload(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_FEATURE_FLAGS_JSON", "[]")
     assert load_feature_flags() == {}
-
-
-def test_load_json_map_unknown_name_returns_empty_dict() -> None:
-    assert _load_json_map("SOME_UNKNOWN_JSON_CONFIG") == {}
 
 
 def test_authorize_write_request_requires_service_identity_when_headers_present(monkeypatch):

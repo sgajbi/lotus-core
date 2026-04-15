@@ -22,20 +22,6 @@ _runtime = EnterpriseReadinessRuntime(
 )
 
 
-def _env_enabled(name: str, default: str = "true") -> bool:
-    return _runtime.env_enabled(name, default)
-
-
-def _load_json_map(name: str) -> dict[str, Any]:
-    if name not in {"ENTERPRISE_FEATURE_FLAGS_JSON", "ENTERPRISE_CAPABILITY_RULES_JSON"}:
-        return {}
-    return _runtime.load_json_map(name)
-
-
-def _env_int(name: str, default: int) -> int:
-    return env_int(name, default)
-
-
 def enterprise_policy_version() -> str:
     return _runtime.enterprise_policy_version()
 
