@@ -32,6 +32,7 @@ class SimulationService:
     async def create_session(
         self, request: SimulationSessionCreateRequest
     ) -> SimulationSessionResponse:
+        await self._ensure_portfolio_exists(request.portfolio_id)
         session = await self.repo.create_session(
             portfolio_id=request.portfolio_id,
             created_by=request.created_by,
@@ -196,6 +197,10 @@ class SimulationService:
             raise ValueError(f"Simulation session {session_id} is not active")
         if session.expires_at is not None and session.expires_at < datetime.now(timezone.utc):
             raise ValueError(f"Simulation session {session_id} is expired")
+
+    async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
+        if not await self.position_repo.portfolio_exists(portfolio_id):
+            raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
     @staticmethod
     def _to_change_record(row) -> SimulationChangeRecord:

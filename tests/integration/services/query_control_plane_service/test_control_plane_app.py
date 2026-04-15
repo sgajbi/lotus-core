@@ -91,6 +91,18 @@ CAPABILITIES_SCHEMA_ROOTS = {
     "WorkflowCapability",
 }
 
+SIMULATION_SCHEMA_ROOTS = {
+    "SimulationSessionCreateRequest",
+    "SimulationSessionRecord",
+    "SimulationSessionResponse",
+    "SimulationChangeInput",
+    "SimulationChangeRecord",
+    "SimulationChangesResponse",
+    "ProjectedPositionRecord",
+    "ProjectedPositionsResponse",
+    "ProjectedSummaryResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1155,11 +1167,22 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     assert response.status_code == 200
     schema = response.json()
 
+    create_route = schema["paths"]["/simulation-sessions"]["post"]
     get_session = schema["paths"]["/simulation-sessions/{session_id}"]["get"]
+    projected_positions_route = schema["paths"]["/simulation-sessions/{session_id}/projected-positions"][
+        "get"
+    ]
+    projected_summary_route = schema["paths"]["/simulation-sessions/{session_id}/projected-summary"][
+        "get"
+    ]
     delete_change = schema["paths"]["/simulation-sessions/{session_id}/changes/{change_id}"][
         "delete"
     ]
     create_session = schema["components"]["schemas"]["SimulationSessionCreateRequest"]
+
+    assert "what-if simulation session" in create_route["description"]
+    not_found_create = create_route["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found_create["detail"] == "Portfolio with id PORT-404 not found"
 
     session_param = next(
         parameter for parameter in get_session["parameters"] if parameter["name"] == "session_id"
@@ -1191,6 +1214,16 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     assert projected_positions["properties"]["positions"]["description"] == (
         "Projected positions after all simulation changes are applied."
     )
+    assert "not for performance analytics" in projected_positions_route["description"]
+    assert "not a recommendation" in projected_summary_route["description"]
+
+
+async def test_openapi_simulation_schema_family_is_fully_documented(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, SIMULATION_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_analytics_input_parameters_and_examples(async_test_client):

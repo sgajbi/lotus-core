@@ -48,6 +48,18 @@ async def test_create_simulation_session_success(async_test_client):
     assert response.json()["session"]["session_id"] == "S1"
 
 
+async def test_create_simulation_session_unknown_portfolio_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.create_session.side_effect = ValueError("Portfolio with id P404 not found")
+
+    response = await client.post(
+        "/simulation-sessions", json={"portfolio_id": "P404", "created_by": "tester"}
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Portfolio with id P404 not found"
+
+
 async def test_get_simulation_session_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_session.side_effect = ValueError("not found")
@@ -108,7 +120,7 @@ async def test_create_simulation_session_unexpected_error_maps_to_500(async_test
     )
 
     assert response.status_code == 500
-    assert "db unavailable" in response.json()["detail"]
+    assert response.json()["detail"] == "Failed to create simulation session."
 
 
 async def test_close_simulation_session_not_found_maps_to_404(async_test_client):

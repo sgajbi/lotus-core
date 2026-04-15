@@ -303,6 +303,72 @@ Automated proof now includes a risk-free schema-family completeness assertion in
 No new downstream migration issue is required from this slice. The known work here is live data
 availability and downstream messaging alignment, not route replacement.
 
+## Certified Endpoint Slice: Simulation Session Family
+
+This certification pass covers:
+
+1. `POST /simulation-sessions`
+2. `GET /simulation-sessions/{session_id}`
+3. `DELETE /simulation-sessions/{session_id}`
+4. `POST /simulation-sessions/{session_id}/changes`
+5. `DELETE /simulation-sessions/{session_id}/changes/{change_id}`
+6. `GET /simulation-sessions/{session_id}/projected-positions`
+7. `GET /simulation-sessions/{session_id}/projected-summary`
+
+### Route Contract Decision
+
+These are the correct strategic control-plane routes for deterministic portfolio what-if state.
+
+The boundary is now made explicit in Swagger and tests:
+
+1. use these routes for sandbox state creation, mutation, and projected booked-state inspection;
+2. do not use them as analytics-input publication routes;
+3. do not use them for advisory recommendation, suitability, or proposal-decision logic;
+4. portfolio-state projections may be consumed by downstream workflows, but recommendation logic
+   remains outside `lotus-core`.
+
+### Downstream Consumer Reality
+
+| Route family | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `/simulation-sessions/*` | `lotus-gateway` | Correct. Gateway brokers session lifecycle and projected-state views through the control-plane base path. |
+| `/integration/advisory/proposals/simulate-execution` | `lotus-advise` | Separate but related strategic route. Advise does not call raw simulation-session lifecycle routes directly for canonical proposal execution. |
+
+`lotus-manage` remains an intended consumer in the RFC-0082 inventory, but no active direct code
+path was found in this review that should be overstated as live validated.
+
+### Upstream Integration Assessment
+
+The simulation-session family remains on the correct serving plane and behind the correct base path:
+
+1. query-control-plane, not query-service convenience reads;
+2. control-plane sandbox lifecycle for booked-state projections;
+3. deterministic projected state, not analytics output;
+4. downstream advisory execution goes through the separate canonical
+   `/integration/advisory/proposals/simulate-execution` route.
+
+During this pass, a real runtime defect was also corrected: unknown `portfolio_id` on
+`POST /simulation-sessions` now fails as a clean not-found error instead of falling through to a
+database foreign-key violation path that could leak internal details.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger is now production-grade on the following dimensions:
+
+1. create and projection route descriptions explain when to use the routes and when not to use
+   them;
+2. create-session now documents the portfolio-not-found failure mode;
+3. internal server failure text is sanitized rather than exposing raw exception content;
+4. the full simulation schema family is covered by a recursive documentation/example guard in
+   `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `#54` simulation OpenAPI error-response gap | Addressed. Negative response codes are documented and guarded by integration tests. | Close as implemented once issue hygiene is updated. |
+| `#52` unknown portfolio leaks raw DB 500 on create-session | Addressed in this slice. Service now prevalidates portfolio existence and the router returns a sanitized 404/500 contract. | Close as implemented once issue hygiene is updated. |
+
 ## Certified Endpoint Slice: Classification Taxonomy
 
 This certification pass covers:
