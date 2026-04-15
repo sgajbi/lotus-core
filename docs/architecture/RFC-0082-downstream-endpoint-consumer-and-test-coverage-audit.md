@@ -575,6 +575,11 @@ The same certification lane now also protects the adjacent policy/effective and
 instrument-enrichment contract families with recursive OpenAPI schema-family guards, so nested
 policy provenance and enrichment fields do not regress silently while core-snapshot evolves.
 
+The source-owned readiness, calculator-SLO, and control-stage support contracts are now also
+covered by a recursive OpenAPI schema-family guard so nested readiness reasons, historical-FX
+dependency summaries, SLO backlog fields, and control-stage lifecycle attributes remain
+self-describing for gateway and operator consumers.
+
 ## Certified Endpoint Slice: Core Snapshot
 
 This certification pass covers:

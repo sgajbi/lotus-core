@@ -146,6 +146,19 @@ BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS = {
     "BenchmarkReturnSeriesResponse",
 }
 
+READINESS_SUPPORT_SCHEMA_ROOTS = {
+    "PortfolioReadinessReason",
+    "PortfolioReadinessBucket",
+    "MissingHistoricalFxDependencyRecord",
+    "MissingHistoricalFxDependencySummary",
+    "PortfolioReadinessResponse",
+    "CalculatorSloBucket",
+    "ReprocessingSloBucket",
+    "CalculatorSloResponse",
+    "PortfolioControlStageRecord",
+    "PortfolioControlStageListResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -406,6 +419,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert readiness_as_of_date["description"] == (
         "Optional as-of date in YYYY-MM-DD format used to scope booked-state readiness."
     )
+    assert "instead of inferring readiness from row counts" in readiness["description"]
 
     stale_threshold = next(
         parameter
@@ -419,6 +433,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "failed_window_hours"
     )
     assert failed_window["description"].startswith("Window in hours")
+    assert "daily operational SLO checks" in calculator_slos["description"]
 
     not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
@@ -465,7 +480,11 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert "not direct business-calculation inputs" in reprocessing_keys["description"]
     assert "not direct business-calculation inputs" in reprocessing_jobs["description"]
     assert "not a business-calculation contract" in lineage["description"]
-    assert "not business-calculation inputs" in schema["paths"]["/lineage/portfolios/{portfolio_id}/keys"]["get"]["description"]
+    assert (
+        "not business-calculation inputs"
+        in schema["paths"]["/lineage/portfolios/{portfolio_id}/keys"]["get"]["description"]
+    )
+    assert "verify stage progression over time" in control_stages["description"]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -579,6 +598,30 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         analytics_export_request_fingerprint["description"]
         == "Optional analytics export request fingerprint filter."
     )
+
+
+async def test_openapi_fully_documents_readiness_support_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, READINESS_SUPPORT_SCHEMA_ROOTS)
+    analytics_export_jobs = schema["paths"][
+        "/support/portfolios/{portfolio_id}/analytics-export-jobs"
+    ]["get"]
+    reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
+        "get"
+    ]
+    reconciliation_runs = schema["paths"]["/support/portfolios/{portfolio_id}/reconciliation-runs"][
+        "get"
+    ]
+    reconciliation_findings = schema["paths"][
+        "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings"
+    ]["get"]
+    control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
+    reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
+        "get"
+    ]
     replay_job_id = next(
         parameter for parameter in reprocessing_jobs["parameters"] if parameter["name"] == "job_id"
     )
