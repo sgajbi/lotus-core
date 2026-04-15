@@ -647,7 +647,7 @@ class IncomeSummaryTotals(BaseModel):
     )
 
 
-class IncomeSummaryResponse(BaseModel):
+class IncomeSummaryResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
     product_version: Literal["v1"] = product_version_field()
     scope_type: ReportingScopeType = Field(..., description="Resolved reporting scope type.")
@@ -703,7 +703,7 @@ class ActivitySummaryTotals(BaseModel):
     )
 
 
-class ActivitySummaryResponse(BaseModel):
+class ActivitySummaryResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
     product_version: Literal["v1"] = product_version_field()
     scope_type: ReportingScopeType = Field(..., description="Resolved reporting scope type.")

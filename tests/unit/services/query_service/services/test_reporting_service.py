@@ -574,6 +574,14 @@ async def test_get_income_summary_returns_requested_window_and_ytd_amounts() -> 
     assert response.totals.requested_window.gross_amount_portfolio_currency == Decimal("80")
     assert response.totals.requested_window.net_amount_reporting_currency == Decimal("76")
     assert response.totals.year_to_date.gross_amount_reporting_currency == Decimal("110")
+    assert response.product_name == "TransactionLedgerWindow"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.correlation_id is None
     interest_bucket = next(
         bucket for bucket in response.portfolios[0].income_types if bucket.income_type == "INTEREST"
     )
@@ -635,3 +643,11 @@ async def test_get_activity_summary_returns_flow_buckets_with_reporting_conversi
     assert inflows_bucket.year_to_date.amount_reporting_currency == Decimal("1800.0")
     assert fees_bucket.requested_window.amount_reporting_currency == Decimal("30.0")
     assert taxes_bucket.requested_window.amount_reporting_currency == Decimal("0")
+    assert response.product_name == "TransactionLedgerWindow"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.correlation_id is None

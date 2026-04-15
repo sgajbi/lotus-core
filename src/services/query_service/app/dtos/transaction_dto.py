@@ -6,7 +6,11 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from .cashflow_dto import CashflowRecord
-from .source_data_product_identity import product_name_field, product_version_field
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 
 
 class TransactionCostRecord(BaseModel):
@@ -432,7 +436,7 @@ class TransactionRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class PaginatedTransactionResponse(BaseModel):
+class PaginatedTransactionResponse(SourceDataProductRuntimeMetadata):
     """
     Represents the paginated API response for a transaction query.
     """

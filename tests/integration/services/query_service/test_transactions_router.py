@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,6 +12,9 @@ from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,
     TransactionCostRecord,
     TransactionRecord,
+)
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.main import app
 
@@ -57,6 +60,7 @@ async def async_test_client():
                     net_interest_amount=Decimal("110.00"),
                 )
             ],
+            **source_data_product_runtime_metadata(as_of_date=date(2025, 8, 1)),
         )
     )
 
@@ -294,6 +298,7 @@ async def test_get_transactions_preserves_settlement_date_for_trade_cash_and_inc
                 currency="USD",
             ),
         ],
+        **source_data_product_runtime_metadata(as_of_date=date(2025, 8, 3)),
     )
 
     response = await client.get("/portfolios/P1/transactions")

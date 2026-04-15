@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.transaction_dto import PaginatedTransactionResponse, TransactionRecord
 from ..repositories.transaction_repository import TransactionRepository
 
@@ -103,4 +104,7 @@ class TransactionService:
             skip=skip,
             limit=limit,
             transactions=transactions,
+            **source_data_product_runtime_metadata(
+                as_of_date=effective_as_of_date or end_date or date.today(),
+            ),
         )

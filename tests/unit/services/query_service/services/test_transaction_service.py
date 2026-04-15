@@ -130,6 +130,14 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.transactions[1].withholding_tax_amount == Decimal("10")
         assert response_dto.transactions[1].other_interest_deductions_amount == Decimal("5")
         assert response_dto.transactions[1].net_interest_amount == Decimal("110")
+        assert response_dto.product_name == "TransactionLedgerWindow"
+        assert response_dto.product_version == "v1"
+        assert response_dto.as_of_date == date(2025, 1, 15)
+        assert response_dto.generated_at.tzinfo is not None
+        assert response_dto.restatement_version == "current"
+        assert response_dto.reconciliation_status == "UNKNOWN"
+        assert response_dto.data_quality_status == "UNKNOWN"
+        assert response_dto.correlation_id is None
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):
@@ -185,6 +193,7 @@ async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_rep
         assert retrieved_cashflow.is_position_flow is True
         assert retrieved_cashflow.is_portfolio_flow is True
         assert hasattr(retrieved_cashflow, "level") is False
+        assert response_dto.as_of_date == date(2025, 1, 15)
 
 
 async def test_get_transactions_raises_when_portfolio_missing(mock_transaction_repo: AsyncMock):

@@ -776,6 +776,9 @@ class ReportingService:
                 ),
             ),
             portfolios=portfolio_rows,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.window.end_date,
+            ),
         )
 
     async def get_activity_summary(
@@ -890,6 +893,9 @@ class ReportingService:
                 ],
             ),
             portfolios=portfolio_rows,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.window.end_date,
+            ),
         )
 
     async def _resolve_scope_portfolios_and_date(

@@ -9,6 +9,20 @@ from src.services.query_service.app.main import app, lifespan
 
 pytestmark = pytest.mark.asyncio
 
+SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
+    "tenant_id",
+    "generated_at",
+    "as_of_date",
+    "restatement_version",
+    "reconciliation_status",
+    "data_quality_status",
+    "latest_evidence_timestamp",
+    "source_batch_fingerprint",
+    "snapshot_id",
+    "policy_version",
+    "correlation_id",
+}
+
 
 @pytest_asyncio.fixture
 async def async_test_client():
@@ -80,19 +94,6 @@ async def test_openapi_exposes_holdings_as_of_runtime_supportability_metadata(
     assert response.status_code == 200
     components = response.json()["components"]["schemas"]
 
-    required_metadata_fields = {
-        "tenant_id",
-        "generated_at",
-        "as_of_date",
-        "restatement_version",
-        "reconciliation_status",
-        "data_quality_status",
-        "latest_evidence_timestamp",
-        "source_batch_fingerprint",
-        "snapshot_id",
-        "policy_version",
-        "correlation_id",
-    }
     holdings_response_schemas = [
         components["PortfolioPositionsResponse"],
         components["CashBalancesResponse"],
@@ -100,8 +101,27 @@ async def test_openapi_exposes_holdings_as_of_runtime_supportability_metadata(
     ]
 
     for response_schema in holdings_response_schemas:
-        assert required_metadata_fields <= set(response_schema["properties"])
+        assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(response_schema["properties"])
         assert response_schema["properties"]["product_name"]["default"] == "HoldingsAsOf"
+        assert response_schema["properties"]["product_version"]["default"] == "v1"
+
+
+async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadata(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    ledger_response_schemas = [
+        components["PaginatedTransactionResponse"],
+        components["IncomeSummaryResponse"],
+        components["ActivitySummaryResponse"],
+    ]
+
+    for response_schema in ledger_response_schemas:
+        assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(response_schema["properties"])
+        assert response_schema["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
         assert response_schema["properties"]["product_version"]["default"] == "v1"
 
 

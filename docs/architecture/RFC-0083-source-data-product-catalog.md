@@ -155,11 +155,14 @@ These fields cover the canonical positions and transaction ledger responses plus
 reporting convenience shapes that are already deprecated toward those target products.
 
 The first operational runtime metadata binding adds the required supportability fields to the
-`HoldingsAsOf` response envelopes:
+`HoldingsAsOf` and `TransactionLedgerWindow` response envelopes:
 
 1. `PortfolioPositionsResponse`,
 2. `CashBalancesResponse`,
-3. `HoldingsSnapshotResponse`.
+3. `HoldingsSnapshotResponse`,
+4. `PaginatedTransactionResponse`,
+5. `IncomeSummaryResponse`,
+6. `ActivitySummaryResponse`.
 
 The binding populates `generated_at`, `as_of_date`, `restatement_version`, and `correlation_id`
 from runtime request context and deterministic defaults. It leaves
