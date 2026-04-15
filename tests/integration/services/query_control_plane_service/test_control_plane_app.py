@@ -1235,8 +1235,11 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
 
     components = schema["components"]["schemas"]
     benchmark_catalog = components["BenchmarkCatalogResponse"]
+    benchmark_assignment_response = components["BenchmarkAssignmentResponse"]
     benchmark_composition_window_response = components["BenchmarkCompositionWindowResponse"]
     benchmark_market_series_response = components["BenchmarkMarketSeriesResponse"]
+    index_price_series_response = components["IndexPriceSeriesResponse"]
+    index_return_series_response = components["IndexReturnSeriesResponse"]
     risk_free_series_response = components["RiskFreeSeriesResponse"]
     coverage_response = components["CoverageResponse"]
     classification_taxonomy_response = components["ClassificationTaxonomyResponse"]
@@ -1251,6 +1254,31 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_component_response["properties"]["rebalance_event_id"]["description"] == (
         "Rebalance event identifier linking related composition changes."
     )
+    assert benchmark_assignment_response["properties"]["product_name"]["default"] == (
+        "BenchmarkAssignment"
+    )
+    assert benchmark_composition_window_response["properties"]["product_name"]["default"] == (
+        "BenchmarkConstituentWindow"
+    )
+    assert benchmark_market_series_response["properties"]["product_name"]["default"] == (
+        "MarketDataWindow"
+    )
+    assert index_price_series_response["properties"]["product_name"]["default"] == (
+        "IndexSeriesWindow"
+    )
+    assert index_return_series_response["properties"]["product_name"]["default"] == (
+        "IndexSeriesWindow"
+    )
+    assert risk_free_series_response["properties"]["product_name"]["default"] == (
+        "RiskFreeSeriesWindow"
+    )
+    assert coverage_response["properties"]["product_name"]["default"] == (
+        "DataQualityCoverageReport"
+    )
+    assert classification_taxonomy_response["properties"]["product_name"]["default"] == (
+        "InstrumentReferenceBundle"
+    )
+    assert benchmark_assignment_response["properties"]["product_version"]["default"] == "v1"
     assert benchmark_market_series_response["properties"]["quality_status_summary"]["examples"] == [
         {"accepted": 31, "estimated": 2}
     ]

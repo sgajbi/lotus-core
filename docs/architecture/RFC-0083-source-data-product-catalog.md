@@ -132,8 +132,19 @@ The first DTO-envelope binding adds `product_name` and `product_version` to:
 1. `PortfolioTimeseriesInput`,
 2. `PositionTimeseriesInput`.
 
-These fields are additive defaults on the analytics input response envelopes. They do not alter
-request semantics, persistence, eventing, paging, or calculation behavior.
+The next DTO-envelope binding adds the same additive fields to the reference and quality products
+that already have catalog-backed control-plane routes:
+
+1. `BenchmarkAssignment`,
+2. `BenchmarkConstituentWindow`,
+3. `MarketDataWindow`,
+4. `IndexSeriesWindow`,
+5. `RiskFreeSeriesWindow`,
+6. `DataQualityCoverageReport`,
+7. `InstrumentReferenceBundle`.
+
+These fields are additive defaults on the response envelopes. They do not alter request semantics,
+persistence, eventing, paging, or calculation behavior.
 
 ## Validation
 
