@@ -1477,7 +1477,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert portfolio_param["description"] == (
         "Portfolio identifier whose effective benchmark assignment is requested."
     )
-    assert "lotus-performance, lotus-risk, and reporting" in benchmark_assignment["description"]
+    assert "lotus-performance benchmark-aware analytics" in benchmark_assignment["description"]
+    assert "lotus-gateway workspace composition flows" in benchmark_assignment["description"]
+    assert "reporting workflows" in benchmark_assignment["description"]
     assert "portfolio_id and as_of_date" in benchmark_assignment["description"]
 
     assignment_not_found = benchmark_assignment["responses"]["404"]["content"]["application/json"][

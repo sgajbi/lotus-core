@@ -296,8 +296,9 @@ async def get_instrument_enrichment_bulk(
         "deterministic match. Resolution is keyed by portfolio_id and as_of_date; "
         "request reporting_currency and policy_context are caller-context fields and do "
         "not change assignment selection in the current implementation.\n"
-        "When: Used by lotus-performance, lotus-risk, and reporting workflows before "
-        "benchmark-aware analytics or evidence generation."
+        "When: Used by lotus-performance benchmark-aware analytics, lotus-gateway workspace "
+        "composition flows, and reporting workflows that need governed benchmark context "
+        "before downstream benchmark math or evidence generation."
     ),
     openapi_extra=source_data_product_openapi_extra("BenchmarkAssignment"),
 )
