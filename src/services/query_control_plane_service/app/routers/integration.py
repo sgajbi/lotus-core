@@ -253,9 +253,13 @@ async def create_core_snapshot(
     },
     summary="Resolve issuer enrichment for security identifiers",
     description=(
-        "Returns issuer enrichment for a caller-provided security_id list. "
-        "Records are deterministic and preserve request order. Unknown securities are returned "
-        "with null issuer fields."
+        "What: Return source-owned issuer and liquidity enrichment for a caller-provided "
+        "security_id list.\n"
+        "How: Resolves canonical instrument metadata in one deterministic batch, preserves "
+        "request order, and returns null issuer fields for unknown securities instead of "
+        "inventing fallback identities.\n"
+        "When: Used by lotus-advise, lotus-risk, lotus-performance, and lotus-gateway when "
+        "shared instrument reference context is needed without direct query-service coupling."
     ),
     openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )

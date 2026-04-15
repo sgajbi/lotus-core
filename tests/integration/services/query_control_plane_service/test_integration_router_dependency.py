@@ -11,6 +11,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_integration_service,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
+    CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
     CoreSnapshotNotFoundError,
     CoreSnapshotUnavailableSectionError,
@@ -68,6 +69,26 @@ async def async_test_client():
                 generated_at=datetime(2026, 2, 27, tzinfo=UTC),
             ),
         }
+    )
+    mock_core_snapshot_service.get_instrument_enrichment_bulk = AsyncMock(
+        return_value=[
+            {
+                "security_id": "SEC_AAPL_US",
+                "issuer_id": "ISSUER_APPLE_INC",
+                "issuer_name": "Apple Inc.",
+                "ultimate_parent_issuer_id": "ISSUER_APPLE_HOLDING",
+                "ultimate_parent_issuer_name": "Apple Holdings PLC",
+                "liquidity_tier": "L1",
+            },
+            {
+                "security_id": "SEC_UNKNOWN",
+                "issuer_id": None,
+                "issuer_name": None,
+                "ultimate_parent_issuer_id": None,
+                "ultimate_parent_issuer_name": None,
+                "liquidity_tier": None,
+            },
+        ]
     )
 
     mock_integration_service = MagicMock()
@@ -687,6 +708,45 @@ async def test_index_catalog_success(async_test_client):
         index_type="equity_index",
         index_status="active",
     )
+
+
+async def test_instrument_enrichment_bulk_success(async_test_client):
+    client, mock_core_snapshot_service, _mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/instruments/enrichment-bulk",
+        json={"security_ids": ["SEC_AAPL_US", "SEC_UNKNOWN"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "InstrumentReferenceBundle"
+    assert body["product_version"] == "v1"
+    assert [record["security_id"] for record in body["records"]] == [
+        "SEC_AAPL_US",
+        "SEC_UNKNOWN",
+    ]
+    assert body["records"][0]["issuer_id"] == "ISSUER_APPLE_INC"
+    assert body["records"][1]["issuer_id"] is None
+    assert body["records"][1]["liquidity_tier"] is None
+    mock_core_snapshot_service.get_instrument_enrichment_bulk.assert_awaited_once_with(
+        ["SEC_AAPL_US", "SEC_UNKNOWN"]
+    )
+
+
+async def test_instrument_enrichment_bulk_whitespace_only_ids_map_to_400(async_test_client):
+    client, mock_core_snapshot_service, _mock_integration_service = async_test_client
+    mock_core_snapshot_service.get_instrument_enrichment_bulk.side_effect = (
+        CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
+    )
+
+    response = await client.post(
+        "/integration/instruments/enrichment-bulk",
+        json={"security_ids": ["   "]},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "security_ids must contain at least one identifier"
 
 
 async def test_benchmark_composition_window_success(async_test_client):

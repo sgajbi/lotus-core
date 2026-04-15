@@ -1316,6 +1316,11 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "example"
     ]
     assert invalid_enrichment["detail"] == "security_ids must contain at least one identifier"
+    assert (
+        "lotus-advise, lotus-risk, lotus-performance, and lotus-gateway"
+        in (enrichment_bulk["description"])
+    )
+    assert "null issuer fields for unknown securities" in enrichment_bulk["description"]
 
     components = schema["components"]["schemas"]
     policy_response = components["EffectiveIntegrationPolicyResponse"]
@@ -1331,12 +1336,16 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "Policy lineage metadata showing how the effective policy was resolved."
     )
     assert enrichment_request["properties"]["security_ids"]["description"] == (
-        "Canonical Lotus security identifiers to enrich in one deterministic batch."
+        "Canonical Lotus security identifiers to enrich in one deterministic batch. Order is "
+        "preserved in the response."
     )
     assert enrichment_response["properties"]["product_name"]["default"] == (
         "InstrumentReferenceBundle"
     )
     assert enrichment_response["properties"]["product_version"]["default"] == "v1"
+    assert enrichment_response["properties"]["records"]["description"].startswith(
+        "Deterministic enrichment records in the same order as request security_ids."
+    )
     assert core_snapshot_governance["properties"]["requested_sections"]["examples"] == [
         ["positions_baseline", "positions_projected", "positions_delta"]
     ]

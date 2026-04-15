@@ -86,7 +86,10 @@ class EffectiveIntegrationPolicyResponse(BaseModel):
 class InstrumentEnrichmentBulkRequest(BaseModel):
     security_ids: list[str] = Field(
         ...,
-        description="Canonical Lotus security identifiers to enrich in one deterministic batch.",
+        description=(
+            "Canonical Lotus security identifiers to enrich in one deterministic batch. "
+            "Order is preserved in the response."
+        ),
         examples=[["SEC_AAPL_US", "SEC_MSFT_US"]],
         min_length=1,
     )
@@ -102,12 +105,12 @@ class InstrumentEnrichmentRecord(BaseModel):
     )
     issuer_id: str | None = Field(
         None,
-        description="Canonical direct issuer identifier, when available.",
+        description="Canonical direct issuer identifier, null when the security is unknown.",
         examples=["ISSUER_APPLE_INC"],
     )
     issuer_name: str | None = Field(
         None,
-        description="Display name for direct issuer, when available.",
+        description="Display name for direct issuer, null when the security is unknown.",
         examples=["Apple Inc."],
     )
     ultimate_parent_issuer_id: str | None = Field(
@@ -138,7 +141,10 @@ class InstrumentEnrichmentBulkResponse(BaseModel):
     product_version: Literal["v1"] = product_version_field()
     records: list[InstrumentEnrichmentRecord] = Field(
         ...,
-        description="Deterministic enrichment records in the same order as request security_ids.",
+        description=(
+            "Deterministic enrichment records in the same order as request security_ids. "
+            "Unknown securities remain present with null enrichment fields."
+        ),
         examples=[
             [
                 {

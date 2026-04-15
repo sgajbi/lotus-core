@@ -651,6 +651,43 @@ The adjacent support-operations contract family is now covered the same way, so 
 job-list, and analytics-export operational payloads cannot silently lose nested descriptions or
 example signals while operator surfaces evolve.
 
+## Certified Endpoint Slice: Instrument Enrichment
+
+This certification pass covers:
+
+1. `POST /integration/instruments/enrichment-bulk`
+
+### Route Contract Decision
+
+This is the strategic shared instrument-reference enrichment route for downstream consumers that
+need governed issuer and liquidity metadata without taking a direct dependency on query-service
+internals.
+
+The contract boundary is now explicit:
+
+1. request order is preserved in the response;
+2. unknown securities remain present with null enrichment fields;
+3. the route publishes source-owned reference context, not downstream suitability or analytics
+   conclusions.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/instruments/enrichment-bulk` | `lotus-advise`, `lotus-risk` | Correct. These repos contain direct integration usage for shared issuer/reference context. `lotus-performance` and `lotus-gateway` remain valid catalog-intended consumers for aligned source-reference enrichment. |
+
+### Swagger / OpenAPI Assessment
+
+Swagger now makes the following explicit:
+
+1. when to use the route and which downstream apps it serves;
+2. that unknown securities return null issuer fields instead of invented fallback identities;
+3. that response order is deterministic and follows request order.
+
+The HTTP dependency lane now also proves both the successful enrichment path and the trimmed-empty
+identifier failure path, so this endpoint no longer relies only on router-function and schema
+coverage.
+
 ## Certified Endpoint Slice: Core Snapshot
 
 This certification pass covers:
