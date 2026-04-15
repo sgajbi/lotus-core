@@ -2,6 +2,8 @@ import pytest
 
 from portfolio_common import events
 from portfolio_common.event_supportability import (
+    CONTROL_EXECUTION,
+    CONTROL_PLANE_AND_POLICY,
     DATA_QUALITY_COVERAGE_REPORT,
     EVENT_FAMILY_DEFINITIONS,
     INGESTION_EVIDENCE_BUNDLE,
@@ -10,6 +12,7 @@ from portfolio_common.event_supportability import (
     SOURCE_INGESTION_EVENT,
     SUPPORTABILITY_SURFACE_DEFINITIONS,
     EventFamilyDefinition,
+    SupportabilitySurfaceDefinition,
     get_event_family_definition,
     validate_event_supportability_catalog,
 )
@@ -65,6 +68,12 @@ def test_supportability_surfaces_are_operator_only_and_evidence_backed() -> None
     for surface in SUPPORTABILITY_SURFACE_DEFINITIONS:
         assert surface.operator_only is True
         assert surface.diagnostics
+
+
+def test_supportability_surfaces_use_canonical_route_family_values() -> None:
+    surface_families = {surface.route_family for surface in SUPPORTABILITY_SURFACE_DEFINITIONS}
+
+    assert surface_families == {CONTROL_PLANE_AND_POLICY, CONTROL_EXECUTION}
 
 
 def test_get_event_family_definition_is_case_insensitive() -> None:
@@ -137,3 +146,17 @@ def test_validation_rejects_unknown_source_data_product_binding() -> None:
 
     with pytest.raises(ValueError, match="references unknown source-data product"):
         validate_event_supportability_catalog((invalid,), ())
+
+
+def test_validation_rejects_unknown_supportability_surface_route_family() -> None:
+    invalid_surface = SupportabilitySurfaceDefinition(
+        name="InvalidSurface",
+        service_name="query_control_plane_service",
+        route_family="control_plane_and_policy",
+        operator_only=True,
+        evidence_bundle=DATA_QUALITY_COVERAGE_REPORT,
+        diagnostics=("lineage",),
+    )
+
+    with pytest.raises(ValueError, match="route_family has unsupported value"):
+        validate_event_supportability_catalog((), (invalid_surface,))

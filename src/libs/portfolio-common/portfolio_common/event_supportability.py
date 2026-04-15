@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from portfolio_common.source_data_products import SOURCE_DATA_PRODUCT_CATALOG
+from portfolio_common.source_data_products import (
+    CONTROL_PLANE_AND_POLICY,
+    SOURCE_DATA_PRODUCT_CATALOG,
+)
 
 
 SOURCE_INGESTION_EVENT = "source_ingestion_event"
@@ -13,6 +16,8 @@ DOMAIN_STATE_EVENT = "domain_state_event"
 PIPELINE_STAGE_EVENT = "pipeline_stage_event"
 RECONCILIATION_CONTROL_EVENT = "reconciliation_control_event"
 SUPPORTABILITY_RECOVERY_EVENT = "supportability_recovery_event"
+
+CONTROL_EXECUTION = "Control Execution"
 
 INBOUND_EVENT = "inbound"
 OUTBOUND_EVENT = "outbound"
@@ -255,7 +260,7 @@ SUPPORTABILITY_SURFACE_DEFINITIONS: tuple[SupportabilitySurfaceDefinition, ...] 
     SupportabilitySurfaceDefinition(
         name="IngestionOperationsDiagnostics",
         service_name="event_replay_service",
-        route_family="control_plane_and_policy",
+        route_family=CONTROL_PLANE_AND_POLICY,
         operator_only=True,
         evidence_bundle=INGESTION_EVIDENCE_BUNDLE,
         diagnostics=(
@@ -271,7 +276,7 @@ SUPPORTABILITY_SURFACE_DEFINITIONS: tuple[SupportabilitySurfaceDefinition, ...] 
     SupportabilitySurfaceDefinition(
         name="ConsumerDlqReplay",
         service_name="event_replay_service",
-        route_family="control_plane_and_policy",
+        route_family=CONTROL_PLANE_AND_POLICY,
         operator_only=True,
         evidence_bundle=INGESTION_EVIDENCE_BUNDLE,
         diagnostics=("dlq_event_listing", "deterministic_replay_fingerprint", "replay_audit"),
@@ -280,7 +285,7 @@ SUPPORTABILITY_SURFACE_DEFINITIONS: tuple[SupportabilitySurfaceDefinition, ...] 
     SupportabilitySurfaceDefinition(
         name="CoreSupportLineage",
         service_name="query_control_plane_service",
-        route_family="control_plane_and_policy",
+        route_family=CONTROL_PLANE_AND_POLICY,
         operator_only=True,
         evidence_bundle=DATA_QUALITY_COVERAGE_REPORT,
         diagnostics=("lineage", "readiness", "valuation_jobs", "aggregation_jobs"),
@@ -288,7 +293,7 @@ SUPPORTABILITY_SURFACE_DEFINITIONS: tuple[SupportabilitySurfaceDefinition, ...] 
     SupportabilitySurfaceDefinition(
         name="ReconciliationOperations",
         service_name="financial_reconciliation_service",
-        route_family="control_execution",
+        route_family=CONTROL_EXECUTION,
         operator_only=True,
         evidence_bundle=RECONCILIATION_EVIDENCE_BUNDLE,
         diagnostics=("reconciliation_runs", "findings", "blocking_controls"),
@@ -320,6 +325,7 @@ def validate_event_supportability_catalog(
         SUPPORTABILITY_RECOVERY_EVENT,
     }
     supported_directions = {INBOUND_EVENT, OUTBOUND_EVENT, INTERNAL_EVENT}
+    supported_surface_route_families = {CONTROL_PLANE_AND_POLICY, CONTROL_EXECUTION}
     supported_evidence = {
         INGESTION_EVIDENCE_BUNDLE,
         RECONCILIATION_EVIDENCE_BUNDLE,
@@ -386,7 +392,7 @@ def validate_event_supportability_catalog(
             raise ValueError(f"Duplicate supportability surface: {surface.name}")
         surface_names.add(surface_name)
         _normalize_required_text(surface.service_name, "service_name")
-        _normalize_required_text(surface.route_family, "route_family")
+        _require_allowed(surface.route_family, "route_family", supported_surface_route_families)
         _require_allowed(surface.evidence_bundle, "evidence_bundle", supported_evidence)
         if not surface.operator_only:
             raise ValueError(f"{surface.name} must be operator-only")

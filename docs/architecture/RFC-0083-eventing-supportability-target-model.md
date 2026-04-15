@@ -78,6 +78,10 @@ Current governed surfaces are:
 | `ReconciliationOperations` | `financial_reconciliation_service` | `ReconciliationEvidenceBundle` |
 
 Every supportability surface must be operator-only and evidence-backed.
+Supportability surface `route_family` values must use the same canonical RFC-0082 route-family
+vocabulary as the route contract-family registry. The accepted Slice 10 values are
+`Control-Plane And Policy` and `Control Execution`. Lower-case internal labels such as
+`control_plane_and_policy` or `control_execution` are not valid in this catalog.
 
 ## Runtime Follow-Up
 
