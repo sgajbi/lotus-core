@@ -478,8 +478,8 @@ PII/client-sensitive fields, and operator-only evidence posture. The helper vali
 source-data product has a profile and emits `x-lotus-source-data-security` OpenAPI metadata for
 catalog-backed routes. Shared enterprise-readiness runtime support now removes duplicated
 query-service and query-control-plane write authorization, capability-rule, policy-header, write
-audit, and opt-in read audit middleware logic while preserving service-local settings and wrapper
-functions. Security profile validation now also prevents operator-only products from being classified
+audit, opt-in read audit, and opt-in read authorization middleware logic while preserving
+service-local settings and wrapper functions. Security profile validation now also prevents operator-only products from being classified
 outside control-plane and policy route families and constrains business, system, and operator access
 classes, audit requirements, and sensitivity-driven retention requirements to their governed
 RFC-0082/RFC-0083 lanes. This slice does not introduce new entitlement policy semantics, persistence

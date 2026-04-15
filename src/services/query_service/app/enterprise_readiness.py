@@ -69,6 +69,10 @@ def _required_capability(method: str, path: str) -> str | None:
     return _runtime.required_capability(method, path)
 
 
+def authorize_request(method: str, path: str, headers: dict[str, str]) -> tuple[bool, str | None]:
+    return _runtime.authorize_request(method, path, headers)
+
+
 def authorize_write_request(
     method: str, path: str, headers: dict[str, str]
 ) -> tuple[bool, str | None]:

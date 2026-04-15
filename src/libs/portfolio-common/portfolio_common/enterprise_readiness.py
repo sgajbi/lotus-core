@@ -18,6 +18,7 @@ AuditEmitter = Callable[..., None]
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 READ_AUDIT_METHODS = {"GET", "HEAD"}
+READ_AUTHZ_METHODS = {"GET", "HEAD"}
 REQUIRED_HEADERS = {"x-actor-id", "x-tenant-id", "x-role", "x-correlation-id"}
 REDACT_FIELDS = {
     "password",
@@ -72,8 +73,8 @@ class EnterpriseReadinessRuntime:
 
         if (
             self.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false")
-            and not self.load_settings().enterprise_primary_key_id.strip()
-        ):
+            or self.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false")
+        ) and not self.load_settings().enterprise_primary_key_id.strip():
             issues.append("missing_primary_key_id")
 
         if issues and self.env_enabled("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", "false"):
@@ -101,9 +102,19 @@ class EnterpriseReadinessRuntime:
     def authorize_write_request(
         self, method: str, path: str, headers: dict[str, str]
     ) -> tuple[bool, str | None]:
-        if method.upper() not in WRITE_METHODS or not self.env_enabled(
+        return self.authorize_request(method, path, headers)
+
+    def authorize_request(
+        self, method: str, path: str, headers: dict[str, str]
+    ) -> tuple[bool, str | None]:
+        normalized_method = method.upper()
+        requires_write_authz = normalized_method in WRITE_METHODS and self.env_enabled(
             "ENTERPRISE_ENFORCE_AUTHZ", "false"
-        ):
+        )
+        requires_read_authz = normalized_method in READ_AUTHZ_METHODS and self.env_enabled(
+            "ENTERPRISE_ENFORCE_READ_AUTHZ", "false"
+        )
+        if not (requires_write_authz or requires_read_authz):
             return True, None
 
         normalized = {str(k).lower(): str(v) for k, v in headers.items()}
@@ -114,7 +125,7 @@ class EnterpriseReadinessRuntime:
         if not (normalized.get("x-service-identity") or normalized.get("authorization")):
             return False, "missing_service_identity"
 
-        required_capability = self.required_capability(method, path)
+        required_capability = self.required_capability(normalized_method, path)
         if required_capability:
             capabilities = {
                 part.strip()
@@ -190,7 +201,7 @@ def build_enterprise_audit_middleware(
         if request.method in WRITE_METHODS and content_length > max_write_payload_bytes:
             return JSONResponse(status_code=413, content={"detail": "payload_too_large"})
 
-        authorized, reason = runtime.authorize_write_request(
+        authorized, reason = runtime.authorize_request(
             request.method, request.url.path, dict(request.headers)
         )
         if not authorized:

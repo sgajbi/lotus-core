@@ -43,8 +43,8 @@ Full production runtime closure still requires:
 1. the `lotus-core` PR Merge Gate,
 2. affected downstream consumer PR Merge Gates,
 3. platform end-to-end validation where canonical product flows depend on core behavior,
-4. full runtime authorization and entitlement proof when security controls move from target model to
-   production enforcement,
+4. full gateway/platform/runtime authorization and entitlement proof when opt-in service-policy
+   controls move to production enforcement,
 5. full cross-service event replay proof when event payload behavior changes beyond the centrally
    guarded outbox envelope.
 

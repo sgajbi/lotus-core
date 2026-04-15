@@ -36,12 +36,15 @@ def _runtime(
     *,
     settings: _Settings = _Settings(),
     authz_enabled: bool = False,
+    read_authz_enabled: bool = False,
     read_audit_enabled: bool = False,
     max_payload_bytes: int = 1_048_576,
 ) -> EnterpriseReadinessRuntime:
     def _env_bool(name: str, default: bool) -> bool:
         if name == "ENTERPRISE_ENFORCE_AUTHZ":
             return authz_enabled
+        if name == "ENTERPRISE_ENFORCE_READ_AUTHZ":
+            return read_authz_enabled
         if name == "ENTERPRISE_AUDIT_READS":
             return read_audit_enabled
         return default
@@ -81,6 +84,44 @@ def test_authorize_write_request_enforces_capability_rules() -> None:
 
     assert allowed is False
     assert reason == "missing_capability:transactions.write"
+
+
+def test_authorize_request_enforces_read_capability_rules_when_enabled() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        settings=_Settings(
+            enterprise_primary_key_id="primary",
+            enterprise_capability_rules={"GET /portfolios": "portfolios.read"},
+        ),
+    )
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-gateway",
+        "X-Capabilities": "transactions.read",
+    }
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
+
+    assert allowed is False
+    assert reason == "missing_capability:portfolios.read"
+
+
+def test_authorize_request_allows_read_when_read_authorization_is_disabled() -> None:
+    runtime = _runtime(read_authz_enabled=False)
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", {})
+
+    assert allowed is True
+    assert reason is None
+
+
+def test_validate_enterprise_runtime_config_checks_primary_key_for_read_authorization() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+
+    assert "missing_primary_key_id" in runtime.validate_enterprise_runtime_config()
 
 
 def test_redact_sensitive_masks_nested_values() -> None:
@@ -239,3 +280,35 @@ async def test_shared_enterprise_middleware_audits_reads_when_enabled() -> None:
         correlation_id="corr-read",
         metadata={"status_code": 200, "access_type": "read"},
     )
+
+
+@pytest.mark.asyncio
+async def test_shared_enterprise_middleware_denies_read_without_headers_when_enabled() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+    audit_emitter = Mock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=audit_emitter,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/portfolios",
+            "headers": [],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    async def _call_next(_: Request) -> Response:
+        return Response(status_code=200)
+
+    response = await middleware(request, _call_next)
+
+    assert response.status_code == 403
+    audit_emitter.assert_called_once()
+    assert audit_emitter.call_args.kwargs["action"] == "DENY GET /api/v1/portfolios"
+    assert audit_emitter.call_args.kwargs["metadata"]["reason"].startswith("missing_headers:")

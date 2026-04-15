@@ -12,7 +12,7 @@
     "full lotus-core PR Merge Gate",
     "affected downstream consumer PR Merge Gates",
     "platform end-to-end validation where canonical product flows depend on core behavior",
-    "full runtime authorization and entitlement proof when security controls move from target model to production enforcement",
+    "full gateway/platform/runtime authorization and entitlement proof when opt-in service-policy controls move to production enforcement",
     "full cross-service event replay proof when event payload behavior changes beyond the centrally guarded outbox envelope"
   ],
   "slices": [

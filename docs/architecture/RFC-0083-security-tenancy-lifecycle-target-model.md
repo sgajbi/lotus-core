@@ -120,8 +120,9 @@ readiness proof, not runtime authorization enforcement.
 `query_service` and `query_control_plane_service` now use the shared
 `portfolio_common.enterprise_readiness` runtime for enterprise policy version headers, write payload
 limits, optional write authorization checks, capability-rule matching, feature-flag lookup,
-sensitive audit metadata redaction, write audit event emission, and opt-in read audit event emission
-when `ENTERPRISE_AUDIT_READS=true`.
+sensitive audit metadata redaction, write audit event emission, opt-in read audit event emission
+when `ENTERPRISE_AUDIT_READS=true`, and opt-in read authorization when
+`ENTERPRISE_ENFORCE_READ_AUTHZ=true`.
 
 Each service keeps a local `enterprise_readiness.py` wrapper so existing imports, tests, settings,
 and service-specific patch points remain stable. The shared helper removes duplicated middleware
@@ -132,6 +133,12 @@ Read auditing is intentionally disabled by default until platform ingress and ga
 the production audit volume and storage posture. When enabled, the middleware records the route path,
 status code, actor, tenant, role, correlation id, and access type without copying request bodies or
 query-string values into audit metadata.
+
+Read authorization is also disabled by default. When enabled, GET and HEAD requests must provide the
+same actor, tenant, role, correlation, and service identity context required for write authorization,
+and may be checked against `ENTERPRISE_CAPABILITY_RULES_JSON` entries such as
+`GET /integration/portfolios`. This is service-policy support; full production entitlement closure
+still requires gateway/platform ingress policy proof and affected-consumer validation.
 
 ## Validation
 
