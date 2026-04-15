@@ -1124,6 +1124,10 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert core_snapshot_response["properties"]["contract_version"]["description"] == (
         "Contract version for the core snapshot response."
     )
+    assert core_snapshot_response["properties"]["product_name"]["default"] == (
+        "PortfolioStateSnapshot"
+    )
+    assert core_snapshot_response["properties"]["product_version"]["default"] == "v1"
     assert core_snapshot_response["properties"]["request_fingerprint"]["description"] == (
         "Deterministic fingerprint of the full core snapshot request contract."
     )

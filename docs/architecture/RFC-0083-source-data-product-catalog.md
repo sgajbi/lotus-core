@@ -154,6 +154,11 @@ The operational read DTO-envelope binding adds `product_name` and `product_versi
 These fields cover the canonical positions and transaction ledger responses plus the pre-live
 reporting convenience shapes that are already deprecated toward those target products.
 
+The snapshot DTO-envelope binding adds `product_name` and `product_version` to
+`PortfolioStateSnapshot` on the core snapshot response. The existing route-level
+`x-lotus-source-data-product` metadata remains the route discovery mechanism; the response fields
+make the resolved product identity visible in generated client models and runtime payloads.
+
 ## Validation
 
 Slice 6 validation is:
