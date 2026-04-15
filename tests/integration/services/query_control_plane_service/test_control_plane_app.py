@@ -837,6 +837,10 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         response_schema["properties"]["reference_state_policy"]["default"]
         == "current_portfolio_reference_state"
     )
+    assert response_schema["properties"]["product_name"]["default"] == "PortfolioAnalyticsReference"
+    assert response_schema["properties"]["product_version"]["default"] == "v1"
+    assert "latest_evidence_timestamp" in response_schema["properties"]
+    assert "data_quality_status" in response_schema["properties"]
     assert (
         response_schema["properties"]["supported_grouping_dimensions"]["description"]
         == "Canonical grouping dimensions supported by analytics input contracts."

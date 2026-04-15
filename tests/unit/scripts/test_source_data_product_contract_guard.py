@@ -167,6 +167,11 @@ def test_discover_source_data_product_routes_finds_current_catalog_bindings() ->
         "PortfolioTimeseriesInput",
     ) in product_routes
     assert (
+        QUERY_CONTROL_PLANE_SERVICE,
+        "/integration/portfolios/{portfolio_id}/analytics/reference",
+        "PortfolioAnalyticsReference",
+    ) in product_routes
+    assert (
         QUERY_SERVICE,
         "/portfolios/{portfolio_id}/transactions",
         "TransactionLedgerWindow",
@@ -177,5 +182,9 @@ def test_discover_response_model_product_identities_finds_current_dto_defaults()
     identities = guard.discover_response_model_product_identities()
 
     assert identities["PortfolioAnalyticsTimeseriesResponse"] == ("PortfolioTimeseriesInput", "v1")
+    assert identities["PortfolioAnalyticsReferenceResponse"] == (
+        "PortfolioAnalyticsReference",
+        "v1",
+    )
     assert identities["PortfolioPositionsResponse"] == ("HoldingsAsOf", "v1")
     assert identities["InstrumentEnrichmentBulkResponse"] == ("InstrumentReferenceBundle", "v1")

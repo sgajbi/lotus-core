@@ -168,6 +168,7 @@ async def get_position_analytics_timeseries(
         "Contract note: portfolio reference fields are current canonical portfolio state, "
         "not historical effective-dated portfolio snapshots."
     ),
+    openapi_extra=source_data_product_openapi_extra("PortfolioAnalyticsReference"),
 )
 async def get_portfolio_analytics_reference(
     request: PortfolioAnalyticsReferenceRequest,

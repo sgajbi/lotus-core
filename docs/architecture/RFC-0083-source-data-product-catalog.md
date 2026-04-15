@@ -50,6 +50,7 @@ evidence reference rather than omitting the concept.
 | `TransactionLedgerWindow` | Operational read | `query_service` | gateway, report, manage, risk | `/portfolios/{portfolio_id}/transactions`, `/reporting/activity-summary/query`, `/reporting/income-summary/query` |
 | `PositionTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/position-timeseries` |
 | `PortfolioTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` |
+| `PortfolioAnalyticsReference` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/reference` |
 | `MarketDataWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/market-series` |
 | `InstrumentReferenceBundle` | Analytics input | `query_control_plane_service` | performance, risk, gateway, advise | `/integration/instruments/enrichment-bulk`, `/integration/reference/classification-taxonomy` |
 | `BenchmarkAssignment` | Analytics input | `query_control_plane_service` | performance, risk, report | `/integration/portfolios/{portfolio_id}/benchmark-assignment` |
@@ -130,7 +131,8 @@ work as a later runtime slice.
 The first DTO-envelope binding adds `product_name` and `product_version` to:
 
 1. `PortfolioTimeseriesInput`,
-2. `PositionTimeseriesInput`.
+2. `PositionTimeseriesInput`,
+3. `PortfolioAnalyticsReference`.
 
 The next DTO-envelope binding adds the same additive fields to the reference and quality products
 that already have catalog-backed control-plane routes:
@@ -167,14 +169,15 @@ market/reference response envelopes:
 7. `CoreSnapshotResponse`,
 8. `PortfolioAnalyticsTimeseriesResponse`,
 9. `PositionAnalyticsTimeseriesResponse`,
-10. `BenchmarkAssignmentResponse`,
-11. `BenchmarkCompositionWindowResponse`,
-12. `BenchmarkMarketSeriesResponse`,
-13. `IndexPriceSeriesResponse`,
-14. `IndexReturnSeriesResponse`,
-15. `RiskFreeSeriesResponse`,
-16. `CoverageResponse`,
-17. `ClassificationTaxonomyResponse`.
+10. `PortfolioAnalyticsReferenceResponse`,
+11. `BenchmarkAssignmentResponse`,
+12. `BenchmarkCompositionWindowResponse`,
+13. `BenchmarkMarketSeriesResponse`,
+14. `IndexPriceSeriesResponse`,
+15. `IndexReturnSeriesResponse`,
+16. `RiskFreeSeriesResponse`,
+17. `CoverageResponse`,
+18. `ClassificationTaxonomyResponse`.
 
 The initial binding populated `generated_at`, `as_of_date`, `restatement_version`, and
 `correlation_id` from runtime request context and deterministic defaults. It left `tenant_id`,
@@ -228,6 +231,15 @@ points are `STALE`, missing expected dates are `PARTIAL`, and empty windows rema
 `UNRECONCILED` depending on whether the request had expected dates. They leave tenant, evidence,
 snapshot, and policy fields null until those controls are resolved in the analytics-input contract
 path.
+
+`PortfolioAnalyticsReference` is the analytics-safe portfolio reference context consumed by
+`lotus-performance` and `lotus-risk`. It is catalog-backed on the query control plane and publishes
+the same product identity and runtime metadata envelope as the analytics-input timeseries products.
+It reuses the existing lineage timestamp for top-level `generated_at`, marks the reference
+`COMPLETE` when the portfolio can be bounded by a portfolio performance horizon, marks it `PARTIAL`
+when the portfolio exists but no performance horizon is available, and derives
+`latest_evidence_timestamp` from durable portfolio source/update/create timestamps when those fields
+are available.
 
 The market/reference products populate top-level `as_of_date` from their explicit as-of request
 where one exists, or from the resolved window end date for window-only products. They preserve

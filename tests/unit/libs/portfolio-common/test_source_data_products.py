@@ -30,6 +30,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "TransactionLedgerWindow",
         "PositionTimeseriesInput",
         "PortfolioTimeseriesInput",
+        "PortfolioAnalyticsReference",
         "MarketDataWindow",
         "InstrumentReferenceBundle",
         "BenchmarkAssignment",
@@ -59,6 +60,7 @@ def test_products_for_consumer_maps_performance_to_analytics_inputs() -> None:
 
     assert "PortfolioTimeseriesInput" in product_names
     assert "PositionTimeseriesInput" in product_names
+    assert "PortfolioAnalyticsReference" in product_names
     assert "HoldingsAsOf" not in product_names
     assert all(
         product.route_family in {ANALYTICS_INPUT, CONTROL_PLANE_AND_POLICY} for product in products

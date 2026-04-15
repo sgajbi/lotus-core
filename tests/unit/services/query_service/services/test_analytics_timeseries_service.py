@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
     AnalyticsWindow,
@@ -872,6 +873,7 @@ async def test_get_portfolio_reference_success() -> None:
                 booking_center_code="SGPB",
                 portfolio_type="advisory",
                 objective="Growth",
+                updated_at=datetime(2025, 12, 30, 9, 0, tzinfo=UTC),
             )
         ),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
@@ -885,6 +887,12 @@ async def test_get_portfolio_reference_success() -> None:
     assert response.performance_end_date == date(2025, 12, 31)
     assert response.reference_state_policy == "current_portfolio_reference_state"
     assert response.supported_grouping_dimensions == ["asset_class", "sector", "country"]
+    assert response.product_name == "PortfolioAnalyticsReference"
+    assert response.product_version == "v1"
+    assert response.generated_at == response.lineage.generated_at
+    assert response.as_of_date == date(2025, 12, 31)
+    assert response.data_quality_status == COMPLETE
+    assert response.latest_evidence_timestamp == datetime(2025, 12, 30, 9, 0, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -910,6 +918,34 @@ async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date
         request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-06-30"),
     )
     assert response.performance_end_date == date(2025, 6, 30)
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_reference_marks_missing_performance_horizon_partial() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+                client_id="CIF_1",
+                booking_center_code="SGPB",
+                portfolio_type="advisory",
+                objective="Growth",
+            )
+        ),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=None),
+    )
+    response = await service.get_portfolio_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-06-30"),
+    )
+
+    assert response.performance_end_date is None
+    assert response.data_quality_status == PARTIAL
+    assert response.latest_evidence_timestamp is None
 
 
 @pytest.mark.asyncio

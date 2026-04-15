@@ -145,6 +145,7 @@ date parameters should be reviewed before they become public contract precedent.
 | `TransactionLedgerWindow` | portfolio transactions and reporting activity queries | Partial | Add booking/correction/restatement and deterministic paging semantics |
 | `PositionTimeseriesInput` | `/integration/portfolios/{portfolio_id}/analytics/position-timeseries`, `position_timeseries` | Strong baseline | Normalize product metadata and freshness/completeness signals |
 | `PortfolioTimeseriesInput` | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries`, `portfolio_timeseries` | Strong baseline | Normalize product metadata and export semantics |
+| `PortfolioAnalyticsReference` | `/integration/portfolios/{portfolio_id}/analytics/reference`, portfolio reference state | Strong baseline | Keep aligned with analytics input product identity, freshness, and evidence metadata |
 | `MarketDataWindow` | prices, FX, market/reference integration routes | Partial | Separate operational raw reads from analytics-safe windows |
 | `InstrumentReferenceBundle` | instruments, enrichment bulk, taxonomy, lookthrough | Partial | Package reference primitives as a stable bundle contract |
 | `BenchmarkAssignment` | benchmark assignment route and table | Strong baseline | Add product-level provenance and version/deprecation rules |

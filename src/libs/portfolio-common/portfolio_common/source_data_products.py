@@ -127,6 +127,18 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Portfolio-level valuation and cash-flow input for TWR/MWR workflows.",
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioAnalyticsReference",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-performance", "lotus-risk"),
+        current_routes=("/integration/portfolios/{portfolio_id}/analytics/reference",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes="Portfolio reference context for analytics sourcing and lifecycle bounds.",
+    ),
+    SourceDataProductDefinition(
         product_name="MarketDataWindow",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

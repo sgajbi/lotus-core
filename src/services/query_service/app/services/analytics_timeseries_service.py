@@ -23,7 +23,9 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_RESULT_BYTES,
 )
 from portfolio_common.reconciliation_quality import (
+    COMPLETE,
     DataQualityCoverageSignal,
+    PARTIAL,
     classify_data_quality_coverage,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -838,6 +840,7 @@ class AnalyticsTimeseriesService:
         performance_end_date = (
             min(latest_date, request.as_of_date) if latest_date is not None else None
         )
+        generated_at = datetime.now(UTC)
         return PortfolioAnalyticsReferenceResponse(
             portfolio_id=portfolio.portfolio_id,
             resolved_as_of_date=request.as_of_date,
@@ -852,9 +855,17 @@ class AnalyticsTimeseriesService:
             reference_state_policy="current_portfolio_reference_state",
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
-                generated_at=datetime.now(UTC),
+                generated_at=generated_at,
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
+            ),
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+                data_quality_status=self._portfolio_reference_data_quality_status(
+                    performance_end_date=performance_end_date,
+                ),
+                latest_evidence_timestamp=self._portfolio_reference_evidence_timestamp(portfolio),
             ),
         )
 
@@ -874,6 +885,19 @@ class AnalyticsTimeseriesService:
                 warning_issue_count=warning_issue_count,
             )
         )
+
+    @staticmethod
+    def _portfolio_reference_data_quality_status(*, performance_end_date: date | None) -> str:
+        return COMPLETE if performance_end_date is not None else PARTIAL
+
+    @staticmethod
+    def _portfolio_reference_evidence_timestamp(portfolio: object) -> datetime | None:
+        timestamps = [
+            timestamp
+            for field_name in ("source_timestamp", "updated_at", "created_at")
+            if isinstance(timestamp := getattr(portfolio, field_name, None), datetime)
+        ]
+        return max(timestamps) if timestamps else None
 
     @staticmethod
     def _export_result_endpoint(job_id: str) -> str:

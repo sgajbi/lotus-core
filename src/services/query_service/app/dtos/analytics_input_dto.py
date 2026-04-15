@@ -609,7 +609,11 @@ class PortfolioAnalyticsReferenceRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class PortfolioAnalyticsReferenceResponse(BaseModel):
+class PortfolioAnalyticsReferenceResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["PortfolioAnalyticsReference"] = product_name_field(
+        "PortfolioAnalyticsReference"
+    )
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
