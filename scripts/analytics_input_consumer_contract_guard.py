@@ -20,6 +20,7 @@ from portfolio_common.source_data_products import (
     SNAPSHOT_AND_SIMULATION,
     SourceDataProductDefinition,
     products_for_consumer,
+    validate_source_data_product_catalog,
 )
 from src.services.query_service.app.dtos.analytics_input_dto import CashFlowObservation
 
@@ -105,9 +106,14 @@ def _evaluate_consumer_contracts(
     catalog: tuple[SourceDataProductDefinition, ...],
     required_serving_plane: str | None = None,
 ) -> list[str]:
+    errors: list[str] = []
+    try:
+        validate_source_data_product_catalog(catalog)
+    except ValueError as exc:
+        errors.append(f"source-data product catalog is invalid: {exc}")
+
     consumer_products = products_for_consumer(consumer, catalog=catalog)
     product_names = {product.product_name for product in consumer_products}
-    errors: list[str] = []
 
     missing_products = required_products - product_names
     if missing_products:

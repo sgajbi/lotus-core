@@ -13,11 +13,12 @@ from scripts import analytics_input_consumer_contract_guard as guard
 def _product(
     product_name: str,
     *,
-    route: str = "/integration/example",
+    route: str | None = None,
     route_family: str = ANALYTICS_INPUT,
     serving_plane: str = QUERY_CONTROL_PLANE_SERVICE,
     consumers: tuple[str, ...] = ("lotus-performance",),
 ) -> SourceDataProductDefinition:
+    route = route or f"/integration/{product_name}"
     return SourceDataProductDefinition(
         product_name=product_name,
         product_version="v1",
@@ -70,6 +71,23 @@ def test_lotus_performance_contract_guard_rejects_missing_required_product() -> 
     )
 
     assert any("PortfolioTimeseriesInput" in error for error in errors)
+
+
+def test_lotus_performance_contract_guard_rejects_invalid_catalog() -> None:
+    catalog = _performance_catalog(
+        overrides=(
+            _product("PortfolioTimeseriesInput", route="/integration/duplicate"),
+            _product("PositionTimeseriesInput", route="/integration/duplicate"),
+        )
+    )
+
+    errors = guard.evaluate_lotus_performance_contracts(
+        catalog=catalog,
+        cash_flow_types=guard.ANALYTICS_CASH_FLOW_TYPES,
+    )
+
+    assert errors[0].startswith("source-data product catalog is invalid:")
+    assert "is assigned to both" in errors[0]
 
 
 def test_lotus_performance_contract_guard_rejects_operational_read_binding() -> None:
