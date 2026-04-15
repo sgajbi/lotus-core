@@ -276,9 +276,9 @@ def build_enterprise_audit_middleware(
             deny_correlation_id = _request_correlation_id(request)
             audit_emitter(
                 action=f"DENY {request.method} {request.url.path}",
-                actor_id=request.headers.get("X-Actor-Id", "unknown"),
-                tenant_id=request.headers.get("X-Tenant-Id", "default"),
-                role=request.headers.get("X-Role", "unknown"),
+                actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
+                tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
+                role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=deny_correlation_id,
                 metadata={"reason": reason},
             )
@@ -295,9 +295,9 @@ def build_enterprise_audit_middleware(
             )
             audit_emitter(
                 action=f"{request.method} {request.url.path}",
-                actor_id=request.headers.get("X-Actor-Id", "unknown"),
-                tenant_id=request.headers.get("X-Tenant-Id", "default"),
-                role=request.headers.get("X-Role", "unknown"),
+                actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
+                tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
+                role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=write_correlation_id,
                 metadata={"status_code": response.status_code},
             )
@@ -309,15 +309,23 @@ def build_enterprise_audit_middleware(
             )
             audit_emitter(
                 action=f"{request.method} {request.url.path}",
-                actor_id=request.headers.get("X-Actor-Id", "unknown"),
-                tenant_id=request.headers.get("X-Tenant-Id", "default"),
-                role=request.headers.get("X-Role", "unknown"),
+                actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
+                tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
+                role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=read_correlation_id,
                 metadata={"status_code": response.status_code, "access_type": "read"},
             )
         return response
 
     return middleware
+
+
+def _request_header_value(request: Request, name: str, default: str) -> str:
+    value = request.headers.get(name)
+    if value is None:
+        return default
+    normalized = value.strip()
+    return normalized or default
 
 
 def _request_correlation_id(

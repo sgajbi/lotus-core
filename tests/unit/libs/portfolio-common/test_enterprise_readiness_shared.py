@@ -336,6 +336,45 @@ async def test_shared_enterprise_middleware_uses_injected_audit_emitter_on_denia
 
 
 @pytest.mark.asyncio
+async def test_shared_enterprise_middleware_normalizes_audit_identity_values() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+    audit_emitter = Mock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=audit_emitter,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/portfolios",
+            "headers": [
+                (b"x-actor-id", b"  "),
+                (b"x-tenant-id", b" tenant-1 "),
+                (b"x-role", b" ops "),
+                (b"x-correlation-id", b"corr-1"),
+                (b"x-service-identity", b"lotus-gateway"),
+            ],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    async def _call_next(_: Request) -> Response:
+        return Response(status_code=200)
+
+    response = await middleware(request, _call_next)
+
+    assert response.status_code == 403
+    audit_emitter.assert_called_once()
+    assert audit_emitter.call_args.kwargs["actor_id"] == "unknown"
+    assert audit_emitter.call_args.kwargs["tenant_id"] == "tenant-1"
+    assert audit_emitter.call_args.kwargs["role"] == "ops"
+
+
+@pytest.mark.asyncio
 async def test_shared_enterprise_middleware_adds_policy_header_and_audits_write() -> None:
     runtime = _runtime(settings=_Settings(enterprise_policy_version="policy-v2"))
     audit_emitter = Mock()
