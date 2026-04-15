@@ -224,6 +224,31 @@ async def test_portfolio_analytics_timeseries_success(async_test_client):
     assert portfolio_call["request"].page.page_size == 100
 
 
+async def test_portfolio_analytics_timeseries_period_request_success(async_test_client):
+    client, mock_service = async_test_client
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/portfolio-timeseries",
+        json={
+            "as_of_date": "2025-12-31",
+            "period": "one_month",
+            "reporting_currency": "EUR",
+            "frequency": "daily",
+            "consumer_system": "lotus-performance",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "PortfolioTimeseriesInput"
+    assert body["resolved_window"] == {
+        "start_date": "2025-01-01",
+        "end_date": "2025-01-31",
+    }
+    portfolio_call = mock_service.get_portfolio_timeseries.await_args.kwargs
+    assert portfolio_call["request"].period == "one_month"
+    assert portfolio_call["request"].window is None
+
+
 async def test_portfolio_analytics_timeseries_invalid_request_maps_to_400(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_portfolio_timeseries = AsyncMock(
@@ -327,6 +352,36 @@ async def test_position_analytics_timeseries_success(async_test_client):
     assert position_call["request"].consumer_system == "lotus-performance"
     assert position_call["request"].dimensions == ["asset_class"]
     assert position_call["request"].page.page_size == 100
+
+
+async def test_position_analytics_timeseries_period_request_without_cash_flows_success(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+    response = await client.post(
+        "/integration/portfolios/DEMO_DPM_EUR_001/analytics/position-timeseries",
+        json={
+            "as_of_date": "2025-12-31",
+            "period": "three_months",
+            "reporting_currency": "EUR",
+            "frequency": "daily",
+            "consumer_system": "lotus-performance",
+            "include_cash_flows": False,
+            "dimensions": ["asset_class"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "PositionTimeseriesInput"
+    assert body["resolved_window"] == {
+        "start_date": "2025-01-01",
+        "end_date": "2025-01-31",
+    }
+    position_call = mock_service.get_position_timeseries.await_args.kwargs
+    assert position_call["request"].period == "three_months"
+    assert position_call["request"].window is None
+    assert position_call["request"].include_cash_flows is False
 
 
 async def test_position_analytics_timeseries_insufficient_data_maps_to_422(async_test_client):
