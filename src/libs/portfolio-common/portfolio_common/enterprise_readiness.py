@@ -34,6 +34,10 @@ REDACT_FIELDS = {
 class EnterpriseSettings(Protocol):
     enterprise_policy_version: str
     enterprise_primary_key_id: str
+    enterprise_enforce_authz: bool
+    enterprise_enforce_read_authz: bool
+    enterprise_audit_reads: bool
+    enterprise_require_capability_rules: bool
     enterprise_feature_flags: dict[str, Any]
     enterprise_capability_rules: dict[str, Any]
 
@@ -47,6 +51,14 @@ class EnterpriseReadinessRuntime:
     logger: logging.Logger
 
     def env_enabled(self, name: str, default: str = "true") -> bool:
+        settings_attr = {
+            "ENTERPRISE_ENFORCE_AUTHZ": "enterprise_enforce_authz",
+            "ENTERPRISE_ENFORCE_READ_AUTHZ": "enterprise_enforce_read_authz",
+            "ENTERPRISE_AUDIT_READS": "enterprise_audit_reads",
+            "ENTERPRISE_REQUIRE_CAPABILITY_RULES": "enterprise_require_capability_rules",
+        }.get(name)
+        if settings_attr:
+            return bool(getattr(self.load_settings(), settings_attr))
         return self.env_bool(name, default.strip().lower() in {"1", "true", "yes", "on"})
 
     def load_json_map(self, name: str) -> dict[str, Any]:

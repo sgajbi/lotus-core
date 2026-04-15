@@ -15,9 +15,13 @@ The executable helpers are:
 3. `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`
 4. `tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py`
 5. `src/services/query_service/app/enterprise_readiness.py`
-6. `tests/unit/services/query_service/test_enterprise_readiness.py`
-7. `src/services/query_control_plane_service/app/enterprise_readiness.py`
-8. `tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py`
+6. `src/services/query_service/app/settings.py`
+7. `tests/unit/services/query_service/test_enterprise_readiness.py`
+8. `tests/unit/services/query_service/test_settings.py`
+9. `src/services/query_control_plane_service/app/enterprise_readiness.py`
+10. `src/services/query_control_plane_service/app/settings.py`
+11. `tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py`
+12. `tests/unit/services/query_control_plane_service/test_control_plane_settings.py`
 
 ## Target Principle
 
@@ -119,12 +123,13 @@ readiness proof, not runtime authorization enforcement.
 
 ## Shared Runtime Support
 
-`query_service` and `query_control_plane_service` now use the shared
+`query_service` and `query_control_plane_service` now use typed service settings plus the shared
 `portfolio_common.enterprise_readiness` runtime for enterprise policy version headers, write payload
 limits, optional write authorization checks, capability-rule matching, feature-flag lookup,
 sensitive audit metadata redaction, write audit event emission, opt-in read audit event emission
-when `ENTERPRISE_AUDIT_READS=true`, and opt-in read authorization when
-`ENTERPRISE_ENFORCE_READ_AUTHZ=true`.
+when `ENTERPRISE_AUDIT_READS=true`, opt-in read authorization when
+`ENTERPRISE_ENFORCE_READ_AUTHZ=true`, and strict capability-rule enforcement when
+`ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`.
 
 Each service keeps a local `enterprise_readiness.py` wrapper so existing imports, tests, settings,
 and service-specific patch points remain stable. The shared helper removes duplicated middleware
@@ -153,10 +158,10 @@ Slice 9 validation is:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_security.py -q`,
 2. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py -q`,
-3. `python -m pytest tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py -q`,
+3. `python -m pytest tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py -q`,
 4. `python scripts/source_data_product_contract_guard.py`,
 5. `python -m pytest tests/integration/services/query_service/test_main_app.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`,
-6. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/enterprise_readiness.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
-7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/enterprise_readiness.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
+6. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_service/app/settings.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/settings.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
+7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_service/app/settings.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/settings.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
 8. `git diff --check`,
 9. `make lint`.

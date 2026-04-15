@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from src.services.query_control_plane_service.app.settings import (
+from src.services.query_service.app.settings import (
     env_bool,
     env_int,
     env_json_map,
-    load_query_control_plane_settings,
+    load_query_service_settings,
 )
 
 
-def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
+def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
     for name in (
         "ENTERPRISE_POLICY_VERSION",
         "ENTERPRISE_ENFORCE_AUTHZ",
@@ -24,7 +24,7 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
     ):
         monkeypatch.delenv(name, raising=False)
 
-    settings = load_query_control_plane_settings()
+    settings = load_query_service_settings()
 
     assert settings.enterprise_policy_version == "1.0.0"
     assert settings.enterprise_enforce_authz is False
@@ -39,7 +39,7 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
     assert settings.enterprise_capability_rules == {}
 
 
-def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
+def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "2.3.1")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
@@ -51,14 +51,14 @@ def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
     monkeypatch.setenv(
         "ENTERPRISE_FEATURE_FLAGS_JSON",
-        '{"risk_write":{"tenant-a":{"ops":true,"*":false}}}',
+        '{"query.advanced":{"tenant-a":{"ops":true,"*":false}}}',
     )
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
-        '{"POST /integration":"risk.write"}',
+        '{"GET /portfolios":"portfolios.read"}',
     )
 
-    settings = load_query_control_plane_settings()
+    settings = load_query_service_settings()
 
     assert settings.enterprise_policy_version == "2.3.1"
     assert settings.enterprise_enforce_authz is True
@@ -70,16 +70,16 @@ def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
     assert settings.enterprise_secret_rotation_days == 45
     assert settings.enterprise_max_write_payload_bytes == 2048
     assert settings.enterprise_feature_flags == {
-        "risk_write": {"tenant-a": {"ops": True, "*": False}}
+        "query.advanced": {"tenant-a": {"ops": True, "*": False}}
     }
-    assert settings.enterprise_capability_rules == {"POST /integration": "risk.write"}
+    assert settings.enterprise_capability_rules == {"GET /portfolios": "portfolios.read"}
 
 
-def test_control_plane_settings_helpers_fail_closed_for_invalid_values(monkeypatch) -> None:
-    monkeypatch.setenv("CONTROL_BOOL", "maybe")
-    monkeypatch.setenv("CONTROL_INT", "not-an-int")
-    monkeypatch.setenv("CONTROL_JSON", "[]")
+def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("QUERY_BOOL", "maybe")
+    monkeypatch.setenv("QUERY_INT", "not-an-int")
+    monkeypatch.setenv("QUERY_JSON", "[]")
 
-    assert env_bool("CONTROL_BOOL", False) is False
-    assert env_int("CONTROL_INT", 11) == 11
-    assert env_json_map("CONTROL_JSON") == {}
+    assert env_bool("QUERY_BOOL", False) is False
+    assert env_int("QUERY_INT", 11) == 11
+    assert env_json_map("QUERY_JSON") == {}

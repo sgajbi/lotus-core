@@ -16,6 +16,10 @@ from portfolio_common.enterprise_readiness import (
 class _Settings:
     enterprise_policy_version: str = "policy-v1"
     enterprise_primary_key_id: str = ""
+    enterprise_enforce_authz: bool = False
+    enterprise_enforce_read_authz: bool = False
+    enterprise_audit_reads: bool = False
+    enterprise_require_capability_rules: bool = False
     enterprise_feature_flags: dict[str, object] | None = None
     enterprise_capability_rules: dict[str, object] | None = None
 
@@ -41,15 +45,22 @@ def _runtime(
     require_capability_rules: bool = False,
     max_payload_bytes: int = 1_048_576,
 ) -> EnterpriseReadinessRuntime:
+    settings = _Settings(
+        enterprise_policy_version=settings.enterprise_policy_version,
+        enterprise_primary_key_id=settings.enterprise_primary_key_id,
+        enterprise_enforce_authz=authz_enabled or settings.enterprise_enforce_authz,
+        enterprise_enforce_read_authz=(
+            read_authz_enabled or settings.enterprise_enforce_read_authz
+        ),
+        enterprise_audit_reads=read_audit_enabled or settings.enterprise_audit_reads,
+        enterprise_require_capability_rules=(
+            require_capability_rules or settings.enterprise_require_capability_rules
+        ),
+        enterprise_feature_flags=settings.enterprise_feature_flags,
+        enterprise_capability_rules=settings.enterprise_capability_rules,
+    )
+
     def _env_bool(name: str, default: bool) -> bool:
-        if name == "ENTERPRISE_ENFORCE_AUTHZ":
-            return authz_enabled
-        if name == "ENTERPRISE_ENFORCE_READ_AUTHZ":
-            return read_authz_enabled
-        if name == "ENTERPRISE_AUDIT_READS":
-            return read_audit_enabled
-        if name == "ENTERPRISE_REQUIRE_CAPABILITY_RULES":
-            return require_capability_rules
         return default
 
     def _env_int(name: str, default: int) -> int:
@@ -87,6 +98,27 @@ def test_authorize_write_request_enforces_capability_rules() -> None:
 
     assert allowed is False
     assert reason == "missing_capability:transactions.write"
+
+
+def test_runtime_uses_typed_settings_for_enterprise_flags() -> None:
+    settings = _Settings(
+        enterprise_enforce_authz=True,
+        enterprise_enforce_read_authz=True,
+        enterprise_audit_reads=True,
+        enterprise_require_capability_rules=True,
+    )
+    runtime = EnterpriseReadinessRuntime(
+        service_name="lotus-core-test",
+        load_settings=lambda: settings,
+        env_bool=lambda _name, _default: False,
+        env_int=lambda _name, default: default,
+        logger=Mock(),
+    )
+
+    assert runtime.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false") is True
+    assert runtime.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false") is True
+    assert runtime.env_enabled("ENTERPRISE_AUDIT_READS", "false") is True
+    assert runtime.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false") is True
 
 
 def test_authorize_request_enforces_read_capability_rules_when_enabled() -> None:
