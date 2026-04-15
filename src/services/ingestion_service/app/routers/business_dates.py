@@ -74,23 +74,15 @@ BUSINESS_DATE_MONOTONIC_POLICY_EXAMPLE = {
     responses={
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the business-date request.",
-            "content": {
-                "application/json": {
-                    "example": BUSINESS_DATE_RATE_LIMIT_EXCEEDED_EXAMPLE
-                }
-            },
+            "content": {"application/json": {"example": BUSINESS_DATE_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Business-date payload violated validation or policy rules.",
-            "content": {
-                "application/json": {"example": BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE}
-            },
+            "content": {"application/json": {"example": BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE}},
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
-            "content": {
-                "application/json": {"example": BUSINESS_DATE_MODE_BLOCKED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": BUSINESS_DATE_MODE_BLOCKED_EXAMPLE}},
         },
     },
     tags=["Business Dates"],
@@ -132,15 +124,15 @@ async def ingest_business_dates(
 
     if not request.business_dates:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE["detail"],
         )
 
-    max_allowed_date = (datetime.now(UTC).date() + timedelta(days=BUSINESS_DATE_MAX_FUTURE_DAYS))
+    max_allowed_date = datetime.now(UTC).date() + timedelta(days=BUSINESS_DATE_MAX_FUTURE_DAYS)
     for row in request.business_dates:
         if row.business_date > max_allowed_date:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "code": "BUSINESS_DATE_FUTURE_POLICY_VIOLATION",
                     "message": (
@@ -165,7 +157,7 @@ async def ingest_business_dates(
             )
             if incoming_max < latest_persisted:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
                         "code": "BUSINESS_DATE_MONOTONIC_POLICY_VIOLATION",
                         "message": (
@@ -234,4 +226,3 @@ async def ingest_business_dates(
         accepted_count=num_dates,
         idempotency_key=idempotency_key,
     )
-
