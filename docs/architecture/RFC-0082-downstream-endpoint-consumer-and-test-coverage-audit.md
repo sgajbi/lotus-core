@@ -240,6 +240,10 @@ The current benchmark-source family is aligned with the intended boundary:
 5. current `fx_rate` semantics are benchmark-currency-to-target-currency context only and should
    not be mistaken for component-to-benchmark normalization.
 
+The benchmark market-series contract now also publishes an explicit
+`component_metadata_policy` telling consumers to use targeted `indices/catalog` lookup when they
+need canonical classification labels or other component metadata alongside raw series.
+
 That last point is important enough to make explicit: the contract is strong and truthful today,
 but it is not a fully normalized benchmark-engine output contract. That remains a valid future
 enhancement area under the broader benchmark-source program.

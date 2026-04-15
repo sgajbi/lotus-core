@@ -308,6 +308,9 @@ async def async_test_client():
             "fx_context_target_currency": "EUR",
             "normalization_policy": "native_component_series_downstream_normalization_required",
             "normalization_status": "native_component_series_with_benchmark_to_target_fx_context",
+            "component_metadata_policy": (
+                "targeted_index_catalog_lookup_required_for_component_metadata"
+            ),
             "request_fingerprint": "fp-benchmark-market-series-1",
             "page": {
                 "page_size": 250,
@@ -748,6 +751,9 @@ async def test_benchmark_market_series_success(async_test_client):
     assert body["target_currency"] == "EUR"
     assert body["normalization_policy"] == (
         "native_component_series_downstream_normalization_required"
+    )
+    assert body["component_metadata_policy"] == (
+        "targeted_index_catalog_lookup_required_for_component_metadata"
     )
     assert body["page"]["returned_component_count"] == 1
     assert body["component_series"][0]["points"][0]["fx_rate"] == "0.9200000000"

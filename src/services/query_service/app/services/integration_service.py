@@ -776,6 +776,9 @@ class IntegrationService:
             fx_context_target_currency=fx_context_target_currency,
             normalization_policy="native_component_series_downstream_normalization_required",
             normalization_status=normalization_status,
+            component_metadata_policy=(
+                "targeted_index_catalog_lookup_required_for_component_metadata"
+            ),
             request_fingerprint=request_scope_fingerprint,
             page=ReferencePageMetadata(
                 page_size=page_size,

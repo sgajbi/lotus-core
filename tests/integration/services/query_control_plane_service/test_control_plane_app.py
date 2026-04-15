@@ -1570,6 +1570,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_market_series_response["properties"]["product_name"]["default"] == (
         "MarketDataWindow"
     )
+    assert benchmark_market_series_response["properties"]["component_metadata_policy"][
+        "description"
+    ].startswith("Contract guidance for resolving canonical component metadata")
     assert index_price_series_response["properties"]["product_name"]["default"] == (
         "IndexSeriesWindow"
     )

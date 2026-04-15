@@ -701,6 +701,16 @@ class BenchmarkMarketSeriesResponse(SourceDataProductRuntimeMetadata):
         ),
         examples=["native_component_series_with_benchmark_to_target_fx_context"],
     )
+    component_metadata_policy: str = Field(
+        ...,
+        description=(
+            "Contract guidance for resolving canonical component metadata such as "
+            "classification labels. Benchmark market-series returns raw component series; use "
+            "`POST /integration/indices/catalog` with targeted `index_ids` when canonical "
+            "component metadata is required alongside these series."
+        ),
+        examples=["targeted_index_catalog_lookup_required_for_component_metadata"],
+    )
     request_fingerprint: str = Field(
         ...,
         description="Deterministic request fingerprint for the benchmark market-series scope.",
