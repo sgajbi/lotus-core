@@ -1522,7 +1522,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Benchmark identifier for the requested benchmark definition."
     )
     assert "point-in-time reference context" in benchmark_definition["description"]
-    assert "lotus-performance, lotus-risk, lotus-report" in benchmark_definition["description"]
+    assert "lotus-performance and other downstream consumers" in benchmark_definition["description"]
     assert (
         "not the strategic cross-window benchmark calculation contract"
         in (benchmark_definition["description"])

@@ -396,11 +396,10 @@ async def fetch_benchmark_composition_window(
     description=(
         "What: Return effective benchmark definition for an as-of date.\n"
         "How: Resolves benchmark master fields and composition records with effective dating.\n"
-        "When: Used by lotus-performance, lotus-risk, lotus-report, and other downstream "
-        "consumers that need point-in-time benchmark reference context before targeted "
-        "composition-window, market-series, or benchmark-aware reporting workflows. This is "
-        "point-in-time reference context, not the strategic cross-window benchmark calculation "
-        "contract."
+        "When: Used by lotus-performance and other downstream consumers that need point-in-time "
+        "benchmark reference context before targeted composition-window, market-series, or "
+        "benchmark-aware reporting workflows. This is point-in-time reference context, not the "
+        "strategic cross-window benchmark calculation contract."
     ),
 )
 async def fetch_benchmark_definition(
