@@ -36,10 +36,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Operations Support"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-OPS-001 not found"}
+INVALID_DATE_RESPONSE_DESCRIPTION = "Invalid date filter."
 
 LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
 }
+
+
+def invalid_date_response_example(field_name: str) -> dict[str, str]:
+    return {"detail": f"Invalid {field_name} '2026-31-03'. Expected YYYY-MM-DD format."}
+
+
+def parse_optional_iso_date(field_name: str, value: Optional[str]) -> Optional[date]:
+    if value is None:
+        return None
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name} '{value}'. Expected YYYY-MM-DD format.",
+        ) from exc
 
 
 def get_operations_service(
@@ -55,7 +73,13 @@ def get_operations_service(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
+            "content": {
+                "application/json": {"example": invalid_date_response_example("business_date")}
+            },
+        },
     },
     summary="Get operational support overview for a portfolio",
     description=(
@@ -110,7 +134,13 @@ async def get_support_overview(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
+            "content": {
+                "application/json": {"example": invalid_date_response_example("as_of_date")}
+            },
+        },
     },
     summary="Get source-owned portfolio readiness for pricing and reporting coverage",
     description=(
@@ -151,8 +181,9 @@ async def get_portfolio_readiness(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
+    parsed_as_of_date = parse_optional_iso_date("as_of_date", as_of_date)
+
     try:
-        parsed_as_of_date = date.fromisoformat(as_of_date) if as_of_date else None
         return await service.get_portfolio_readiness(
             portfolio_id=portfolio_id,
             as_of_date=parsed_as_of_date,
@@ -176,7 +207,7 @@ async def get_portfolio_readiness(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
     },
     summary="Get calculator SLO baseline snapshot for a portfolio",
     description=(
@@ -232,7 +263,13 @@ async def get_calculator_slos(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
+            "content": {
+                "application/json": {"example": invalid_date_response_example("business_date")}
+            },
+        },
     },
     summary="List portfolio-day control stages for support workflows",
     description=(
@@ -270,8 +307,9 @@ async def get_portfolio_control_stages(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
+    parsed_business_date = parse_optional_iso_date("business_date", business_date)
+
     try:
-        parsed_business_date = date.fromisoformat(business_date) if business_date else None
         return await service.get_portfolio_control_stages(
             portfolio_id=portfolio_id,
             skip=skip,
@@ -298,7 +336,13 @@ async def get_portfolio_control_stages(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
+            "content": {
+                "application/json": {"example": invalid_date_response_example("watermark_date")}
+            },
+        },
     },
     summary="List durable replay keys for support workflows",
     description=(
@@ -339,8 +383,9 @@ async def get_reprocessing_keys(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
+    parsed_watermark_date = parse_optional_iso_date("watermark_date", watermark_date)
+
     try:
-        parsed_watermark_date = date.fromisoformat(watermark_date) if watermark_date else None
         return await service.get_reprocessing_keys(
             portfolio_id=portfolio_id,
             skip=skip,
@@ -367,7 +412,13 @@ async def get_reprocessing_keys(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
+            "content": {
+                "application/json": {"example": invalid_date_response_example("business_date")}
+            },
+        },
     },
     summary="List durable replay jobs for support workflows",
     description=(
@@ -441,7 +492,13 @@ async def get_reprocessing_jobs(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
+            "content": {
+                "application/json": {"example": invalid_date_response_example("business_date")}
+            },
+        },
     },
     summary="List valuation jobs for support workflows",
     description=(
@@ -489,8 +546,9 @@ async def get_valuation_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
+    parsed_business_date = parse_optional_iso_date("business_date", business_date)
+
     try:
-        parsed_business_date = date.fromisoformat(business_date) if business_date else None
         return await service.get_valuation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
@@ -519,7 +577,13 @@ async def get_valuation_jobs(
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
+            "content": {
+                "application/json": {"example": invalid_date_response_example("business_date")}
+            },
+        },
     },
     summary="List aggregation jobs for support workflows",
     description=(
@@ -562,8 +626,9 @@ async def get_aggregation_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
+    parsed_business_date = parse_optional_iso_date("business_date", business_date)
+
     try:
-        parsed_business_date = date.fromisoformat(business_date) if business_date else None
         return await service.get_aggregation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,

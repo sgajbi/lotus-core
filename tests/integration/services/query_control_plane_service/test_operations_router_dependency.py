@@ -260,6 +260,46 @@ async def test_portfolio_readiness_not_found_maps_to_404(async_test_client):
     assert "not found" in response.json()["detail"].lower()
 
 
+async def test_portfolio_readiness_invalid_as_of_date_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/support/portfolios/P1/readiness?as_of_date=2026-31-03")
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Invalid as_of_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    mock_service.get_portfolio_readiness.assert_not_awaited()
+
+
+async def test_control_stages_invalid_business_date_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/support/portfolios/P1/control-stages?business_date=2026-31-03")
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "Invalid business_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    mock_service.get_portfolio_control_stages.assert_not_awaited()
+
+
+async def test_reprocessing_keys_invalid_watermark_date_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/support/portfolios/P1/reprocessing-keys?watermark_date=2026-31-03"
+    )
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "Invalid watermark_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    mock_service.get_reprocessing_keys.assert_not_awaited()
+
+
 async def test_calculator_slos_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_calculator_slos.return_value = {

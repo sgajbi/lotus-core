@@ -512,6 +512,10 @@ runtime maturity. The current contract now states more explicitly that:
 For this family, Swagger now makes the operator-only boundary clearer and recursive schema-family
 tests protect the evidence bundle models from documentation drift.
 
+Malformed operator date filters are now also contractually separated from missing-portfolio
+conditions: support routes that parse caller-supplied dates return `400 Bad Request` with an
+explicit field-level message instead of collapsing malformed dates into `404 Not Found`.
+
 Automated proof now includes:
 
 1. reconciliation-evidence schema-family completeness checks;

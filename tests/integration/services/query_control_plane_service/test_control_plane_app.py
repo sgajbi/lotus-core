@@ -268,6 +268,10 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
 
     not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    readiness_invalid_date = readiness["responses"]["400"]["content"]["application/json"]["example"]
+    assert readiness_invalid_date["detail"] == (
+        "Invalid as_of_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
 
     lineage_not_found = lineage["responses"]["404"]["content"]["application/json"]["example"]
     assert lineage_not_found["detail"] == (
@@ -303,6 +307,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
         "get"
     ]
+    control_stages_invalid_date = control_stages["responses"]["400"]["content"]["application/json"][
+        "example"
+    ]
+    assert control_stages_invalid_date["detail"] == (
+        "Invalid business_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    reprocessing_keys_invalid_date = reprocessing_keys["responses"]["400"]["content"][
+        "application/json"
+    ]["example"]
+    assert reprocessing_keys_invalid_date["detail"] == (
+        "Invalid watermark_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
     reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
         "get"
     ]
