@@ -1130,6 +1130,15 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
         parameter for parameter in delete_change["parameters"] if parameter["name"] == "change_id"
     )
     assert change_id_param["description"] == "Simulation change identifier."
+    add_changes = schema["paths"]["/simulation-sessions/{session_id}/changes"]["post"]
+    add_changes_not_found = add_changes["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert add_changes_not_found["detail"] == "Simulation session SIM-20260310-0001 not found"
+    delete_change_not_found = delete_change["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert delete_change_not_found["detail"] == "Simulation change SIM-CHG-0001 not found"
 
     portfolio_id = create_session["properties"]["portfolio_id"]
     assert portfolio_id["description"] == "Portfolio identifier for the simulated scenario."

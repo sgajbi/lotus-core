@@ -106,6 +106,21 @@ async def test_add_simulation_changes_validation_maps_to_400(async_test_client):
     assert response.status_code == 400
 
 
+async def test_add_simulation_changes_missing_session_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.add_changes.side_effect = ValueError("Simulation session S404 not found")
+
+    response = await client.post(
+        "/simulation-sessions/S404/changes",
+        json={
+            "changes": [{"security_id": "SEC_AAPL_US", "transaction_type": "BUY", "quantity": 10}]
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Simulation session S404 not found"
+
+
 async def test_add_simulation_changes_success(async_test_client):
     client, mock_service = async_test_client
     now = datetime.now(timezone.utc)
@@ -232,6 +247,16 @@ async def test_delete_simulation_change_validation_maps_to_400(async_test_client
 
     response = await client.delete("/simulation-sessions/S1/changes/C404")
     assert response.status_code == 400
+
+
+async def test_delete_simulation_change_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.delete_change.side_effect = ValueError("Simulation change C404 not found")
+
+    response = await client.delete("/simulation-sessions/S1/changes/C404")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Simulation change C404 not found"
 
 
 async def test_delete_simulation_change_success(async_test_client):

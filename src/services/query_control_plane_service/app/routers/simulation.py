@@ -24,6 +24,13 @@ SIMULATION_PORTFOLIO_NOT_FOUND_EXAMPLE = {"detail": "Portfolio with id PORT-404 
 SIMULATION_INTERNAL_ERROR_EXAMPLE = {"detail": "Failed to create simulation session."}
 
 
+def _raise_simulation_mutation_error(exc: ValueError) -> None:
+    detail = str(exc)
+    if "not found" in detail.lower():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
 def get_simulation_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> SimulationService:
@@ -37,9 +44,7 @@ def get_simulation_service(
     responses={
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
-            "content": {
-                "application/json": {"example": SIMULATION_PORTFOLIO_NOT_FOUND_EXAMPLE}
-            },
+            "content": {"application/json": {"example": SIMULATION_PORTFOLIO_NOT_FOUND_EXAMPLE}},
         },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "description": "Unexpected simulation session creation failure.",
@@ -126,10 +131,14 @@ async def close_simulation_session(
     "/{session_id}/changes",
     response_model=SimulationChangesResponse,
     responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Simulation session not found.",
+            "content": {"application/json": {"example": SIMULATION_SESSION_NOT_FOUND_EXAMPLE}},
+        },
         status.HTTP_400_BAD_REQUEST: {
             "description": "Simulation session is inactive or change request is invalid.",
             "content": {"application/json": {"example": SIMULATION_SESSION_INVALID_STATE_EXAMPLE}},
-        }
+        },
     },
     description=(
         "Add or update simulation changes for a session. The returned payload reflects the "
@@ -149,17 +158,21 @@ async def add_simulation_changes(
         payload = [item.model_dump() for item in request.changes]
         return await service.add_changes(session_id, payload)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        _raise_simulation_mutation_error(exc)
 
 
 @router.delete(
     "/{session_id}/changes/{change_id}",
     response_model=SimulationChangesResponse,
     responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Simulation session or change not found.",
+            "content": {"application/json": {"example": SIMULATION_CHANGE_NOT_FOUND_EXAMPLE}},
+        },
         status.HTTP_400_BAD_REQUEST: {
             "description": "Simulation session is inactive or change request is invalid.",
             "content": {"application/json": {"example": SIMULATION_CHANGE_NOT_FOUND_EXAMPLE}},
-        }
+        },
     },
     description="Delete a simulation change from a session.",
 )
@@ -179,7 +192,7 @@ async def delete_simulation_change(
     try:
         return await service.delete_change(session_id, change_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        _raise_simulation_mutation_error(exc)
 
 
 @router.get(
@@ -238,4 +251,3 @@ async def get_projected_summary(
         return await service.get_projected_summary(session_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-

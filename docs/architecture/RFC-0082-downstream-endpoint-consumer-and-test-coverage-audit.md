@@ -414,6 +414,9 @@ The HTTP dependency lane now also covers the practical lifecycle that gateway-st
 actually execute: create, read, close, add-change, delete-change, projected-positions, and
 projected-summary responses all have direct router-level success or failure proof in
 `tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py`.
+Mutation routes now also distinguish missing session or change state (`404`) from inactive-session
+or invalid mutation requests (`400`) instead of collapsing those outcomes into one generic client
+error bucket.
 
 ### Issue Disposition For This Endpoint Family
 
