@@ -127,6 +127,14 @@ This binding does not change response payloads, persistence, generated events, o
 behavior. It makes the catalog visible to contract consumers and keeps the full DTO-envelope metadata
 work as a later runtime slice.
 
+The first DTO-envelope binding adds `product_name` and `product_version` to:
+
+1. `PortfolioTimeseriesInput`,
+2. `PositionTimeseriesInput`.
+
+These fields are additive defaults on the analytics input response envelopes. They do not alter
+request semantics, persistence, eventing, paging, or calculation behavior.
+
 ## Validation
 
 Slice 6 validation is:

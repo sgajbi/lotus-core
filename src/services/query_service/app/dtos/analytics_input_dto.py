@@ -94,8 +94,7 @@ class PageMetadata(BaseModel):
     snapshot_epoch: int = Field(
         ...,
         description=(
-            "Snapshot epoch pinned for the paged traversal to keep pages internally "
-            "consistent."
+            "Snapshot epoch pinned for the paged traversal to keep pages internally consistent."
         ),
         examples=[7],
     )
@@ -134,8 +133,7 @@ class QualityDiagnostics(BaseModel):
     cash_flows_included: bool = Field(
         False,
         description=(
-            "Whether the response rows include canonical per-position cash_flow "
-            "observations."
+            "Whether the response rows include canonical per-position cash_flow observations."
         ),
         examples=[True],
     )
@@ -313,6 +311,16 @@ class PortfolioTimeseriesObservation(BaseModel):
 
 
 class PortfolioAnalyticsTimeseriesResponse(BaseModel):
+    product_name: Literal["PortfolioTimeseriesInput"] = Field(
+        "PortfolioTimeseriesInput",
+        description="RFC-0083 source-data product name represented by this response.",
+        examples=["PortfolioTimeseriesInput"],
+    )
+    product_version: Literal["v1"] = Field(
+        "v1",
+        description="RFC-0083 source-data product version represented by this response.",
+        examples=["v1"],
+    )
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
@@ -543,6 +551,16 @@ class PositionTimeseriesRow(BaseModel):
 
 
 class PositionAnalyticsTimeseriesResponse(BaseModel):
+    product_name: Literal["PositionTimeseriesInput"] = Field(
+        "PositionTimeseriesInput",
+        description="RFC-0083 source-data product name represented by this response.",
+        examples=["PositionTimeseriesInput"],
+    )
+    product_version: Literal["v1"] = Field(
+        "v1",
+        description="RFC-0083 source-data product version represented by this response.",
+        examples=["v1"],
+    )
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
@@ -623,9 +641,7 @@ class PortfolioAnalyticsReferenceResponse(BaseModel):
     )
     performance_end_date: date | None = Field(
         None,
-        description=(
-            "Latest available portfolio valuation date, bounded by resolved_as_of_date."
-        ),
+        description=("Latest available portfolio valuation date, bounded by resolved_as_of_date."),
         examples=["2025-12-31"],
     )
     client_id: str = Field(
@@ -782,7 +798,9 @@ class AnalyticsExportJobResponse(BaseModel):
     result_endpoint: str = Field(
         ...,
         description="Deterministic result retrieval path for this export job.",
-        examples=["/integration/exports/analytics-timeseries/jobs/aexp_7e8ad3e7bc6f4d3b97de66f1/result"],
+        examples=[
+            "/integration/exports/analytics-timeseries/jobs/aexp_7e8ad3e7bc6f4d3b97de66f1/result"
+        ],
     )
     result_format: Literal["json", "ndjson"] = Field(
         ...,
