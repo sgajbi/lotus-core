@@ -241,6 +241,10 @@ HTTP-level dependency proof now also exercises both benchmark-source routes in
 including route-success payload shape and route-specific `404` or `400` mapping for downstream
 integration failures.
 
+The same dependency lane now also covers the adjacent benchmark-definition and raw index or
+benchmark series contracts that lotus-performance and lotus-risk depend on when they need
+point-in-time reference context or provider-return evidence alongside the strategic source routes.
+
 ### Issue Disposition For This Endpoint Family
 
 | Issue | Assessment | Disposition |

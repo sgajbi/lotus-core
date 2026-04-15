@@ -99,6 +99,37 @@ async def async_test_client():
             ),
         }
     )
+    mock_integration_service.get_benchmark_definition = AsyncMock(
+        return_value={
+            "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+            "benchmark_name": "Global Balanced 60/40 (TR)",
+            "benchmark_type": "composite",
+            "benchmark_currency": "USD",
+            "return_convention": "total_return_index",
+            "benchmark_status": "active",
+            "benchmark_family": "multi_asset_strategic",
+            "benchmark_provider": "MSCI",
+            "rebalance_frequency": "quarterly",
+            "classification_set_id": "wm_global_taxonomy_v1",
+            "classification_labels": {"asset_class": "multi_asset", "region": "global"},
+            "effective_from": "2025-01-01",
+            "effective_to": None,
+            "quality_status": "accepted",
+            "source_timestamp": "2026-01-31T08:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "bmk_60_40_v20260131",
+            "components": [
+                {
+                    "index_id": "IDX_MSCI_WORLD_TR",
+                    "composition_weight": "0.6000000000",
+                    "composition_effective_from": "2025-01-01",
+                    "composition_effective_to": None,
+                    "rebalance_event_id": "rebalance_2026q1",
+                }
+            ],
+            "contract_version": "rfc_062_v1",
+        }
+    )
     mock_integration_service.get_risk_free_series = AsyncMock(
         return_value={
             "currency": "USD",
@@ -217,6 +248,80 @@ async def async_test_client():
             ),
         }
     )
+    mock_integration_service.get_index_price_series = AsyncMock(
+        return_value={
+            "index_id": "IDX_MSCI_WORLD_TR",
+            "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "points": [
+                {
+                    "series_date": "2026-01-02",
+                    "index_price": "100.2500000000",
+                    "series_currency": "USD",
+                    "value_convention": "close_price",
+                    "quality_status": "accepted",
+                }
+            ],
+            "lineage": {
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
+    mock_integration_service.get_index_return_series = AsyncMock(
+        return_value={
+            "index_id": "IDX_MSCI_WORLD_TR",
+            "as_of_date": "2026-01-31",
+            "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "request_fingerprint": "fp-index-return-1",
+            "points": [
+                {
+                    "series_date": "2026-01-02",
+                    "index_return": "0.0025000000",
+                    "return_period": "1d",
+                    "return_convention": "total_return_index",
+                    "series_currency": "USD",
+                    "quality_status": "accepted",
+                }
+            ],
+            "lineage": {
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
+    mock_integration_service.get_benchmark_return_series = AsyncMock(
+        return_value={
+            "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+            "as_of_date": "2026-01-31",
+            "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "request_fingerprint": "fp-benchmark-return-1",
+            "points": [
+                {
+                    "series_date": "2026-01-02",
+                    "benchmark_return": "0.0021000000",
+                    "return_period": "1d",
+                    "return_convention": "total_return_index",
+                    "series_currency": "USD",
+                    "quality_status": "accepted",
+                }
+            ],
+            "lineage": {
+                "contract_version": "rfc_062_v1",
+                "source_system": "lotus-core",
+            },
+        }
+    )
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
@@ -322,6 +427,41 @@ async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
     )
 
 
+async def test_benchmark_definition_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/definition",
+        json={"as_of_date": "2026-01-31"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert body["benchmark_name"] == "Global Balanced 60/40 (TR)"
+    assert body["benchmark_type"] == "composite"
+    assert body["components"][0]["index_id"] == "IDX_MSCI_WORLD_TR"
+    mock_integration_service.get_benchmark_definition.assert_awaited_once_with(
+        "BMK_GLOBAL_BALANCED_60_40",
+        date(2026, 1, 31),
+    )
+
+
+async def test_benchmark_definition_not_found_maps_to_404(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_benchmark_definition = AsyncMock(return_value=None)
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/definition",
+        json={"as_of_date": "2026-01-31"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "No effective benchmark definition found for benchmark_id and as_of_date."
+    )
+
+
 async def test_benchmark_composition_window_success(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
 
@@ -409,6 +549,75 @@ async def test_benchmark_market_series_invalid_page_token_maps_to_400(async_test
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid benchmark market series page_token."
+
+
+async def test_index_price_series_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/indices/IDX_MSCI_WORLD_TR/price-series",
+        json={
+            "as_of_date": "2026-01-31",
+            "window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+            "target_currency": "USD",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "IndexSeriesWindow"
+    assert body["product_version"] == "v1"
+    assert body["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert body["points"][0]["index_price"] == "100.2500000000"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_index_price_series.assert_awaited_once()
+
+
+async def test_index_return_series_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/indices/IDX_MSCI_WORLD_TR/return-series",
+        json={
+            "as_of_date": "2026-01-31",
+            "window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "IndexSeriesWindow"
+    assert body["product_version"] == "v1"
+    assert body["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert body["request_fingerprint"] == "fp-index-return-1"
+    assert body["points"][0]["return_convention"] == "total_return_index"
+    assert body["points"][0]["index_return"] == "0.0025000000"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_index_return_series.assert_awaited_once()
+
+
+async def test_benchmark_return_series_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/return-series",
+        json={
+            "as_of_date": "2026-01-31",
+            "window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "frequency": "daily",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert body["request_fingerprint"] == "fp-benchmark-return-1"
+    assert body["points"][0]["benchmark_return"] == "0.0021000000"
+    mock_integration_service.get_benchmark_return_series.assert_awaited_once()
 
 
 async def test_risk_free_series_success(async_test_client):
