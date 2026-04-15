@@ -150,7 +150,10 @@ still requires gateway/platform ingress policy proof and affected-consumer valid
 When production policy requires explicit entitlement rules, `ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`
 can be enabled alongside read or write authorization. In that mode, any protected request without a
 matching method/path capability rule is denied with `missing_capability_rule`, and runtime
-configuration validation reports `missing_capability_rules` if no capability rules are configured.
+configuration validation reports `missing_capability_rules` if no actionable capability rules are
+configured. Actionable rules must use a supported read/write method, an absolute route path, and a
+non-empty capability name, for example `GET /integration/portfolios` mapped to
+`analytics.reference.read`.
 
 ## Validation
 

@@ -19,6 +19,7 @@ AuditEmitter = Callable[..., None]
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 READ_AUDIT_METHODS = {"GET", "HEAD"}
 READ_AUTHZ_METHODS = {"GET", "HEAD"}
+CAPABILITY_RULE_METHODS = WRITE_METHODS | READ_AUTHZ_METHODS
 REQUIRED_HEADERS = {"x-actor-id", "x-tenant-id", "x-role", "x-correlation-id"}
 REDACT_FIELDS = {
     "password",
@@ -107,7 +108,14 @@ class EnterpriseReadinessRuntime:
 
     def load_capability_rules(self) -> dict[str, str]:
         rules = self.load_json_map("ENTERPRISE_CAPABILITY_RULES_JSON")
-        return {str(key): str(value) for key, value in rules.items() if isinstance(key, str)}
+        normalized: dict[str, str] = {}
+        for key, capability in rules.items():
+            normalized_rule = _normalize_capability_rule(key, capability)
+            if normalized_rule is None:
+                continue
+            rule_key, rule_capability = normalized_rule
+            normalized[rule_key] = rule_capability
+        return normalized
 
     def is_feature_enabled(self, feature_key: str, tenant_id: str, role: str) -> bool:
         flags = self.load_feature_flags()
@@ -217,6 +225,23 @@ def _path_matches_rule(path: str, rule_path: str) -> bool:
     if not normalized_rule or normalized_rule == "/":
         return True
     return path == normalized_rule or path.startswith(f"{normalized_rule}/")
+
+
+def _normalize_capability_rule(key: Any, capability: Any) -> tuple[str, str] | None:
+    if not isinstance(key, str) or not isinstance(capability, str):
+        return None
+    parts = key.strip().split(maxsplit=1)
+    if len(parts) != 2:
+        return None
+    method, path = parts[0].upper(), parts[1].strip()
+    normalized_capability = capability.strip()
+    if (
+        method not in CAPABILITY_RULE_METHODS
+        or not path.startswith("/")
+        or not normalized_capability
+    ):
+        return None
+    return f"{method} {path.rstrip('/') or '/'}", normalized_capability
 
 
 def build_enterprise_audit_middleware(

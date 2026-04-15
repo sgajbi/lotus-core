@@ -183,6 +183,36 @@ def test_required_capability_matches_only_path_segments() -> None:
     assert runtime.required_capability("GET", "/portfolios-v2/P1") is None
 
 
+def test_capability_rules_keep_only_actionable_method_path_mappings() -> None:
+    runtime = _runtime(
+        settings=_Settings(
+            enterprise_capability_rules={
+                "get /portfolios/": " portfolios.read ",
+                "GET portfolios": "missing.leading.slash",
+                "GET": "missing.path",
+                "TRACE /portfolios": "unsupported.method",
+                "POST /transactions": "",
+                "DELETE /orders": {"not": "a string"},
+            }
+        )
+    )
+
+    assert runtime.load_capability_rules() == {"GET /portfolios": "portfolios.read"}
+
+
+def test_runtime_config_treats_only_invalid_capability_rules_as_missing() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        require_capability_rules=True,
+        settings=_Settings(
+            enterprise_primary_key_id="primary",
+            enterprise_capability_rules={"GET /portfolios": ""},
+        ),
+    )
+
+    assert "missing_capability_rules" in runtime.validate_enterprise_runtime_config()
+
+
 def test_validate_enterprise_runtime_config_checks_primary_key_for_read_authorization() -> None:
     runtime = _runtime(read_authz_enabled=True)
 
