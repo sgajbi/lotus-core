@@ -100,6 +100,10 @@ ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 
 
+def _semantic_cashflow_event_id(event: TransactionEvent) -> str:
+    return f"cashflow:{event.portfolio_id}:{event.transaction_id}:{event.epoch or 0}"
+
+
 class CashflowCalculatorConsumer(BaseConsumer):
     """
     Consumes raw transaction completion events, calculates the corresponding
@@ -177,20 +181,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
                 fallback_correlation_id=event_data.get("correlation_id"),
             ) as correlation_id:
                 event = TransactionEvent.model_validate(event_data)
-
-                if (
-                    msg.topic() == KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC
-                    and (event.epoch or 0) == 0
-                ):
-                    logger.info(
-                        "Skipping non-replay processed-transaction event on replay cashflow path.",
-                        extra={
-                            "transaction_id": event.transaction_id,
-                            "topic": msg.topic(),
-                            "epoch": event.epoch or 0,
-                        },
-                    )
-                    return
+                semantic_event_id = _semantic_cashflow_event_id(event)
 
                 async for db in get_async_db_session():
                     tx = await db.begin()
@@ -236,6 +227,26 @@ class CashflowCalculatorConsumer(BaseConsumer):
                             logger.warning(f"Event {event_id} already processed. Skipping.")
                             await tx.rollback()
                             return
+                        if await idempotency_repo.is_event_processed(
+                            semantic_event_id, SERVICE_NAME
+                        ):
+                            logger.info(
+                                "Semantic cashflow event already processed. Skipping duplicate "
+                                "cross-topic publication.",
+                                extra={
+                                    "transaction_id": event.transaction_id,
+                                    "portfolio_id": event.portfolio_id,
+                                    "epoch": event.epoch or 0,
+                                    "event_id": event_id,
+                                    "semantic_event_id": semantic_event_id,
+                                    "topic": msg.topic(),
+                                },
+                            )
+                            await idempotency_repo.mark_event_processed(
+                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                            )
+                            await db.commit()
+                            return
 
                         event_transaction_type = resolve_effective_processing_transaction_type(
                             event
@@ -270,6 +281,12 @@ class CashflowCalculatorConsumer(BaseConsumer):
                             )
                             await idempotency_repo.mark_event_processed(
                                 event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                            )
+                            await idempotency_repo.mark_event_processed(
+                                semantic_event_id,
+                                event.portfolio_id,
+                                SERVICE_NAME,
+                                correlation_id,
                             )
                             await db.commit()
                             return
@@ -312,6 +329,12 @@ class CashflowCalculatorConsumer(BaseConsumer):
 
                         await idempotency_repo.mark_event_processed(
                             event_id, event.portfolio_id, SERVICE_NAME, correlation_id
+                        )
+                        await idempotency_repo.mark_event_processed(
+                            semantic_event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
                         )
                         await db.commit()
 

@@ -2,7 +2,7 @@
 import asyncio
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from portfolio_common.database_models import Cashflow, CashflowRule
@@ -184,8 +184,14 @@ async def test_process_message_success(
         await cashflow_consumer.process_message(mock_kafka_message)
 
         # Assert
-        mock_idempotency_repo.is_event_processed.assert_called_once_with(
-            "transactions.persisted-0-123", "cashflow-calculator"
+        mock_idempotency_repo.is_event_processed.assert_has_awaits(
+            [
+                call("transactions.persisted-0-123", "cashflow-calculator"),
+                call(
+                    "cashflow:PORT_CFC_01:TXN_CASHFLOW_CONSUMER:1",
+                    "cashflow-calculator",
+                ),
+            ]
         )
         mock_rules_repo.get_all_rules.assert_awaited_once()
         mock_cashflow_repo.create_cashflow.assert_called_once()
@@ -197,8 +203,22 @@ async def test_process_message_success(
             "test-corr-id"
         )
 
-        mock_idempotency_repo.mark_event_processed.assert_called_once()
-        assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "test-corr-id"
+        mock_idempotency_repo.mark_event_processed.assert_has_awaits(
+            [
+                call(
+                    "transactions.persisted-0-123",
+                    "PORT_CFC_01",
+                    "cashflow-calculator",
+                    "test-corr-id",
+                ),
+                call(
+                    "cashflow:PORT_CFC_01:TXN_CASHFLOW_CONSUMER:1",
+                    "PORT_CFC_01",
+                    "cashflow-calculator",
+                    "test-corr-id",
+                ),
+            ]
+        )
         cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
@@ -315,11 +335,88 @@ async def test_process_message_skips_replay_event_when_canonical_state_was_remov
     mock_cashflow_repo.transaction_exists.assert_awaited_once_with(
         "TXN_CASHFLOW_CONSUMER", portfolio_id="PORT_CFC_01"
     )
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+        "transactions.cost.processed-0-123",
+        "PORT_CFC_01",
+        "cashflow-calculator",
+        "test-corr-id",
+    )
     mock_idempotency_repo.is_event_processed.assert_not_called()
     mock_rules_repo.get_all_rules.assert_not_awaited()
     mock_cashflow_repo.create_cashflow.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
+    cashflow_consumer._send_to_dlq_async.assert_not_called()
+
+
+async def test_process_message_skips_duplicate_cross_topic_cashflow_publication(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    """
+    GIVEN a processed-transaction event whose semantic cashflow work already succeeded on the
+    persisted-transaction topic
+    WHEN the replay topic delivers the same transaction payload
+    THEN the consumer should acknowledge the Kafka event without emitting a duplicate outbox event.
+    """
+    mock_cashflow_repo = mock_dependencies["cashflow_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_rules_repo = mock_dependencies["rules_repo"]
+
+    event = TransactionEvent(
+        transaction_id="TXN_CASHFLOW_REPLAY_E0",
+        portfolio_id="PORT_CFC_01",
+        instrument_id="INST_CFC_01",
+        security_id="SEC_CFC_01",
+        transaction_date=datetime(2025, 8, 1, 10, 0, 0),
+        transaction_type="BUY",
+        quantity=Decimal("100"),
+        price=Decimal("10"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_fee=Decimal("5.50"),
+        trade_currency="USD",
+        currency="USD",
+        epoch=0,
+    )
+    mock_kafka_message.topic.return_value = "transactions.cost.processed"
+    mock_kafka_message.value.return_value = event.model_dump_json().encode("utf-8")
+
+    mock_idempotency_repo.is_event_processed.side_effect = [False, True]
+    mock_cashflow_repo.portfolio_exists.return_value = True
+    mock_cashflow_repo.transaction_exists.return_value = True
+
+    with patch(
+        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+    ) as mock_fencer_class:
+        mock_fencer_instance = AsyncMock()
+        mock_fencer_instance.check.return_value = True
+        mock_fencer_class.return_value = mock_fencer_instance
+
+        await cashflow_consumer.process_message(mock_kafka_message)
+
+    mock_cashflow_repo.portfolio_exists.assert_awaited_once_with("PORT_CFC_01")
+    mock_cashflow_repo.transaction_exists.assert_awaited_once_with(
+        "TXN_CASHFLOW_REPLAY_E0", portfolio_id="PORT_CFC_01"
+    )
+    mock_idempotency_repo.is_event_processed.assert_has_awaits(
+        [
+            call("transactions.cost.processed-0-123", "cashflow-calculator"),
+            call(
+                "cashflow:PORT_CFC_01:TXN_CASHFLOW_REPLAY_E0:0",
+                "cashflow-calculator",
+            ),
+        ]
+    )
+    mock_rules_repo.get_all_rules.assert_not_awaited()
+    mock_cashflow_repo.create_cashflow.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+        "transactions.cost.processed-0-123",
+        "PORT_CFC_01",
+        "cashflow-calculator",
+        ANY,
+    )
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
@@ -552,7 +649,22 @@ async def test_process_message_skips_non_cash_fx_contract_lifecycle_components(
     mock_rules_repo.get_all_rules.assert_not_awaited()
     mock_cashflow_repo.create_cashflow.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.mark_event_processed.assert_has_awaits(
+        [
+            call(
+                "transactions.persisted-0-123",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+            call(
+                "cashflow:PORT_CFC_01:TXN_CASHFLOW_FX_CONTRACT_01:1",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+        ]
+    )
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
@@ -623,7 +735,22 @@ async def test_process_message_dividend_external_mode_still_creates_product_cash
     mock_rules_repo.get_all_rules.assert_awaited_once()
     mock_cashflow_repo.create_cashflow.assert_called_once()
     mock_outbox_repo.create_outbox_event.assert_called_once()
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.mark_event_processed.assert_has_awaits(
+        [
+            call(
+                "transactions.persisted-0-123",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+            call(
+                "cashflow:PORT_CFC_01:TXN_CASHFLOW_DIV_EXT_01:1",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+        ]
+    )
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
@@ -743,7 +870,22 @@ async def test_process_message_interest_external_mode_still_creates_product_cash
     mock_rules_repo.get_all_rules.assert_awaited_once()
     mock_cashflow_repo.create_cashflow.assert_called_once()
     mock_outbox_repo.create_outbox_event.assert_called_once()
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.mark_event_processed.assert_has_awaits(
+        [
+            call(
+                "transactions.persisted-0-123",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+            call(
+                "cashflow:PORT_CFC_01:TXN_CASHFLOW_INT_EXT_01:1",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+        ]
+    )
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
@@ -863,7 +1005,22 @@ async def test_process_message_buy_with_linked_cash_leg_still_creates_product_ca
     mock_rules_repo.get_all_rules.assert_awaited_once()
     mock_cashflow_repo.create_cashflow.assert_called_once()
     mock_outbox_repo.create_outbox_event.assert_called_once()
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.mark_event_processed.assert_has_awaits(
+        [
+            call(
+                "transactions.persisted-0-123",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+            call(
+                "cashflow:PORT_CFC_01:TXN_CASHFLOW_BUY_LINKED_01:1",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+        ]
+    )
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
@@ -932,7 +1089,22 @@ async def test_process_message_cash_in_lieu_with_linked_cash_leg_still_creates_p
     mock_rules_repo.get_all_rules.assert_awaited_once()
     mock_cashflow_repo.create_cashflow.assert_called_once()
     mock_outbox_repo.create_outbox_event.assert_called_once()
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.mark_event_processed.assert_has_awaits(
+        [
+            call(
+                "transactions.persisted-0-123",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+            call(
+                "cashflow:PORT_CFC_01:TXN_CASHFLOW_CIL_LINKED_01:1",
+                "PORT_CFC_01",
+                "cashflow-calculator",
+                "test-corr-id",
+            ),
+        ]
+    )
     cashflow_consumer._send_to_dlq_async.assert_not_called()
 
 
