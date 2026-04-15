@@ -11,6 +11,11 @@ For each `daily_position_snapshot` event it receives, `timeseries_generator_serv
 * **Cash Flows:** The service queries the `cashflows` table for all flows associated with that specific security on that specific day. It then aggregates these flows based on their timing (`BOD` or `EOD`) and their type (`is_position_flow`, `is_portfolio_flow`) to populate the four distinct cash flow fields in the time-series record.
 * **Fees:** Fees are derived from cash flows that are classified as expenses.
 
+When a position snapshot is generated or restated, the consumer also recalculates dependent later
+position-timeseries rows for the same portfolio/security while material state continues to change.
+This keeps persisted BOD values aligned with prior persisted EOD state after replay, backfill, and
+out-of-order snapshot publication.
+
 The downstream query-control-plane analytics input contract applies an additional serving-time
 continuity guard for TWR consumers. If a stored position-timeseries BOD value is stale relative to
 the immediately preceding active EOD state, the analytics response uses the prior EOD value as

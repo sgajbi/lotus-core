@@ -487,3 +487,21 @@ class TimeseriesRepositoryBase:
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    @async_timed(repository="TimeseriesRepository", method="get_next_snapshot_after")
+    async def get_next_snapshot_after(
+        self, portfolio_id: str, security_id: str, a_date: date, epoch: int
+    ) -> Optional[DailyPositionSnapshot]:
+        stmt = (
+            select(DailyPositionSnapshot)
+            .filter(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.security_id == security_id,
+                DailyPositionSnapshot.date > a_date,
+                DailyPositionSnapshot.epoch <= epoch,
+            )
+            .order_by(DailyPositionSnapshot.date.asc(), DailyPositionSnapshot.epoch.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
