@@ -46,7 +46,9 @@ prevents operator-only products from being classified outside the control-plane 
 family, so support and evidence products cannot silently drift into business read or analytics-input
 contracts. Access classifications are route-family constrained: business-consumer access belongs to
 operational read or snapshot/simulation products, system access belongs to analytics-input products,
-and operator access belongs to control-plane and policy products.
+and operator access belongs to control-plane and policy products. Audit requirements are constrained
+the same way: business-consumer products use read/export audit, system products use system-access
+audit, and operator products use operator-access audit.
 
 ## Access Classes
 

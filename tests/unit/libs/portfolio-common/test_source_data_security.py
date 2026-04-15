@@ -65,6 +65,19 @@ def test_analytics_input_products_require_system_access_classification() -> None
         assert profile.access_classification == SYSTEM_ACCESS
 
 
+def test_security_profiles_align_audit_requirement_to_access_classification() -> None:
+    expected_audit_by_access = {
+        "business_consumer_access": "audit_read_and_export",
+        "system_access": "audit_system_access",
+        "operator_access": "audit_operator_access",
+    }
+
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        profile = get_source_data_security_profile(product.product_name)
+
+        assert profile.audit_requirement == expected_audit_by_access[profile.access_classification]
+
+
 def test_portfolio_snapshot_profile_is_client_confidential() -> None:
     profile = get_source_data_security_profile("PortfolioStateSnapshot")
 
@@ -171,6 +184,22 @@ def test_security_profile_validation_rejects_access_classification_route_family_
     )
 
     with pytest.raises(ValueError, match="not valid for route family"):
+        validate_source_data_security_profiles((invalid,))
+
+
+def test_security_profile_validation_rejects_access_audit_mismatch() -> None:
+    invalid = SourceDataSecurityProfile(
+        product_name="PortfolioTimeseriesInput",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement="retain_for_client_record",
+        audit_requirement="audit_read_and_export",
+        pii_fields=("portfolio_id",),
+    )
+
+    with pytest.raises(ValueError, match="audit_requirement .* is not valid"):
         validate_source_data_security_profiles((invalid,))
 
 

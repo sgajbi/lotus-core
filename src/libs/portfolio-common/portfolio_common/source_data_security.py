@@ -35,6 +35,11 @@ ACCESS_CLASSIFICATION_ROUTE_FAMILIES = {
     SYSTEM_ACCESS: {ANALYTICS_INPUT},
     OPERATOR_ACCESS: {CONTROL_PLANE_AND_POLICY},
 }
+ACCESS_CLASSIFICATION_AUDIT_REQUIREMENT = {
+    BUSINESS_CONSUMER_ACCESS: AUDIT_READ_AND_EXPORT,
+    SYSTEM_ACCESS: AUDIT_SYSTEM_ACCESS,
+    OPERATOR_ACCESS: AUDIT_OPERATOR_ACCESS,
+}
 
 
 @dataclass(frozen=True)
@@ -287,6 +292,14 @@ def validate_source_data_security_profiles(
                 )
         if profile.audit_requirement == AUDIT_OPERATOR_ACCESS and not profile.operator_only:
             raise ValueError(f"{profile.product_name} operator audit requires operator_only")
+        expected_audit_requirement = ACCESS_CLASSIFICATION_AUDIT_REQUIREMENT[
+            profile.access_classification
+        ]
+        if profile.audit_requirement != expected_audit_requirement:
+            raise ValueError(
+                f"{profile.product_name} audit_requirement {profile.audit_requirement} "
+                f"is not valid for access_classification {profile.access_classification}"
+            )
         if catalog_product:
             allowed_route_families = ACCESS_CLASSIFICATION_ROUTE_FAMILIES[
                 profile.access_classification
