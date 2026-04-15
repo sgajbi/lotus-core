@@ -199,6 +199,16 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
             [
                 SimpleNamespace(
                     security_id="SEC_A",
+                    valuation_date=date(2024, 12, 31),
+                    eod_market_value=Decimal("1000.00"),
+                    epoch=3,
+                )
+            ]
+        ),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(
+                    security_id="SEC_A",
                     valuation_date=date(2025, 1, 1),
                     amount=Decimal("10"),
                     timing="BOD",
@@ -232,6 +242,20 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     assert "instruments.asset_class" in unpaged_sql
     assert "ORDER BY anon_1.valuation_date ASC, anon_1.security_id ASC" in unpaged_sql
 
+    prior_rows = await repo.list_latest_position_timeseries_before(
+        portfolio_id="P1",
+        before_date=date(2025, 1, 1),
+        security_ids=["SEC_A"],
+        snapshot_epoch=3,
+    )
+    assert len(prior_rows) == 1
+    prior_stmt = db.execute.await_args_list[1].args[0]
+    prior_sql = str(prior_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_timeseries.date < '2025-01-01'" in prior_sql
+    assert "position_timeseries.epoch <= 3" in prior_sql
+    assert "row_number() OVER (PARTITION BY position_timeseries.security_id" in prior_sql
+    assert "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC" in prior_sql
+
     position_cashflow_rows = await repo.list_position_cashflow_rows(
         portfolio_id="P1",
         security_ids=["SEC_A"],
@@ -239,7 +263,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
         snapshot_epoch=3,
     )
     assert len(position_cashflow_rows) == 1
-    position_cashflow_stmt = db.execute.await_args_list[1].args[0]
+    position_cashflow_stmt = db.execute.await_args_list[2].args[0]
     position_cashflow_sql = str(
         position_cashflow_stmt.compile(compile_kwargs={"literal_binds": True})
     )
@@ -253,7 +277,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
         snapshot_epoch=4,
     )
     assert len(portfolio_cashflow_rows) == 1
-    portfolio_cashflow_stmt = db.execute.await_args_list[2].args[0]
+    portfolio_cashflow_stmt = db.execute.await_args_list[3].args[0]
     portfolio_cashflow_sql = str(
         portfolio_cashflow_stmt.compile(compile_kwargs={"literal_binds": True})
     )
@@ -266,6 +290,14 @@ async def test_timeseries_repository_short_circuits_empty_cashflow_filters() -> 
     db = AsyncMock(spec=AsyncSession)
     repo = AnalyticsTimeseriesRepository(db)
 
+    assert (
+        await repo.list_latest_position_timeseries_before(
+            portfolio_id="P1",
+            before_date=date(2025, 1, 1),
+            security_ids=[],
+        )
+        == []
+    )
     assert (
         await repo.list_position_cashflow_rows(
             portfolio_id="P1",
