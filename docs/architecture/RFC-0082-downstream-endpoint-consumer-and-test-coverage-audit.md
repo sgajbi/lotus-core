@@ -289,6 +289,16 @@ The certification lane now also protects the adjacent benchmark definition, benc
 index catalog, and raw return-series schema family with recursive OpenAPI guards so nested
 reference/publication fields do not drift silently while benchmark sourcing evolves.
 
+Swagger now also makes the supporting-route boundary clearer for this adjacent family:
+
+1. benchmark definition is point-in-time benchmark context, not the strategic cross-window
+   benchmark calculation contract;
+2. benchmark catalog is discovery-first and should give way to targeted benchmark routes once an
+   identifier is known;
+3. raw index and benchmark return-series routes are evidence or validation sources, not substitutes
+   for composition-window plus market-series sourcing when lower-level benchmark reconstruction is
+   required.
+
 ## Certified Endpoint Slice: Risk-Free Reference Family
 
 This certification pass covers:

@@ -1447,6 +1447,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "/integration/benchmarks/{benchmark_id}/market-series"
     ]["post"]
     index_price_series = schema["paths"]["/integration/indices/{index_id}/price-series"]["post"]
+    index_return_series = schema["paths"]["/integration/indices/{index_id}/return-series"]["post"]
     benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"]["post"]
     risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"]["post"]
     risk_free_series = schema["paths"]["/integration/reference/risk-free-series"]["post"]
@@ -1502,6 +1503,11 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "Benchmark identifier for the requested benchmark definition."
     )
     assert "point-in-time reference context" in benchmark_definition["description"]
+    assert "lotus-performance, lotus-risk, lotus-report" in benchmark_definition["description"]
+    assert (
+        "not the strategic cross-window benchmark calculation contract"
+        in (benchmark_definition["description"])
+    )
 
     definition_not_found = benchmark_definition["responses"]["404"]["content"]["application/json"][
         "example"
@@ -1546,9 +1552,26 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "/integration/benchmarks/{benchmark_id}/return-series"
     ]["post"]
     assert "before targeted benchmark assignment" in benchmark_catalog_route["description"]
+    assert (
+        "Prefer the targeted routes once a concrete benchmark identifier is known."
+        in (benchmark_catalog_route["description"])
+    )
     assert "governed classification labels" in index_catalog_route["description"]
     assert "broad-market sector labels" in index_catalog_route["description"]
     assert "prefer `index_ids` to avoid full-catalog scans" in index_catalog_route["description"]
+    assert (
+        "lotus-performance and lotus-risk analytics pipelines"
+        in (index_price_series["description"])
+    )
+    assert (
+        "not a normalized benchmark-engine output contract" in (index_price_series["description"])
+    )
+    assert "lotus-performance and lotus-risk" in index_return_series["description"]
+    assert (
+        "not a substitute for benchmark composition plus market-series inputs"
+        in (index_return_series["description"])
+    )
+    assert "lotus-performance and lotus-risk" in benchmark_return_series["description"]
     assert "not the default benchmark-math source" in benchmark_return_series["description"]
 
     coverage_param = next(
