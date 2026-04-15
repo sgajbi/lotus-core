@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -13,6 +13,22 @@ from src.services.query_service.app.routers.reporting import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _runtime_metadata(as_of_date: date) -> dict:
+    return {
+        "generated_at": datetime(2026, 3, 27, 12, 0, tzinfo=UTC),
+        "as_of_date": as_of_date,
+        "restatement_version": "current",
+        "reconciliation_status": "UNKNOWN",
+        "data_quality_status": "UNKNOWN",
+        "latest_evidence_timestamp": None,
+        "source_batch_fingerprint": None,
+        "snapshot_id": None,
+        "tenant_id": None,
+        "policy_version": None,
+        "correlation_id": None,
+    }
 
 
 @pytest_asyncio.fixture
@@ -89,6 +105,7 @@ async def test_query_cash_balances(async_test_client):
             "total_balance_reporting_currency": Decimal("250"),
         },
         "cash_accounts": [],
+        **_runtime_metadata(date(2026, 3, 27)),
     }
 
     response = await client.post("/reporting/cash-balances/query", json={"portfolio_id": "P1"})
@@ -159,6 +176,7 @@ async def test_query_holdings_snapshot(async_test_client):
                 "valuation_status": "VALUED",
             }
         ],
+        **_runtime_metadata(date(2026, 3, 27)),
     }
 
     response = await client.post("/reporting/holdings-snapshot/query", json={"portfolio_id": "P1"})
@@ -221,6 +239,7 @@ async def test_query_income_summary(async_test_client):
             },
         },
         "portfolios": [],
+        **_runtime_metadata(date(2026, 3, 27)),
     }
 
     response = await client.post(
@@ -261,6 +280,7 @@ async def test_query_activity_summary(async_test_client):
             ],
         },
         "portfolios": [],
+        **_runtime_metadata(date(2026, 3, 27)),
     }
 
     response = await client.post(

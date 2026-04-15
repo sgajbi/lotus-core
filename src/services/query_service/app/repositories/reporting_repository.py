@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
@@ -46,6 +46,7 @@ class IncomeSummaryAggregateRow:
     ytd_other_deductions: Decimal
     requested_net_amount: Decimal
     ytd_net_amount: Decimal
+    latest_evidence_timestamp: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class ActivitySummaryAggregateRow:
     ytd_transaction_count: int
     requested_amount: Decimal
     ytd_amount: Decimal
+    latest_evidence_timestamp: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -347,6 +349,7 @@ class ReportingRepository:
                     "requested_net_amount"
                 ),
                 func.sum(direct_net_amount).label("ytd_net_amount"),
+                func.max(Transaction.updated_at).label("latest_evidence_timestamp"),
             )
             .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
@@ -416,6 +419,7 @@ class ReportingRepository:
                     "requested_amount"
                 ),
                 base_activity_amount.label("ytd_amount"),
+                Transaction.updated_at.label("latest_evidence_timestamp"),
             )
             .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
@@ -444,6 +448,7 @@ class ReportingRepository:
                     else_=0,
                 ).label("requested_amount"),
                 func.abs(func.coalesce(Transaction.withholding_tax_amount, 0)).label("ytd_amount"),
+                Transaction.updated_at.label("latest_evidence_timestamp"),
             )
             .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
@@ -470,6 +475,9 @@ class ReportingRepository:
                 func.sum(activity_union.c.ytd_transaction_count).label("ytd_transaction_count"),
                 func.sum(activity_union.c.requested_amount).label("requested_amount"),
                 func.sum(activity_union.c.ytd_amount).label("ytd_amount"),
+                func.max(activity_union.c.latest_evidence_timestamp).label(
+                    "latest_evidence_timestamp"
+                ),
             )
             .group_by(
                 activity_union.c.portfolio_id,

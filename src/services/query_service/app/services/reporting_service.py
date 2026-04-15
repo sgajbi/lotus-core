@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -237,6 +237,7 @@ class ReportingService:
             cash_accounts=account_records,
             **source_data_product_runtime_metadata(
                 as_of_date=resolved_as_of_date,
+                latest_evidence_timestamp=self._latest_snapshot_evidence_timestamp(cash_rows),
             ),
         )
 
@@ -403,6 +404,7 @@ class ReportingService:
             positions=holdings,
             **source_data_product_runtime_metadata(
                 as_of_date=resolved_as_of_date,
+                latest_evidence_timestamp=self._latest_snapshot_evidence_timestamp(rows),
             ),
         )
 
@@ -778,6 +780,7 @@ class ReportingService:
             portfolios=portfolio_rows,
             **source_data_product_runtime_metadata(
                 as_of_date=request.window.end_date,
+                latest_evidence_timestamp=self._latest_aggregate_evidence_timestamp(rows),
             ),
         )
 
@@ -895,6 +898,7 @@ class ReportingService:
             portfolios=portfolio_rows,
             **source_data_product_runtime_metadata(
                 as_of_date=request.window.end_date,
+                latest_evidence_timestamp=self._latest_aggregate_evidence_timestamp(rows),
             ),
         )
 
@@ -979,6 +983,28 @@ class ReportingService:
             "net_portfolio": ZERO,
             "net_reporting": ZERO,
         }
+
+    @staticmethod
+    def _latest_snapshot_evidence_timestamp(rows: list[Any]) -> datetime | None:
+        timestamps: list[datetime] = []
+        for row in rows:
+            snapshot = getattr(row, "snapshot", None)
+            for candidate in (
+                getattr(snapshot, "updated_at", None),
+                getattr(snapshot, "created_at", None),
+            ):
+                if isinstance(candidate, datetime):
+                    timestamps.append(candidate)
+        return max(timestamps) if timestamps else None
+
+    @staticmethod
+    def _latest_aggregate_evidence_timestamp(rows: list[Any]) -> datetime | None:
+        timestamps = [
+            timestamp
+            for row in rows
+            if isinstance(timestamp := getattr(row, "latest_evidence_timestamp", None), datetime)
+        ]
+        return max(timestamps) if timestamps else None
 
     @staticmethod
     def _new_flow_metric() -> dict[str, Decimal | int]:

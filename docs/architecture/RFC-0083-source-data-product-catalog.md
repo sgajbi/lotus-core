@@ -189,13 +189,18 @@ position evidence. Fully snapshot-backed current holdings are `COMPLETE`; curren
 depend on history-backed fallback or supplement rows are `PARTIAL`; holdings with any non-current
 position-state status are `STALE`; empty holdings or holdings without position-state evidence remain
 `UNKNOWN`. The response also populates `latest_evidence_timestamp` from durable position-row and
-position-state timestamps when available.
+position-state timestamps when available. Deprecated reporting convenience responses that still map
+to `HoldingsAsOf`, such as cash balances and holdings snapshots, populate
+`latest_evidence_timestamp` from the returned daily-position snapshot rows while they remain
+available during pre-live endpoint consolidation.
 
 `TransactionLedgerWindow` responses populate `latest_evidence_timestamp` from the latest durable
 transaction-row update timestamp across the filtered ledger window, independent of the requested
 page. They continue to leave reconciliation, data-quality, source-batch, and snapshot fields at
 truthful unresolved defaults until transaction-level reconciliation and source-lineage evidence are
-joined into the ledger response path.
+joined into the ledger response path. Deprecated reporting convenience responses that still map to
+`TransactionLedgerWindow`, such as income and activity summaries, populate the same evidence
+timestamp from the transaction rows included in their year-to-date aggregation windows.
 
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly
