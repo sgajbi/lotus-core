@@ -562,7 +562,10 @@ async def test_benchmark_assignment_success(async_test_client):
     assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.resolve_benchmark_assignment.assert_awaited_once()
+    mock_integration_service.resolve_benchmark_assignment.assert_awaited_once_with(
+        portfolio_id="PORT-INT-001",
+        as_of_date=date(2026, 1, 31),
+    )
 
 
 async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
@@ -685,6 +688,10 @@ async def test_benchmark_composition_window_success(async_test_client):
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     mock_integration_service.get_benchmark_composition_window.assert_awaited_once()
+    composition_call = mock_integration_service.get_benchmark_composition_window.await_args.kwargs
+    assert composition_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert composition_call["request"].window.start_date == date(2026, 1, 1)
+    assert composition_call["request"].window.end_date == date(2026, 3, 31)
 
 
 async def test_benchmark_composition_window_not_found_maps_to_404(async_test_client):
@@ -732,6 +739,19 @@ async def test_benchmark_market_series_success(async_test_client):
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     mock_integration_service.get_benchmark_market_series.assert_awaited_once()
+    market_call = mock_integration_service.get_benchmark_market_series.await_args.kwargs
+    assert market_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert market_call["request"].as_of_date == date(2026, 1, 31)
+    assert market_call["request"].window.start_date == date(2026, 1, 1)
+    assert market_call["request"].window.end_date == date(2026, 1, 31)
+    assert market_call["request"].target_currency == "EUR"
+    assert market_call["request"].series_fields == [
+        "index_price",
+        "index_return",
+        "component_weight",
+        "fx_rate",
+    ]
+    assert market_call["request"].page.page_size == 250
 
 
 async def test_benchmark_market_series_invalid_page_token_maps_to_400(async_test_client):
@@ -823,6 +843,12 @@ async def test_benchmark_return_series_success(async_test_client):
     assert body["request_fingerprint"] == "fp-benchmark-return-1"
     assert body["points"][0]["benchmark_return"] == "0.0021000000"
     mock_integration_service.get_benchmark_return_series.assert_awaited_once()
+    benchmark_return_call = mock_integration_service.get_benchmark_return_series.await_args.kwargs
+    assert benchmark_return_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert benchmark_return_call["request"].as_of_date == date(2026, 1, 31)
+    assert benchmark_return_call["request"].window.start_date == date(2026, 1, 1)
+    assert benchmark_return_call["request"].window.end_date == date(2026, 1, 31)
+    assert benchmark_return_call["request"].frequency == "daily"
 
 
 async def test_risk_free_series_success(async_test_client):
