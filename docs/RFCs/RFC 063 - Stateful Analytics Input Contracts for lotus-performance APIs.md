@@ -92,6 +92,16 @@ The portfolio companion endpoint now has a stronger contract baseline as well.
    - `stale_points_count`
    - `cash_flows_included`
 
+### Day-boundary capital continuity
+The query-control-plane analytics input contract serves TWR-safe beginning capital. When persisted
+position timeseries rows contain stale BOD values, the serving path derives the effective beginning
+market value from immediately preceding active EOD position state unless a BOD position flow
+explicitly changes the opening state. Positions that reappear after an absent date are not carried
+from stale historical rows. If internal position-flow evidence explains the reappearance and there
+is no portfolio-level external flow, the serving path treats the position's EOD value as beginning
+capital rather than publishing an artificial return from zero. Portfolio-level external flows remain
+authoritative and are not converted into beginning capital.
+
 ### Why this matters
 This endpoint feeds stateful TWR and MWR. The contract now states clearly:
 1. what currency the totals are in

@@ -122,8 +122,10 @@ class AnalyticsTimeseriesRepository:
             .where(*predicates)
             .subquery()
         )
-        stmt = select(ranked.c.valuation_date).where(ranked.c.rn == 1).order_by(
-            ranked.c.valuation_date.asc()
+        stmt = (
+            select(ranked.c.valuation_date)
+            .where(ranked.c.rn == 1)
+            .order_by(ranked.c.valuation_date.asc())
         )
         result = await self.db.execute(stmt)
         return [row.valuation_date for row in result.all()]
@@ -308,6 +310,46 @@ class AnalyticsTimeseriesRepository:
             .where(ranked.c.rn == 1)
             .order_by(ranked.c.valuation_date.asc(), ranked.c.security_id.asc())
         )
+        result = await self.db.execute(stmt)
+        return result.all()
+
+    async def list_latest_position_timeseries_before(
+        self,
+        *,
+        portfolio_id: str,
+        before_date: date,
+        security_ids: list[str],
+        snapshot_epoch: int | None = None,
+    ) -> list[Any]:
+        if not security_ids:
+            return []
+
+        predicates = [
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.security_id.in_(security_ids),
+            PositionTimeseries.date < before_date,
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
+
+        ranked = (
+            select(
+                PositionTimeseries.security_id.label("security_id"),
+                PositionTimeseries.date.label("valuation_date"),
+                PositionTimeseries.eod_market_value.label("eod_market_value"),
+                PositionTimeseries.epoch.label("epoch"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionTimeseries.security_id,),
+                    order_by=(PositionTimeseries.date.desc(), PositionTimeseries.epoch.desc()),
+                )
+                .label("rn"),
+            )
+            .where(*predicates)
+            .subquery()
+        )
+
+        stmt = select(ranked).where(ranked.c.rn == 1).order_by(ranked.c.security_id.asc())
         result = await self.db.execute(stmt)
         return result.all()
 

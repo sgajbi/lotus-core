@@ -232,6 +232,15 @@ points are `STALE`, missing expected dates are `PARTIAL`, and empty windows rema
 snapshot, and policy fields null until those controls are resolved in the analytics-input contract
 path.
 
+The analytics-input serving path also normalizes day-boundary beginning capital for TWR safety.
+Persisted position-timeseries BOD values that are stale relative to prior EOD state are repaired at
+the contract boundary when the position was active on the immediately preceding observation date.
+Positions that reappear after an absent date are not carried forward from stale historical rows;
+if they are backed by internal position-flow evidence and no portfolio-level external flow, they are
+treated as new internal beginning capital instead of artificial returns from zero. This preserves
+downstream economics without changing source persistence or inventing portfolio-level external cash
+flows.
+
 `PortfolioAnalyticsReference` is the analytics-safe portfolio reference context consumed by
 `lotus-performance` and `lotus-risk`. It is catalog-backed on the query control plane and publishes
 the same product identity and runtime metadata envelope as the analytics-input timeseries products.

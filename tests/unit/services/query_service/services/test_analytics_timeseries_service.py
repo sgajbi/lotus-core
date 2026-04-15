@@ -352,6 +352,7 @@ async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_n
                 )
             ]
         ),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(
             side_effect=[
                 {date(2025, 1, 1): Decimal("1.2")},
@@ -390,6 +391,114 @@ async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_n
 
 
 @pytest.mark.asyncio
+async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuity() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 18),
+                    bod_market_value=Decimal("95"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 18),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("0"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 18),
+                    bod_market_value=Decimal("70"),
+                    eod_market_value=Decimal("75"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("105"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("50"),
+                    bod_cashflow_position=Decimal("50"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("101"),
+                    bod_cashflow_position=Decimal("25"),
+                    epoch=1,
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("-50"),
+                    classification="INVESTMENT_OUTFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("25"),
+                    classification="INVESTMENT_INFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    observations, _, _, _, _ = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date="2025-05-18", end_date="2025-05-19"),
+        page_size=10,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
+    )
+
+    second_observation = next(
+        observation
+        for observation in observations
+        if observation.valuation_date == date(2025, 5, 19)
+    )
+    assert second_observation.beginning_market_value == Decimal("250")
+    assert second_observation.ending_market_value == Decimal("256")
+
+
+@pytest.mark.asyncio
 async def test_portfolio_observation_rows_raises_when_position_fx_missing() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
@@ -407,6 +516,7 @@ async def test_portfolio_observation_rows_raises_when_position_fx_missing() -> N
             ]
         ),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(side_effect=[{}, {}]),
     )
 
@@ -1195,6 +1305,250 @@ async def test_get_position_timeseries_distinguishes_internal_trade_flows_from_e
         (Decimal("20000"), "external_flow", "external"),
         (Decimal("-5500"), "internal_trade_flow", "internal"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_repairs_beginning_values_for_continuity() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("105"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("10"),
+                    epoch=1,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("50"),
+                    bod_cashflow_position=Decimal("50"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("5"),
+                    epoch=1,
+                    asset_class="Fund",
+                    sector=None,
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("101"),
+                    bod_cashflow_position=Decimal("25"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("1"),
+                    epoch=1,
+                    asset_class="Cash",
+                    sector=None,
+                    country="US",
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 18),
+                    eod_market_value=Decimal("100"),
+                    epoch=1,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 18),
+                    eod_market_value=Decimal("0"),
+                    epoch=1,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 18),
+                    eod_market_value=Decimal("75"),
+                    epoch=1,
+                ),
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_NEW_INTERNAL",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("-50"),
+                    classification="INVESTMENT_OUTFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+                SimpleNamespace(
+                    security_id="SEC_INTERNAL_BOD_CARRY",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("25"),
+                    classification="INVESTMENT_INFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-05-19",
+            window=AnalyticsWindow(start_date="2025-05-19", end_date="2025-05-19"),
+            include_cash_flows=True,
+        ),
+    )
+
+    existing = next(row for row in response.rows if row.security_id == "SEC_EXISTING")
+    new_internal = next(row for row in response.rows if row.security_id == "SEC_NEW_INTERNAL")
+    internal_bod_carry = next(
+        row for row in response.rows if row.security_id == "SEC_INTERNAL_BOD_CARRY"
+    )
+
+    assert existing.beginning_market_value_position_currency == Decimal("100")
+    assert existing.ending_market_value_position_currency == Decimal("105")
+    assert new_internal.beginning_market_value_position_currency == Decimal("50")
+    assert new_internal.ending_market_value_position_currency == Decimal("50")
+    assert internal_bod_carry.beginning_market_value_position_currency == Decimal("100")
+    assert internal_bod_carry.ending_market_value_position_currency == Decimal("101")
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_does_not_carry_beginning_across_absent_dates() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_GAPPED",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("95"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("10"),
+                    epoch=1,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_OTHER",
+                    valuation_date=date(2025, 5, 20),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("10"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("1"),
+                    epoch=1,
+                    asset_class="Cash",
+                    sector=None,
+                    country="US",
+                    position_currency="USD",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_GAPPED",
+                    valuation_date=date(2025, 5, 21),
+                    bod_market_value=Decimal("120"),
+                    eod_market_value=Decimal("50"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("5"),
+                    epoch=1,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_GAPPED",
+                    valuation_date=date(2025, 5, 21),
+                    amount=Decimal("50"),
+                    classification="INVESTMENT_INFLOW",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                )
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-05-21",
+            window=AnalyticsWindow(start_date="2025-05-19", end_date="2025-05-21"),
+            include_cash_flows=True,
+        ),
+    )
+
+    reappearing = next(
+        row
+        for row in response.rows
+        if row.security_id == "SEC_GAPPED" and row.valuation_date == date(2025, 5, 21)
+    )
+
+    assert reappearing.beginning_market_value_position_currency == Decimal("50")
+    assert reappearing.ending_market_value_position_currency == Decimal("50")
 
 
 @pytest.mark.asyncio
