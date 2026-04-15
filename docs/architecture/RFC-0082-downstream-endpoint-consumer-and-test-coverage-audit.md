@@ -111,7 +111,9 @@ Reviewed open `lotus-core` issues tied directly to these contracts:
 | --- | --- | --- |
 | `#233` position-timeseries missing `position_currency` | Addressed in the live contract. `PositionTimeseriesRow.position_currency` is present in the public schema, documented, and regression-covered. | Closure comment posted with implementation evidence; issue should now be closed. |
 | `#259` need explicit flow provenance beyond plain external flow | Addressed in the live contract. `CashFlowObservation` now exposes `cash_flow_type`, `flow_scope`, and `source_classification`, with OpenAPI descriptions covering semantics. | Closure comment posted with implementation evidence; issue should now be closed. |
-| `#250`, `#253`, `#254`, `#258`, `#260` | These are route-family economics/readiness defects rather than documentation or route-publication gaps. They require runtime validation against canonical/live scenarios before closure. | Keep open until live source-economics proof is re-run and captured. |
+| `#250`, `#253`, `#254` | These are route-family economics/readiness defects rather than documentation or route-publication gaps. They require runtime validation against canonical/live scenarios before closure. | Keep open until live source-economics proof is re-run and captured. |
+| `#258` internal trade legs misclassified as `external_flow` | Unit/service evidence now shows distinct `internal_trade_flow` versus `external_flow` behavior for the funded buy scenario. | Closure comment posted with current implementation evidence; re-open only if fresh live cross-app artifacts contradict the service tests. |
+| `#260` staged external cash flows doubled in cash-only windows | Unit/service evidence now shows portfolio and position staged external flows remain `10000`, `5000`, `-2000` rather than doubling. | Closure comment posted with current implementation evidence; re-open only if fresh live cross-app artifacts contradict the service tests. |
 
 No new gateway issue is required from this slice. Gateway is using the strategic analytics-reference
 route correctly for source context, and no duplicate or stale gateway usage of legacy analytics
