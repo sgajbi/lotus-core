@@ -384,6 +384,11 @@ For this family, Swagger is now production-grade on the following dimensions:
 4. the full simulation schema family is covered by a recursive documentation/example guard in
    `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
 
+The HTTP dependency lane now also covers the practical lifecycle that gateway-style consumers
+actually execute: create, read, close, add-change, delete-change, projected-positions, and
+projected-summary responses all have direct router-level success or failure proof in
+`tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py`.
+
 ### Issue Disposition For This Endpoint Family
 
 | Issue | Assessment | Disposition |
