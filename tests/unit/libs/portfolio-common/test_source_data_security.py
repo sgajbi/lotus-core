@@ -107,6 +107,40 @@ def test_security_profile_validation_rejects_operator_only_without_operator_acce
         validate_source_data_security_profiles((invalid,))
 
 
+def test_security_profile_validation_rejects_operator_only_business_product() -> None:
+    invalid = SourceDataSecurityProfile(
+        product_name="PortfolioStateSnapshot",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=OPERATOR_ACCESS,
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement=RETAIN_FOR_OPERATIONAL_AUDIT,
+        audit_requirement=AUDIT_OPERATOR_ACCESS,
+        pii_fields=("portfolio_id", "client_id"),
+        operator_only=True,
+    )
+
+    with pytest.raises(ValueError, match="operator_only requires control-plane route family"):
+        validate_source_data_security_profiles((invalid,))
+
+
+def test_security_profile_validation_rejects_operator_audit_without_operator_only() -> None:
+    invalid = SourceDataSecurityProfile(
+        product_name="PortfolioStateSnapshot",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=OPERATOR_ACCESS,
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement=RETAIN_FOR_OPERATIONAL_AUDIT,
+        audit_requirement=AUDIT_OPERATOR_ACCESS,
+        pii_fields=("portfolio_id", "client_id"),
+        operator_only=False,
+    )
+
+    with pytest.raises(ValueError, match="operator audit requires operator_only"):
+        validate_source_data_security_profiles((invalid,))
+
+
 def test_security_profile_validation_rejects_client_sensitivity_without_pii_fields() -> None:
     invalid = SourceDataSecurityProfile(
         product_name="PortfolioStateSnapshot",

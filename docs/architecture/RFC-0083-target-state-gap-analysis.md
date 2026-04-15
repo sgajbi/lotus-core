@@ -479,8 +479,9 @@ source-data product has a profile and emits `x-lotus-source-data-security` OpenA
 catalog-backed routes. Shared enterprise-readiness runtime support now removes duplicated
 query-service and query-control-plane write authorization, capability-rule, policy-header, write
 audit, and opt-in read audit middleware logic while preserving service-local settings and wrapper
-functions. This slice does not introduce new entitlement policy semantics, persistence changes, or
-downstream response payload shape changes.
+functions. Security profile validation now also prevents operator-only products from being classified
+outside control-plane and policy route families. This slice does not introduce new entitlement policy
+semantics, persistence changes, or downstream response payload shape changes.
 
 ## Slice 10 Completion Note
 

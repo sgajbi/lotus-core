@@ -41,7 +41,10 @@ Every source-data product profile must define:
 9. whether the product is operator-only.
 
 The helper validates that every product in the Slice 6 source-data product catalog has a profile and
-emits the `x-lotus-source-data-security` OpenAPI extension for catalog-backed routes.
+emits the `x-lotus-source-data-security` OpenAPI extension for catalog-backed routes. It also
+prevents operator-only products from being classified outside the control-plane and policy route
+family, so support and evidence products cannot silently drift into business read or analytics-input
+contracts.
 
 ## Access Classes
 

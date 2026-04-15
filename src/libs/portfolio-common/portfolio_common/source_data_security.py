@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from portfolio_common.source_data_products import SOURCE_DATA_PRODUCT_CATALOG
+from portfolio_common.source_data_products import (
+    CONTROL_PLANE_AND_POLICY,
+    SOURCE_DATA_PRODUCT_CATALOG,
+)
 
 
 CLIENT_CONFIDENTIAL = "client_confidential"
@@ -218,9 +221,11 @@ def source_data_security_openapi_extra(product_name: str) -> dict[str, dict[str,
 def validate_source_data_security_profiles(
     profiles: tuple[SourceDataSecurityProfile, ...] = SOURCE_DATA_SECURITY_PROFILES,
 ) -> None:
+    catalog_products = {
+        product.product_name.upper(): product for product in SOURCE_DATA_PRODUCT_CATALOG
+    }
     catalog_product_names = {
-        product.product_name.upper(): product.product_name
-        for product in SOURCE_DATA_PRODUCT_CATALOG
+        product_name: product.product_name for product_name, product in catalog_products.items()
     }
     profile_product_names: dict[str, str] = {}
     profile_names: set[str] = set()
@@ -265,6 +270,14 @@ def validate_source_data_security_profiles(
             raise ValueError(f"{profile.product_name} must require entitlement scoping")
         if profile.operator_only and profile.access_classification != OPERATOR_ACCESS:
             raise ValueError(f"{profile.product_name} operator_only requires operator access")
+        if profile.operator_only:
+            catalog_product = catalog_products.get(product_name)
+            if catalog_product and catalog_product.route_family != CONTROL_PLANE_AND_POLICY:
+                raise ValueError(
+                    f"{profile.product_name} operator_only requires control-plane route family"
+                )
+        if profile.audit_requirement == AUDIT_OPERATOR_ACCESS and not profile.operator_only:
+            raise ValueError(f"{profile.product_name} operator audit requires operator_only")
         if (
             profile.sensitivity_classification in {CLIENT_CONFIDENTIAL, CLIENT_SENSITIVE}
             and not profile.pii_fields
