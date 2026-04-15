@@ -6,7 +6,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from .source_data_product_identity import product_name_field, product_version_field
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
 IncomeType = Literal["DIVIDEND", "INTEREST", "CASH_IN_LIEU"]
@@ -444,7 +448,7 @@ class CashBalancesTotals(BaseModel):
     )
 
 
-class CashBalancesResponse(BaseModel):
+class CashBalancesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.")
@@ -541,7 +545,7 @@ class HoldingSnapshotRecord(BaseModel):
     valuation_status: str | None = Field(None, description="Snapshot valuation status.")
 
 
-class HoldingsSnapshotResponse(BaseModel):
+class HoldingsSnapshotResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-001"])

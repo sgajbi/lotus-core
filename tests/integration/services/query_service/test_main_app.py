@@ -73,6 +73,38 @@ async def test_openapi_binds_query_service_source_data_product_response_identity
             )
 
 
+async def test_openapi_exposes_holdings_as_of_runtime_supportability_metadata(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    required_metadata_fields = {
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "policy_version",
+        "correlation_id",
+    }
+    holdings_response_schemas = [
+        components["PortfolioPositionsResponse"],
+        components["CashBalancesResponse"],
+        components["HoldingsSnapshotResponse"],
+    ]
+
+    for response_schema in holdings_response_schemas:
+        assert required_metadata_fields <= set(response_schema["properties"])
+        assert response_schema["properties"]["product_name"]["default"] == "HoldingsAsOf"
+        assert response_schema["properties"]["product_version"]["default"] == "v1"
+
+
 async def test_middleware_generates_correlation_id_when_missing(async_test_client):
     with patch(
         "src.services.query_service.app.main.generate_correlation_id", return_value="QRY-abc"

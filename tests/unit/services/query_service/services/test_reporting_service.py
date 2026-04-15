@@ -216,6 +216,14 @@ async def test_get_cash_balances_returns_cash_accounts_and_totals() -> None:
     assert response.totals.total_balance_portfolio_currency == Decimal("250")
     assert response.totals.total_balance_reporting_currency == Decimal("300.0")
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.product_name == "HoldingsAsOf"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.correlation_id is None
 
 
 async def test_get_cash_balances_prefers_cash_account_master_and_keeps_zero_balance_accounts() -> (
@@ -386,6 +394,14 @@ async def test_get_holdings_snapshot_restates_reporting_currency_and_region() ->
     assert len(response.positions) == 1
     assert response.positions[0].region == "North America"
     assert response.positions[0].weight == Decimal("1")
+    assert response.product_name == "HoldingsAsOf"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2026, 3, 27)
+    assert response.generated_at.tzinfo is not None
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.correlation_id is None
 
 
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:

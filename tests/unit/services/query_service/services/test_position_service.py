@@ -122,6 +122,14 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.positions[0].liquidity_tier == "L2"
         assert response.positions[0].held_since_date == date(2024, 12, 31)
         assert response.positions[0].weight == Decimal("1")
+        assert response.product_name == "HoldingsAsOf"
+        assert response.product_version == "v1"
+        assert response.as_of_date == date(2025, 1, 1)
+        assert response.generated_at.tzinfo is not None
+        assert response.restatement_version == "current"
+        assert response.reconciliation_status == "UNKNOWN"
+        assert response.data_quality_status == "UNKNOWN"
+        assert response.correlation_id is None
 
 
 async def test_get_latest_positions_falls_back_to_position_history(mock_position_repo: AsyncMock):
@@ -253,6 +261,8 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
         assert response.positions[0].valuation.market_value == Decimal("123.45")
         assert response.positions[0].valuation.unrealized_gain_loss == Decimal("0")
         assert response.positions[0].held_since_date == date(2025, 1, 3)
+        assert response.as_of_date == date(2025, 1, 1)
+        assert response.data_quality_status == "UNKNOWN"
 
 
 async def test_get_latest_positions_supplements_missing_snapshot_rows_from_history(

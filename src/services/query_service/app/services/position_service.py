@@ -12,6 +12,7 @@ from ..dtos.position_dto import (
     Position,
     PositionHistoryRecord,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.valuation_dto import ValuationData
 from ..repositories.position_repository import PositionRepository
 
@@ -159,7 +160,9 @@ class PositionService:
                 cost_basis=position_row.cost_basis,
                 cost_basis_local=position_row.cost_basis_local,
                 instrument_name=instrument.name if instrument else "N/A",
-                position_date=(position_row.date if is_snapshot_row else position_row.position_date),
+                position_date=(
+                    position_row.date if is_snapshot_row else position_row.position_date
+                ),
                 asset_class=instrument.asset_class if instrument else None,
                 isin=instrument.isin if instrument else None,
                 currency=instrument.currency if instrument else None,
@@ -215,4 +218,13 @@ class PositionService:
                     (security_id, epoch), default_date
                 )
 
-        return PortfolioPositionsResponse(portfolio_id=portfolio_id, positions=positions)
+        response_as_of_date = effective_as_of_date or max(
+            (position.position_date for position in positions), default=date.today()
+        )
+        return PortfolioPositionsResponse(
+            portfolio_id=portfolio_id,
+            positions=positions,
+            **source_data_product_runtime_metadata(
+                as_of_date=response_as_of_date,
+            ),
+        )

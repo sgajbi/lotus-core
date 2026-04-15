@@ -43,6 +43,7 @@ from ..dtos.reporting_dto import (
     ReportingPortfolioSummary,
     ReportingScope,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.reporting_repository import (
     ActivitySummaryAggregateRow,
     IncomeSummaryAggregateRow,
@@ -167,15 +168,11 @@ class ReportingService:
         views = [
             AllocationView(
                 dimension=view.dimension,
-                total_market_value_reporting_currency=(
-                    view.total_market_value_reporting_currency
-                ),
+                total_market_value_reporting_currency=(view.total_market_value_reporting_currency),
                 buckets=[
                     AllocationBucket(
                         dimension_value=bucket.dimension_value,
-                        market_value_reporting_currency=(
-                            bucket.market_value_reporting_currency
-                        ),
+                        market_value_reporting_currency=(bucket.market_value_reporting_currency),
                         weight=bucket.weight,
                         position_count=bucket.position_count,
                     )
@@ -238,6 +235,9 @@ class ReportingService:
                 total_balance_reporting_currency=total_reporting_currency,
             ),
             cash_accounts=account_records,
+            **source_data_product_runtime_metadata(
+                as_of_date=resolved_as_of_date,
+            ),
         )
 
     async def get_portfolio_summary(
@@ -401,6 +401,9 @@ class ReportingService:
             total_market_value_portfolio_currency=total_portfolio_value,
             total_market_value_reporting_currency=total_reporting_value,
             positions=holdings,
+            **source_data_product_runtime_metadata(
+                as_of_date=resolved_as_of_date,
+            ),
         )
 
     async def _build_cash_account_balance_records(
