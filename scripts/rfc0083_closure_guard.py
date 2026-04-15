@@ -72,6 +72,7 @@ EXPECTED_SLICE_ARTIFACTS = {
     10: {
         "docs/architecture/RFC-0083-eventing-supportability-target-model.md",
         "src/libs/portfolio-common/portfolio_common/event_supportability.py",
+        "src/libs/portfolio-common/portfolio_common/events.py",
         "tests/unit/libs/portfolio-common/test_event_supportability.py",
         "scripts/event_runtime_contract_guard.py",
         "tests/unit/scripts/test_event_runtime_contract_guard.py",

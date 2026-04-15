@@ -481,6 +481,7 @@ Slice 10 eventing and supportability target modeling is recorded in:
 
 - `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
 - `src/libs/portfolio-common/portfolio_common/event_supportability.py`
+- `src/libs/portfolio-common/portfolio_common/events.py`
 - `tests/unit/libs/portfolio-common/test_event_supportability.py`
 - `scripts/event_runtime_contract_guard.py`
 - `tests/unit/scripts/test_event_runtime_contract_guard.py`
@@ -492,8 +493,10 @@ surface posture, operator-only diagnostics, and evidence bundle linkage. The hel
 family definitions, schema model bindings, required idempotency/correlation/schema version posture,
 operator supportability surfaces, and actual outbox `event_type`/topic alignment against runtime
 emissions. `OutboxRepository` now centrally enriches payloads with `event_type`, `schema_version`, and
-`correlation_id` supportability metadata and rejects conflicting caller-supplied metadata. This slice
-does not change Kafka topics, generated OpenAPI, persistence schema, or downstream contract shape.
+`correlation_id` supportability metadata and rejects conflicting caller-supplied metadata. Shared event
+models inherit from `CoreEventModel`, which explicitly ignores envelope metadata that is not part of a
+specific domain payload. This slice does not change Kafka topics, generated OpenAPI, persistence schema,
+or downstream contract shape.
 
 ## Slice 11 Completion Note
 

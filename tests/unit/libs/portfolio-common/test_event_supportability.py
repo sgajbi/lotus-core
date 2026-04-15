@@ -28,6 +28,124 @@ def test_event_supportability_catalog_validates_against_existing_event_models() 
     validate_event_supportability_catalog(available_schema_models=available_models)
 
 
+def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> None:
+    sample_payloads_by_schema_model = {
+        "PortfolioEvent": {
+            "portfolio_id": "P1",
+            "base_currency": "USD",
+            "open_date": "2026-01-01",
+            "risk_exposure": "balanced",
+            "investment_time_horizon": "long_term",
+            "portfolio_type": "discretionary",
+            "booking_center_code": "SG",
+            "client_id": "C1",
+            "status": "ACTIVE",
+        },
+        "TransactionEvent": {
+            "transaction_id": "T1",
+            "portfolio_id": "P1",
+            "instrument_id": "I1",
+            "security_id": "S1",
+            "transaction_date": "2026-04-10T00:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": "10",
+            "price": "100",
+            "gross_transaction_amount": "1000",
+            "trade_currency": "USD",
+            "currency": "USD",
+        },
+        "MarketPricePersistedEvent": {
+            "security_id": "S1",
+            "price_date": "2026-04-10",
+            "price": "101.25",
+            "currency": "USD",
+        },
+        "InstrumentEvent": {
+            "security_id": "S1",
+            "name": "Instrument One",
+            "isin": "US0000000001",
+            "currency": "USD",
+            "product_type": "EQUITY",
+        },
+        "DailyPositionSnapshotPersistedEvent": {
+            "id": 1,
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "date": "2026-04-10",
+            "epoch": 0,
+        },
+        "CashflowCalculatedEvent": {
+            "cashflow_id": 1,
+            "transaction_id": "T1",
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "cashflow_date": "2026-04-10",
+            "amount": "12.34",
+            "currency": "USD",
+            "classification": "DIVIDEND",
+            "timing": "eod",
+            "is_position_flow": True,
+            "is_portfolio_flow": False,
+            "calculation_type": "standard",
+        },
+        "TransactionProcessingCompletedEvent": {
+            "transaction_id": "T1",
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "business_date": "2026-04-10",
+        },
+        "PortfolioDayReadyForValuationEvent": {
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "valuation_date": "2026-04-10",
+        },
+        "ValuationDayCompletedEvent": {
+            "daily_position_snapshot_id": 1,
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "valuation_date": "2026-04-10",
+        },
+        "PositionTimeseriesDayCompletedEvent": {
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "timeseries_date": "2026-04-10",
+        },
+        "PortfolioAggregationDayCompletedEvent": {
+            "portfolio_id": "P1",
+            "aggregation_date": "2026-04-10",
+        },
+        "FinancialReconciliationRequestedEvent": {
+            "portfolio_id": "P1",
+            "business_date": "2026-04-10",
+        },
+        "FinancialReconciliationCompletedEvent": {
+            "portfolio_id": "P1",
+            "business_date": "2026-04-10",
+            "outcome_status": "PASSED",
+            "reconciliation_types": ["transaction_cashflow"],
+        },
+        "PortfolioDayControlsEvaluatedEvent": {
+            "portfolio_id": "P1",
+            "business_date": "2026-04-10",
+            "status": "PASSED",
+        },
+    }
+
+    for definition in EVENT_FAMILY_DEFINITIONS:
+        model_cls = getattr(events, definition.schema_model)
+        payload = {
+            **sample_payloads_by_schema_model[definition.schema_model],
+            "event_type": definition.event_type,
+            "schema_version": "1.0.0",
+            "correlation_id": "corr-123",
+        }
+
+        parsed = model_cls.model_validate(payload)
+
+        assert model_cls.model_config["extra"] == "ignore"
+        assert parsed is not None
+
+
 def test_source_ingestion_events_are_idempotent_and_auditable() -> None:
     ingestion_events = [
         definition

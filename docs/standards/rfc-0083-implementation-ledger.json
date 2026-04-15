@@ -13,7 +13,7 @@
     "affected downstream consumer PR Merge Gates",
     "platform end-to-end validation where canonical product flows depend on core behavior",
     "runtime authorization and entitlement proof when security controls move from target model to enforcement",
-    "runtime event envelope/schema-version proof when event payload behavior changes"
+    "full cross-service event replay proof when event payload behavior changes beyond the centrally guarded outbox envelope"
   ],
   "slices": [
     {
@@ -138,6 +138,7 @@
       "artifacts": [
         "docs/architecture/RFC-0083-eventing-supportability-target-model.md",
         "src/libs/portfolio-common/portfolio_common/event_supportability.py",
+        "src/libs/portfolio-common/portfolio_common/events.py",
         "tests/unit/libs/portfolio-common/test_event_supportability.py",
         "scripts/event_runtime_contract_guard.py",
         "tests/unit/scripts/test_event_runtime_contract_guard.py",

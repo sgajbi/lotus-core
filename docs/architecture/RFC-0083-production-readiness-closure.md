@@ -45,7 +45,8 @@ Full production runtime closure still requires:
 3. platform end-to-end validation where canonical product flows depend on core behavior,
 4. runtime authorization and entitlement proof when security controls move from target model to
    enforcement,
-5. runtime event envelope/schema-version proof when event payload behavior changes.
+5. full cross-service event replay proof when event payload behavior changes beyond the centrally
+   guarded outbox envelope.
 
 ## Validation
 
