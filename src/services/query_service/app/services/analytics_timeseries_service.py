@@ -22,6 +22,10 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_PAGE_DEPTH,
     ANALYTICS_EXPORT_RESULT_BYTES,
 )
+from portfolio_common.reconciliation_quality import (
+    DataQualityCoverageSignal,
+    classify_data_quality_coverage,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.analytics_input_dto import (
@@ -527,6 +531,12 @@ class AnalyticsTimeseriesService:
         stale_points_count = sum(
             count for status_name, count in quality_distribution.items() if status_name != "final"
         )
+        data_quality_status = self._timeseries_data_quality_status(
+            required_count=len(expected_business_dates),
+            observed_count=len(observed_dates),
+            stale_count=stale_points_count,
+            warning_issue_count=1 if next_page_token else 0,
+        )
         fingerprint = self._request_fingerprint(
             {
                 "endpoint": "portfolio-timeseries",
@@ -570,6 +580,7 @@ class AnalyticsTimeseriesService:
             **source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
+                data_quality_status=data_quality_status,
             ),
         )
 
@@ -754,6 +765,16 @@ class AnalyticsTimeseriesService:
                 }
             )
 
+        stale_points_count = sum(
+            count for status_name, count in quality_distribution.items() if status_name != "final"
+        )
+        data_quality_status = self._timeseries_data_quality_status(
+            required_count=len(response_rows),
+            observed_count=len(response_rows),
+            stale_count=stale_points_count,
+            warning_issue_count=1 if next_page_token else 0,
+        )
+
         fingerprint = self._request_fingerprint(
             {
                 "endpoint": "position-timeseries",
@@ -777,7 +798,7 @@ class AnalyticsTimeseriesService:
             diagnostics=QualityDiagnostics(
                 quality_status_distribution=quality_distribution,
                 missing_dates_count=0,
-                stale_points_count=0,
+                stale_points_count=stale_points_count,
                 requested_dimensions=list(request.dimensions),
                 cash_flows_included=request.include_cash_flows,
             ),
@@ -793,6 +814,7 @@ class AnalyticsTimeseriesService:
             **source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
+                data_quality_status=data_quality_status,
             ),
         )
 
@@ -834,6 +856,23 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
+        )
+
+    @staticmethod
+    def _timeseries_data_quality_status(
+        *,
+        required_count: int,
+        observed_count: int,
+        stale_count: int,
+        warning_issue_count: int = 0,
+    ) -> str:
+        return classify_data_quality_coverage(
+            DataQualityCoverageSignal(
+                required_count=required_count,
+                observed_count=observed_count,
+                stale_count=stale_count,
+                warning_issue_count=warning_issue_count,
+            )
         )
 
     @staticmethod

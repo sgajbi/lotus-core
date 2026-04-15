@@ -212,8 +212,13 @@ portfolio-wide epoch.
 
 The analytics-input timeseries products reuse their existing `lineage.generated_at` timestamp for
 the top-level `generated_at` supportability field so lineage and envelope metadata stay internally
-consistent. They leave tenant, evidence, snapshot, and policy fields null until those controls are
-resolved in the analytics-input contract path.
+consistent. They derive `data_quality_status` from expected/observed valuation dates, stale or
+restated points, and pagination completeness using the shared reconciliation-quality helper: fully
+observed final windows are `COMPLETE`, paginated responses are `PARTIAL`, stale or restated returned
+points are `STALE`, missing expected dates are `PARTIAL`, and empty windows remain `UNKNOWN` or
+`UNRECONCILED` depending on whether the request had expected dates. They leave tenant, evidence,
+snapshot, and policy fields null until those controls are resolved in the analytics-input contract
+path.
 
 The market/reference products populate top-level `as_of_date` from their explicit as-of request
 where one exists, or from the resolved window end date for window-only products. They preserve

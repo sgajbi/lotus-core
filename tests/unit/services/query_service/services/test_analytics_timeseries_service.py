@@ -129,7 +129,7 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
     assert response.generated_at == response.lineage.generated_at
     assert response.restatement_version == "current"
     assert response.reconciliation_status == "UNKNOWN"
-    assert response.data_quality_status == "UNKNOWN"
+    assert response.data_quality_status == "COMPLETE"
     assert response.tenant_id is None
     assert response.snapshot_id is None
     assert response.policy_version is None
@@ -196,6 +196,7 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
     assert response.observations[0].cash_flow_currency == "USD"
     assert response.diagnostics.missing_dates_count == 1
     assert response.diagnostics.stale_points_count == 1
+    assert response.data_quality_status == "STALE"
 
 
 @pytest.mark.asyncio
@@ -464,6 +465,25 @@ def test_position_cash_flows_for_keys_preserves_non_position_amounts() -> None:
     assert result[("SEC_A", date(2025, 1, 1))][0].cash_flow_type == "transfer"
 
 
+def test_timeseries_data_quality_status_classifies_empty_and_missing_windows() -> None:
+    assert (
+        AnalyticsTimeseriesService._timeseries_data_quality_status(  # pylint: disable=protected-access
+            required_count=0,
+            observed_count=0,
+            stale_count=0,
+        )
+        == "UNKNOWN"
+    )
+    assert (
+        AnalyticsTimeseriesService._timeseries_data_quality_status(  # pylint: disable=protected-access
+            required_count=3,
+            observed_count=2,
+            stale_count=0,
+        )
+        == "PARTIAL"
+    )
+
+
 def test_resolve_window_supports_long_periods_and_clamps_to_inception() -> None:
     service = make_service()
 
@@ -639,7 +659,7 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
     assert response.generated_at == response.lineage.generated_at
     assert response.restatement_version == "current"
     assert response.reconciliation_status == "UNKNOWN"
-    assert response.data_quality_status == "UNKNOWN"
+    assert response.data_quality_status == "PARTIAL"
     assert response.tenant_id is None
     assert response.snapshot_id is None
     assert response.policy_version is None
@@ -1025,6 +1045,8 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     assert response.rows[0].cash_flows[2].cash_flow_type == "expense"
     assert response.diagnostics.cash_flows_included is True
     assert response.diagnostics.requested_dimensions == ["asset_class", "sector", "country"]
+    assert response.diagnostics.stale_points_count == 1
+    assert response.data_quality_status == "STALE"
     assert response.rows[0].cash_flow_currency == "USD"
     assert response.rows[0].portfolio_to_reporting_fx_rate == Decimal("1.2")
 
