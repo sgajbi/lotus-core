@@ -208,6 +208,23 @@ async def async_test_client():
             ),
         }
     )
+    mock_integration_service.get_benchmark_coverage = AsyncMock(
+        return_value={
+            "request_fingerprint": "fp-benchmark-coverage-1",
+            "observed_start_date": "2026-01-01",
+            "observed_end_date": "2026-01-31",
+            "expected_start_date": "2026-01-01",
+            "expected_end_date": "2026-01-31",
+            "total_points": 31,
+            "missing_dates_count": 0,
+            "missing_dates_sample": [],
+            "quality_status_distribution": {"ACCEPTED": 31},
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
     mock_integration_service.get_risk_free_coverage = AsyncMock(
         return_value={
             "request_fingerprint": "fp-risk-free-coverage-1",
@@ -831,6 +848,32 @@ async def test_risk_free_series_success(async_test_client):
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     mock_integration_service.get_risk_free_series.assert_awaited_once()
+
+
+async def test_benchmark_coverage_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/coverage",
+        json={"window": {"start_date": "2026-01-01", "end_date": "2026-01-31"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "DataQualityCoverageReport"
+    assert body["product_version"] == "v1"
+    assert body["observed_start_date"] == "2026-01-01"
+    assert body["observed_end_date"] == "2026-01-31"
+    assert body["total_points"] == 31
+    assert body["missing_dates_count"] == 0
+    assert body["quality_status_distribution"] == {"ACCEPTED": 31}
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    mock_integration_service.get_benchmark_coverage.assert_awaited_once_with(
+        benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
 
 
 async def test_risk_free_coverage_success(async_test_client):

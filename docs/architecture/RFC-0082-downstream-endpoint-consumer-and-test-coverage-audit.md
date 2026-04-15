@@ -196,6 +196,7 @@ This certification pass covers:
 
 1. `POST /integration/benchmarks/{benchmark_id}/composition-window`
 2. `POST /integration/benchmarks/{benchmark_id}/market-series`
+3. `POST /integration/benchmarks/{benchmark_id}/coverage`
 
 ### Route Contract Decision
 
@@ -706,7 +707,7 @@ For this endpoint, Swagger now makes the following explicit:
 | `IndexSeriesWindow` | `POST /integration/indices/{index_id}/price-series`; `POST /integration/indices/{index_id}/return-series` | `lotus-performance`, `lotus-risk` | `lotus-performance` execution and benchmark tests reference index price series. | Strong for performance sourcing. Core OpenAPI/catalog tests protect both price and return routes. Risk direct usage should be validated when active-risk use cases require raw index series. |
 | `RiskFreeSeriesWindow` | `POST /integration/reference/risk-free-series` | `lotus-performance`, `lotus-risk` | `lotus-performance` returns-series service; `lotus-risk` rolling mode adapter and live returns support. | Strong. Both performance and risk have direct tests around source retrieval/error handling, with core OpenAPI/catalog guards. |
 | `ReconciliationEvidenceBundle` | `GET /support/portfolios/{portfolio_id}/reconciliation-runs`; `GET /support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings` | `lotus-performance`, `lotus-risk`, `lotus-gateway`, `lotus-manage` | Mostly governed support-plane contract evidence in lotus-core. Downstream workflows should use these routes for operator evidence, not for business calculations. | Adequate for core contract publication. More downstream product-flow tests are needed when UI/operator consumers start depending on these routes directly. |
-| `DataQualityCoverageReport` | `POST /integration/benchmarks/{benchmark_id}/coverage`; `POST /integration/reference/risk-free-series/coverage` | `lotus-performance`, `lotus-risk`, `lotus-gateway`, `lotus-manage` | `lotus-risk` rolling adapter coverage calls; performance benchmark readiness paths consume benchmark coverage semantics. | Strong for risk-free coverage and core route publication. Benchmark coverage should be part of live benchmark-validation evidence before production sign-off. |
+| `DataQualityCoverageReport` | `POST /integration/benchmarks/{benchmark_id}/coverage`; `POST /integration/reference/risk-free-series/coverage` | `lotus-performance`, `lotus-risk`, `lotus-gateway`, `lotus-manage` | `lotus-risk` rolling adapter coverage calls; performance benchmark readiness paths consume benchmark coverage semantics. | Strong for both risk-free and benchmark coverage publication in the dependency lane. Live benchmark-validation evidence is still required before production sign-off. |
 | `IngestionEvidenceBundle` | `GET /lineage/portfolios/{portfolio_id}/keys`; `GET /support/portfolios/{portfolio_id}/reprocessing-keys`; `POST /support/portfolios/{portfolio_id}/reprocessing-jobs` | `lotus-gateway`, `lotus-manage`, `lotus-report` | Core lineage and support routes are present in OpenAPI. These are operational support products rather than calculation inputs. | Adequate core route and OpenAPI proof. Downstream operator-console/report workflows need explicit tests before they can be called fully production-proven. |
 
 ## Swagger Documentation Assessment
@@ -760,3 +761,4 @@ For a route to be considered production-grade, all of the following must hold:
 2. Keep `SOURCE_DATA_PRODUCT_CATALOG`, OpenAPI operation descriptions, and this audit synchronized whenever route consumers change.
 3. Avoid adding downstream UI features that imply backend capability until the relevant source-data product has live validation evidence.
 4. Complete PR Merge Gates and production authorization/entitlement proof before claiming full production runtime closure.
+
