@@ -76,12 +76,13 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
     summary="Fetch portfolio analytics timeseries inputs",
     description=(
         "What: Return canonical portfolio valuation and cash-flow timeseries required by "
-        "lotus-performance and lotus-risk.\n"
+        "lotus-performance and other governed downstream analytics consumers.\n"
         "How: Resolve effective window, apply deterministic paging, and include "
         "lineage/quality diagnostics. Returned cash_flows are canonical portfolio-level "
         "events expressed in the effective reporting currency with explicit flow provenance.\n"
-        "When: Used for stateful TWR/MWR input acquisition and risk analytics sourcing without "
-        "direct database coupling."
+        "When: Used directly for stateful TWR/MWR input acquisition in lotus-performance and "
+        "kept available as a governed portfolio-level analytics-input contract for future "
+        "downstream analytics sourcing without direct database coupling."
     ),
     openapi_extra=source_data_product_openapi_extra("PortfolioTimeseriesInput"),
 )

@@ -199,7 +199,14 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     portfolio_reference = paths["/integration/portfolios/{portfolio_id}/analytics/reference"][
         "post"
     ]
-    assert "lotus-performance and lotus-risk" in portfolio_timeseries["description"]
+    assert (
+        "lotus-performance and other governed downstream analytics consumers"
+        in (portfolio_timeseries["description"])
+    )
+    assert (
+        "Used directly for stateful TWR/MWR input acquisition in lotus-performance"
+        in (portfolio_timeseries["description"])
+    )
     assert "historical risk attribution" in position_timeseries["description"]
     assert "lotus-performance analytics pipelines" in portfolio_reference["description"]
     assert "lotus-gateway workspace source context flows" in portfolio_reference["description"]
