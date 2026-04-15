@@ -300,6 +300,7 @@ class BenchmarkDefinitionResponse(BaseModel):
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for resolved definition.",
+        examples=["2026-01-31T08:00:00Z"],
     )
     source_vendor: str | None = Field(
         None,
@@ -318,6 +319,7 @@ class BenchmarkDefinitionResponse(BaseModel):
     contract_version: str = Field(
         "rfc_062_v1",
         description="Query contract version for benchmark definition integration.",
+        examples=["rfc_062_v1"],
     )
 
     model_config = ConfigDict()
@@ -434,6 +436,7 @@ class IndexDefinitionResponse(BaseModel):
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp.",
+        examples=["2026-01-31T08:00:00Z"],
     )
     source_vendor: str | None = Field(None, description="Source vendor name.", examples=["MSCI"])
     source_record_id: str | None = Field(

@@ -240,6 +240,10 @@ Automated proof now includes a benchmark-source schema-family completeness asser
 No new downstream migration issue is required from this slice. The active downstream consumer is
 already using the strategic routes rather than a stale or duplicate benchmark path.
 
+The certification lane now also protects the adjacent benchmark definition, benchmark catalog,
+index catalog, and raw return-series schema family with recursive OpenAPI guards so nested
+reference/publication fields do not drift silently while benchmark sourcing evolves.
+
 ## Certified Endpoint Slice: Risk-Free Reference Family
 
 This certification pass covers:

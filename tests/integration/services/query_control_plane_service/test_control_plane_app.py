@@ -131,6 +131,21 @@ INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS = {
     "InstrumentEnrichmentBulkResponse",
 }
 
+BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS = {
+    "BenchmarkDefinitionRequest",
+    "BenchmarkDefinitionResponse",
+    "BenchmarkCatalogRequest",
+    "BenchmarkCatalogResponse",
+    "IndexCatalogRequest",
+    "IndexDefinitionResponse",
+    "IndexCatalogResponse",
+    "IndexSeriesRequest",
+    "IndexPriceSeriesResponse",
+    "IndexReturnSeriesResponse",
+    "BenchmarkReturnSeriesRequest",
+    "BenchmarkReturnSeriesResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1571,6 +1586,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_id["description"] == (
         "Benchmark identifier for the requested benchmark definition."
     )
+    assert "point-in-time reference context" in benchmark_definition["description"]
 
     definition_not_found = benchmark_definition["responses"]["404"]["content"]["application/json"][
         "example"
@@ -1608,6 +1624,14 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         if parameter["name"] == "index_id"
     )
     assert index_id["description"] == "Index identifier for the requested raw price series."
+    benchmark_catalog_route = schema["paths"]["/integration/benchmarks/catalog"]["post"]
+    index_catalog_route = schema["paths"]["/integration/indices/catalog"]["post"]
+    benchmark_return_series = schema["paths"][
+        "/integration/benchmarks/{benchmark_id}/return-series"
+    ]["post"]
+    assert "before targeted benchmark assignment" in benchmark_catalog_route["description"]
+    assert "governed classification labels" in index_catalog_route["description"]
+    assert "not the default benchmark-math source" in benchmark_return_series["description"]
 
     coverage_param = next(
         parameter
@@ -1775,6 +1799,18 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     )
     assert reference_page_metadata["properties"]["request_scope_fingerprint"]["description"] == (
         "Deterministic fingerprint of the request scope bound to this page sequence."
+    )
+
+
+async def test_openapi_fully_documents_benchmark_reference_catalog_schema_family(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(
+        schema, BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS
     )
 
 
