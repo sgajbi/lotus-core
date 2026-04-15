@@ -1593,6 +1593,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     benchmark_return_series = schema["paths"][
         "/integration/benchmarks/{benchmark_id}/return-series"
     ]["post"]
+    assert (
+        "Used directly by lotus-gateway workspace benchmark selection flows"
+        in (benchmark_catalog_route["description"])
+    )
     assert "before targeted benchmark assignment" in benchmark_catalog_route["description"]
     assert (
         "Prefer the targeted routes once a concrete benchmark identifier is known."

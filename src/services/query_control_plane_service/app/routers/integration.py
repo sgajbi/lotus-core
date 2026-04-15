@@ -430,9 +430,10 @@ async def fetch_benchmark_definition(
     description=(
         "What: Return benchmark master records effective on a requested date.\n"
         "How: Applies optional filters and effective dating in query service.\n"
-        "When: Used by downstream integration workflows to discover valid benchmark references "
-        "before targeted benchmark assignment, definition, market-series, or benchmark-return "
-        "retrieval. Prefer the targeted routes once a concrete benchmark identifier is known."
+        "When: Used directly by lotus-gateway workspace benchmark selection flows and other "
+        "downstream discovery workflows to find valid benchmark references before targeted "
+        "benchmark assignment, definition, market-series, or benchmark-return retrieval. "
+        "Prefer the targeted routes once a concrete benchmark identifier is known."
     ),
 )
 async def fetch_benchmark_catalog(

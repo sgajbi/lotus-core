@@ -293,8 +293,9 @@ Swagger now also makes the supporting-route boundary clearer for this adjacent f
 
 1. benchmark definition is point-in-time benchmark context, not the strategic cross-window
    benchmark calculation contract;
-2. benchmark catalog is discovery-first and should give way to targeted benchmark routes once an
-   identifier is known;
+2. benchmark catalog is discovery-first, now explicitly documents `lotus-gateway` workspace
+   benchmark-selection usage, and should give way to targeted benchmark routes once an identifier
+   is known;
 3. raw index and benchmark return-series routes are evidence or validation sources, not substitutes
    for composition-window plus market-series sourcing when lower-level benchmark reconstruction is
    required.
