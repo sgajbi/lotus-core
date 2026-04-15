@@ -676,10 +676,12 @@ error path.
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-risk` | Correct. Gateway uses the route for workspace state sourcing, and risk uses it for concentration and rolling-Sharpe currency/valuation context. |
+| `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-risk` | Correct. Gateway uses the route for workspace state sourcing, and risk uses it for concentration and rolling-Sharpe currency/valuation context. No active direct `lotus-manage` or `lotus-advise` client was found in this pass. |
 
 `lotus-manage` remains an intended consumer in the source-data catalog, but direct active code use
-was not found in this pass and should not be overstated as live validated.
+was not found in this pass and should not be overstated as live validated. The same is true for
+`lotus-advise` on this specific route family: advisory work is currently anchored more strongly to
+simulation and stateful-context seams than to direct `core-snapshot` reads.
 
 ### Swagger / OpenAPI Assessment
 
@@ -694,13 +696,13 @@ For this endpoint, Swagger now makes the following explicit:
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Already addressed for core-snapshot. The route documents 404 behavior and integration tests assert the not-found response example. | Close as implemented when issue hygiene is updated. |
+| `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Already addressed for core-snapshot. The route documents 404 behavior and integration tests assert the not-found response example. | Closure comment posted; close as implemented unless fresh contrary evidence appears. |
 
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |
 | --- | --- | --- | --- | --- |
-| `PortfolioStateSnapshot` | `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-advise`, `lotus-manage`, `lotus-risk` | `lotus-gateway/src/app/clients/lotus_core_query_client.py`; `lotus-risk` RFC and live characterization references. | Core OpenAPI/catalog guards plus downstream unit/integration tests in gateway and risk. `lotus-manage` is catalog-intended and should be validated through product workflow tests when it starts consuming the route directly. |
+| `PortfolioStateSnapshot` | `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-advise`, `lotus-manage`, `lotus-risk` | Direct active client evidence exists in `lotus-gateway/src/app/clients/lotus_core_query_client.py` and `lotus-risk/src/app/integrations/lotus_core_client.py`. `lotus-manage` currently documents intended adoption but does not yet have an active outbound client. `lotus-advise` currently uses other lotus-core seams more directly than `core-snapshot` itself. | Strong for gateway and risk. `lotus-manage` and `lotus-advise` remain catalog-intended and should not be described as live direct consumers of this route until their product flows bind to it. |
 | `PositionTimeseriesInput` | `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries` | `lotus-performance`, `lotus-risk` | `lotus-performance` core integration and stateful attribution/contribution services; `lotus-risk/src/app/services/attribution_mode_adapter.py`. | Strong. Core route and schema tests, performance client tests, performance API/e2e mocked journey tests, and risk attribution adapter tests. |
 | `PortfolioTimeseriesInput` | `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` | `lotus-performance`, `lotus-risk` | `lotus-performance` returns/TWR source services and canonical TWR inspection script. Risk is catalog-intended for portfolio-level analytics input, with current direct evidence stronger for position attribution and risk-free sources. | Strong for performance. Core catalog/OpenAPI tests protect the contract; risk portfolio-timeseries runtime use should be rechecked when risk portfolio-level analytics expands. |
 | `PortfolioAnalyticsReference` | `POST /integration/portfolios/{portfolio_id}/analytics/reference` | `lotus-performance`, `lotus-risk` | `lotus-performance` core integration service; `lotus-gateway` uses this route as workspace source context even though gateway is not the primary analytics owner. | Strong for performance and core contract. Gateway client test covers pass-through source context. Risk should use this only where it needs analytics lifecycle/reference context, not operational holdings. |
