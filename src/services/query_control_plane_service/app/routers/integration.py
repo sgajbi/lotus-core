@@ -155,7 +155,9 @@ async def get_effective_integration_policy(
         "How: Applies tenant and consumer policy, resolves baseline or simulation state, "
         "and returns reproducibility metadata including request fingerprint and freshness.\n"
         "When: Used by downstream systems that need policy-aware positions, totals, "
-        "delta, or enrichment views without direct query-service coupling."
+        "delta, or enrichment views without direct query-service coupling. This route "
+        "publishes portfolio-state source data, not downstream analytics conclusions such as "
+        "performance returns, risk metrics, or advisory recommendation ownership."
     ),
     openapi_extra=source_data_product_openapi_extra("PortfolioStateSnapshot"),
 )

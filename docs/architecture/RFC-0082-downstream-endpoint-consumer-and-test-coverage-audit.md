@@ -567,6 +567,48 @@ Related downstream follow-up remains valid:
 | `lotus-gateway #109` | Downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. | Keep open in gateway. |
 | `lotus-gateway #73` | Platform capabilities latency issue in gateway aggregation, not a lotus-core publication defect. | Keep open in gateway. |
 
+## Certified Endpoint Slice: Core Snapshot
+
+This certification pass covers:
+
+1. `POST /integration/portfolios/{portfolio_id}/core-snapshot`
+
+### Route Contract Decision
+
+This remains the strategic state snapshot contract for downstream consumers that need governed
+portfolio-state sections.
+
+The contract boundary is now explicit in Swagger and tests:
+
+1. use it for policy-aware baseline or simulation state;
+2. use it for positions, deltas, totals, valuation context, and enrichment;
+3. do not use it as a substitute for downstream performance, risk, or advisory output contracts;
+4. treat it as source data publication, not analytics ownership transfer.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-risk` | Correct. Gateway uses the route for workspace state sourcing, and risk uses it for concentration and rolling-Sharpe currency/valuation context. |
+
+`lotus-manage` remains an intended consumer in the source-data catalog, but direct active code use
+was not found in this pass and should not be overstated as live validated.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. this route publishes portfolio-state source sections, not analytics conclusions;
+2. simulation request block semantics are explicit and exampled;
+3. request options and section payload semantics are explicit and exampled;
+4. the full core-snapshot schema family is now protected by a recursive OpenAPI completeness guard.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Already addressed for core-snapshot. The route documents 404 behavior and integration tests assert the not-found response example. | Close as implemented when issue hygiene is updated. |
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |

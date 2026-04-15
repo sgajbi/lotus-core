@@ -103,6 +103,23 @@ SIMULATION_SCHEMA_ROOTS = {
     "ProjectedSummaryResponse",
 }
 
+CORE_SNAPSHOT_SCHEMA_ROOTS = {
+    "CoreSnapshotSimulationOptions",
+    "CoreSnapshotRequestOptions",
+    "CoreSnapshotRequest",
+    "CoreSnapshotValuationContext",
+    "CoreSnapshotSimulationMetadata",
+    "CoreSnapshotPolicyProvenance",
+    "CoreSnapshotGovernanceMetadata",
+    "CoreSnapshotFreshnessMetadata",
+    "CoreSnapshotPositionRecord",
+    "CoreSnapshotDeltaRecord",
+    "CoreSnapshotInstrumentEnrichmentRecord",
+    "CoreSnapshotPortfolioTotals",
+    "CoreSnapshotSections",
+    "CoreSnapshotResponse",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1436,9 +1453,27 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert core_snapshot_response["properties"]["request_fingerprint"]["description"] == (
         "Deterministic fingerprint of the full core snapshot request contract."
     )
+    assert "portfolio-state source data" in core_snapshot["description"]
+    assert core_snapshot_request["properties"]["simulation"]["description"].startswith(
+        "Simulation options required only when snapshot_mode=SIMULATION."
+    )
+    assert core_snapshot_request["properties"]["options"]["description"].startswith(
+        "Request-level section behavior options controlling zero-quantity inclusion"
+    )
+    assert core_snapshot_response["properties"]["sections"]["description"].startswith(
+        "Requested snapshot section payload."
+    )
     assert core_snapshot_sections["properties"]["positions_delta"]["description"] == (
         "Per-security baseline versus projected deltas."
     )
+
+
+async def test_openapi_fully_documents_core_snapshot_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, CORE_SNAPSHOT_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_benchmark_reference_parameters(async_test_client):
