@@ -101,7 +101,8 @@ infer those statuses only from OpenAPI examples.
 
 The same dependency lane now covers the adjunct analytics export contract family, including create,
 status lookup, JSON result retrieval, NDJSON result retrieval with gzip transport, `404` for
-missing jobs, and `422` for incomplete export payload state.
+missing jobs, `422` for incomplete export payload state, and `422` for export-result
+serialization requests that the persisted job cannot satisfy.
 
 ### Issue Disposition For This Endpoint Family
 

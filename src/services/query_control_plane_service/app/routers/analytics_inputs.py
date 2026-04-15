@@ -270,7 +270,10 @@ async def get_analytics_export_job(
             "content": {"application/json": {"example": ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE}},
         },
         HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Export job is incomplete or source payload unavailable.",
+            "description": (
+                "Export job is incomplete, source payload unavailable, or requested "
+                "serialization is unsupported."
+            ),
             "content": {"application/json": {"example": ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE}},
         },
     },

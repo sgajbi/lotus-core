@@ -1216,6 +1216,10 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
+    assert (
+        export_result["responses"]["422"]["description"]
+        == "Export job is incomplete, source payload unavailable, or requested serialization is unsupported."
+    )
 
     components = schema["components"]["schemas"]
     page_metadata = components["PageMetadata"]

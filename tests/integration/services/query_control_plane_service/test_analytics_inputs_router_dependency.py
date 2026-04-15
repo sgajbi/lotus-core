@@ -575,3 +575,22 @@ async def test_get_analytics_export_job_result_incomplete_maps_to_422(async_test
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Export job JOB-AN-0001 is not complete."
+
+
+async def test_get_analytics_export_job_result_unsupported_configuration_maps_to_422(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+    mock_service.get_export_result_ndjson = AsyncMock(
+        side_effect=AnalyticsInputError(
+            "UNSUPPORTED_CONFIGURATION",
+            "Export job JOB-AN-0001 cannot be rendered as NDJSON.",
+        )
+    )
+
+    response = await client.get(
+        "/integration/exports/analytics-timeseries/jobs/aexp_1/result?result_format=ndjson&compression=none"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Export job JOB-AN-0001 cannot be rendered as NDJSON."
