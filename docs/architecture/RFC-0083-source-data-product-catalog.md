@@ -204,7 +204,10 @@ timestamp from the transaction rows included in their year-to-date aggregation w
 
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly
-path. It leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs
+path. Snapshot-backed baseline responses populate `freshness.snapshot_timestamp` and top-level
+`latest_evidence_timestamp` from durable position snapshot and position-state timestamps. Historical
+fallback baselines leave those fields null because they are not resolved snapshot evidence. The
+response leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs
 for deterministic snapshot identity. The core snapshot freshness block populates
 `freshness.snapshot_epoch` only when the returned snapshot-backed baseline rows resolve to one
 unambiguous position epoch; mixed per-security epochs remain null rather than claiming a single

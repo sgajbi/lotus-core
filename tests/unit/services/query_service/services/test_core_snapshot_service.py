@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -27,12 +27,16 @@ def _snapshot_row(
     quantity: Decimal = Decimal("10"),
     market_value: Decimal = Decimal("100"),
     market_value_local: Decimal = Decimal("100"),
+    created_at: datetime | None = None,
+    updated_at: datetime | None = None,
 ):
     return SimpleNamespace(
         security_id=security_id,
         quantity=quantity,
         market_value=market_value,
         market_value_local=market_value_local,
+        created_at=created_at,
+        updated_at=updated_at,
     )
 
 
@@ -71,7 +75,19 @@ def mock_dependencies():
         base_currency="USD",
     )
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
-        (_snapshot_row(), _instrument(), SimpleNamespace(status="CURRENT", epoch=7))
+        (
+            _snapshot_row(
+                created_at=datetime(2026, 2, 27, 9, 30, tzinfo=UTC),
+                updated_at=datetime(2026, 2, 27, 10, 0, tzinfo=UTC),
+            ),
+            _instrument(),
+            SimpleNamespace(
+                status="CURRENT",
+                epoch=7,
+                created_at=datetime(2026, 2, 27, 9, 0, tzinfo=UTC),
+                updated_at=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
+            ),
+        )
     ]
     position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = []
     simulation_repo.get_session.return_value = SimpleNamespace(
@@ -148,6 +164,7 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.request_fingerprint
     assert response.freshness.baseline_source == "position_state"
     assert response.freshness.snapshot_epoch == 7
+    assert response.freshness.snapshot_timestamp == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
     assert response.freshness.fallback_reason is None
     assert response.governance.consumer_system == "lotus-performance"
     assert response.governance.tenant_id == "default"
@@ -158,7 +175,7 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.restatement_version == "current"
     assert response.reconciliation_status == "UNKNOWN"
     assert response.data_quality_status == "UNKNOWN"
-    assert response.latest_evidence_timestamp is None
+    assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
     assert response.snapshot_id is None
     assert response.policy_version == "snapshot.policy.inline.default"
@@ -396,9 +413,14 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
                 quantity=Decimal("3"),
                 cost_basis=Decimal("45"),
                 cost_basis_local=Decimal("45"),
+                created_at=datetime(2026, 2, 27, 8, 30, tzinfo=UTC),
+                updated_at=datetime(2026, 2, 27, 8, 45, tzinfo=UTC),
             ),
             _instrument("SEC_BOND_US", "USD", "BOND"),
-            SimpleNamespace(status="CURRENT"),
+            SimpleNamespace(
+                status="CURRENT",
+                updated_at=datetime(2026, 2, 27, 8, 50, tzinfo=UTC),
+            ),
         )
     ]
     service = CoreSnapshotService(AsyncMock())
@@ -412,7 +434,25 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
     assert rows["SEC_BOND_US"]["market_value_base"] == Decimal("45")
     assert source.baseline_source == "position_history"
     assert source.freshness_status == "HISTORICAL_FALLBACK"
+    assert source.snapshot_timestamp is None
     assert source.fallback_reason == "NO_CURRENT_POSITION_STATE_ROWS"
+
+
+async def test_latest_snapshot_timestamp_uses_latest_row_or_state_timestamp():
+    latest = CoreSnapshotService._latest_snapshot_timestamp(
+        [
+            (
+                _snapshot_row(
+                    created_at=datetime(2026, 2, 27, 9, 30, tzinfo=UTC),
+                    updated_at=datetime(2026, 2, 27, 10, 0, tzinfo=UTC),
+                ),
+                _instrument(),
+                SimpleNamespace(updated_at=datetime(2026, 2, 27, 10, 5, tzinfo=UTC)),
+            )
+        ]
+    )
+
+    assert latest == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
 
 
 async def test_resolve_baseline_positions_leaves_snapshot_epoch_null_for_mixed_epochs(

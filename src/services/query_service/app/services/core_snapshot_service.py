@@ -291,6 +291,7 @@ class CoreSnapshotService:
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 tenant_id=resolved_tenant_id,
+                latest_evidence_timestamp=freshness_meta.snapshot_timestamp,
                 policy_version=policy_provenance.policy_version,
             ),
         )
@@ -376,13 +377,27 @@ class CoreSnapshotService:
         freshness = CoreSnapshotFreshnessMetadata(
             freshness_status=("CURRENT_SNAPSHOT" if use_snapshot else "HISTORICAL_FALLBACK"),
             baseline_source=source,
-            snapshot_timestamp=None,
+            snapshot_timestamp=(self._latest_snapshot_timestamp(rows) if use_snapshot else None),
             snapshot_epoch=(
                 self._single_resolved_epoch(rows) if use_snapshot and baseline else None
             ),
             fallback_reason=(None if use_snapshot else "NO_CURRENT_POSITION_STATE_ROWS"),
         )
         return dict(sorted(baseline.items(), key=lambda item: item[0])), freshness
+
+    @staticmethod
+    def _latest_snapshot_timestamp(rows: list[Any]) -> datetime | None:
+        timestamps: list[datetime] = []
+        for row, _instrument, state in rows:
+            for candidate in (
+                getattr(row, "updated_at", None),
+                getattr(row, "created_at", None),
+                getattr(state, "updated_at", None),
+                getattr(state, "created_at", None),
+            ):
+                if isinstance(candidate, datetime):
+                    timestamps.append(candidate)
+        return max(timestamps) if timestamps else None
 
     @staticmethod
     def _single_resolved_epoch(rows: list[Any]) -> int | None:
