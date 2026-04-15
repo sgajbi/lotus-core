@@ -73,7 +73,7 @@ EXPECTED_SLICE_ARTIFACTS = {
         "src/services/query_service/app/enterprise_readiness.py",
         "src/services/query_service/app/settings.py",
         "tests/unit/services/query_service/test_enterprise_readiness.py",
-        "tests/unit/services/query_service/test_settings.py",
+        "tests/unit/services/query_service/test_query_service_settings.py",
         "src/services/query_control_plane_service/app/enterprise_readiness.py",
         "src/services/query_control_plane_service/app/settings.py",
         "tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py",
