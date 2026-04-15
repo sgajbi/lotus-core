@@ -29,8 +29,10 @@ slice:
 11. eventing and supportability catalog,
 12. production-readiness closure ledger.
 
-The closure guard validates that every slice is present in the ledger and every ledger artifact exists
-in the repository.
+The closure guard validates that every slice is present in the ledger, every required slice artifact
+is still listed, and every ledger artifact exists in the repository. This prevents closure drift where
+a slice remains marked complete but loses the specific guard, model, test, or target document that
+made the slice auditable.
 
 ## Runtime Closure Not Claimed
 

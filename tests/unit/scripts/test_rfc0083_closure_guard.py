@@ -17,7 +17,7 @@ def _ledger() -> dict[str, object]:
                 "title": f"Slice {slice_number}",
                 "status": "completed",
                 "validationLane": "unit",
-                "artifacts": [f"slice-{slice_number}.md"],
+                "artifacts": sorted(guard.EXPECTED_SLICE_ARTIFACTS[slice_number]),
             }
             for slice_number in range(12)
         ],
@@ -25,8 +25,11 @@ def _ledger() -> dict[str, object]:
 
 
 def _write_artifacts(repo_root: Path) -> None:
-    for slice_number in range(12):
-        (repo_root / f"slice-{slice_number}.md").write_text("ok\n", encoding="utf-8")
+    for artifacts in guard.EXPECTED_SLICE_ARTIFACTS.values():
+        for artifact in artifacts:
+            path = repo_root / artifact
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("ok\n", encoding="utf-8")
 
 
 def test_evaluate_ledger_accepts_complete_ledger(tmp_path: Path) -> None:
@@ -47,11 +50,33 @@ def test_evaluate_ledger_rejects_missing_slice(tmp_path: Path) -> None:
 
 def test_evaluate_ledger_rejects_missing_artifact(tmp_path: Path) -> None:
     _write_artifacts(tmp_path)
-    (tmp_path / "slice-3.md").unlink()
+    (tmp_path / "src/libs/portfolio-common/portfolio_common/reconstruction_identity.py").unlink()
 
     errors = guard.evaluate_ledger(_ledger(), repo_root=tmp_path)
 
-    assert "slice 3 artifact does not exist: slice-3.md" in errors
+    assert (
+        "slice 3 artifact does not exist: "
+        "src/libs/portfolio-common/portfolio_common/reconstruction_identity.py"
+    ) in errors
+
+
+def test_evaluate_ledger_rejects_missing_required_artifact_entry(tmp_path: Path) -> None:
+    _write_artifacts(tmp_path)
+    ledger = _ledger()
+    slices = ledger["slices"]  # type: ignore[assignment]
+    slices[6]["artifacts"] = [
+        "docs/architecture/RFC-0083-source-data-product-catalog.md",
+        "src/libs/portfolio-common/portfolio_common/source_data_products.py",
+    ]
+
+    errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
+
+    assert (
+        "slice 6 is missing required artifact(s): "
+        "scripts/source_data_product_contract_guard.py, "
+        "tests/unit/libs/portfolio-common/test_source_data_products.py, "
+        "tests/unit/scripts/test_source_data_product_contract_guard.py"
+    ) in errors
 
 
 def test_evaluate_ledger_rejects_runtime_production_claim(tmp_path: Path) -> None:
@@ -89,7 +114,7 @@ def test_evaluate_ledger_rejects_absolute_artifact_path(tmp_path: Path) -> None:
     _write_artifacts(tmp_path)
     ledger = _ledger()
     slices = ledger["slices"]  # type: ignore[assignment]
-    slices[0]["artifacts"] = [str((tmp_path / "slice-0.md").resolve())]
+    slices[0]["artifacts"] = [str((tmp_path / "REPOSITORY-ENGINEERING-CONTEXT.md").resolve())]
 
     errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
 

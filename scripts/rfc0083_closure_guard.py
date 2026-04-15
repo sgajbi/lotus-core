@@ -14,6 +14,71 @@ LEDGER_SPEC_VERSION = "1.0.0"
 APPLICATION = "lotus-core"
 GOVERNING_RFCS = {"RFC-0082", "RFC-0083"}
 EXPECTED_SLICES = set(range(12))
+EXPECTED_SLICE_ARTIFACTS = {
+    0: {
+        "docs/architecture/RFC-0083-target-state-gap-analysis.md",
+        "REPOSITORY-ENGINEERING-CONTEXT.md",
+    },
+    1: {
+        "docs/standards/temporal-vocabulary.md",
+        "docs/standards/temporal-vocabulary-allowlist.json",
+        "scripts/temporal_vocabulary_guard.py",
+        "tests/unit/scripts/test_temporal_vocabulary_guard.py",
+    },
+    2: {
+        "docs/standards/route-contract-family-registry.json",
+        "scripts/route_contract_family_guard.py",
+        "tests/unit/scripts/test_route_contract_family_guard.py",
+    },
+    3: {
+        "docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md",
+        "src/libs/portfolio-common/portfolio_common/reconstruction_identity.py",
+        "tests/unit/libs/portfolio-common/test_reconstruction_identity.py",
+    },
+    4: {
+        "docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md",
+        "src/libs/portfolio-common/portfolio_common/ingestion_evidence.py",
+        "tests/unit/libs/portfolio-common/test_ingestion_evidence.py",
+    },
+    5: {
+        "docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md",
+        "src/libs/portfolio-common/portfolio_common/reconciliation_quality.py",
+        "tests/unit/libs/portfolio-common/test_reconciliation_quality.py",
+    },
+    6: {
+        "docs/architecture/RFC-0083-source-data-product-catalog.md",
+        "src/libs/portfolio-common/portfolio_common/source_data_products.py",
+        "tests/unit/libs/portfolio-common/test_source_data_products.py",
+        "scripts/source_data_product_contract_guard.py",
+        "tests/unit/scripts/test_source_data_product_contract_guard.py",
+    },
+    7: {
+        "docs/architecture/RFC-0083-market-reference-data-target-model.md",
+        "src/libs/portfolio-common/portfolio_common/market_reference_quality.py",
+        "tests/unit/libs/portfolio-common/test_market_reference_quality.py",
+    },
+    8: {
+        "docs/architecture/RFC-0083-endpoint-consolidation-disposition.md",
+        "src/services/query_service/app/routers/reporting.py",
+        "tests/integration/services/query_service/test_main_app.py",
+    },
+    9: {
+        "docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md",
+        "src/libs/portfolio-common/portfolio_common/source_data_security.py",
+        "tests/unit/libs/portfolio-common/test_source_data_security.py",
+    },
+    10: {
+        "docs/architecture/RFC-0083-eventing-supportability-target-model.md",
+        "src/libs/portfolio-common/portfolio_common/event_supportability.py",
+        "tests/unit/libs/portfolio-common/test_event_supportability.py",
+    },
+    11: {
+        "docs/architecture/RFC-0083-production-readiness-closure.md",
+        "docs/standards/rfc-0083-implementation-ledger.json",
+        "scripts/rfc0083_closure_guard.py",
+        "tests/unit/scripts/test_rfc0083_closure_guard.py",
+    },
+}
 
 
 def load_ledger(path: Path = LEDGER_PATH) -> dict[str, Any]:
@@ -65,15 +130,24 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
         if not isinstance(artifacts, list) or not artifacts:
             errors.append(f"slice {slice_number} must list artifacts")
             continue
+        artifact_set: set[str] = set()
         for artifact in artifacts:
             if not isinstance(artifact, str) or not artifact.strip():
                 errors.append(f"slice {slice_number} has invalid artifact path: {artifact!r}")
                 continue
+            artifact_set.add(artifact)
             if Path(artifact).is_absolute():
                 errors.append(f"slice {slice_number} artifact must be repo-relative: {artifact}")
                 continue
             if not (repo_root / artifact).exists():
                 errors.append(f"slice {slice_number} artifact does not exist: {artifact}")
+        required_artifacts = EXPECTED_SLICE_ARTIFACTS.get(slice_number, set())
+        missing_required_artifacts = sorted(required_artifacts - artifact_set)
+        if missing_required_artifacts:
+            errors.append(
+                f"slice {slice_number} is missing required artifact(s): "
+                + ", ".join(missing_required_artifacts)
+            )
 
     missing_slices = EXPECTED_SLICES - seen_slices
     extra_slices = seen_slices - EXPECTED_SLICES
