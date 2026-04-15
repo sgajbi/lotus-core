@@ -512,7 +512,7 @@ narrow governed-scope reads such as index-only classification pulls.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #306` missing sector labels for canonical benchmark indices | Valid downstream-impacting classification coverage issue. The taxonomy contract itself is correct; the remaining work is source coverage and/or more explicit unsupported-dimension signaling. | Keep open. |
+| `lotus-core #306` missing sector labels for canonical benchmark indices | Current repo truth indicates this is likely stale rather than an active contract defect. The canonical demo/seed bundle now publishes governed broad-market sector labels for `IDX_GLOBAL_EQUITY_TR` and `IDX_GLOBAL_BOND_TR`, repository coverage proves effective-dated index catalog resolution keeps those labels, and the `indices/catalog` contract now documents that broad benchmark component indices can legitimately publish broad-market sector labels instead of issuer sectors. | Closure comment should reference the canonical seed and repository evidence; re-open only if fresh live ingestion/runtime evidence again omits the labels. |
 
 No new downstream migration issue is required from this slice. The active need here is classification
 coverage quality, not route replacement.

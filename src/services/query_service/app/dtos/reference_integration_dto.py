@@ -430,8 +430,12 @@ class IndexDefinitionResponse(BaseModel):
     )
     classification_labels: dict[str, str] = Field(
         default_factory=dict,
-        description="Canonical index classification labels required for attribution.",
-        examples=[{"asset_class": "equity", "sector": "technology", "region": "global"}],
+        description=(
+            "Canonical index classification labels required for attribution and benchmark "
+            "exposure grouping. Broad benchmark component indices can carry governed "
+            "broad-market sector labels rather than issuer sectors."
+        ),
+        examples=[{"asset_class": "equity", "sector": "broad_market_equity", "region": "global"}],
     )
     effective_from: date = Field(
         ..., description="Definition effective start date.", examples=["2025-01-01"]

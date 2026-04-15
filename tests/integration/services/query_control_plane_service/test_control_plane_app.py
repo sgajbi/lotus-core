@@ -1516,6 +1516,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     ]["post"]
     assert "before targeted benchmark assignment" in benchmark_catalog_route["description"]
     assert "governed classification labels" in index_catalog_route["description"]
+    assert "broad-market sector labels" in index_catalog_route["description"]
     assert "prefer `index_ids` to avoid full-catalog scans" in index_catalog_route["description"]
     assert "not the default benchmark-math source" in benchmark_return_series["description"]
 
@@ -1561,6 +1562,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert index_catalog_request["properties"]["index_ids"]["description"].startswith(
         "Optional targeted index identifiers to resolve."
     )
+    assert index_catalog_request["properties"]["index_ids"]["type"] == "array"
+    assert components["IndexDefinitionResponse"]["properties"]["classification_labels"][
+        "description"
+    ].startswith("Canonical index classification labels required for attribution")
     assert benchmark_assignment_response["properties"]["product_name"]["default"] == (
         "BenchmarkAssignment"
     )

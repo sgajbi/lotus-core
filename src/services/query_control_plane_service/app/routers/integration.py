@@ -444,9 +444,10 @@ async def fetch_benchmark_catalog(
         "How: Applies optional targeted index_ids filters, broader attribute filters, and "
         "effective dating in query service.\n"
         "When: Used by lotus-performance and attribution pipelines to discover "
-        "canonical index metadata and governed classification labels. When a downstream caller "
-        "already knows the benchmark component universe, prefer `index_ids` to avoid full-catalog "
-        "scans."
+        "canonical index metadata and governed classification labels. Benchmark component indices "
+        "can publish broad-market sector labels such as `broad_market_equity` or "
+        "`broad_market_fixed_income` for exposure grouping. When a downstream caller already "
+        "knows the benchmark component universe, prefer `index_ids` to avoid full-catalog scans."
     ),
 )
 async def fetch_index_catalog(
