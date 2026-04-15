@@ -1,5 +1,6 @@
 import pytest
 
+import portfolio_common.event_supportability as event_supportability
 from portfolio_common import events
 from portfolio_common.event_supportability import (
     CONTROL_EXECUTION,
@@ -18,6 +19,7 @@ from portfolio_common.event_supportability import (
     get_event_family_definition,
     validate_event_supportability_catalog,
 )
+from portfolio_common.source_data_security import SourceDataSecurityProfile
 
 
 def test_event_supportability_catalog_validates_against_existing_event_models() -> None:
@@ -190,6 +192,13 @@ def test_supportability_surfaces_are_operator_only_and_evidence_backed() -> None
         assert surface.diagnostics
 
 
+def test_supportability_surface_evidence_uses_operator_only_security_profiles() -> None:
+    for surface in SUPPORTABILITY_SURFACE_DEFINITIONS:
+        profile = event_supportability.get_source_data_security_profile(surface.evidence_bundle)
+
+        assert profile.operator_only is True
+
+
 def test_supportability_surfaces_use_canonical_route_family_values() -> None:
     surface_families = {surface.route_family for surface in SUPPORTABILITY_SURFACE_DEFINITIONS}
 
@@ -316,4 +325,36 @@ def test_validation_rejects_unknown_supportability_surface_route_family() -> Non
     )
 
     with pytest.raises(ValueError, match="route_family has unsupported value"):
+        validate_event_supportability_catalog((), (invalid_surface,))
+
+
+def test_validation_rejects_supportability_surface_without_operator_security_profile(
+    monkeypatch,
+) -> None:
+    invalid_surface = SupportabilitySurfaceDefinition(
+        name="InvalidSurface",
+        service_name="query_control_plane_service",
+        route_family=CONTROL_PLANE_AND_POLICY,
+        operator_only=True,
+        evidence_bundle=DATA_QUALITY_COVERAGE_REPORT,
+        diagnostics=("lineage",),
+    )
+
+    monkeypatch.setattr(
+        event_supportability,
+        "get_source_data_security_profile",
+        lambda _: SourceDataSecurityProfile(
+            product_name=DATA_QUALITY_COVERAGE_REPORT,
+            tenant_required=True,
+            entitlement_required=True,
+            access_classification="business_consumer_access",
+            sensitivity_classification="client_confidential",
+            retention_requirement="retain_for_client_record",
+            audit_requirement="audit_read_and_export",
+            pii_fields=("portfolio_id",),
+            operator_only=False,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="operator-only security profile"):
         validate_event_supportability_catalog((), (invalid_surface,))

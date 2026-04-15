@@ -9,6 +9,7 @@ from portfolio_common.source_data_products import (
     CONTROL_PLANE_AND_POLICY,
     SOURCE_DATA_PRODUCT_CATALOG,
 )
+from portfolio_common.source_data_security import get_source_data_security_profile
 
 
 SOURCE_INGESTION_EVENT = "source_ingestion_event"
@@ -458,6 +459,11 @@ def validate_event_supportability_catalog(
         _normalize_required_text(surface.service_name, "service_name")
         _require_allowed(surface.route_family, "route_family", supported_surface_route_families)
         _require_allowed(surface.evidence_bundle, "evidence_bundle", supported_evidence)
+        evidence_profile = get_source_data_security_profile(surface.evidence_bundle)
+        if not evidence_profile.operator_only:
+            raise ValueError(
+                f"{surface.name} evidence bundle must use an operator-only security profile"
+            )
         if not surface.operator_only:
             raise ValueError(f"{surface.name} must be operator-only")
         if not surface.diagnostics:

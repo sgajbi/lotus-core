@@ -499,8 +499,9 @@ Slice 10 eventing and supportability target modeling is recorded in:
 The model defines event family governance, event schema-governance requirements, supportability
 surface posture, operator-only diagnostics, and evidence bundle linkage. The helper validates event
 family definitions, schema model bindings, required idempotency/correlation/schema version posture,
-operator supportability surfaces, and actual outbox `event_type`/topic alignment against runtime
-emissions. `OutboxRepository` now centrally enriches payloads with `event_type`, `schema_version`, and
+operator supportability surfaces, operator-only security profile bindings for support evidence, and
+actual outbox `event_type`/topic alignment against runtime emissions. `OutboxRepository` now
+centrally enriches payloads with `event_type`, `schema_version`, and
 `correlation_id` supportability metadata and rejects conflicting caller-supplied metadata. Shared event
 models inherit from `CoreEventModel`, which explicitly ignores envelope metadata that is not part of a
 specific domain payload. This slice does not change Kafka topics, generated OpenAPI, persistence schema,

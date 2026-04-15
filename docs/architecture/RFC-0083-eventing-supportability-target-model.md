@@ -109,6 +109,8 @@ Supportability surface `route_family` values must use the same canonical RFC-008
 vocabulary as the route contract-family registry. The accepted Slice 10 values are
 `Control-Plane And Policy` and `Control Execution`. Lower-case internal labels such as
 `control_plane_and_policy` or `control_execution` are not valid in this catalog.
+Supportability surface evidence bundles must also resolve to RFC-0083 Slice 9 operator-only security
+profiles, keeping operator diagnostics aligned with the source-data product security model.
 
 ## Runtime Follow-Up
 
