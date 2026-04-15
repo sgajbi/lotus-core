@@ -184,6 +184,13 @@ and policy versioning are wired for these products. `reconciliation_status` and
 `data_quality_status` remain `UNKNOWN` until the reconciliation and data-quality evidence models are
 joined into operational product responses.
 
+`HoldingsAsOf` portfolio-position responses additionally derive `data_quality_status` from returned
+position evidence. Fully snapshot-backed current holdings are `COMPLETE`; current holdings that
+depend on history-backed fallback or supplement rows are `PARTIAL`; holdings with any non-current
+position-state status are `STALE`; empty holdings or holdings without position-state evidence remain
+`UNKNOWN`. The response also populates `latest_evidence_timestamp` from durable position-row and
+position-state timestamps when available.
+
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly
 path. It leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs

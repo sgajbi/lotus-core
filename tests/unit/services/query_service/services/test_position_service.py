@@ -1,5 +1,5 @@
 # tests/unit/services/query_service/services/test_position_service.py
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
 )
 
 from src.services.query_service.app.repositories.position_repository import PositionRepository
+from src.services.query_service.app.dtos.position_dto import Position
 from src.services.query_service.app.services.position_service import PositionService
 
 pytestmark = pytest.mark.asyncio
@@ -34,7 +35,12 @@ def mock_position_repo() -> AsyncMock:
 
     # --- FIX: Return the correct 3-tuple structure ---
     mock_snapshot = DailyPositionSnapshot(
-        security_id="S1", quantity=Decimal(100), cost_basis=Decimal(1000), date=date(2025, 1, 1)
+        security_id="S1",
+        quantity=Decimal(100),
+        cost_basis=Decimal(1000),
+        date=date(2025, 1, 1),
+        created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
     )
     mock_instrument = Instrument(
         name="Test Instrument",
@@ -47,7 +53,12 @@ def mock_position_repo() -> AsyncMock:
         rating="AA+",
         liquidity_tier="L2",
     )
-    mock_state = PositionState(status="CURRENT", epoch=1)
+    mock_state = PositionState(
+        status="CURRENT",
+        epoch=1,
+        created_at=datetime(2025, 1, 1, 8, 30, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
+    )
 
     repo.get_latest_positions_by_portfolio.return_value = [
         (mock_snapshot, mock_instrument, mock_state)
@@ -128,7 +139,8 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.generated_at.tzinfo is not None
         assert response.restatement_version == "current"
         assert response.reconciliation_status == "UNKNOWN"
-        assert response.data_quality_status == "UNKNOWN"
+        assert response.data_quality_status == "COMPLETE"
+        assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
         assert response.correlation_id is None
 
 
@@ -222,6 +234,25 @@ async def test_get_portfolio_positions_raises_when_portfolio_missing(mock_positi
             await service.get_portfolio_positions("P404")
 
 
+async def test_holdings_data_quality_status_does_not_infer_missing_state():
+    assert (
+        PositionService._holdings_data_quality_status(
+            positions=[
+                Position(
+                    security_id="S1",
+                    quantity=Decimal("1"),
+                    cost_basis=Decimal("10"),
+                    position_date=date(2025, 1, 1),
+                    instrument_name="Missing state",
+                    reprocessing_status=None,
+                )
+            ],
+            history_supplements=[],
+        )
+        == "UNKNOWN"
+    )
+
+
 async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cost_basis(
     mock_position_repo: AsyncMock,
 ):
@@ -262,7 +293,7 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
         assert response.positions[0].valuation.unrealized_gain_loss == Decimal("0")
         assert response.positions[0].held_since_date == date(2025, 1, 3)
         assert response.as_of_date == date(2025, 1, 1)
-        assert response.data_quality_status == "UNKNOWN"
+        assert response.data_quality_status == "PARTIAL"
 
 
 async def test_get_latest_positions_supplements_missing_snapshot_rows_from_history(
@@ -341,6 +372,7 @@ async def test_get_latest_positions_supplements_missing_snapshot_rows_from_histo
         assert history_position.valuation is not None
         assert history_position.valuation.market_value == Decimal("64840.437")
         assert history_position.reprocessing_status == "REPROCESSING"
+        assert response.data_quality_status == "STALE"
         mock_position_repo.get_latest_snapshot_valuation_map_as_of_date.assert_awaited_once_with(
             "P1", date(2025, 1, 1)
         )
