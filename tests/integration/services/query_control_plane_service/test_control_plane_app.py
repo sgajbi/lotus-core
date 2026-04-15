@@ -182,6 +182,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/support/portfolios/{portfolio_id}/overview" in paths
     assert "/support/portfolios/{portfolio_id}/readiness" in paths
     assert "/simulation-sessions/{session_id}" in paths
+    assert "/integration/advisory/proposals/simulate-execution" in paths
     analytics_input_routes = {
         "/integration/portfolios/{portfolio_id}/analytics/reference",
         "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
@@ -1181,6 +1182,39 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     )
     assert "not for performance analytics" in projected_positions_route["description"]
     assert "not a recommendation" in projected_summary_route["description"]
+
+
+async def test_openapi_describes_advisory_simulation_contract(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    advisory_simulation = schema["paths"]["/integration/advisory/proposals/simulate-execution"][
+        "post"
+    ]
+    assert "intended for lotus-advise" in advisory_simulation["description"]
+    assert (
+        "request hashing, and lifecycle/idempotency orchestration"
+        in (advisory_simulation["description"])
+    )
+    assert (
+        "Do not use it for generic simulation-session lifecycle orchestration"
+        in (advisory_simulation["description"])
+    )
+    assert "advisory recommendation ownership" in advisory_simulation["description"]
+
+    contract_header = next(
+        parameter
+        for parameter in advisory_simulation["parameters"]
+        if parameter["name"] == "X-Lotus-Contract-Version"
+    )
+    assert "must match the version supported by lotus-core" in contract_header["description"]
+
+    precondition = advisory_simulation["responses"]["412"]
+    assert (
+        precondition["description"]
+        == "Caller requested an unsupported canonical simulation contract version."
+    )
 
 
 async def test_openapi_simulation_schema_family_is_fully_documented(async_test_client):

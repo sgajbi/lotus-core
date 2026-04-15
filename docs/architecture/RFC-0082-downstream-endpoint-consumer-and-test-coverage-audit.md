@@ -475,7 +475,9 @@ For this endpoint, Swagger now makes the following explicit:
 
 1. execution projection belongs to `lotus-core`, while recommendation ownership does not;
 2. error responses are published as canonical problem-details payloads;
-3. problem-details fields now carry explicit examples for contract-version mismatch handling.
+3. problem-details fields now carry explicit examples for contract-version mismatch handling;
+4. the control-plane OpenAPI regression suite now asserts the contract-version header semantics and
+   the route-purpose wording that fences this endpoint away from generic simulation-session usage.
 
 ## Certified Endpoint Slice: Classification Taxonomy
 
