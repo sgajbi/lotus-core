@@ -196,7 +196,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                         )
 
                         cashflows = await repo.get_all_cashflows_for_security_date(
-                            event.portfolio_id, event.security_id, event.date
+                            event.portfolio_id, event.security_id, event.date, event.epoch
                         )
 
                         existing_timeseries = await repo.get_position_timeseries(

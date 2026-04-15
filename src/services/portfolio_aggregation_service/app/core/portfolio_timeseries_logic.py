@@ -85,11 +85,7 @@ class PortfolioTimeseriesLogic:
             total_bod_cf += (pos_ts.bod_cashflow_portfolio or Decimal(0)) * rate
             total_eod_mv += (pos_ts.eod_market_value or Decimal(0)) * rate
             total_eod_cf += (pos_ts.eod_cashflow_portfolio or Decimal(0)) * rate
-
-            if (pos_ts.bod_cashflow_portfolio or Decimal(0)) < 0:
-                total_fees += abs(pos_ts.bod_cashflow_portfolio * rate)
-            if (pos_ts.eod_cashflow_portfolio or Decimal(0)) < 0:
-                total_fees += abs(pos_ts.eod_cashflow_portfolio * rate)
+            total_fees += (pos_ts.fees or Decimal(0)) * rate
 
         return PortfolioTimeseries(
             portfolio_id=portfolio.portfolio_id,

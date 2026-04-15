@@ -754,6 +754,64 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
         assert job1.failure_reason == "Stale processing timeout exceeded max attempts"
 
 
+async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
+    clean_db, async_db_session: AsyncSession
+):
+    stale_time = FIXED_STALE_NOW - timedelta(minutes=30)
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-SUPERSEDE-STALE",
+                security_id="S-SUPERSEDE-STALE",
+                valuation_date=date(2025, 8, 11),
+                epoch=1,
+                status="PROCESSING",
+                updated_at=stale_time,
+                correlation_id="corr-old",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="P-SUPERSEDE-STALE",
+                security_id="S-SUPERSEDE-STALE",
+                valuation_date=date(2025, 8, 11),
+                epoch=2,
+                status="COMPLETE",
+                updated_at=FIXED_STALE_NOW,
+                correlation_id="corr-new",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
+        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+    await async_db_session.commit()
+
+    assert reset_count == 0
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .where(
+                    PortfolioValuationJob.portfolio_id == "P-SUPERSEDE-STALE",
+                    PortfolioValuationJob.security_id == "S-SUPERSEDE-STALE",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 11),
+                )
+                .order_by(PortfolioValuationJob.epoch.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert [(job.epoch, job.status, job.failure_reason) for job in jobs] == [
+        (1, "SKIPPED_SUPERSEDED", "Superseded by newer valuation epoch."),
+        (2, "COMPLETE", None),
+    ]
+
+
 async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
     clean_db, setup_stale_job_data, session_factory: async_sessionmaker
 ):

@@ -128,6 +128,18 @@ async def test_process_message_success(
 
         # ASSERT
         mock_fencer_class.assert_not_called()
+        mock_repo.get_last_snapshot_before.assert_awaited_once_with(
+            portfolio_id=mock_event.portfolio_id,
+            security_id=mock_event.security_id,
+            a_date=mock_event.date,
+            epoch=mock_event.epoch,
+        )
+        mock_repo.get_all_cashflows_for_security_date.assert_awaited_once_with(
+            mock_event.portfolio_id,
+            mock_event.security_id,
+            mock_event.date,
+            mock_event.epoch,
+        )
         mock_repo.upsert_position_timeseries.assert_awaited_once()
         mock_outbox_repo.create_outbox_event.assert_awaited_once()
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
@@ -309,9 +321,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     finally:
         correlation_id_var.reset(token)
 
-    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
-        "ts-corr-id"
-    )
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == ("ts-corr-id")
 
 
 async def test_process_message_skips_downstream_fanout_for_identical_timeseries(

@@ -49,9 +49,7 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     claimed_metric.assert_called_once_with(2)
 
     claim_stmt = mock_db_session.execute.await_args.args[0]
-    compiled_query = str(
-        claim_stmt.compile(compile_kwargs={"literal_binds": True})
-    )
+    compiled_query = str(claim_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "NOT (EXISTS" in compiled_query
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
 
@@ -63,9 +61,9 @@ async def test_find_and_reset_stale_jobs_emits_reset_metric(
 
     select_result = MagicMock()
     select_result.all.return_value = [
-        MagicMock(id=101, attempt_count=1),
-        MagicMock(id=102, attempt_count=1),
-        MagicMock(id=103, attempt_count=1),
+        MagicMock(id=101, attempt_count=1, has_newer_epoch=False),
+        MagicMock(id=102, attempt_count=1, has_newer_epoch=False),
+        MagicMock(id=103, attempt_count=1, has_newer_epoch=False),
     ]
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [(101,), (102,), (103,)]
@@ -86,9 +84,28 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     repo = ValuationRepository(mock_db_session)
 
     select_result = MagicMock()
-    select_result.all.return_value = [MagicMock(id=201, attempt_count=3)]
+    select_result.all.return_value = [MagicMock(id=201, attempt_count=3, has_newer_epoch=False)]
     failed_result = MagicMock()
     mock_db_session.execute.side_effect = [select_result, failed_result]
+
+    with patch(
+        "src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository.observe_valuation_worker_stale_resets"
+    ) as reset_metric:
+        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+
+    assert reset_count == 0
+    reset_metric.assert_not_called()
+
+
+async def test_find_and_reset_stale_jobs_skips_superseded_rows_without_emitting_reset_metric(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    select_result = MagicMock()
+    select_result.all.return_value = [MagicMock(id=301, attempt_count=1, has_newer_epoch=True)]
+    skipped_result = MagicMock()
+    mock_db_session.execute.side_effect = [select_result, skipped_result]
 
     with patch(
         "src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository.observe_valuation_worker_stale_resets"
@@ -105,7 +122,7 @@ async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
     repo = ValuationRepository(mock_db_session)
 
     select_result = MagicMock()
-    select_result.all.return_value = [MagicMock(id=101, attempt_count=1)]
+    select_result.all.return_value = [MagicMock(id=101, attempt_count=1, has_newer_epoch=False)]
     update_result = MagicMock()
     update_result.fetchall.return_value = []
     mock_db_session.execute.side_effect = [select_result, update_result]
