@@ -32,6 +32,10 @@ FRONT_OFFICE_SEED_CONTRACT = load_front_office_seed_contract()
 DEFAULT_PORTFOLIO_ID = FRONT_OFFICE_SEED_CONTRACT.portfolio_id
 DEFAULT_BENCHMARK_ID = FRONT_OFFICE_SEED_CONTRACT.benchmark_id
 DEFAULT_POSTGRES_CONTAINER = "lotus-core-app-local-postgres-1"
+DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
+    "IDX_GLOBAL_EQUITY_TR",
+    "IDX_GLOBAL_BOND_TR",
+)
 
 GLOBAL_PROCESSED_EVENT_RESET_PATTERNS = (
     ("position-calculator", "transaction_processing.ready-%"),
@@ -128,12 +132,18 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
 
 
 def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+    benchmark_index_id_list = ", ".join(
+        f"'{index_id}'" for index_id in DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS
+    )
     return "\n".join(
         [
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             f"delete from benchmark_composition_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_return_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_definitions where benchmark_id = '{benchmark_id}';",
+            f"delete from index_price_series where index_id in ({benchmark_index_id_list});",
+            f"delete from index_return_series where index_id in ({benchmark_index_id_list});",
+            f"delete from index_definitions where index_id in ({benchmark_index_id_list});",
         ]
     )
 

@@ -309,6 +309,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "classification_set_id": "wm_global_taxonomy_v1",
                 "classification_labels": {
                     "asset_class": "equity",
+                    "sector": "broad_market_equity",
                     "region": "global",
                 },
                 "effective_from": effective_from,
@@ -327,6 +328,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "classification_set_id": "wm_global_taxonomy_v1",
                 "classification_labels": {
                     "asset_class": "fixed_income",
+                    "sector": "broad_market_fixed_income",
                     "region": "global",
                 },
                 "effective_from": effective_from,

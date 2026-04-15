@@ -40,7 +40,8 @@ The ledger intentionally records `runtimeProductionStatus` as `not-production-cl
 
 Full production runtime closure still requires:
 
-1. affected downstream consumer PR Merge Gates,
+1. lotus-performance affected downstream consumer PR Merge Gate after in-flight benchmark-exposure
+   work is committed or parked,
 2. full gateway/platform authorization and entitlement proof when opt-in service-policy controls
    move to production enforcement,
 3. full cross-service event replay proof when event payload behavior changes beyond the centrally
@@ -67,6 +68,27 @@ The canonical front-office platform end-to-end validation for `PB_SG_GLOBAL_BAL_
 
 That evidence proves the live canonical Workbench/Gateway/Core/Performance/Risk/Manage/Report flow
 for the governed front-office portfolio. It does not replace affected downstream PR Merge Gates.
+
+The downstream PR Merge Gate parity checks completed on 2026-04-15 for:
+
+1. `lotus-risk`: `make ci`,
+2. `lotus-advise`: `make ci`,
+3. `lotus-gateway`: `make ci`.
+
+`lotus-performance` remains intentionally open because its branch has in-flight benchmark-exposure
+work owned by another agent. That gate should be rerun after the in-flight changes are committed or
+parked.
+
+The canonical reference-data issue proof completed on 2026-04-15:
+
+1. `python tools/front_office_portfolio_seed.py --portfolio-id PB_SG_GLOBAL_BAL_001 --start-date
+   2025-03-31 --end-date 2026-04-10 --benchmark-start-date 2025-01-06 --wait-seconds 300`,
+2. live `POST /integration/reference/risk-free-series` returned 90 USD points for `2026-01-01`
+   through `2026-03-31` with `data_quality_status=COMPLETE`,
+3. live `POST /integration/reference/risk-free-series/coverage?currency=USD` returned
+   `total_points=90` and `missing_dates_count=0`,
+4. live `POST /integration/indices/catalog` returned only the canonical component records for
+   `IDX_GLOBAL_EQUITY_TR` and `IDX_GLOBAL_BOND_TR`, each with governed broad-market sector labels.
 
 ## Validation
 

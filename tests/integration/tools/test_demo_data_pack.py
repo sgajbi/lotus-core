@@ -37,6 +37,14 @@ def test_build_demo_bundle_contains_benchmark_seed_data():
     assert {
         composition["composition_weight"] for composition in bundle["benchmark_compositions"]
     } == {"0.6000000000", "0.4000000000"}
+    sector_by_index = {
+        index["index_id"]: index["classification_labels"].get("sector")
+        for index in bundle["indices"]
+    }
+    assert sector_by_index == {
+        "IDX_GLOBAL_EQUITY_TR": "broad_market_equity",
+        "IDX_GLOBAL_BOND_TR": "broad_market_fixed_income",
+    }
 
 
 def test_build_demo_bundle_contains_usd_risk_free_reference_series():

@@ -340,6 +340,14 @@ def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_
         DEFAULT_BENCHMARK_ID.lower()
     )
     assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-05-10"
+    sector_by_index = {
+        index["index_id"]: index["classification_labels"].get("sector")
+        for index in bundle["indices"]
+    }
+    assert sector_by_index == {
+        "IDX_GLOBAL_EQUITY_TR": "broad_market_equity",
+        "IDX_GLOBAL_BOND_TR": "broad_market_fixed_income",
+    }
 
 
 def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically():
@@ -352,6 +360,11 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "delete from benchmark_composition_series" in sql
     assert "delete from benchmark_return_series" in sql
     assert "delete from benchmark_definitions" in sql
+    assert "delete from index_price_series where index_id in" in sql
+    assert "delete from index_return_series where index_id in" in sql
+    assert "delete from index_definitions where index_id in" in sql
+    assert "IDX_GLOBAL_EQUITY_TR" in sql
+    assert "IDX_GLOBAL_BOND_TR" in sql
     assert "PB_SG_GLOBAL_BAL_001" in sql
     assert DEFAULT_BENCHMARK_ID in sql
 

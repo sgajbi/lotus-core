@@ -42,6 +42,28 @@ def _latest_reference_evidence_timestamp(rows: list[Any]) -> datetime | None:
     return max(timestamps) if timestamps else None
 
 
+def _latest_effective_rows(rows: list[Any], *key_fields: str) -> list[Any]:
+    latest_by_key: dict[tuple[Any, ...], Any] = {}
+    for row in sorted(
+        rows,
+        key=lambda item: (
+            tuple(getattr(item, field) for field in key_fields),
+            getattr(item, "effective_from", None)
+            or getattr(item, "composition_effective_from", None)
+            or date.min,
+            getattr(item, "updated_at", None) or datetime.min,
+            getattr(item, "created_at", None) or datetime.min,
+        ),
+        reverse=True,
+    ):
+        key = tuple(getattr(row, field) for field in key_fields)
+        latest_by_key.setdefault(key, row)
+    return sorted(
+        latest_by_key.values(),
+        key=lambda item: tuple(getattr(item, field) for field in key_fields),
+    )
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -125,8 +147,13 @@ class ReferenceDataRepository:
             stmt = stmt.where(BenchmarkDefinition.benchmark_currency == benchmark_currency.upper())
         if benchmark_status:
             stmt = stmt.where(BenchmarkDefinition.benchmark_status == benchmark_status)
-        result = await self._db.execute(stmt.order_by(BenchmarkDefinition.benchmark_id.asc()))
-        return list(result.scalars().all())
+        result = await self._db.execute(
+            stmt.order_by(
+                BenchmarkDefinition.benchmark_id.asc(),
+                BenchmarkDefinition.effective_from.desc(),
+            )
+        )
+        return _latest_effective_rows(list(result.scalars().all()), "benchmark_id")
 
     async def list_index_definitions(
         self,
@@ -148,8 +175,10 @@ class ReferenceDataRepository:
             stmt = stmt.where(IndexDefinition.index_type == index_type)
         if index_status:
             stmt = stmt.where(IndexDefinition.index_status == index_status)
-        result = await self._db.execute(stmt.order_by(IndexDefinition.index_id.asc()))
-        return list(result.scalars().all())
+        result = await self._db.execute(
+            stmt.order_by(IndexDefinition.index_id.asc(), IndexDefinition.effective_from.desc())
+        )
+        return _latest_effective_rows(list(result.scalars().all()), "index_id")
 
     async def list_benchmark_components(
         self,
@@ -169,7 +198,11 @@ class ReferenceDataRepository:
             .order_by(BenchmarkCompositionSeries.index_id.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _latest_effective_rows(
+            list(result.scalars().all()),
+            "benchmark_id",
+            "index_id",
+        )
 
     async def list_benchmark_components_overlapping_window(
         self,
@@ -219,6 +252,7 @@ class ReferenceDataRepository:
             )
         )
         rows = list((await self._db.execute(stmt)).scalars().all())
+        rows = _latest_effective_rows(rows, "benchmark_id", "index_id")
         grouped: dict[str, list[BenchmarkCompositionSeries]] = defaultdict(list)
         for row in rows:
             grouped[row.benchmark_id].append(row)
