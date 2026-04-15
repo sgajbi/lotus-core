@@ -420,12 +420,17 @@ Slice 6 source-data product catalog modeling is recorded in:
 - `docs/architecture/RFC-0083-source-data-product-catalog.md`
 - `src/libs/portfolio-common/portfolio_common/source_data_products.py`
 - `tests/unit/libs/portfolio-common/test_source_data_products.py`
+- `scripts/source_data_product_contract_guard.py`
+- `tests/unit/scripts/test_source_data_product_contract_guard.py`
 
 The catalog defines priority source-data product names, versions, route-family ownership, serving
 plane, consumers, current route mappings, required supportability metadata, paging/export disposition,
 and convenience shapes to consolidate. The helper validates duplicate product names, duplicate route
-ownership, required metadata, and consumer product lookup. This slice does not change runtime
-behavior, schemas, generated OpenAPI, persistence, or downstream contract shape.
+ownership, required metadata, and consumer product lookup. The contract guard validates that every
+catalog route exposes matching `x-lotus-source-data-product` OpenAPI metadata and that every catalog
+route response model exposes matching `product_name` and `product_version` DTO-envelope defaults.
+This slice remains additive: it does not change request semantics, persistence, generated events, or
+calculation behavior.
 
 ## Slice 7 Completion Note
 

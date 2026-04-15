@@ -36,7 +36,7 @@ Current repository posture:
 6. RFC-0083 Slice 3 now defines the portfolio reconstruction target model and deterministic snapshot identity helper,
 7. RFC-0083 Slice 4 now defines the ingestion source-lineage target model and source-batch evidence helper,
 8. RFC-0083 Slice 5 now defines the reconciliation/data-quality target model and shared status helper,
-9. RFC-0083 Slice 6 now defines the priority source-data product catalog, product metadata requirements, consumer map, and paging/export disposition,
+9. RFC-0083 Slice 6 now defines the priority source-data product catalog, product metadata requirements, consumer map, paging/export disposition, route metadata bindings, DTO-envelope product identity, and a linted source-data product contract guard,
 10. RFC-0083 Slice 7 now defines market/reference quality, observed-at mapping, and freshness/completeness classification for benchmark, index, risk-free, price, FX, and instrument products,
 11. RFC-0083 Slice 8 now records endpoint-consolidation disposition and deprecates selected pre-live reporting convenience routes in OpenAPI while preserving tested handlers,
 12. RFC-0083 Slice 9 now defines source-data product security, tenancy, entitlement, audit, sensitivity, and retention profiles,
@@ -111,7 +111,7 @@ Use these commands as the primary local contract:
 
 Important validation expectations:
 
-1. architecture guards, OpenAPI gates, warning budget, vocabulary and contract gates are active,
+1. architecture guards, OpenAPI gates, warning budget, vocabulary, source-data product, and contract gates are active,
 2. PR-grade validation includes runtime gates, Docker smoke, latency, and performance load checks,
 3. main releasability extends PR validation with heavier release-only gates,
 4. deterministic test-manifest orchestration is part of the repo truth and should not be bypassed casually.
@@ -156,7 +156,7 @@ Most relevant current governance:
 6. future portfolio state products must use `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md` and the deterministic identity helper before exposing restatable snapshots,
 7. future ingestion/replay evidence products must use `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md` before expanding runtime evidence contracts,
 8. future reconciliation/data-quality evidence products must use `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md` before expanding source-data product supportability fields,
-9. future source-data product DTO and route work must use `docs/architecture/RFC-0083-source-data-product-catalog.md` and `src/libs/portfolio-common/portfolio_common/source_data_products.py` for product names, versions, required metadata, consumer mapping, and paging/export disposition,
+9. future source-data product DTO and route work must use `docs/architecture/RFC-0083-source-data-product-catalog.md` and `src/libs/portfolio-common/portfolio_common/source_data_products.py` for product names, versions, required metadata, consumer mapping, and paging/export disposition, and must pass `make source-data-product-contract-guard`,
 10. future market/reference/benchmark/index/risk-free DTO work must use `docs/architecture/RFC-0083-market-reference-data-target-model.md` and `src/libs/portfolio-common/portfolio_common/market_reference_quality.py` before changing observed/source timestamp or freshness/completeness semantics,
 11. route removal or deprecation must follow `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`, update the route-family registry when routes change, and carry affected-consumer evidence,
 12. future source-data product security, retention, audit, and entitlement changes must use `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md` and `src/libs/portfolio-common/portfolio_common/source_data_security.py`,
