@@ -439,6 +439,19 @@ async def test_core_snapshot_success(async_test_client):
         include_sections=["POSITIONS_BASELINE"],
     )
     mock_core_snapshot_service.get_core_snapshot.assert_awaited_once()
+    core_snapshot_call = mock_core_snapshot_service.get_core_snapshot.await_args.kwargs
+    assert core_snapshot_call["portfolio_id"] == "PORT-INT-001"
+    assert core_snapshot_call["request"].as_of_date == date(2026, 2, 27)
+    assert core_snapshot_call["request"].snapshot_mode == "BASELINE"
+    assert len(core_snapshot_call["request"].sections) == 1
+    assert core_snapshot_call["request"].sections[0].value == "positions_baseline"
+    assert core_snapshot_call["request"].consumer_system == "lotus-gateway"
+    assert core_snapshot_call["request"].tenant_id == "default"
+    assert core_snapshot_call["governance"].consumer_system == "lotus-gateway"
+    assert core_snapshot_call["governance"].tenant_id == "default"
+    assert [section.value for section in core_snapshot_call["governance"].applied_sections] == [
+        "positions_baseline"
+    ]
 
 
 async def test_core_snapshot_policy_block_maps_to_403(async_test_client):
