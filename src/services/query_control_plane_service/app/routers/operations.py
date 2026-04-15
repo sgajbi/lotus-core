@@ -46,6 +46,23 @@ RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = {
 }
 
 
+def problem_response(description: str, example: dict[str, str]) -> dict[str, object]:
+    return {"description": description, "content": {"application/json": {"example": example}}}
+
+
+def portfolio_not_found_response(
+    description: str = "Portfolio not found.",
+) -> dict[str, object]:
+    return problem_response(description, PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE)
+
+
+def invalid_date_response(field_name: str) -> dict[str, object]:
+    return problem_response(
+        INVALID_DATE_RESPONSE_DESCRIPTION,
+        invalid_date_response_example(field_name),
+    )
+
+
 def invalid_date_response_example(field_name: str) -> dict[str, str]:
     return {"detail": f"Invalid {field_name} '2026-31-03'. Expected YYYY-MM-DD format."}
 
@@ -72,12 +89,7 @@ def get_operations_service(
 @router.get(
     "/support/portfolios/{portfolio_id}/overview",
     response_model=SupportOverviewResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="Get operational support overview for a portfolio",
     description=(
         "What: Return support-oriented operational state for one portfolio.\n"
@@ -128,16 +140,8 @@ async def get_support_overview(
     "/support/portfolios/{portfolio_id}/readiness",
     response_model=PortfolioReadinessResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
-            "content": {
-                "application/json": {"example": invalid_date_response_example("as_of_date")}
-            },
-        },
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("as_of_date"),
     },
     summary="Get source-owned portfolio readiness for pricing and reporting coverage",
     description=(
@@ -200,12 +204,7 @@ async def get_portfolio_readiness(
 @router.get(
     "/support/portfolios/{portfolio_id}/calculator-slos",
     response_model=CalculatorSloResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="Get calculator SLO baseline snapshot for a portfolio",
     description=(
         "What: Return calculator backlog, stale-processing, and failed-job baselines for one "
@@ -257,16 +256,8 @@ async def get_calculator_slos(
     "/support/portfolios/{portfolio_id}/control-stages",
     response_model=PortfolioControlStageListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
-            "content": {
-                "application/json": {"example": invalid_date_response_example("business_date")}
-            },
-        },
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
     },
     summary="List portfolio-day control stages for support workflows",
     description=(
@@ -330,16 +321,8 @@ async def get_portfolio_control_stages(
     "/support/portfolios/{portfolio_id}/reprocessing-keys",
     response_model=ReprocessingKeyListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
-            "content": {
-                "application/json": {"example": invalid_date_response_example("watermark_date")}
-            },
-        },
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("watermark_date"),
     },
     summary="List durable replay keys for support workflows",
     description=(
@@ -405,12 +388,7 @@ async def get_reprocessing_keys(
 @router.get(
     "/support/portfolios/{portfolio_id}/reprocessing-jobs",
     response_model=ReprocessingJobListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List durable replay jobs for support workflows",
     description=(
         "What: List durable replay jobs currently relevant to a portfolio.\n"
@@ -480,16 +458,8 @@ async def get_reprocessing_jobs(
     "/support/portfolios/{portfolio_id}/valuation-jobs",
     response_model=SupportJobListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
-            "content": {
-                "application/json": {"example": invalid_date_response_example("business_date")}
-            },
-        },
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
     },
     summary="List valuation jobs for support workflows",
     description=(
@@ -565,16 +535,8 @@ async def get_valuation_jobs(
     "/support/portfolios/{portfolio_id}/aggregation-jobs",
     response_model=SupportJobListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
-            "content": {
-                "application/json": {"example": invalid_date_response_example("business_date")}
-            },
-        },
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
     },
     summary="List aggregation jobs for support workflows",
     description=(
@@ -643,12 +605,7 @@ async def get_aggregation_jobs(
 @router.get(
     "/support/portfolios/{portfolio_id}/analytics-export-jobs",
     response_model=AnalyticsExportJobListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List analytics export jobs for support workflows",
     description=(
         "What: List durable analytics export jobs for a portfolio with support filters.\n"
@@ -707,12 +664,7 @@ async def get_analytics_export_jobs(
 @router.get(
     "/support/portfolios/{portfolio_id}/reconciliation-runs",
     response_model=ReconciliationRunListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List reconciliation runs for support workflows",
     description=(
         "What: List durable reconciliation control runs for a portfolio.\n"
@@ -786,12 +738,10 @@ async def get_reconciliation_runs(
     "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings",
     response_model=ReconciliationFindingListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio or reconciliation run not found.",
-            "content": {
-                "application/json": {"example": RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE}
-            },
-        }
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio or reconciliation run not found.",
+            RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE,
+        )
     },
     summary="List reconciliation findings for one support run",
     description=(
@@ -857,10 +807,10 @@ async def get_reconciliation_findings(
     "/lineage/portfolios/{portfolio_id}/securities/{security_id}",
     response_model=LineageResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio/security lineage not found.",
-            "content": {"application/json": {"example": LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio/security lineage not found.",
+            LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE,
+        )
     },
     summary="Get lineage state for a portfolio-security key",
     description=(
@@ -892,12 +842,7 @@ async def get_lineage(
 @router.get(
     "/lineage/portfolios/{portfolio_id}/keys",
     response_model=LineageKeyListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List lineage keys for a portfolio",
     description=(
         "What: List lineage keys for a portfolio.\n"
