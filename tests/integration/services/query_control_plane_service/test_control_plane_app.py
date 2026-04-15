@@ -1550,22 +1550,12 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert "lotus-performance owns benchmark math" in benchmark_market_series["description"]
     assert "lotus-performance and lotus-risk" in risk_free_series["description"]
     assert "raw risk-free reference series" in risk_free_series["description"]
-    assert (
-        "lotus-performance, lotus-risk, gateway supportability surfaces"
-        in (benchmark_coverage["description"])
-    )
+    assert "downstream readiness or support flows" in (benchmark_coverage["description"])
     assert (
         "source-data readiness evidence, not benchmark returns"
         in (benchmark_coverage["description"])
     )
-    assert (
-        "lotus-performance, lotus-risk, and readiness/support flows"
-        in (risk_free_coverage["description"])
-    )
-    assert (
-        "lotus-performance, lotus-risk, and readiness/support flows"
-        in (risk_free_coverage["description"])
-    )
+    assert "lotus-risk and other readiness/support flows" in (risk_free_coverage["description"])
     assert (
         "downstream consumers that need governed shared classification labels"
         in (classification_taxonomy["description"])

@@ -663,10 +663,9 @@ async def fetch_classification_taxonomy(
         "What: Return benchmark reference data coverage diagnostics for an expected window.\n"
         "How: Compares expected window dates against observed data and summarizes "
         "quality distribution.\n"
-        "When: Used by lotus-performance, lotus-risk, gateway supportability surfaces, and "
-        "operator readiness checks before benchmark-aware analytics processing. This route "
-        "publishes source-data readiness evidence, not benchmark returns or benchmark-engine "
-        "outputs."
+        "When: Used by downstream readiness or support flows before benchmark-aware analytics "
+        "processing. This route publishes source-data readiness evidence, not benchmark returns "
+        "or benchmark-engine outputs."
     ),
     openapi_extra=source_data_product_openapi_extra("DataQualityCoverageReport"),
 )
@@ -697,10 +696,10 @@ async def get_benchmark_coverage(
         "What: Return risk-free series coverage diagnostics for an expected window.\n"
         "How: Compares expected window dates against observed data and summarizes "
         "quality distribution.\n"
-        "When: Used by lotus-performance, lotus-risk, and readiness/support flows that need "
-        "deterministic risk-free availability evidence before downstream analytics proceed. "
-        "A response with `total_points = 0` and null observed bounds indicates an upstream "
-        "data-availability gap for the requested currency/window."
+        "When: Used by lotus-risk and other readiness/support flows that need deterministic "
+        "risk-free availability evidence before downstream analytics proceed. A response with "
+        "`total_points = 0` and null observed bounds indicates an upstream data-availability gap "
+        "for the requested currency/window."
     ),
     openapi_extra=source_data_product_openapi_extra("DataQualityCoverageReport"),
 )
