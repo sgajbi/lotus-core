@@ -544,6 +544,11 @@ Automated proof now includes:
 1. reconciliation-evidence schema-family completeness checks;
 2. ingestion-evidence schema-family completeness checks.
 
+The HTTP dependency lane now also proves the default-query behavior for the two gateway-facing
+support entry points: `overview` and `readiness` both have direct router-level coverage for the
+canonical default stale-threshold and failed-window parameters, and readiness also proves the
+`as_of_date=None` path used by callers that want source-owned latest-state evaluation.
+
 ### Issue Disposition For This Endpoint Family
 
 No active GitHub issue was found that changes the current contract decision for this family.
