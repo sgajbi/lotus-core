@@ -199,6 +199,11 @@ where one exists, or from the resolved window end date for window-only products.
 existing lineage dictionaries and leave evidence, snapshot, and policy fields null until reference
 source-batch and quality evidence are joined into those contracts.
 
+`DataQualityCoverageReport` additionally derives `data_quality_status` from observed coverage,
+missing dates, and stale quality-status counts using `reconciliation_quality.py`. Full observed
+coverage is `COMPLETE`, missing coverage is `PARTIAL`, stale observed coverage is `STALE`, and empty
+observed coverage is `UNRECONCILED`.
+
 The snapshot DTO-envelope binding adds `product_name` and `product_version` to
 `PortfolioStateSnapshot` on the core snapshot response. The existing route-level
 `x-lotus-source-data-product` metadata remains the route discovery mechanism; the response fields

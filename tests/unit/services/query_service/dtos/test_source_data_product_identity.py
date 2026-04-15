@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 from portfolio_common.logging_utils import correlation_id_var
-from portfolio_common.reconciliation_quality import UNKNOWN
+from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
 from src.services.query_service.app.dtos.analytics_input_dto import (
     PortfolioAnalyticsTimeseriesResponse,
@@ -99,6 +99,8 @@ def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage()
         as_of_date=date(2026, 3, 26),
         generated_at=datetime(2026, 4, 15, 1, 30, tzinfo=UTC),
         tenant_id="tenant_sg_pb",
+        reconciliation_status=COMPLETE,
+        data_quality_status=COMPLETE,
         latest_evidence_timestamp=latest_evidence_timestamp,
         source_batch_fingerprint="sbf_abc",
         snapshot_id="pss_abc",
@@ -106,6 +108,8 @@ def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage()
     )
 
     assert metadata["tenant_id"] == "tenant_sg_pb"
+    assert metadata["reconciliation_status"] == COMPLETE
+    assert metadata["data_quality_status"] == COMPLETE
     assert metadata["latest_evidence_timestamp"] == latest_evidence_timestamp
     assert metadata["source_batch_fingerprint"] == "sbf_abc"
     assert metadata["snapshot_id"] == "pss_abc"

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNRECONCILED
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -30,6 +31,50 @@ def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
     assert response.missing_dates_count == 1
     assert response.missing_dates_sample == [date(2026, 1, 2)]
     assert response.request_fingerprint == "fp-coverage-test"
+    assert response.data_quality_status == PARTIAL
+
+
+@pytest.mark.parametrize(
+    ("coverage", "expected_status"),
+    [
+        (
+            {
+                "total_points": 3,
+                "observed_dates": [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)],
+                "quality_status_counts": {"accepted": 3},
+            },
+            COMPLETE,
+        ),
+        (
+            {
+                "total_points": 3,
+                "observed_dates": [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)],
+                "quality_status_counts": {"STALE": 1, "accepted": 2},
+            },
+            STALE,
+        ),
+        (
+            {
+                "total_points": 0,
+                "observed_dates": [],
+                "quality_status_counts": {},
+            },
+            UNRECONCILED,
+        ),
+    ],
+)
+def test_to_coverage_response_classifies_data_quality_status(
+    coverage: dict[str, object],
+    expected_status: str,
+) -> None:
+    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+        coverage=coverage,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 3),
+        request_fingerprint="fp-coverage-test",
+    )
+
+    assert response.data_quality_status == expected_status
 
 
 def test_canonical_consumer_system_mappings() -> None:

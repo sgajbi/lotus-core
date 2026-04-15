@@ -10,6 +10,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from portfolio_common.reconciliation_quality import (
+    DataQualityCoverageSignal,
+    classify_data_quality_coverage,
+)
+
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyProvenanceMetadata
 from ..dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
@@ -75,8 +80,15 @@ class IntegrationService:
         return Decimal(str(value))
 
     @staticmethod
-    def _runtime_metadata(as_of_date: date) -> dict[str, object]:
-        return source_data_product_runtime_metadata(as_of_date=as_of_date)
+    def _runtime_metadata(
+        as_of_date: date,
+        *,
+        data_quality_status: str | None = None,
+    ) -> dict[str, object]:
+        return source_data_product_runtime_metadata(
+            as_of_date=as_of_date,
+            data_quality_status=data_quality_status or "UNKNOWN",
+        )
 
     @staticmethod
     def _runtime_metadata_for_existing_as_of_date(as_of_date: date) -> dict[str, object]:
@@ -975,6 +987,18 @@ class IntegrationService:
                 observed_cursor = observed_cursor + timedelta(days=1)
 
         missing_dates = sorted(expected_dates - observed_dates)
+        quality_counts = dict(coverage.get("quality_status_counts", {}))
+        data_quality_status = classify_data_quality_coverage(
+            DataQualityCoverageSignal(
+                required_count=len(expected_dates),
+                observed_count=len(observed_dates),
+                stale_count=int(
+                    quality_counts.get("STALE", 0)
+                    or quality_counts.get("stale", 0)
+                    or quality_counts.get("Stale", 0)
+                ),
+            )
+        )
         return CoverageResponse(
             request_fingerprint=request_fingerprint,
             observed_start_date=observed_start,
@@ -984,6 +1008,9 @@ class IntegrationService:
             total_points=int(coverage.get("total_points", 0)),
             missing_dates_count=len(missing_dates),
             missing_dates_sample=missing_dates[:10],
-            quality_status_distribution=dict(coverage.get("quality_status_counts", {})),
-            **IntegrationService._runtime_metadata(end_date),
+            quality_status_distribution=quality_counts,
+            **IntegrationService._runtime_metadata(
+                end_date,
+                data_quality_status=data_quality_status,
+            ),
         )
