@@ -274,6 +274,8 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
         "Applied look-through mode"
     )
     assert cash_response["properties"]["totals"]["description"] == "Portfolio-level cash totals."
+    assert cash_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
+    assert cash_response["properties"]["product_version"]["default"] == "v1"
     assert (
         portfolio_summary_response["properties"]["snapshot_metadata"]["description"]
         == "Resolved snapshot metadata for the summary query."
@@ -281,10 +283,13 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert holdings_snapshot_response["properties"]["positions"]["description"].startswith(
         "Holdings snapshot rows"
     )
+    assert holdings_snapshot_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert income_response["properties"]["totals"]["description"] == "Scope-level income totals."
+    assert income_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
     assert (
         activity_response["properties"]["totals"]["description"] == "Scope-level activity totals."
     )
+    assert activity_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
     assert cash_account_query_response["properties"]["cash_accounts"]["description"] == (
         "Canonical cash accounts linked to the portfolio."
     )
@@ -302,6 +307,7 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
     schema = response.json()
 
     transactions = schema["paths"]["/portfolios/{portfolio_id}/transactions"]["get"]
+    transaction_response = schema["components"]["schemas"]["PaginatedTransactionResponse"]
 
     portfolio_param = next(
         parameter for parameter in transactions["parameters"] if parameter["name"] == "portfolio_id"
@@ -353,6 +359,10 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         == "Canonical settlement timestamp when known. Use alongside transaction_date to "
         "differentiate trade booking from contractual or effective cash/value settlement."
     )
+    assert transaction_response["properties"]["product_name"]["default"] == (
+        "TransactionLedgerWindow"
+    )
+    assert transaction_response["properties"]["product_version"]["default"] == "v1"
 
     not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"
@@ -365,6 +375,7 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
 
     latest_positions = schema["paths"]["/portfolios/{portfolio_id}/positions"]["get"]
     position_history = schema["paths"]["/portfolios/{portfolio_id}/position-history"]["get"]
+    positions_response = schema["components"]["schemas"]["PortfolioPositionsResponse"]
 
     positions_portfolio_id = next(
         parameter
@@ -399,6 +410,8 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     ]
     assert positions_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
     assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+    assert positions_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
+    assert positions_response["properties"]["product_version"]["default"] == "v1"
 
 
 async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):

@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .source_data_product_identity import product_name_field, product_version_field
+
 
 class AnalyticsWindow(BaseModel):
     start_date: date = Field(
@@ -311,16 +313,10 @@ class PortfolioTimeseriesObservation(BaseModel):
 
 
 class PortfolioAnalyticsTimeseriesResponse(BaseModel):
-    product_name: Literal["PortfolioTimeseriesInput"] = Field(
-        "PortfolioTimeseriesInput",
-        description="RFC-0083 source-data product name represented by this response.",
-        examples=["PortfolioTimeseriesInput"],
+    product_name: Literal["PortfolioTimeseriesInput"] = product_name_field(
+        "PortfolioTimeseriesInput"
     )
-    product_version: Literal["v1"] = Field(
-        "v1",
-        description="RFC-0083 source-data product version represented by this response.",
-        examples=["v1"],
-    )
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )
@@ -551,16 +547,8 @@ class PositionTimeseriesRow(BaseModel):
 
 
 class PositionAnalyticsTimeseriesResponse(BaseModel):
-    product_name: Literal["PositionTimeseriesInput"] = Field(
-        "PositionTimeseriesInput",
-        description="RFC-0083 source-data product name represented by this response.",
-        examples=["PositionTimeseriesInput"],
-    )
-    product_version: Literal["v1"] = Field(
-        "v1",
-        description="RFC-0083 source-data product version represented by this response.",
-        examples=["v1"],
-    )
+    product_name: Literal["PositionTimeseriesInput"] = product_name_field("PositionTimeseriesInput")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["DEMO_DPM_EUR_001"]
     )

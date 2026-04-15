@@ -1,10 +1,11 @@
 # services/query-service/app/dtos/position_dto.py
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .source_data_product_identity import product_name_field, product_version_field
 from .valuation_dto import ValuationData
 
 
@@ -80,6 +81,8 @@ class Position(BaseModel):
 
 
 class PortfolioPositionsResponse(BaseModel):
+    product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     positions: List[Position] = Field(..., description="Latest positions for the portfolio.")
 
@@ -135,9 +138,7 @@ class PortfolioPositionHistoryResponse(BaseModel):
     Represents the API response for a portfolio's position history.
     """
 
-    portfolio_id: str = Field(
-        ..., description="Portfolio identifier.", examples=["PF-001"]
-    )
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     security_id: str = Field(
         ...,
         description="Security identifier for which the history is returned.",

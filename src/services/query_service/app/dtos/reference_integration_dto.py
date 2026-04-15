@@ -6,21 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
-def _product_name_field(product_name: str):
-    return Field(
-        product_name,
-        description="RFC-0083 source-data product name represented by this response.",
-        examples=[product_name],
-    )
-
-
-def _product_version_field():
-    return Field(
-        "v1",
-        description="RFC-0083 source-data product version represented by this response.",
-        examples=["v1"],
-    )
+from .source_data_product_identity import product_name_field, product_version_field
 
 
 class IntegrationWindow(BaseModel):
@@ -73,8 +59,8 @@ class BenchmarkAssignmentRequest(BaseModel):
 
 
 class BenchmarkAssignmentResponse(BaseModel):
-    product_name: Literal["BenchmarkAssignment"] = _product_name_field("BenchmarkAssignment")
-    product_version: Literal["v1"] = _product_version_field()
+    product_name: Literal["BenchmarkAssignment"] = product_name_field("BenchmarkAssignment")
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(
         ...,
         description="Canonical portfolio identifier.",
@@ -187,10 +173,10 @@ class BenchmarkComponentResponse(BaseModel):
 
 
 class BenchmarkCompositionWindowResponse(BaseModel):
-    product_name: Literal["BenchmarkConstituentWindow"] = _product_name_field(
+    product_name: Literal["BenchmarkConstituentWindow"] = product_name_field(
         "BenchmarkConstituentWindow"
     )
-    product_version: Literal["v1"] = _product_version_field()
+    product_version: Literal["v1"] = product_version_field()
     benchmark_id: str = Field(
         ...,
         description="Canonical benchmark identifier.",
@@ -632,8 +618,8 @@ class ComponentSeriesResponse(BaseModel):
 
 
 class BenchmarkMarketSeriesResponse(BaseModel):
-    product_name: Literal["MarketDataWindow"] = _product_name_field("MarketDataWindow")
-    product_version: Literal["v1"] = _product_version_field()
+    product_name: Literal["MarketDataWindow"] = product_name_field("MarketDataWindow")
+    product_version: Literal["v1"] = product_version_field()
     benchmark_id: str = Field(
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )
@@ -787,8 +773,8 @@ class BenchmarkReturnSeriesPoint(BaseModel):
 
 
 class IndexPriceSeriesResponse(BaseModel):
-    product_name: Literal["IndexSeriesWindow"] = _product_name_field("IndexSeriesWindow")
-    product_version: Literal["v1"] = _product_version_field()
+    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
     frequency: str = Field(..., description="Frequency label.", examples=["daily"])
@@ -805,8 +791,8 @@ class IndexPriceSeriesResponse(BaseModel):
 
 
 class IndexReturnSeriesResponse(BaseModel):
-    product_name: Literal["IndexSeriesWindow"] = _product_name_field("IndexSeriesWindow")
-    product_version: Literal["v1"] = _product_version_field()
+    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     as_of_date: date = Field(
         ...,
@@ -884,8 +870,8 @@ class RiskFreeSeriesPoint(BaseModel):
 
 
 class RiskFreeSeriesResponse(BaseModel):
-    product_name: Literal["RiskFreeSeriesWindow"] = _product_name_field("RiskFreeSeriesWindow")
-    product_version: Literal["v1"] = _product_version_field()
+    product_name: Literal["RiskFreeSeriesWindow"] = product_name_field("RiskFreeSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     currency: str = Field(..., description="Series currency code.", examples=["USD"])
     as_of_date: date = Field(
         ...,
@@ -923,10 +909,10 @@ class CoverageRequest(BaseModel):
 
 
 class CoverageResponse(BaseModel):
-    product_name: Literal["DataQualityCoverageReport"] = _product_name_field(
+    product_name: Literal["DataQualityCoverageReport"] = product_name_field(
         "DataQualityCoverageReport"
     )
-    product_version: Literal["v1"] = _product_version_field()
+    product_version: Literal["v1"] = product_version_field()
     request_fingerprint: str = Field(
         ...,
         description="Deterministic request fingerprint for the coverage diagnostics scope.",
@@ -1019,10 +1005,10 @@ class ClassificationTaxonomyEntry(BaseModel):
 
 
 class ClassificationTaxonomyResponse(BaseModel):
-    product_name: Literal["InstrumentReferenceBundle"] = _product_name_field(
+    product_name: Literal["InstrumentReferenceBundle"] = product_name_field(
         "InstrumentReferenceBundle"
     )
-    product_version: Literal["v1"] = _product_version_field()
+    product_version: Literal["v1"] = product_version_field()
     as_of_date: date = Field(
         ...,
         description="As-of date used for taxonomy response.",

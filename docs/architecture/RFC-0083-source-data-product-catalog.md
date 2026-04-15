@@ -146,6 +146,14 @@ that already have catalog-backed control-plane routes:
 These fields are additive defaults on the response envelopes. They do not alter request semantics,
 persistence, eventing, paging, or calculation behavior.
 
+The operational read DTO-envelope binding adds `product_name` and `product_version` to:
+
+1. `HoldingsAsOf`,
+2. `TransactionLedgerWindow`.
+
+These fields cover the canonical positions and transaction ledger responses plus the pre-live
+reporting convenience shapes that are already deprecated toward those target products.
+
 ## Validation
 
 Slice 6 validation is:
