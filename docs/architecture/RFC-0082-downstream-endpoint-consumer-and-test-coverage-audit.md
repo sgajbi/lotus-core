@@ -234,7 +234,10 @@ The current benchmark-source family is aligned with the intended boundary:
 2. `market-series` returns native component series plus explicit normalization metadata;
 3. deterministic paging exists for large component universes via `ReferencePageRequest` and
    `ReferencePageMetadata`;
-4. current `fx_rate` semantics are benchmark-currency-to-target-currency context only and should
+4. `indices/catalog` now also supports optional targeted `index_ids`, so attribution consumers that
+   already know the benchmark component universe can fetch canonical classification labels without
+   scanning the full effective index catalog;
+5. current `fx_rate` semantics are benchmark-currency-to-target-currency context only and should
    not be mistaken for component-to-benchmark normalization.
 
 That last point is important enough to make explicit: the contract is strong and truthful today,
@@ -272,7 +275,7 @@ series retrieval.
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `#246` broader benchmark source hardening | Still valid as the umbrella benchmark-source program. This slice closes documentation/truth gaps but does not claim the entire benchmark-source roadmap is finished. | Keep open. |
-| `#237` grouped benchmark analytics contract | Still valid. Current consumers still need some client-side grouping work on top of the lower-level source contracts. | Keep open. |
+| `#237` grouped benchmark analytics contract | Still valid, but narrowed. `indices/catalog` now supports optional targeted `index_ids`, so downstream consumers no longer need a full index-catalog scan just to resolve known benchmark component metadata. The remaining gap is the absence of a first-class grouped benchmark analytics input contract. | Keep open as the grouped-contract follow-on, not as a catalog-scan workaround issue. |
 
 No new downstream migration issue is required from this slice. The active downstream consumer is
 already using the strategic routes rather than a stale or duplicate benchmark path.

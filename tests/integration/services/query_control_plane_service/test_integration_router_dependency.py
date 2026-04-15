@@ -664,6 +664,7 @@ async def test_index_catalog_success(async_test_client):
         "/integration/indices/catalog",
         json={
             "as_of_date": "2026-01-31",
+            "index_ids": ["IDX_MSCI_WORLD_TR"],
             "index_currency": "USD",
             "index_type": "equity_index",
             "index_status": "active",
@@ -677,6 +678,7 @@ async def test_index_catalog_success(async_test_client):
     assert body["records"][0]["index_type"] == "equity_index"
     mock_integration_service.list_index_catalog.assert_awaited_once_with(
         as_of_date=date(2026, 1, 31),
+        index_ids=["IDX_MSCI_WORLD_TR"],
         index_currency="USD",
         index_type="equity_index",
         index_status="active",

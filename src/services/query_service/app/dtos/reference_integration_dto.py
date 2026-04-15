@@ -371,6 +371,15 @@ class IndexCatalogRequest(BaseModel):
         description="Point-in-time date for index catalog retrieval.",
         examples=["2026-01-31"],
     )
+    index_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional targeted index identifiers to resolve. Use this when the caller already "
+            "knows the component universe and needs canonical metadata without scanning the full "
+            "effective catalog."
+        ),
+        examples=[["IDX_MSCI_WORLD_TR", "IDX_BLOOMBERG_GLOBAL_AGG_TR"]],
+    )
     index_currency: str | None = Field(
         None,
         description="Optional index currency filter.",

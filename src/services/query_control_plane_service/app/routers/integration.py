@@ -441,9 +441,12 @@ async def fetch_benchmark_catalog(
     summary="Fetch index master catalog",
     description=(
         "What: Return index master records effective on a requested date.\n"
-        "How: Applies optional filters and effective dating in query service.\n"
+        "How: Applies optional targeted index_ids filters, broader attribute filters, and "
+        "effective dating in query service.\n"
         "When: Used by lotus-performance and attribution pipelines to discover "
-        "canonical index metadata and governed classification labels."
+        "canonical index metadata and governed classification labels. When a downstream caller "
+        "already knows the benchmark component universe, prefer `index_ids` to avoid full-catalog "
+        "scans."
     ),
 )
 async def fetch_index_catalog(
@@ -454,6 +457,7 @@ async def fetch_index_catalog(
         IndexCatalogResponse,
         await integration_service.list_index_catalog(
             as_of_date=request.as_of_date,
+            index_ids=request.index_ids,
             index_currency=request.index_currency,
             index_type=request.index_type,
             index_status=request.index_status,

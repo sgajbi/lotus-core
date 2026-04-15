@@ -158,6 +158,7 @@ class ReferenceDataRepository:
     async def list_index_definitions(
         self,
         as_of_date: date,
+        index_ids: list[str] | None = None,
         index_currency: str | None = None,
         index_type: str | None = None,
         index_status: str | None = None,
@@ -169,6 +170,8 @@ class ReferenceDataRepository:
                 as_of_date,
             )
         )
+        if index_ids:
+            stmt = stmt.where(IndexDefinition.index_id.in_(index_ids))
         if index_currency:
             stmt = stmt.where(IndexDefinition.index_currency == index_currency.upper())
         if index_type:

@@ -131,7 +131,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         "B1", date(2026, 1, 1), date(2026, 1, 2)
     )
     assert await repo.list_benchmark_definitions(date(2026, 1, 1), "composite", "USD", "active")
-    assert await repo.list_index_definitions(date(2026, 1, 1), "USD", "equity", "active")
+    assert await repo.list_index_definitions(date(2026, 1, 1), None, "USD", "equity", "active")
     assert await repo.list_benchmark_components("B1", date(2026, 1, 1))
     assert await repo.list_benchmark_components_overlapping_window(
         "B1", date(2026, 1, 1), date(2026, 1, 2)
@@ -388,3 +388,29 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
     assert [row.series_date for row in rows] == [date(2026, 1, 1), date(2026, 1, 2)]
     assert rows[0].series_id == "front_office"
     assert rows[1].series_id == "demo"
+
+
+@pytest.mark.asyncio
+async def test_list_index_definitions_filters_targeted_index_ids() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                index_id="IDX_KEEP",
+                effective_from=date(2026, 1, 1),
+                classification_labels={"asset_class": "equity"},
+            ),
+            SimpleNamespace(
+                index_id="IDX_SKIP",
+                effective_from=date(2026, 1, 1),
+                classification_labels={"asset_class": "fixed_income"},
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_index_definitions(date(2026, 1, 31), ["IDX_KEEP"])
+
+    assert [row.index_id for row in rows] == ["IDX_KEEP", "IDX_SKIP"]
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "index_definitions.index_id IN ('IDX_KEEP')" in compiled

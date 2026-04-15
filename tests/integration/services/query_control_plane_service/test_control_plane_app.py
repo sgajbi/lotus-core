@@ -1516,6 +1516,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     ]["post"]
     assert "before targeted benchmark assignment" in benchmark_catalog_route["description"]
     assert "governed classification labels" in index_catalog_route["description"]
+    assert "prefer `index_ids` to avoid full-catalog scans" in index_catalog_route["description"]
     assert "not the default benchmark-math source" in benchmark_return_series["description"]
 
     coverage_param = next(
@@ -1546,6 +1547,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     classification_taxonomy_response = components["ClassificationTaxonomyResponse"]
     benchmark_component_response = components["BenchmarkComponentResponse"]
     benchmark_assignment_request = components["BenchmarkAssignmentRequest"]
+    index_catalog_request = components["IndexCatalogRequest"]
 
     assert benchmark_catalog["properties"]["records"]["description"] == (
         "Benchmark definition records effective for the requested date."
@@ -1555,6 +1557,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     )
     assert benchmark_component_response["properties"]["rebalance_event_id"]["description"] == (
         "Rebalance event identifier linking related composition changes."
+    )
+    assert index_catalog_request["properties"]["index_ids"]["description"].startswith(
+        "Optional targeted index identifiers to resolve."
     )
     assert benchmark_assignment_response["properties"]["product_name"]["default"] == (
         "BenchmarkAssignment"
