@@ -22,7 +22,8 @@ def get_capabilities_service() -> CapabilitiesService:
     description=(
         "What: Return policy-resolved integration capabilities for a consumer and tenant context.\n"
         "How: Applies environment and tenant-policy overrides, then derives workflow states from "
-        "canonical feature dependencies.\n"
+        "canonical feature dependencies. Callers should use the canonical snake_case query "
+        "parameters `consumer_system` and `tenant_id`.\n"
         "When: Used by downstream services and UI clients to enable only supported lotus-core "
         "integration paths."
     ),

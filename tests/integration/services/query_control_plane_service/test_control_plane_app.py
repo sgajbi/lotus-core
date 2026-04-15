@@ -85,6 +85,12 @@ RECONCILIATION_SUPPORT_SCHEMA_ROOTS = {
     "ReconciliationFindingListResponse",
 }
 
+CAPABILITIES_SCHEMA_ROOTS = {
+    "IntegrationCapabilitiesResponse",
+    "FeatureCapability",
+    "WorkflowCapability",
+}
+
 
 def _collect_schema_refs(property_schema: dict[str, object]) -> set[str]:
     refs: set[str] = set()
@@ -1761,10 +1767,13 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert consumer_system["schema"]["default"] == "lotus-gateway"
     assert tenant_id["description"] == "Tenant or client identifier for policy resolution."
     assert tenant_id["schema"]["default"] == "default"
+    assert "supported lotus-core integration paths" in capabilities["description"]
+    assert "snake_case query parameters" in capabilities["description"]
 
     components = schema["components"]["schemas"]
     feature_capability = components["FeatureCapability"]
     workflow_capability = components["WorkflowCapability"]
+    capabilities_response = components["IntegrationCapabilitiesResponse"]
 
     assert feature_capability["properties"]["key"]["description"] == "Canonical feature key."
     assert feature_capability["properties"]["owner_service"]["description"] == (
@@ -1776,3 +1785,17 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert workflow_capability["properties"]["required_features"]["description"] == (
         "Feature keys required for workflow execution."
     )
+    assert capabilities_response["properties"]["consumer_system"]["description"] == (
+        "Canonical consumer system receiving capabilities."
+    )
+    assert capabilities_response["properties"]["tenant_id"]["description"] == (
+        "Tenant identifier used for capability policy resolution."
+    )
+
+
+async def test_openapi_fully_documents_capabilities_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    _assert_schema_properties_are_documented_and_exampled(schema, CAPABILITIES_SCHEMA_ROOTS)

@@ -423,6 +423,53 @@ The main follow-up remains product adoption and downstream workflow testing in r
 `lotus-gateway`, `lotus-manage`, and `lotus-report` when they start relying on these deeper support
 surfaces directly.
 
+## Certified Endpoint Slice: Integration Capabilities
+
+This certification pass covers:
+
+1. `GET /integration/capabilities`
+
+### Route Contract Decision
+
+This is the control-plane discovery contract for policy-resolved lotus-core capability posture.
+
+The contract is intentionally narrow:
+
+1. it publishes source-owned feature and workflow availability for a consumer/tenant context;
+2. it is not a substitute for endpoint-specific OpenAPI or source-data product contracts;
+3. callers should use the canonical snake_case query parameters `consumer_system` and `tenant_id`.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /integration/capabilities` | `lotus-gateway` | Active direct use exists via gateway platform capability aggregation and workbench composition context. |
+
+This route is primarily a discovery/control-plane surface rather than a source-data product. The
+active downstream need is real, but its job is capability publication, not domain calculation.
+
+### Upstream Integration Assessment
+
+The route is correctly placed and the contract is already strong. The main truth boundary worth
+making explicit in this slice is canonical query naming. The route now states plainly that callers
+should use snake_case `consumer_system` and `tenant_id`.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the canonical query names explicit and recursive schema-family
+tests protect the capabilities response surface from documentation drift.
+
+### Issue Disposition For This Endpoint
+
+No lotus-core issue is open against this route at the moment.
+
+Related downstream follow-up remains valid:
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-gateway #109` | Downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. | Keep open in gateway. |
+| `lotus-gateway #73` | Platform capabilities latency issue in gateway aggregation, not a lotus-core publication defect. | Keep open in gateway. |
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |
