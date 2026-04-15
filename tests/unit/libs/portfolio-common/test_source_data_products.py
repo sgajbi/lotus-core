@@ -12,6 +12,7 @@ from portfolio_common.source_data_products import (
     SourceDataProductDefinition,
     get_source_data_product,
     products_for_consumer,
+    source_data_product_openapi_extra,
     validate_source_data_product_catalog,
 )
 
@@ -62,6 +63,21 @@ def test_products_for_consumer_maps_performance_to_analytics_inputs() -> None:
     assert all(
         product.route_family in {ANALYTICS_INPUT, CONTROL_PLANE_AND_POLICY} for product in products
     )
+
+
+def test_source_data_product_openapi_extra_exposes_machine_readable_contract_identity() -> None:
+    extra = source_data_product_openapi_extra("PortfolioTimeseriesInput")
+
+    extension = extra["x-lotus-source-data-product"]
+
+    assert extension["product_name"] == "PortfolioTimeseriesInput"
+    assert extension["product_version"] == "v1"
+    assert extension["route_family"] == ANALYTICS_INPUT
+    assert extension["serving_plane"] == QUERY_CONTROL_PLANE_SERVICE
+    assert extension["owner"] == "lotus-core"
+    assert "lotus-performance" in extension["consumers"]
+    assert "required_metadata_fields" in extension
+    assert "restatement_version" in extension["required_metadata_fields"]
 
 
 def test_holdings_product_records_convenience_shapes_to_consolidate() -> None:

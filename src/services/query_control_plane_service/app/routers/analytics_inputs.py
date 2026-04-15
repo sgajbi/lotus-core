@@ -5,6 +5,7 @@ from typing import Literal, NoReturn, cast
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import Response
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.analytics_input_dto import (
@@ -79,6 +80,7 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
         "events expressed in the effective reporting currency with explicit flow provenance.\n"
         "When: Used for stateful TWR and MWR input acquisition without direct database coupling."
     ),
+    openapi_extra=source_data_product_openapi_extra("PortfolioTimeseriesInput"),
 )
 async def get_portfolio_analytics_timeseries(
     request: PortfolioAnalyticsTimeseriesRequest,
@@ -126,6 +128,7 @@ async def get_portfolio_analytics_timeseries(
         "When: Used by lotus-performance analytics pipelines for large-window "
         "position input retrieval."
     ),
+    openapi_extra=source_data_product_openapi_extra("PositionTimeseriesInput"),
 )
 async def get_position_analytics_timeseries(
     request: PositionAnalyticsTimeseriesRequest,

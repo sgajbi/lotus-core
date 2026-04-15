@@ -919,6 +919,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     portfolio_inputs = schema["paths"][
         "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries"
     ]["post"]
+    position_inputs = schema["paths"][
+        "/integration/portfolios/{portfolio_id}/analytics/position-timeseries"
+    ]["post"]
     export_result = schema["paths"][
         "/integration/exports/analytics-timeseries/jobs/{job_id}/result"
     ]["get"]
@@ -934,6 +937,19 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     invalid_request = portfolio_inputs["responses"]["400"]["content"]["application/json"]["example"]
     assert invalid_request["detail"] == "Exactly one of window or period must be provided."
+
+    portfolio_product = portfolio_inputs["x-lotus-source-data-product"]
+    assert portfolio_product["product_name"] == "PortfolioTimeseriesInput"
+    assert portfolio_product["product_version"] == "v1"
+    assert portfolio_product["route_family"] == "Analytics Input"
+    assert portfolio_product["serving_plane"] == "query_control_plane_service"
+    assert "lotus-performance" in portfolio_product["consumers"]
+    assert "restatement_version" in portfolio_product["required_metadata_fields"]
+
+    position_product = position_inputs["x-lotus-source-data-product"]
+    assert position_product["product_name"] == "PositionTimeseriesInput"
+    assert position_product["route_family"] == "Analytics Input"
+    assert "lotus-risk" in position_product["consumers"]
 
     job_id_param = next(
         parameter for parameter in export_result["parameters"] if parameter["name"] == "job_id"
@@ -986,13 +1002,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert export_result_schema["properties"]["data"]["description"] == (
         "Serialized observations or rows from the selected dataset."
     )
-    assert (
-        export_job_schema["properties"]["lifecycle_mode"]["default"] == "inline_job_execution"
-    )
-    assert (
-        export_job_schema["properties"]["disposition"]["description"].startswith(
-            "How this response was produced"
-        )
+    assert export_job_schema["properties"]["lifecycle_mode"]["default"] == "inline_job_execution"
+    assert export_job_schema["properties"]["disposition"]["description"].startswith(
+        "How this response was produced"
     )
     assert export_job_schema["properties"]["result_available"]["description"] == (
         "True when a finalized result payload is available for retrieval."
@@ -1233,12 +1245,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert components[series_point_name]["properties"]["series_currency"]["description"] == (
         "Native component series currency for the returned price or return point."
     )
-    assert (
-        components[series_point_name]["properties"]["fx_rate"]["description"]
-        == (
-            "Benchmark-currency to target-currency FX context rate when target currency "
-            "is requested. This is not component-to-benchmark normalization."
-        )
+    assert components[series_point_name]["properties"]["fx_rate"]["description"] == (
+        "Benchmark-currency to target-currency FX context rate when target currency "
+        "is requested. This is not component-to-benchmark normalization."
     )
     assert benchmark_market_series_response["properties"]["normalization_policy"]["examples"] == [
         "native_component_series_downstream_normalization_required"

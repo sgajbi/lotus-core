@@ -254,6 +254,23 @@ def get_source_data_product(product_name: str) -> SourceDataProductDefinition:
     raise KeyError(f"Unknown source-data product: {product_name}")
 
 
+def source_data_product_openapi_extra(product_name: str) -> dict[str, dict[str, object]]:
+    product = get_source_data_product(product_name)
+    return {
+        "x-lotus-source-data-product": {
+            "product_name": product.product_name,
+            "product_version": product.product_version,
+            "route_family": product.route_family,
+            "serving_plane": product.serving_plane,
+            "owner": product.owner,
+            "consumers": list(product.consumers),
+            "paging_mode": product.paging_mode,
+            "export_mode": product.export_mode,
+            "required_metadata_fields": list(product.required_metadata_fields),
+        }
+    }
+
+
 def products_for_consumer(consumer: str) -> tuple[SourceDataProductDefinition, ...]:
     requested = _normalize_required_text(consumer, "consumer")
     return tuple(

@@ -112,6 +112,20 @@ Future runtime slices must:
 5. preserve RFC-0082 route-family classification,
 6. update downstream contract tests for affected consumers.
 
+## Runtime Binding Progress
+
+The first runtime-adjacent binding exposes machine-readable source-data product identity in OpenAPI
+through `x-lotus-source-data-product` for the analytics timeseries input contracts:
+
+1. `PortfolioTimeseriesInput` on
+   `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries`,
+2. `PositionTimeseriesInput` on
+   `/integration/portfolios/{portfolio_id}/analytics/position-timeseries`.
+
+This binding does not change response payloads, persistence, generated events, or downstream runtime
+behavior. It makes the catalog visible to contract consumers and keeps the full DTO-envelope metadata
+work as a later runtime slice.
+
 ## Validation
 
 Slice 6 validation is:
