@@ -606,6 +606,11 @@ The contract boundary is now explicit in Swagger and tests:
 3. do not use it as a substitute for downstream performance, risk, or advisory output contracts;
 4. treat it as source data publication, not analytics ownership transfer.
 
+The certification lane now also includes HTTP-level dependency tests for the gateway-facing
+`core-snapshot` and benchmark-assignment routes, so policy gating, source-data runtime metadata,
+and not-found behavior are proven through the ASGI surface rather than only through direct router
+function tests.
+
 ### Downstream Consumer Reality
 
 | Route | Active downstream consumers verified | Integration posture |
