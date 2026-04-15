@@ -34,6 +34,75 @@ Important boundary reminder:
    calculation outputs remain owned by the authoritative downstream analytics service, usually
    `lotus-performance`.
 
+## Certified Endpoint Slice: Analytics Input Family
+
+This certification pass covers the current strategic analytics-input contracts:
+
+1. `POST /integration/portfolios/{portfolio_id}/analytics/reference`
+2. `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries`
+3. `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries`
+
+### Route Contract Decision
+
+These are the correct live routes. The legacy convenience reads that downstream systems sometimes
+expected in earlier probes are not the governed integration contract:
+
+1. `GET /integration/portfolios/{portfolio_id}/timeseries` is not the strategic route.
+2. `GET /integration/positions/{portfolio_id}/timeseries` is not the strategic route.
+3. Consumers requiring analytics input must use the `POST /integration/.../analytics/...`
+   control-plane contracts so request scope, lineage, reporting-currency conversion, filters,
+   dimensions, paging, and source-data metadata remain explicit and reproducible.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/portfolios/{portfolio_id}/analytics/reference` | `lotus-performance`, `lotus-gateway` | Correct. `lotus-performance` uses the route for stateful portfolio lifecycle/reference metadata. `lotus-gateway` uses it for workspace source context and does not attempt to compute analytics itself. |
+| `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` | `lotus-performance` | Correct. This is the canonical upstream source for stateful portfolio-level return inputs. No gateway direct use was found, which is appropriate. |
+| `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries` | `lotus-performance`, `lotus-risk` | Correct. `lotus-performance` uses it for contribution/attribution-style sourcing. `lotus-risk` uses it for historical attribution exposure history. |
+
+### Upstream Integration Assessment
+
+The analytics-input family is on the correct serving plane for upstream callers:
+
+1. query-control-plane, not query-service convenience reads
+2. `POST` contract shape, not `GET`, because these routes support governed request bodies
+3. explicit request lineage through `consumer_system`
+4. deterministic paging via `page.page_token` and `request_scope_fingerprint`
+5. reproducible currency scope via `reporting_currency`
+
+For this family, the upstream contract is already aligned with the architecture target in
+RFC-0082/RFC-0083. The remaining risk is not route placement; it is keeping economic correctness
+and downstream adoption synchronized as the analytics stack evolves.
+
+### Swagger / OpenAPI Assessment
+
+For the analytics-input family, Swagger is now production-grade on the following dimensions:
+
+1. route descriptions explain when to use each endpoint and who should consume it;
+2. request fields and response fields carry explicit descriptions;
+3. canonical examples/defaults are present across the schema family;
+4. source-data product metadata and security metadata are published in OpenAPI extensions;
+5. invalid-request and not-found examples are published for the operator-facing failure modes.
+
+Automated proof now includes a recursive analytics-input schema completeness assertion in
+`tests/integration/services/query_control_plane_service/test_control_plane_app.py` so regressions
+in field descriptions/examples are caught even when nested models change.
+
+### Issue Disposition For This Endpoint Family
+
+Reviewed open `lotus-core` issues tied directly to these contracts:
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `#233` position-timeseries missing `position_currency` | Addressed in the live contract. `PositionTimeseriesRow.position_currency` is present in the public schema, documented, and regression-covered. | Close as implemented once GitHub issue hygiene is updated. |
+| `#259` need explicit flow provenance beyond plain external flow | Addressed in the live contract. `CashFlowObservation` now exposes `cash_flow_type`, `flow_scope`, and `source_classification`, with OpenAPI descriptions covering semantics. | Close as implemented once GitHub issue hygiene is updated. |
+| `#250`, `#253`, `#254`, `#258`, `#260` | These are route-family economics/readiness defects rather than documentation or route-publication gaps. They require runtime validation against canonical/live scenarios before closure. | Keep open until live source-economics proof is re-run and captured. |
+
+No new gateway issue is required from this slice. Gateway is using the strategic analytics-reference
+route correctly for source context, and no duplicate or stale gateway usage of legacy analytics
+paths was found during review.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |
