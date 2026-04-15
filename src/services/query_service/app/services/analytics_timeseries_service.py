@@ -43,6 +43,7 @@ from ..dtos.analytics_input_dto import (
     PositionTimeseriesRow,
     QualityDiagnostics,
 )
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.analytics_export_repository import AnalyticsExportRepository
 from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from ..settings import load_query_service_settings
@@ -533,6 +534,7 @@ class AnalyticsTimeseriesService:
                 "request": request.model_dump(mode="json"),
             }
         )
+        generated_at = datetime.now(UTC)
         return PortfolioAnalyticsTimeseriesResponse(
             portfolio_id=portfolio_id,
             portfolio_currency=portfolio.base_currency,
@@ -544,7 +546,7 @@ class AnalyticsTimeseriesService:
             frequency=request.frequency,
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
-                generated_at=datetime.now(UTC),
+                generated_at=generated_at,
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
@@ -565,6 +567,10 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             observations=observations,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+            ),
         )
 
     async def get_position_timeseries(
@@ -755,6 +761,7 @@ class AnalyticsTimeseriesService:
                 "request": request.model_dump(mode="json"),
             }
         )
+        generated_at = datetime.now(UTC)
         return PositionAnalyticsTimeseriesResponse(
             portfolio_id=portfolio_id,
             portfolio_currency=portfolio.base_currency,
@@ -763,7 +770,7 @@ class AnalyticsTimeseriesService:
             frequency=request.frequency,
             lineage=LineageMetadata(
                 generated_by="integration.analytics_inputs",
-                generated_at=datetime.now(UTC),
+                generated_at=generated_at,
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
@@ -783,6 +790,10 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             rows=response_rows,
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                generated_at=generated_at,
+            ),
         )
 
     async def get_portfolio_reference(

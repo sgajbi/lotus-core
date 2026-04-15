@@ -123,11 +123,22 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
     assert response.diagnostics.returned_observation_dates_count == 1
     assert response.diagnostics.cash_flows_included is True
     assert response.page.sort_key == "valuation_date:asc"
+    assert response.product_name == "PortfolioTimeseriesInput"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2025, 12, 31)
+    assert response.generated_at == response.lineage.generated_at
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.tenant_id is None
+    assert response.snapshot_id is None
+    assert response.policy_version is None
 
 
 @pytest.mark.asyncio
-async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_reporting_currency(
-) -> None:
+async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_reporting_currency() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -293,8 +304,9 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
 
 
 @pytest.mark.asyncio
-async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_next_page_token(
-) -> None:
+async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_next_page_token() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=4),
@@ -346,16 +358,20 @@ async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_n
         ),
     )
 
-    observations, quality_distribution, observed_dates, snapshot_epoch, next_page_token = (
-        await service._portfolio_observation_rows(  # pylint: disable=protected-access
-            portfolio_id="P1",
-            portfolio_currency="USD",
-            reporting_currency="SGD",
-            resolved_window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
-            page_size=1,
-            cursor_date=None,
-            request_scope_fingerprint="scope-1",
-        )
+    (
+        observations,
+        quality_distribution,
+        observed_dates,
+        snapshot_epoch,
+        next_page_token,
+    ) = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="SGD",
+        resolved_window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
+        page_size=1,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
     )
 
     assert snapshot_epoch == 4
@@ -617,6 +633,16 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
     assert "scope_fingerprint" in token_payload
+    assert response.product_name == "PositionTimeseriesInput"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2025, 12, 31)
+    assert response.generated_at == response.lineage.generated_at
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.tenant_id is None
+    assert response.snapshot_id is None
+    assert response.policy_version is None
 
 
 @pytest.mark.asyncio
@@ -1004,8 +1030,9 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_distinguishes_internal_trade_flows_from_external_funding(
-) -> None:
+async def test_get_position_timeseries_distinguishes_internal_trade_flows_from_external_funding() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -1336,8 +1363,9 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_converts_position_values_to_portfolio_and_reporting_currency(
-) -> None:
+async def test_get_position_timeseries_converts_position_values_to_portfolio_and_reporting_currency() -> (
+    None
+):
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -1938,15 +1966,21 @@ async def test_get_export_result_json_success_and_export_job_state_helpers() -> 
     assert response.result_row_count == 1
 
     assert await service._mark_export_job_running("aexp_ok") is running_row  # pylint: disable=protected-access
-    assert await service._mark_export_job_completed(  # pylint: disable=protected-access
-        "aexp_ok",
-        result_payload=completed_row.result_payload,
-        result_row_count=1,
-    ) is running_row
-    assert await service._mark_export_job_failed(  # pylint: disable=protected-access
-        "aexp_ok",
-        error_message="boom",
-    ) is running_row
+    assert (
+        await service._mark_export_job_completed(  # pylint: disable=protected-access
+            "aexp_ok",
+            result_payload=completed_row.result_payload,
+            result_row_count=1,
+        )
+        is running_row
+    )
+    assert (
+        await service._mark_export_job_failed(  # pylint: disable=protected-access
+            "aexp_ok",
+            error_message="boom",
+        )
+        is running_row
+    )
     service.export_repo.mark_running.assert_awaited_once_with(running_row)
     service.export_repo.mark_completed.assert_awaited_once()
     service.export_repo.mark_failed.assert_awaited_once_with(running_row, error_message="boom")

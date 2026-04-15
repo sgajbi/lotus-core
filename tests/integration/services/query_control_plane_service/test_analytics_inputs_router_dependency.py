@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -8,6 +8,9 @@ import pytest_asyncio
 from src.services.query_control_plane_service.app.main import app
 from src.services.query_control_plane_service.app.routers.analytics_inputs import (
     get_analytics_timeseries_service,
+)
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -52,6 +55,7 @@ async def async_test_client():
                 "next_page_token": None,
             },
             "observations": [],
+            **source_data_product_runtime_metadata(as_of_date=date(2025, 12, 31)),
         }
     )
     mock_service.get_position_timeseries = AsyncMock(
@@ -86,6 +90,7 @@ async def async_test_client():
                 "next_page_token": None,
             },
             "rows": [],
+            **source_data_product_runtime_metadata(as_of_date=date(2025, 12, 31)),
         }
     )
     mock_service.get_portfolio_reference = AsyncMock(
@@ -189,6 +194,9 @@ async def test_portfolio_analytics_timeseries_success(async_test_client):
     assert body["portfolio_id"] == "DEMO_DPM_EUR_001"
     assert body["product_name"] == "PortfolioTimeseriesInput"
     assert body["product_version"] == "v1"
+    assert body["as_of_date"] == "2025-12-31"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
 
 
 async def test_position_analytics_timeseries_success(async_test_client):
@@ -210,6 +218,9 @@ async def test_position_analytics_timeseries_success(async_test_client):
     assert body["portfolio_id"] == "DEMO_DPM_EUR_001"
     assert body["product_name"] == "PositionTimeseriesInput"
     assert body["product_version"] == "v1"
+    assert body["as_of_date"] == "2025-12-31"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
     mock_service.get_position_timeseries.assert_awaited_once()
 
 

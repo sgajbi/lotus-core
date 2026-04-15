@@ -6,7 +6,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .source_data_product_identity import product_name_field, product_version_field
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 
 
 class AnalyticsWindow(BaseModel):
@@ -312,7 +316,7 @@ class PortfolioTimeseriesObservation(BaseModel):
     model_config = ConfigDict()
 
 
-class PortfolioAnalyticsTimeseriesResponse(BaseModel):
+class PortfolioAnalyticsTimeseriesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["PortfolioTimeseriesInput"] = product_name_field(
         "PortfolioTimeseriesInput"
     )
@@ -546,7 +550,7 @@ class PositionTimeseriesRow(BaseModel):
     model_config = ConfigDict()
 
 
-class PositionAnalyticsTimeseriesResponse(BaseModel):
+class PositionAnalyticsTimeseriesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["PositionTimeseriesInput"] = product_name_field("PositionTimeseriesInput")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(

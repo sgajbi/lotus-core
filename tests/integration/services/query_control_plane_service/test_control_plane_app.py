@@ -1064,8 +1064,10 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     )
     assert portfolio_response["properties"]["product_name"]["default"] == "PortfolioTimeseriesInput"
     assert portfolio_response["properties"]["product_version"]["default"] == "v1"
+    assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(portfolio_response["properties"])
     assert position_response["properties"]["product_name"]["default"] == "PositionTimeseriesInput"
     assert position_response["properties"]["product_version"]["default"] == "v1"
+    assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(position_response["properties"])
     assert portfolio_observation["properties"]["cash_flow_currency"]["description"] == (
         "Currency code applied to the observation cash_flows amounts; matches the "
         "effective reporting_currency."

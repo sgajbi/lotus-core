@@ -155,7 +155,8 @@ These fields cover the canonical positions and transaction ledger responses plus
 reporting convenience shapes that are already deprecated toward those target products.
 
 The first runtime metadata binding adds the required supportability fields to the
-`HoldingsAsOf`, `TransactionLedgerWindow`, and `PortfolioStateSnapshot` response envelopes:
+`HoldingsAsOf`, `TransactionLedgerWindow`, `PortfolioStateSnapshot`, and analytics-input response
+envelopes:
 
 1. `PortfolioPositionsResponse`,
 2. `CashBalancesResponse`,
@@ -163,7 +164,9 @@ The first runtime metadata binding adds the required supportability fields to th
 4. `PaginatedTransactionResponse`,
 5. `IncomeSummaryResponse`,
 6. `ActivitySummaryResponse`,
-7. `CoreSnapshotResponse`.
+7. `CoreSnapshotResponse`,
+8. `PortfolioAnalyticsTimeseriesResponse`,
+9. `PositionAnalyticsTimeseriesResponse`.
 
 The binding populates `generated_at`, `as_of_date`, `restatement_version`, and `correlation_id`
 from runtime request context and deterministic defaults. It leaves
@@ -177,6 +180,11 @@ joined into operational product responses.
 integration governance context because those values already exist in the core snapshot assembly
 path. It leaves `snapshot_id` null until the reconstruction scope can supply complete epoch inputs
 for deterministic snapshot identity.
+
+The analytics-input timeseries products reuse their existing `lineage.generated_at` timestamp for
+the top-level `generated_at` supportability field so lineage and envelope metadata stay internally
+consistent. They leave tenant, evidence, snapshot, and policy fields null until those controls are
+resolved in the analytics-input contract path.
 
 The snapshot DTO-envelope binding adds `product_name` and `product_version` to
 `PortfolioStateSnapshot` on the core snapshot response. The existing route-level
