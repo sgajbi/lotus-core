@@ -327,6 +327,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert "not business calculations" in reconciliation_findings["description"]
     assert "not direct business-calculation inputs" in reprocessing_keys["description"]
     assert "not direct business-calculation inputs" in reprocessing_jobs["description"]
+    assert "400" not in reprocessing_jobs["responses"]
     assert "not a business-calculation contract" in lineage["description"]
     assert (
         "not business-calculation inputs"

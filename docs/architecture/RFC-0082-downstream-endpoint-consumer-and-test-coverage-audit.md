@@ -569,7 +569,8 @@ Malformed operator date filters are now also contractually separated from missin
 conditions: support routes that parse caller-supplied dates return `400 Bad Request` with an
 explicit field-level message instead of collapsing malformed dates into `404 Not Found`. Support
 overview is intentionally excluded from that list because it does not accept a caller-supplied
-date filter.
+date filter. Reprocessing-job listings are also excluded because the route does not accept a
+caller-supplied date filter.
 
 Automated proof now includes:
 

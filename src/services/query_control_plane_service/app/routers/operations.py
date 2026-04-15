@@ -407,12 +407,6 @@ async def get_reprocessing_keys(
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
         },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": INVALID_DATE_RESPONSE_DESCRIPTION,
-            "content": {
-                "application/json": {"example": invalid_date_response_example("business_date")}
-            },
-        },
     },
     summary="List durable replay jobs for support workflows",
     description=(
