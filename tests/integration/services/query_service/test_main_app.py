@@ -47,6 +47,32 @@ async def test_openapi_binds_query_service_source_data_products(async_test_clien
             assert extension["current_routes"] == list(product.current_routes)
 
 
+async def test_openapi_binds_query_service_source_data_product_response_identity(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    components = schema["components"]["schemas"]
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        if product.serving_plane != QUERY_SERVICE:
+            continue
+        for route in product.current_routes:
+            operation = schema["paths"][route].get("post") or schema["paths"][route].get("get")
+            response_schema_ref = operation["responses"]["200"]["content"]["application/json"][
+                "schema"
+            ]["$ref"]
+            response_schema_name = response_schema_ref.rsplit("/", maxsplit=1)[-1]
+            response_schema = components[response_schema_name]
+
+            assert response_schema["properties"]["product_name"]["default"] == product.product_name
+            assert (
+                response_schema["properties"]["product_version"]["default"]
+                == product.product_version
+            )
+
+
 async def test_middleware_generates_correlation_id_when_missing(async_test_client):
     with patch(
         "src.services.query_service.app.main.generate_correlation_id", return_value="QRY-abc"
