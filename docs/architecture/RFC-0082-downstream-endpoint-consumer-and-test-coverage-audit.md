@@ -647,12 +647,19 @@ replacement inside lotus-core.
 
 This certification pass covers the operator-evidence family around:
 
-1. `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
-2. `GET /support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings`
-3. `GET /support/portfolios/{portfolio_id}/reprocessing-keys`
-4. `GET /support/portfolios/{portfolio_id}/reprocessing-jobs`
-5. `GET /lineage/portfolios/{portfolio_id}/securities/{security_id}`
-6. `GET /lineage/portfolios/{portfolio_id}/keys`
+1. `GET /support/portfolios/{portfolio_id}/overview`
+2. `GET /support/portfolios/{portfolio_id}/readiness`
+3. `GET /support/portfolios/{portfolio_id}/calculator-slos`
+4. `GET /support/portfolios/{portfolio_id}/control-stages`
+5. `GET /support/portfolios/{portfolio_id}/valuation-jobs`
+6. `GET /support/portfolios/{portfolio_id}/aggregation-jobs`
+7. `GET /support/portfolios/{portfolio_id}/analytics-export-jobs`
+8. `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
+9. `GET /support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings`
+10. `GET /support/portfolios/{portfolio_id}/reprocessing-keys`
+11. `GET /support/portfolios/{portfolio_id}/reprocessing-jobs`
+12. `GET /lineage/portfolios/{portfolio_id}/securities/{security_id}`
+13. `GET /lineage/portfolios/{portfolio_id}/keys`
 
 ### Route Contract Decision
 
