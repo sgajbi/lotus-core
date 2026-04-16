@@ -27,10 +27,15 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-TXN-00
     },
     summary="Get Portfolio Transactions",
     description=(
-        "Returns the canonical portfolio transaction ledger with date-window filters, optional "
-        "instrument and security drill-down, pagination, and sorting. Use `security_id` for "
-        "holdings drill-down and latest transaction retrieval for a specific security within "
-        "the portfolio. Results default to latest-first ordering by `transaction_date` "
+        "What: Return the strategic TransactionLedgerWindow operational read for one portfolio.\n"
+        "How: Publishes the canonical portfolio transaction ledger with date-window filters, "
+        "instrument/security drill-down, FX and linked-event filters, pagination, and sorting.\n"
+        "When: Use this route when a downstream consumer needs governed transaction-ledger rows "
+        "rather than summary aggregations. Use `security_id` for holdings drill-down, "
+        "`instrument_id` for instrument-specific inspection, and FX/event filters such as "
+        "`component_type`, `linked_transaction_group_id`, `fx_contract_id`, `swap_event_id`, "
+        "`near_leg_group_id`, or `far_leg_group_id` when the consumer needs multi-row economic "
+        "event analysis. Results default to latest-first ordering by `transaction_date` "
         "descending unless `sort_by` and `sort_order` are provided explicitly."
     ),
     openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),

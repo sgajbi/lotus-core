@@ -1104,6 +1104,63 @@ route-purpose wording and request-parameter descriptions.
 | `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `GET /portfolios/{portfolio_id}/cashflow-projection` in this pass. |
 | `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated projected cashflow route correctly. |
 
+## Certified Endpoint Slice: Transaction Ledger Operational Read
+
+This certification pass covers:
+
+1. `GET /portfolios/{portfolio_id}/transactions`
+
+### Route Contract Decision
+
+This is the strategic lotus-core operational-read route for governed transaction-ledger rows.
+
+The boundary is explicit:
+
+1. use it when a downstream consumer needs canonical transaction-ledger rows rather than summary
+   aggregates;
+2. use holdings drill-down, instrument-specific filters, and FX/event filters intentionally instead
+   of reconstructing economic-event views client-side;
+3. keep summary income/activity reporting and performance interpretation outside this route;
+4. preserve paging and explicit sorting as part of the governed ledger contract.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /portfolios/{portfolio_id}/transactions` | `lotus-gateway` | Mixed. Gateway uses the dedicated route for portfolio transaction-ledger views, but it currently narrows the upstream filter surface and does not expose the full set of instrument, FX-component, linked-event, and explicit sorting filters already supported by lotus-core. |
+
+No active direct `lotus-report`, `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was
+evidenced against this route in this pass.
+
+### Upstream Integration Assessment
+
+The route is strong and domain-correct for operational ledger inspection:
+
+1. it publishes canonical ledger rows with date-window, holdings drill-down, FX, and linked-event
+   filter support;
+2. explicit sort and pagination controls make the ledger stable for UI and operational use;
+3. the route stays row-oriented and does not collapse into summary reporting or performance logic;
+4. OpenAPI descriptions now make the advanced filter surface more explicit for downstream consumers.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. this is the strategic `TransactionLedgerWindow` operational read for one portfolio;
+2. holdings, instrument, and FX/event filters are part of the governed contract;
+3. explicit sorting remains part of the route semantics;
+4. 404 examples and transaction field descriptions remain clear and specific.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+advanced filter descriptions and strategic route wording.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `GET /portfolios/{portfolio_id}/transactions` in this pass. |
+| `lotus-gateway #120` advanced transaction-ledger filter posture | Open. Still valid as downstream adoption work. Gateway currently exposes only a subset of the upstream filter and sorting surface even though lotus-core already supports richer FX/event drill-down filters. | Keep open until gateway makes and documents an explicit product decision on the full transaction-ledger filter surface, and implements whichever strategically useful options should be exposed. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:
