@@ -128,11 +128,11 @@ These endpoints are currently classified as operational read contracts because t
 | --- | --- | --- | --- | --- |
 | `POST /reporting/assets-under-management/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Source-data query, not report composition. |
 | `POST /reporting/asset-allocation/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Must remain core-held allocation source truth. |
-| `POST /reporting/cash-balances/query` | Operational Read | gateway, advise | Deprecated convenience shape | Cash source-data summary; strategic replacement is `GET /portfolios/{portfolio_id}/cash-balances` in `HoldingsAsOf`. |
+| `POST /reporting/cash-balances/query` | Operational Read | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated convenience shape | Cash source-data summary retained as a migration bridge. Strategic replacement is `GET /portfolios/{portfolio_id}/cash-balances` in `HoldingsAsOf`; remove/keep decision still depends on merged or external consumer confirmation. |
 | `POST /reporting/portfolio-summary/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Avoid absorbing analytics narrative. |
 | `POST /reporting/holdings-snapshot/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Holdings snapshot query; target product is `HoldingsAsOf`. |
-| `POST /reporting/income-summary/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Income source-data summary; target product is `TransactionLedgerWindow`. |
-| `POST /reporting/activity-summary/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Transaction/activity source-data summary; target product is `TransactionLedgerWindow`. |
+| `POST /reporting/income-summary/query` | Operational Read | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated convenience shape | Income source-data summary retained as a migration bridge. Target product is `TransactionLedgerWindow`; remove/keep decision still depends on merged or external consumer confirmation. |
+| `POST /reporting/activity-summary/query` | Operational Read | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated convenience shape | Transaction/activity source-data summary retained as a migration bridge. Target product is `TransactionLedgerWindow`; remove/keep decision still depends on merged or external consumer confirmation. |
 
 ### `query_control_plane_service`: Analytics Input Contracts
 
