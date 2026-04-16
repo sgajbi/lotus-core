@@ -1365,12 +1365,12 @@ The boundary is explicit:
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `GET /portfolios/` | No active direct downstream caller evidenced in this pass | Correct strategic discovery contract with no overstated live adoption. Gateway documents a portfolio catalog surface in its own API, but this pass did not find active product code that should be described as a current direct caller of lotus-core list discovery. |
+| `GET /portfolios/` | `lotus-gateway` | Correct. Gateway actively calls the canonical discovery route through its portfolio catalog service for `/api/v1/portfolio/portfolios`, while its foundation selector surface uses the dedicated lookup contract instead of overloading this broader discovery read. |
 | `GET /portfolios/{portfolio_id}` | `lotus-gateway` | Correct. Gateway actively calls the canonical single-portfolio detail route before composing downstream workspace and related portfolio views. |
 
-The split matters. Single-portfolio identity is a live downstream dependency today, while list
-discovery remains catalog-correct without enough direct evidence in this pass to describe it as an
-active bound route.
+The split still matters. Gateway uses the broader discovery route for portfolio catalog views and
+the single-portfolio identity route for workspace composition, while foundation selector flows use
+the narrower `/lookups/portfolios` contract instead of treating discovery as a generic lookup API.
 
 ### Upstream Integration Assessment
 
@@ -1380,8 +1380,12 @@ The route pair is strong and appropriately narrow:
    center filters with deterministic ordering;
 2. single-portfolio detail publishes canonical identity, lifecycle, advisory, booking-center, and
    cost-basis metadata without bleeding into holdings or reporting concerns;
-3. not-found behavior for single-portfolio detail is truthful and explicit;
-4. the pair keeps identity/discovery separate from broader portfolio-state composition, which is
+3. single-portfolio detail now aligns to the newer route pattern by raising explicit lookup misses
+   rather than generic value errors inside the service layer;
+4. unexpected failures on discovery now fall through to the shared global error envelope instead of
+   emitting one-off router-local `500` strings;
+5. not-found behavior for single-portfolio detail is truthful and explicit;
+6. the pair keeps identity/discovery separate from broader portfolio-state composition, which is
    the right operational-read boundary for downstream systems.
 
 No upstream defect was found in this pass.
@@ -1403,7 +1407,7 @@ single-portfolio lookup, `404`, and filter forwarding behavior.
 
 Service-level proof exists in
 `tests/unit/services/query_service/services/test_portfolio_service.py` for DTO mapping, empty-list
-behavior, single-portfolio lookup, and not-found handling.
+behavior, single-portfolio lookup, DTO normalization, and not-found handling.
 
 Repository-level proof exists in
 `tests/unit/services/query_service/repositories/test_query_portfolio_repository.py` for no-filter

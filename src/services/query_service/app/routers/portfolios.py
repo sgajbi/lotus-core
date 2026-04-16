@@ -56,18 +56,12 @@ async def get_portfolios(
     ),
     service: PortfolioService = Depends(get_portfolio_service),
 ):
-    try:
-        return await service.get_portfolios(
-            portfolio_id=portfolio_id,
-            portfolio_ids=portfolio_ids,
-            client_id=client_id,
-            booking_center_code=booking_center_code,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {e}",
-        )
+    return await service.get_portfolios(
+        portfolio_id=portfolio_id,
+        portfolio_ids=portfolio_ids,
+        client_id=client_id,
+        booking_center_code=booking_center_code,
+    )
 
 
 @router.get(
@@ -102,7 +96,7 @@ async def get_portfolio_by_id(
     try:
         portfolio = await service.get_portfolio_by_id(portfolio_id)
         return portfolio
-    except ValueError:
+    except LookupError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Portfolio with id {portfolio_id} not found",

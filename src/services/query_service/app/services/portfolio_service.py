@@ -2,7 +2,6 @@
 import logging
 from typing import Optional
 
-from portfolio_common.database_models import Portfolio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
@@ -47,7 +46,7 @@ class PortfolioService:
 
         return PortfolioQueryResponse(portfolios=portfolios)
 
-    async def get_portfolio_by_id(self, portfolio_id: str) -> Portfolio:
+    async def get_portfolio_by_id(self, portfolio_id: str) -> PortfolioRecord:
         """
         Retrieves a single portfolio by its ID.
         Raises an exception if the portfolio is not found.
@@ -55,6 +54,6 @@ class PortfolioService:
         logger.info(f"Fetching portfolio with id: {portfolio_id}")
         db_portfolio = await self.repo.get_by_id(portfolio_id)
         if not db_portfolio:
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
-        return db_portfolio
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        return PortfolioRecord.model_validate(db_portfolio)
 
