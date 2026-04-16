@@ -305,6 +305,95 @@ Swagger now also makes the supporting-route boundary clearer for this adjacent f
    remaining evidence/reference contracts rather than substitutes for composition-window plus
    market-series sourcing when lower-level benchmark reconstruction is required.
 
+## Certified Endpoint Slice: Benchmark And Index Reference Family
+
+This certification pass covers:
+
+1. `POST /integration/benchmarks/{benchmark_id}/definition`
+2. `POST /integration/benchmarks/catalog`
+3. `POST /integration/indices/catalog`
+4. `POST /integration/indices/{index_id}/price-series`
+5. `POST /integration/indices/{index_id}/return-series`
+6. `POST /integration/benchmarks/{benchmark_id}/return-series`
+
+### Route Contract Decision
+
+These remain valid supporting downstream contracts, but they are not the strategic benchmark
+calculation seams.
+
+The intended split is now explicit:
+
+1. benchmark definition is point-in-time reference context;
+2. benchmark catalog is discovery-first selection support;
+3. index catalog is governed metadata and classification lookup for known benchmark components;
+4. raw index and benchmark return-series routes are vendor/reference evidence inputs;
+5. cross-window benchmark calculation still belongs to `lotus-performance` and should prefer
+   composition-window plus market-series when lower-level reconstruction is required.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /integration/benchmarks/{benchmark_id}/definition` | `lotus-performance` | Correct. Performance uses the route for point-in-time benchmark reference context before broader benchmark sourcing. |
+| `POST /integration/benchmarks/catalog` | `lotus-gateway` | Correct. Gateway uses the route for workspace benchmark-selection and discovery flows before targeted benchmark routes are known. |
+| `POST /integration/indices/catalog` | `lotus-performance` | Correct. Performance uses targeted `index_ids` lookup to resolve governed classification labels for benchmark component grouping. |
+| `POST /integration/indices/{index_id}/price-series` | `lotus-performance` | Correct. Performance uses the route for component-level benchmark source pricing when reconstructing benchmark inputs. |
+| `POST /integration/indices/{index_id}/return-series` | No active direct caller evidenced in this pass | Catalog-intended and contract-valid. Current direct code evidence remains stronger for index price-series and benchmark market-series than for raw index return-series itself. |
+| `POST /integration/benchmarks/{benchmark_id}/return-series` | `lotus-performance` | Correct, with discipline. Performance uses the route as vendor/reference benchmark return evidence and explicit override-style sourcing, not as the default benchmark-math path. |
+
+`lotus-risk` remains catalog-intended for parts of this family, but this pass did not find active
+direct raw definition, catalog, or return-series calls that should be described as live production
+dependencies here.
+
+### Upstream Integration Assessment
+
+The family is now aligned with the intended downstream boundary:
+
+1. benchmark definition returns effective point-in-time context and clean `404` semantics;
+2. benchmark catalog is explicitly discovery-first and should give way to targeted routes once a
+   concrete identifier is known;
+3. index catalog supports optional targeted `index_ids`, so downstream consumers do not need full
+   catalog scans just to resolve known benchmark component metadata;
+4. raw index price-series and benchmark return-series remain source/reference evidence contracts,
+   not substitutes for the strategic benchmark-source family;
+5. current downstream performance usage matches that split: benchmark grouping relies on targeted
+   index-catalog metadata, benchmark reconstruction uses price-series plus composition/market
+   contracts, and vendor benchmark return-series stays non-default evidence input.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the following explicit:
+
+1. benchmark definition is point-in-time reference context, not the strategic cross-window
+   calculation contract;
+2. benchmark catalog is for discovery and selection before targeted benchmark routes are known;
+3. index catalog is the governed source for benchmark component metadata and classification labels;
+4. raw index price-series and raw return-series contracts are evidence/reference inputs with
+   explicit downstream usage notes;
+5. the nested benchmark reference, catalog, and raw-series schema family is protected by recursive
+   OpenAPI completeness guards.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_control_plane_service/test_integration_router_dependency.py` for
+benchmark definition, benchmark catalog, index catalog, raw index price-series, raw index
+return-series, and raw benchmark return-series success and not-found behavior where applicable.
+
+Schema-quality proof exists in
+`tests/integration/services/query_control_plane_service/test_control_plane_app.py`, including route
+descriptions, response examples, and nested component schema completeness for the broader benchmark
+reference/catalog family.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core #237` grouped benchmark analytics contract | Still valid. Targeted `index_ids` removes the old full-catalog-scan pain, but downstream consumers still compose grouped benchmark analytics from lower-level contracts client-side. | Keep open as the grouped benchmark follow-on, not as a defect in the current reference family. |
+| `lotus-core #246` broader benchmark source hardening | Still valid. This slice confirms the supporting reference contracts are truthful today, but does not claim the full benchmark-source program is complete. | Keep open. |
+| `lotus-performance #125` downstream adoption of latest lotus-core benchmark/reference hardening | Still valid as downstream conformance work. Performance is the primary active consumer for this family and should keep tests, mocks, and runtime assumptions aligned to the tightened route descriptions and payload semantics. | Keep open until downstream adoption review is complete. |
+
+No new downstream migration issue is required from this slice. The active consumers reviewed here
+are already using the governed routes rather than a stale duplicate seam.
+
 ## Certified Endpoint Slice: Risk-Free Reference Family
 
 This certification pass covers:
