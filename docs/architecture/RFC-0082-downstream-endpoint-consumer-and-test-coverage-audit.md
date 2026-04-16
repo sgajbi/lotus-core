@@ -1879,7 +1879,7 @@ defaults.
 | Repository issue | Status | Certification read |
 | --- | --- | --- |
 | `lotus-core` | No open issue | The source route is already contract-tight in this pass. No lotus-core behavior or documentation defect remains open against `GET /integration/capabilities`. |
-| `lotus-gateway #117` | Open | Active downstream defect. Gateway still sends camelCase query params to lotus-core capabilities in its core query client and should align to canonical snake_case `consumer_system` / `tenant_id`. |
+| `lotus-gateway #117` | Closed on April 16, 2026 | Verified fixed in gateway commit `b45d3af`. `src/app/clients/lotus_core_query_client.py` now sends canonical snake_case `consumer_system` / `tenant_id`, and gateway unit coverage locks the non-default consumer and tenant path. |
 | `lotus-gateway #73` | Open | Still valid, but it is a gateway aggregation-latency issue rather than a lotus-core publication defect. |
 | `lotus-gateway #116` | Open | Remains the broader gateway adoption umbrella for recently hardened lotus-core control-plane routes, including capability and policy semantics. |
 | `lotus-gateway #109` | Open | Adjacent downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. |
@@ -1981,12 +1981,12 @@ was not found in this pass and should not be overstated as live validated. The s
 `lotus-advise` on this specific route family: advisory work is currently anchored more strongly to
 simulation and stateful-context seams than to direct `core-snapshot` reads.
 
-One downstream mismatch was found in this pass: `lotus-gateway` foundation workspace tests and
-parser helpers still model an older upstream payload shape with nested `portfolio` and `metadata`
-blocks. That is not the governed `PortfolioStateSnapshot` contract. Gateway should read the
-current top-level source-data runtime metadata, `portfolio_id`, `valuation_context`, and requested
-`sections`, and only fetch separate portfolio identity context from dedicated routes when the UI
-needs it. That concrete downstream defect is now tracked in `lotus-gateway #118`.
+The earlier downstream mismatch found in this pass is now closed. On April 16, 2026, gateway commit
+`6ec3977` moved foundation workspace parsing onto the governed top-level
+`PortfolioStateSnapshot` envelope, using the dedicated portfolio identity route only for identity
+fields that are not owned by `core-snapshot`. Current gateway unit and integration fixtures now
+model top-level `portfolio_id`, `as_of_date`, `valuation_context`, and `sections`, and an explicit
+regression test proves the parser ignores legacy nested `portfolio` / `metadata` blocks.
 
 ### Swagger / OpenAPI Assessment
 
@@ -2004,7 +2004,7 @@ For this endpoint, Swagger now makes the following explicit:
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Closed. The route documents 404 behavior and integration tests assert the not-found response example. | Re-open only if fresh contrary runtime evidence appears. |
-| `lotus-gateway #118` legacy `core-snapshot` envelope assumption in foundation workspace | Open. Still valid as downstream adoption work. Gateway foundation parsing and fixtures still rely on nested `portfolio` and `metadata` blocks that are not part of the governed `PortfolioStateSnapshot` contract. | Keep open until gateway foundation parsing and tests consume the top-level source-data runtime metadata plus `valuation_context` and `sections`. |
+| `lotus-gateway #118` legacy `core-snapshot` envelope assumption in foundation workspace | Closed on April 16, 2026. Verified fixed in gateway commit `6ec3977`. Foundation workspace parsing now consumes the canonical top-level `PortfolioStateSnapshot` envelope, fetches separate identity data only where required, and regression tests fail if legacy nested `portfolio` / `metadata` assumptions return. | Keep closed unless fresh gateway code reintroduces legacy envelope dependence. |
 
 ## Downstream Consumer Matrix
 
