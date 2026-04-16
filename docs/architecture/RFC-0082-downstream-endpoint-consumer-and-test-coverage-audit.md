@@ -994,24 +994,25 @@ This certification pass covers:
 ### Route Contract Decision
 
 These remain deprecated compatibility routes in the `TransactionLedgerWindow` family, but they are
-still the correct downstream choice when a consumer needs source-owned income or portfolio-flow
-summaries rather than raw transaction rows or broad snapshot payloads.
+are no longer the strategic downstream integration seam. The strategic source-data route for new
+or migrating consumers is `GET /portfolios/{portfolio_id}/transactions`.
 
 The boundary is explicit:
 
-1. use these routes for source-owned requested-window and year-to-date summary outputs;
-2. prefer them over mining income or activity aggregates from `core-snapshot` when the downstream
-   need is summary data rather than broader state publication;
-3. do not use them as a substitute for raw transaction-ledger exploration when row-level
-   transaction evidence is required;
+1. these compatibility routes still publish source-owned requested-window and year-to-date summary
+   outputs;
+2. downstream consumers should prefer the strategic `TransactionLedgerWindow` route over these
+   compatibility shapes when they can derive report/UI summaries from the ledger contract;
+3. the convenience routes remain preferable to mining income or activity aggregates from
+   `core-snapshot` while migration is incomplete;
 4. keep performance, risk, and narrative report composition outside these contracts.
 
 ### Downstream Consumer Reality
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `POST /reporting/income-summary/query` | `lotus-gateway`, `lotus-report` | Correct. Gateway already uses the dedicated route for income views. Report now uses the dedicated route for summary income sections instead of reading income aggregates from `core-snapshot`. |
-| `POST /reporting/activity-summary/query` | `lotus-gateway`, `lotus-report` | Correct. Gateway already uses the dedicated route for activity views. Report now uses the dedicated route for summary activity sections instead of reading activity aggregates from `core-snapshot`. |
+| `POST /reporting/income-summary/query` | `lotus-gateway`, `lotus-report` | Transitional only. Both consumers use the deprecated compatibility route directly instead of mining `core-snapshot`, but they should migrate to the strategic transaction-ledger route. |
+| `POST /reporting/activity-summary/query` | `lotus-gateway`, `lotus-report` | Transitional only. Both consumers use the deprecated compatibility route directly instead of mining `core-snapshot`, but they should migrate to the strategic transaction-ledger route. |
 
 No active direct `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was evidenced against
 these endpoint shapes in this pass.
@@ -1053,8 +1054,8 @@ for requested-window and year-to-date aggregation behavior.
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against these two routes in this pass. |
-| `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated income and activity summary routes directly. |
-| `lotus-report` | No open issue after direct downstream fix in this pass | Report now binds summary income and activity sections to the dedicated lotus-core routes instead of mining them from `core-snapshot`. |
+| `lotus-gateway #122` | Open. Valid downstream migration work. Gateway still calls the deprecated income/activity summary routes directly and should move UI-facing summary flows onto the strategic `GET /portfolios/{portfolio_id}/transactions` contract. | Keep open until gateway no longer calls either deprecated summary route. |
+| `lotus-report #39` | Open. Valid downstream migration work. Report still builds income/activity sections from the deprecated compatibility routes and should derive them from the strategic transaction-ledger contract instead. | Keep open until report no longer calls either deprecated summary route. |
 
 ## Certified Endpoint Slice: Assets Under Management Operational Read
 
