@@ -682,9 +682,23 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    components = schema["components"]["schemas"]
 
+    instruments = schema["paths"]["/instruments/"]["get"]
     prices = schema["paths"]["/prices/"]["get"]
     fx_rates = schema["paths"]["/fx-rates/"]["get"]
+
+    assert "canonical security master lookup" in instruments["description"]
+    assert "do not use it as a substitute for portfolio positions" in instruments["description"]
+    assert "source-owned pricing history" in prices["description"]
+    assert "do not use it as a substitute for performance analytics" in prices["description"]
+    assert "source-owned FX conversion history" in fx_rates["description"]
+    assert "do not use it as a substitute for portfolio performance" in fx_rates["description"]
+
+    instrument_security_id = next(
+        parameter for parameter in instruments["parameters"] if parameter["name"] == "security_id"
+    )
+    assert instrument_security_id["description"] == "Filter by a specific security identifier."
 
     security_id = next(
         parameter for parameter in prices["parameters"] if parameter["name"] == "security_id"
@@ -700,6 +714,19 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
         parameter for parameter in fx_rates["parameters"] if parameter["name"] == "to_currency"
     )
     assert to_currency["description"] == "Quote currency code for the requested FX series."
+
+    instrument_response = components["PaginatedInstrumentResponse"]
+    price_response = components["MarketPriceResponse"]
+    fx_response = components["FxRateResponse"]
+    assert instrument_response["properties"]["instruments"]["description"] == (
+        "The list of instrument records for the current page."
+    )
+    assert price_response["properties"]["prices"]["description"] == (
+        "Market price records for the requested security and date range."
+    )
+    assert fx_response["properties"]["rates"]["description"] == (
+        "FX rate observations for the requested currency pair and date range."
+    )
 
 
 async def test_openapi_describes_lookup_catalog_contract_examples(async_test_client):

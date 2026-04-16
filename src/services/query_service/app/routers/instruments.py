@@ -14,11 +14,12 @@ router = APIRouter(prefix="/instruments", tags=["Instruments"])
 @router.get(
     "/",
     response_model=PaginatedInstrumentResponse,
-    summary="Get a List of Instruments",
+    summary="Get reference instrument records",
     description=(
         "Returns reference instrument records with optional filtering by security and product "
-        "type. "
-        "Used by lookup selectors and enrichment workflows."
+        "type. Use this route for canonical security master lookup, reference-data diagnostics, "
+        "and thin lookup/enrichment support workflows; do not use it as a substitute for "
+        "portfolio positions, pricing history, or downstream analytics output."
     ),
 )
 async def get_instruments(

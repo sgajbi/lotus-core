@@ -15,10 +15,12 @@ router = APIRouter(prefix="/fx-rates", tags=["FX Rates"])
 @router.get(
     "/",
     response_model=FxRateResponse,
-    summary="Get FX Rates for a Currency Pair",
+    summary="Get FX-rate series for a currency pair",
     description=(
         "Returns FX rates for a currency pair over an optional date range. "
-        "Used by valuation/performance conversion diagnostics and reconciliation."
+        "Use this route for source-owned FX conversion history, valuation conversion checks, and "
+        "reconciliation diagnostics; do not use it as a substitute for portfolio performance, "
+        "risk analytics, or derived reporting outputs."
     ),
 )
 async def get_fx_rates(

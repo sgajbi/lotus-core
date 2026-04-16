@@ -1403,6 +1403,87 @@ route-purpose wording, field descriptions, and single-portfolio not-found exampl
 | `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the portfolio discovery/detail routes. |
 | Downstream repos | No open issue found in this pass | No stale or incorrect downstream contract usage was evidenced for these endpoints, so no new issue was opened. |
 
+## Certified Endpoint Slice: Reference Market Data Reads
+
+This certification pass covers:
+
+1. `GET /instruments/`
+2. `GET /prices/`
+3. `GET /fx-rates/`
+
+### Route Contract Decision
+
+These routes are the correct strategic raw reference-data reads.
+
+The boundary is explicit:
+
+1. use `GET /instruments/` for canonical security-master lookup and reference-data diagnostics;
+2. use `GET /prices/` for source-owned security price history;
+3. use `GET /fx-rates/` for source-owned FX conversion history;
+4. do not use these routes as substitutes for holdings state, portfolio valuation outputs,
+   performance analytics, risk analytics, or reporting aggregates.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /instruments/` | No active direct downstream caller evidenced in `lotus-gateway`, `lotus-risk`, `lotus-advise`, or `lotus-report` during this pass | Correct strategic raw reference-data contract with no overstated live adoption. Downstreams in this pass were more strongly bound to higher-level enrichment or portfolio-facing seams than to direct instrument-master reads. |
+| `GET /prices/` | No active direct downstream caller evidenced in this pass | Correct raw market-data contract with no overstated live adoption. This pass did not find downstream product code that should be described as a current direct caller. |
+| `GET /fx-rates/` | No active direct downstream caller evidenced in this pass | Correct raw FX-history contract with no overstated live adoption. This pass did not find downstream product code that should be described as a current direct caller. |
+
+That posture is acceptable. These are foundational raw reads and should remain available, but the
+current active downstreams reviewed in this pass lean more heavily on portfolio-scoped, reporting,
+or integration/control-plane contracts than on these raw query surfaces directly.
+
+### Upstream Integration Assessment
+
+The family is strong for its intended purpose:
+
+1. instrument lookup stays limited to canonical reference master fields with pagination and product
+   filtering;
+2. price history stays scoped to one security plus an optional date window;
+3. FX history stays scoped to one currency pair plus an optional date window, with router-level
+   currency canonicalization to uppercase;
+4. the family keeps raw market/reference publication separate from derived portfolio analytics and
+   report composition.
+
+No upstream defect was found in this pass.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the following explicit:
+
+1. each route publishes raw reference or market-data history rather than derived portfolio output;
+2. when-to-use and when-not-to-use guidance is explicit on all three routes;
+3. request parameter descriptions remain specific for security ID, product type, currencies, and
+   date-window filters;
+4. response schema field descriptions are explicit for instrument pages, price records, and FX
+   rate records.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_reference_data_routers.py` for instrument, price,
+and FX success behavior.
+
+Service-level proof exists in
+`tests/unit/services/query_service/services/test_instrument_service.py`,
+`tests/unit/services/query_service/services/test_price_service.py`, and
+`tests/unit/services/query_service/services/test_fx_rate_service.py`.
+
+Repository-level proof exists in
+`tests/unit/services/query_service/repositories/test_instrument_repository.py`,
+`tests/unit/services/query_service/repositories/test_price_repository.py`, and
+`tests/unit/services/query_service/repositories/test_fx_rate_repository.py`.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording, parameter descriptions, and response-schema field descriptions.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the raw reference market-data routes. |
+| Downstream repos | No open issue found in this pass | No downstream misuse or stale direct-contract binding was evidenced for these endpoints, so no new issue was opened. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:
