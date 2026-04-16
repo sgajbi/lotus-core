@@ -1053,7 +1053,7 @@ for requested-window and year-to-date aggregation behavior.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against these two routes in this pass. |
+| `lotus-core #309` | Open. Valid strategic follow-on. Downstream migration onto `GET /portfolios/{portfolio_id}/transactions` is now blocked or narrowed by the lack of explicit reporting-currency-restated transaction amount semantics in the public ledger contract. | Keep open until lotus-core either closes the parity gap, publishes an alternative strategic summary seam, or explicitly governs these deprecated summary routes as long-lived compatibility surface. |
 | `lotus-gateway #122` | Open. Valid downstream migration work. Gateway still calls the deprecated income/activity summary routes directly and should move UI-facing summary flows onto the strategic `GET /portfolios/{portfolio_id}/transactions` contract. | Keep open until gateway no longer calls either deprecated summary route. |
 | `lotus-report #39` | Open. Valid downstream migration work. Report still builds income/activity sections from the deprecated compatibility routes and should derive them from the strategic transaction-ledger contract instead. | Keep open until report no longer calls either deprecated summary route. |
 
