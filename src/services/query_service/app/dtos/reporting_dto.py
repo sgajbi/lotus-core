@@ -457,35 +457,69 @@ class CashAccountBalanceRecord(BaseModel):
         description="Native cash account currency.",
         examples=["USD"],
     )
-    instrument_name: str = Field(..., description="Display name for the cash account.")
+    instrument_name: str = Field(
+        ...,
+        description="Display name for the cash account.",
+        examples=["USD Operating Cash"],
+    )
     balance_account_currency: Decimal = Field(
-        ..., description="Cash balance in native cash account currency."
+        ...,
+        description="Cash balance in native cash account currency.",
+        examples=[235350.0],
     )
     balance_portfolio_currency: Decimal = Field(
-        ..., description="Cash balance translated to portfolio currency."
+        ...,
+        description="Cash balance translated to portfolio currency.",
+        examples=[235350.0],
     )
     balance_reporting_currency: Decimal = Field(
-        ..., description="Cash balance translated to the effective reporting currency."
+        ...,
+        description="Cash balance translated to the effective reporting currency.",
+        examples=[235350.0],
     )
 
 
 class CashBalancesTotals(BaseModel):
-    cash_account_count: int = Field(..., description="Number of cash accounts returned.")
+    cash_account_count: int = Field(
+        ...,
+        description="Number of cash accounts returned.",
+        examples=[2],
+    )
     total_balance_portfolio_currency: Decimal = Field(
-        ..., description="Total cash balance in portfolio currency."
+        ...,
+        description="Total cash balance in portfolio currency.",
+        examples=[236443.0],
     )
     total_balance_reporting_currency: Decimal = Field(
-        ..., description="Total cash balance in reporting currency."
+        ...,
+        description="Total cash balance in reporting currency.",
+        examples=[236443.0],
     )
 
 
 class CashBalancesResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
     product_version: Literal["v1"] = product_version_field()
-    portfolio_id: str = Field(..., description="Portfolio identifier.")
-    portfolio_currency: str = Field(..., description="Portfolio base currency.")
-    reporting_currency: str = Field(..., description="Effective reporting currency.")
-    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
+    portfolio_id: str = Field(
+        ...,
+        description="Portfolio identifier.",
+        examples=["PORT-001"],
+    )
+    portfolio_currency: str = Field(
+        ...,
+        description="Portfolio base currency.",
+        examples=["USD"],
+    )
+    reporting_currency: str = Field(
+        ...,
+        description="Effective reporting currency.",
+        examples=["USD"],
+    )
+    resolved_as_of_date: date = Field(
+        ...,
+        description="Effective as-of date used by the query.",
+        examples=["2026-03-27"],
+    )
     totals: CashBalancesTotals = Field(..., description="Portfolio-level cash totals.")
     cash_accounts: list[CashAccountBalanceRecord] = Field(
         ..., description="Resolved cash accounts and balances for the portfolio."

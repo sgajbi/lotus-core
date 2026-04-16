@@ -349,7 +349,8 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     )
     assert "strategic allocation views" in allocation_query["description"]
     assert "Prefer this route over mining allocation views from `core-snapshot`" in allocation_query["description"]
-    assert "portfolio currency and reporting currency" in cash_query["description"]
+    assert "per-account cash balances or translated cash totals" in cash_query["description"]
+    assert "pre-live convenience shape for the RFC-0083 HoldingsAsOf source-data product" in cash_query["description"]
     assert "strategic historical portfolio summary" in portfolio_summary_query["description"]
     assert "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`" in portfolio_summary_query["description"]
     assert "correct lotus-core summary seam for report-ready wealth totals" in portfolio_summary_query["description"]
@@ -387,6 +388,8 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
         1000000.0
     ]
     assert cash_response["properties"]["totals"]["description"] == "Portfolio-level cash totals."
+    assert cash_response["properties"]["reporting_currency"]["examples"] == ["USD"]
+    assert cash_response["properties"]["resolved_as_of_date"]["examples"] == ["2026-03-27"]
     assert cash_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert cash_response["properties"]["product_version"]["default"] == "v1"
     assert (
