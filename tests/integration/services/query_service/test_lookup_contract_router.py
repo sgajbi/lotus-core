@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import httpx
 import pytest
@@ -41,7 +41,7 @@ async def async_test_client():
             return_value=mock_instrument_service,
         ),
     ):
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client, mock_portfolio_service, mock_instrument_service
 
@@ -112,43 +112,48 @@ async def test_portfolio_lookup_contract_sorted_filtered_and_limited(async_test_
 
 async def test_instrument_lookup_contract_with_q_filter(async_test_client):
     client, _, mock_instrument_service = async_test_client
-    mock_instrument_service.get_instruments.return_value = PaginatedInstrumentResponse(
-        total=3,
-        skip=0,
-        limit=200,
-        instruments=[
-            {
-                "security_id": "SEC_Z",
-                "name": "Zulu Instrument",
-                "isin": "US0000000001",
-                "currency": "USD",
-                "product_type": "Equity",
-                "asset_class": "Equity",
-            },
-            {
-                "security_id": "SEC_A",
-                "name": "Alpha Instrument",
-                "isin": "US0000000002",
-                "currency": "USD",
-                "product_type": "Equity",
-                "asset_class": "Equity",
-            },
-            {
-                "security_id": "BND_1",
-                "name": "Bond One",
-                "isin": "US0000000003",
-                "currency": "USD",
-                "product_type": "Bond",
-                "asset_class": "Fixed Income",
-            },
-        ],
-    )
+    mock_instrument_service.get_instruments.side_effect = [
+        PaginatedInstrumentResponse(
+            total=201,
+            skip=0,
+            limit=200,
+            instruments=[
+                {
+                    "security_id": "SEC_Z",
+                    "name": "Zulu Instrument",
+                    "isin": "US0000000001",
+                    "currency": "USD",
+                    "product_type": "Equity",
+                    "asset_class": "Equity",
+                }
+            ],
+        ),
+        PaginatedInstrumentResponse(
+            total=201,
+            skip=200,
+            limit=200,
+            instruments=[
+                {
+                    "security_id": "SEC_A",
+                    "name": "Alpha Instrument",
+                    "isin": "US0000000002",
+                    "currency": "USD",
+                    "product_type": "Equity",
+                    "asset_class": "Equity",
+                }
+            ],
+        ),
+    ]
 
     response = await client.get("/lookups/instruments?limit=200&product_type=Equity&q=alpha")
     assert response.status_code == 200
     items = response.json()["items"]
     _assert_lookup_items_contract(items)
     assert items == [{"id": "SEC_A", "label": "SEC_A | Alpha Instrument"}]
+    assert mock_instrument_service.get_instruments.await_args_list == [
+        call(skip=0, limit=200, product_type="Equity"),
+        call(skip=200, limit=200, product_type="Equity"),
+    ]
 
 
 async def test_currency_lookup_contract_source_scope_and_uppercase(async_test_client):
@@ -193,3 +198,14 @@ async def test_currency_lookup_contract_source_scope_and_uppercase(async_test_cl
     _assert_lookup_items_contract(items)
     assert items == [{"id": "USD", "label": "USD"}]
     mock_portfolio_service.get_portfolios.assert_not_called()
+
+
+async def test_lookup_contract_unexpected_errors_use_global_500_envelope(async_test_client):
+    client, mock_portfolio_service, _ = async_test_client
+    mock_portfolio_service.get_portfolios.side_effect = RuntimeError("boom")
+
+    response = await client.get("/lookups/portfolios")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()

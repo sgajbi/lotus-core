@@ -9,11 +9,19 @@ from ..services.portfolio_service import PortfolioService
 router = APIRouter(prefix="/lookups", tags=["Lookup Catalogs"])
 
 
-async def _fetch_all_instruments(service: InstrumentService, page_limit: int) -> list:
+async def _fetch_all_instruments(
+    service: InstrumentService,
+    page_limit: int,
+    product_type: str | None = None,
+) -> list:
     skip = 0
     collected = []
     while True:
-        page = await service.get_instruments(skip=skip, limit=page_limit)
+        page = await service.get_instruments(
+            skip=skip,
+            limit=page_limit,
+            product_type=product_type,
+        )
         collected.extend(page.instruments)
         skip += page.limit
         if skip >= page.total:
@@ -115,14 +123,24 @@ async def get_instrument_lookups(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
     service = InstrumentService(db)
-    response = await service.get_instruments(skip=0, limit=limit, product_type=product_type)
+    instruments = (
+        await _fetch_all_instruments(
+            service=service,
+            page_limit=min(max(limit, 200), 1000),
+            product_type=product_type,
+        )
+        if q
+        else (
+            await service.get_instruments(skip=0, limit=limit, product_type=product_type)
+        ).instruments
+    )
 
     items = [
         LookupItem(
             id=instrument.security_id,
             label=f"{instrument.security_id} | {instrument.name}",
         )
-        for instrument in response.instruments
+        for instrument in instruments
     ]
     return LookupResponse(items=_filter_limit_sort_items(items, q=q, limit=limit))
 

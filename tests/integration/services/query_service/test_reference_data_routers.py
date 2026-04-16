@@ -402,3 +402,36 @@ async def test_get_currency_lookups_source_and_query(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "USD", "label": "USD"}]
     mock_portfolio_service.get_portfolios.assert_not_called()
+
+
+async def test_get_portfolio_lookups_unexpected_uses_global_500_envelope(async_test_client):
+    client, _, _, _, mock_portfolio_service = async_test_client
+    mock_portfolio_service.get_portfolios.side_effect = RuntimeError("boom")
+
+    response = await client.get("/lookups/portfolios")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
+
+
+async def test_get_instrument_lookups_unexpected_uses_global_500_envelope(async_test_client):
+    client, _, mock_instrument_service, _, _ = async_test_client
+    mock_instrument_service.get_instruments.side_effect = RuntimeError("boom")
+
+    response = await client.get("/lookups/instruments")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
+
+
+async def test_get_currency_lookups_unexpected_uses_global_500_envelope(async_test_client):
+    client, _, mock_instrument_service, _, _ = async_test_client
+    mock_instrument_service.get_instruments.side_effect = RuntimeError("boom")
+
+    response = await client.get("/lookups/currencies")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()

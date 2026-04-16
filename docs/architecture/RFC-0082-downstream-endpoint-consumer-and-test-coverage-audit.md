@@ -1618,12 +1618,16 @@ The family is strong for its intended purpose:
 1. portfolio lookups are derived from canonical portfolio records with optional CIF and
    booking-center scoping;
 2. instrument lookups are derived from canonical instrument records with optional product-type
-   filtering;
+   filtering, and `q` search now scans the full filtered instrument catalog across pages before
+   applying selector ordering and truncation;
 3. currency lookups are derived deterministically from portfolio base currencies and instrument
    currencies, with source scoping and full pagination over instrument pages;
 4. the routes intentionally reduce the payload to selector-safe `id` / `label` records.
 
-No upstream defect was found in this pass.
+One upstream defect was found and fixed in this pass: instrument lookup search could miss valid
+matches beyond the first fetched page when `q` was supplied. The route now pages through the full
+filtered instrument catalog before applying search and limit semantics, which restores truthful
+selector behavior for larger inventories.
 
 ### Swagger / OpenAPI Assessment
 
@@ -1635,9 +1639,11 @@ For this family, Swagger now makes the following explicit:
 4. response schema field descriptions are explicit for lookup items and lookup collections.
 
 Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_lookup_contract_router.py` and
 `tests/integration/services/query_service/test_reference_data_routers.py` for portfolio,
 instrument, and currency lookup success, filtering, source scoping, pagination-driven currency
-derivation, and output ordering.
+derivation, output ordering, full-catalog instrument search, and shared `500` envelope behavior on
+unexpected failures.
 
 Gateway-side direct-consumer proof exists in
 `lotus-gateway/src/app/clients/lotus_core_query_client.py`,
@@ -1651,7 +1657,7 @@ route-purpose wording, parameter descriptions, and lookup schema field descripti
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the lookup catalog routes. |
+| `lotus-core` | No open issue found in this pass | No open lotus-core issue existed for this family. The one core defect found in certification was fixed directly in this slice, so no new issue was opened. |
 | Downstream repos | No open issue found in this pass | Gateway appears to be using the lookup contracts correctly, so no downstream issue was opened. |
 
 ## Certified Endpoint Slice: Asset Allocation Operational Read
