@@ -488,6 +488,10 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         if parameter["name"] == "portfolio_id"
     )
     assert positions_portfolio_id["description"] == "Portfolio identifier."
+    assert "strategic HoldingsAsOf operational read" in latest_positions["description"]
+    assert "gateway portfolio position books" in latest_positions["description"]
+    assert "Use `as_of_date` for booked historical state" in latest_positions["description"]
+    assert "Do not treat this route as a substitute for performance, risk, or reporting-specific aggregation contracts" in latest_positions["description"]
 
     include_projected = next(
         parameter
@@ -495,7 +499,14 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         if parameter["name"] == "include_projected"
     )
     assert include_projected["description"] == (
-        "When true, includes future-dated projected position state beyond current business_date."
+        "When true, returns the latest projected state even if future-dated transactions push holdings beyond the latest booked business_date."
+    )
+
+    as_of_date = next(
+        parameter for parameter in latest_positions["parameters"] if parameter["name"] == "as_of_date"
+    )
+    assert as_of_date["description"] == (
+        "Optional as-of date for booked position state. When omitted and `include_projected=false`, lotus-core resolves the latest booked business date."
     )
 
     history_security_id = next(
@@ -517,6 +528,9 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
     assert positions_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert positions_response["properties"]["product_version"]["default"] == "v1"
+    assert positions_response["properties"]["positions"]["description"].startswith(
+        "Governed holdings rows for the resolved HoldingsAsOf scope."
+    )
 
 
 async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):

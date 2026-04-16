@@ -746,6 +746,86 @@ mode instead of collapsing that route into a generic portfolio-only not-found ex
 | `lotus-manage #32` | Still valid future-adoption issue. No active direct client was evidenced in this pass, so manage should treat the issue as adoption guidance rather than proof of live dependency. | Keep open in manage until direct operator workflow binding exists and is tested. |
 | `lotus-report #38` | Opened in this pass as future-adoption guidance. Report remains a catalog-intended support/evidence consumer, but this pass did not find active direct client code. | Keep open in report until direct workflow binding and tests exist. |
 
+## Certified Endpoint Slice: Holdings Operational Read Family
+
+This certification pass covers:
+
+1. `GET /portfolios/{portfolio_id}/positions`
+2. `POST /reporting/holdings-snapshot/query`
+
+### Route Contract Decision
+
+The strategic route in this family is `GET /portfolios/{portfolio_id}/positions`.
+
+The boundary is now explicit:
+
+1. use `GET /portfolios/{portfolio_id}/positions` for governed HoldingsAsOf operational reads,
+   including booked as-of state and optional projected holdings state;
+2. use `as_of_date` when the consumer needs booked state on or before a specific business date;
+3. use `include_projected=true` only when the consumer intentionally wants future-dated projected
+   holdings beyond the latest booked business date;
+4. do not treat this route as a substitute for performance, risk, or reporting-specific
+   aggregations;
+5. `POST /reporting/holdings-snapshot/query` remains a deprecated convenience shape in the same
+   `HoldingsAsOf` product family and should not be the default choice for new downstream bindings.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /portfolios/{portfolio_id}/positions` | `lotus-gateway` | Correct. Gateway uses the strategic positions route for portfolio position-book workflows. |
+| `POST /reporting/holdings-snapshot/query` | No active direct downstream caller evidenced in this pass | Deprecated convenience shape. Core coverage remains strong, but this pass did not find a live downstream product binding that should be described as the preferred route. |
+
+Gateway still also uses the deprecated sibling convenience route
+`POST /reporting/cash-balances/query` in related holdings flows. That is now tracked as downstream
+migration issue `lotus-gateway #119`.
+
+### Upstream Integration Assessment
+
+The current holdings route is strong and production-grade for the operational read purpose:
+
+1. latest booked state resolves from daily position snapshots when available;
+2. missing snapshot rows are supplemented from position history so downstream holdings reads do not
+   collapse while snapshot materialization catches up;
+3. fallback valuation continuity is preserved through latest snapshot valuation metadata when
+   history-only rows are surfaced;
+4. data-quality posture distinguishes `COMPLETE`, `PARTIAL`, `STALE`, and `UNKNOWN` instead of
+   collapsing mixed-quality holdings into one opaque status;
+5. held-since dates are derived per active epoch so downstream suitability, concentration, and
+   private-banking review surfaces can reason about continuous holding periods correctly.
+
+The main remaining risk is downstream route choice, not core implementation correctness.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the following explicit:
+
+1. `GET /portfolios/{portfolio_id}/positions` is the strategic `HoldingsAsOf` operational read;
+2. booked historical state versus projected-state usage is explicit in the route description and
+   parameter descriptions;
+3. the route is fenced away from performance, risk, and reporting-specific aggregation contracts;
+4. the response schema now describes holdings rows as the governed `HoldingsAsOf` scope rather than
+   a generic positions list;
+5. `POST /reporting/holdings-snapshot/query` remains documented as a deprecated convenience shape.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_positions_router_dependency.py` for success, 404,
+500, `as_of_date`, and `include_projected` forwarding behavior.
+
+Service-level proof exists in `tests/unit/services/query_service/services/test_position_service.py`
+for snapshot-backed latest state, history fallback, valuation continuity, held-since derivation,
+projected-mode unbounded reads, and holdings data-quality classification.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route purpose, parameter descriptions, and `HoldingsAsOf` product identity.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | The strategic positions route is contract-tight in this pass. No open lotus-core defect was found against `GET /portfolios/{portfolio_id}/positions`. |
+| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway remains correctly bound to the strategic positions route for position-book reads, but related holdings workflows still depend on a deprecated convenience shape in the same product family. | Keep open until gateway narrows or removes deprecated `HoldingsAsOf` convenience-route dependence in holdings-position workflows. |
+
 ## Certified Endpoint Slice: Effective Integration Policy
 
 This certification pass covers:
