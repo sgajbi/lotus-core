@@ -808,6 +808,14 @@ The HTTP dependency lane now also proves both the successful enrichment path and
 identifier failure path, so this endpoint no longer relies only on router-function and schema
 coverage.
 
+### Issue Disposition For This Endpoint
+
+| Repository issue | Status | Certification read |
+| --- | --- | --- |
+| `lotus-core` | No open issue | The source route is contract-tight in this pass. No lotus-core behavior or documentation defect remains open against `POST /integration/instruments/enrichment-bulk`. |
+| `lotus-risk #93` | Open | Still valid as downstream adoption work. Risk is an active direct consumer and should keep its concentration and attribution tests aligned to deterministic response order, null unknown-security handling, and upstream-owned enrichment semantics. |
+| `lotus-advise #92` | Open | Still valid as downstream adoption work. Advise is an active direct consumer and should keep stateful-context tests and mocks aligned to current enrichment semantics and null unknown-security handling. |
+
 ## Certified Endpoint Slice: Core Snapshot
 
 This certification pass covers:
