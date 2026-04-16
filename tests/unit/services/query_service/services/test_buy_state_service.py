@@ -111,7 +111,7 @@ async def test_get_position_lots_raises_when_portfolio_missing(mock_buy_state_re
     ):
         mock_buy_state_repo.portfolio_exists.return_value = False
         service = BuyStateService(AsyncMock())
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_position_lots("P404", "US0378331005")
 
 
@@ -135,7 +135,7 @@ async def test_get_accrued_offsets_raises_when_portfolio_missing(mock_buy_state_
     ):
         mock_buy_state_repo.portfolio_exists.return_value = False
         service = BuyStateService(AsyncMock())
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_accrued_offsets("P404", "US0378331005")
 
 
@@ -148,5 +148,40 @@ async def test_get_buy_cash_linkage_raises_when_transaction_not_found(
     ):
         mock_buy_state_repo.get_buy_cash_linkage.return_value = None
         service = BuyStateService(AsyncMock())
-        with pytest.raises(ValueError, match="Transaction TXN-404 not found for portfolio PORT-1"):
+        with pytest.raises(
+            LookupError,
+            match="BUY cash linkage not found for portfolio PORT-1 and transaction TXN-404",
+        ):
             await service.get_buy_cash_linkage("PORT-1", "TXN-404")
+
+
+async def test_get_position_lots_raises_when_security_has_no_buy_state(
+    mock_buy_state_repo: AsyncMock,
+):
+    mock_buy_state_repo.get_position_lots.return_value = []
+    with patch(
+        "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
+        return_value=mock_buy_state_repo,
+    ):
+        service = BuyStateService(AsyncMock())
+        with pytest.raises(
+            LookupError,
+            match="BUY state not found for portfolio PORT-1 and security US0378331005",
+        ):
+            await service.get_position_lots("PORT-1", "US0378331005")
+
+
+async def test_get_accrued_offsets_raises_when_security_has_no_buy_state(
+    mock_buy_state_repo: AsyncMock,
+):
+    mock_buy_state_repo.get_accrued_offsets.return_value = []
+    with patch(
+        "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
+        return_value=mock_buy_state_repo,
+    ):
+        service = BuyStateService(AsyncMock())
+        with pytest.raises(
+            LookupError,
+            match="BUY state not found for portfolio PORT-1 and security US0378331005",
+        ):
+            await service.get_accrued_offsets("PORT-1", "US0378331005")

@@ -58,7 +58,7 @@ async def get_position_lots(
 ):
     try:
         return await service.get_position_lots(portfolio_id=portfolio_id, security_id=security_id)
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
@@ -94,7 +94,7 @@ async def get_accrued_offsets(
 ):
     try:
         return await service.get_accrued_offsets(portfolio_id=portfolio_id, security_id=security_id)
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
@@ -134,5 +134,5 @@ async def get_buy_cash_linkage(
         return await service.get_buy_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

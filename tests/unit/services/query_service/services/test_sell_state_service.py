@@ -90,7 +90,10 @@ async def test_get_sell_cash_linkage_raises_when_not_found(mock_sell_state_repo:
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        with pytest.raises(ValueError, match="SELL transaction TX404 not found"):
+        with pytest.raises(
+            LookupError,
+            match="SELL cash linkage not found for portfolio PORT-1 and transaction TX404",
+        ):
             await service.get_sell_cash_linkage("PORT-1", "TX404")
 
 
@@ -101,7 +104,7 @@ async def test_get_sell_disposals_raises_when_portfolio_missing(mock_sell_state_
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_sell_disposals("P404", "US0378331005")
 
 
@@ -114,7 +117,7 @@ async def test_get_sell_cash_linkage_raises_when_portfolio_missing(
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_sell_cash_linkage("P404", "TXN-SELL-1")
 
 
@@ -147,3 +150,19 @@ async def test_get_sell_disposals_maps_none_paths(mock_sell_state_repo: AsyncMoc
     record = response.sell_disposals[0]
     assert record.disposal_cost_basis_base is None
     assert record.net_sell_proceeds_base is None
+
+
+async def test_get_sell_disposals_raises_when_security_has_no_sell_state(
+    mock_sell_state_repo: AsyncMock,
+):
+    mock_sell_state_repo.get_sell_disposals.return_value = []
+    with patch(
+        "src.services.query_service.app.services.sell_state_service.SellStateRepository",
+        return_value=mock_sell_state_repo,
+    ):
+        service = SellStateService(AsyncMock())
+        with pytest.raises(
+            LookupError,
+            match="SELL state not found for portfolio PORT-1 and security US0378331005",
+        ):
+            await service.get_sell_disposals("PORT-1", "US0378331005")

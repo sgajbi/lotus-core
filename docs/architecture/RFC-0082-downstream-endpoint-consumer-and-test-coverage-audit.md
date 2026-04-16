@@ -1301,8 +1301,9 @@ The family is strong for its intended purpose:
    for deterministic reconciliation;
 4. SELL disposal state exposes disposed quantity, disposed basis, realized gain/loss, and policy
    metadata in a way that remains readable for audit and support workflows;
-5. the service layer preserves truthful `404` behavior for missing portfolios or transactions
-   rather than collapsing investigative misses into empty generic payloads.
+5. the service layer now preserves truthful `404` behavior for missing portfolios, missing
+   transaction linkage, and missing persisted BUY/SELL security-key state rather than collapsing
+   investigative misses into empty generic payloads.
 
 No upstream defect was found in this pass. The family is narrow by design, and that narrowness is
 appropriate.
@@ -1319,11 +1320,11 @@ For this family, Swagger now makes the following explicit:
 Focused HTTP-level dependency proof exists in
 `tests/integration/services/query_service/test_buy_state_router.py` and
 `tests/integration/services/query_service/test_sell_state_router.py` for success and `404`
-behavior across the family.
+behavior across the family, including missing persisted portfolio-security investigative state.
 
 Service-level proof exists in `tests/unit/services/query_service/services/test_buy_state_service.py`
 and `tests/unit/services/query_service/services/test_sell_state_service.py` for mapping of lot,
-offset, disposal, proceeds, and cash-linkage semantics.
+offset, disposal, proceeds, cash-linkage semantics, and missing-state investigative `404` mapping.
 
 Repository-level proof exists in
 `tests/unit/services/query_service/repositories/test_buy_state_repository.py` and

@@ -55,7 +55,7 @@ async def get_sell_disposals(
 ):
     try:
         return await service.get_sell_disposals(portfolio_id=portfolio_id, security_id=security_id)
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
@@ -95,5 +95,5 @@ async def get_sell_cash_linkage(
         return await service.get_sell_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
