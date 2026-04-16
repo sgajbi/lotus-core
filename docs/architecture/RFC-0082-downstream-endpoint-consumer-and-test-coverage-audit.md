@@ -860,7 +860,7 @@ parser helpers still model an older upstream payload shape with nested `portfoli
 blocks. That is not the governed `PortfolioStateSnapshot` contract. Gateway should read the
 current top-level source-data runtime metadata, `portfolio_id`, `valuation_context`, and requested
 `sections`, and only fetch separate portfolio identity context from dedicated routes when the UI
-needs it.
+needs it. That concrete downstream defect is now tracked in `lotus-gateway #118`.
 
 ### Swagger / OpenAPI Assessment
 
@@ -878,6 +878,7 @@ For this endpoint, Swagger now makes the following explicit:
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Closed. The route documents 404 behavior and integration tests assert the not-found response example. | Re-open only if fresh contrary runtime evidence appears. |
+| `lotus-gateway #118` legacy `core-snapshot` envelope assumption in foundation workspace | Open. Still valid as downstream adoption work. Gateway foundation parsing and fixtures still rely on nested `portfolio` and `metadata` blocks that are not part of the governed `PortfolioStateSnapshot` contract. | Keep open until gateway foundation parsing and tests consume the top-level source-data runtime metadata plus `valuation_context` and `sections`. |
 
 ## Downstream Consumer Matrix
 
