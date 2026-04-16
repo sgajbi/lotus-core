@@ -483,6 +483,12 @@ For this endpoint, Swagger now makes the following explicit:
 4. the control-plane OpenAPI regression suite now asserts the contract-version header semantics and
    the route-purpose wording that fences this endpoint away from generic simulation-session usage.
 
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-advise #93` canonical core advisory simulation execution contract review | Opened in this pass. `lotus-advise` is the active direct consumer and already has dedicated client/test coverage, but the downstream adoption trail should explicitly track the certified contract-version, request-hash, idempotency, and problem-details semantics for this route. | Keep open in `lotus-advise` until downstream docs/tests are rechecked against the latest certified core contract. |
+
 ## Certified Endpoint Slice: Classification Taxonomy
 
 This certification pass covers:
