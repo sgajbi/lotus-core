@@ -32,8 +32,11 @@ def get_position_service(
     },
     summary="Get Position History for a Security",
     description=(
-        "Returns epoch-aware position history for a portfolio-security key across a date range. "
-        "Used for drill-down views and lineage-aware troubleshooting."
+        "Returns epoch-aware position history for a portfolio-security key across an optional date "
+        "range. Use this route for holdings drill-down, lineage-aware troubleshooting, and "
+        "historical security-level state inspection when a downstream consumer needs dated "
+        "position-history rows; do not use it as a substitute for the strategic latest-holdings "
+        "read, transaction-ledger rows, or reporting summaries."
     ),
 )
 async def get_position_history(

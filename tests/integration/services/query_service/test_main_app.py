@@ -573,6 +573,12 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert history_security_id["description"] == (
         "Security identifier for the position-history drill-down."
     )
+    assert "holdings drill-down, lineage-aware troubleshooting, and historical security-level state inspection" in (
+        position_history["description"]
+    )
+    assert "do not use it as a substitute for the strategic latest-holdings read" in (
+        position_history["description"]
+    )
 
     positions_not_found = latest_positions["responses"]["404"]["content"]["application/json"][
         "example"
@@ -580,8 +586,12 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     history_not_found = position_history["responses"]["404"]["content"]["application/json"][
         "example"
     ]
+    position_history_response = schema["components"]["schemas"]["PortfolioPositionHistoryResponse"]
     assert positions_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
     assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+    assert position_history_response["properties"]["positions"]["description"] == (
+        "Time-series list of position-history records for the security."
+    )
     assert positions_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert positions_response["properties"]["product_version"]["default"] == "v1"
     assert positions_response["properties"]["positions"]["description"].startswith(

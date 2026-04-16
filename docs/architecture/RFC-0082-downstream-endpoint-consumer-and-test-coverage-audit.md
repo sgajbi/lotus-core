@@ -1403,6 +1403,77 @@ route-purpose wording, field descriptions, and single-portfolio not-found exampl
 | `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the portfolio discovery/detail routes. |
 | Downstream repos | No open issue found in this pass | No stale or incorrect downstream contract usage was evidenced for these endpoints, so no new issue was opened. |
 
+## Certified Endpoint Slice: Position History Operational Read
+
+This certification pass covers:
+
+1. `GET /portfolios/{portfolio_id}/position-history`
+
+### Route Contract Decision
+
+This is the correct strategic lotus-core route for historical security-level position-state
+inspection.
+
+The boundary is explicit:
+
+1. use it when a downstream consumer needs dated position-history rows for one security inside one
+   portfolio;
+2. use optional `start_date` and `end_date` filters to narrow the investigative window honestly;
+3. do not use it as a substitute for the strategic latest-holdings read, transaction-ledger rows,
+   or reporting summary contracts.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /portfolios/{portfolio_id}/position-history` | No active direct downstream caller evidenced in `lotus-gateway`, `lotus-manage`, or `lotus-report` during this pass | Correct investigative holdings-history contract with no overstated live adoption. The route remains catalog-correct for gateway and support drill-down use cases, but this pass did not find product code that should be described as a current direct binding. |
+
+That is acceptable. This route is narrower than the strategic latest-holdings read and should stay
+that way.
+
+### Upstream Integration Assessment
+
+The route is strong for its intended purpose:
+
+1. it publishes dated position-history rows for one portfolio-security key;
+2. it preserves truthful `404` and `500` behavior rather than silently degrading failed drill-down
+   requests;
+3. it keeps historical security-state inspection separate from latest holdings and transaction
+   ledger publication;
+4. service-level tests already cover not-found handling and history-row mapping.
+
+No upstream defect was found in this pass.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. the route is for holdings-history drill-down and troubleshooting, not broad portfolio state;
+2. when-not-to-use guidance fences the route away from latest holdings, ledger, and reporting
+   reads;
+3. `security_id`, `start_date`, and `end_date` semantics remain explicit;
+4. the `404` example and position-history response-field descriptions are explicit.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_positions_router_dependency.py` for success, `404`,
+and `500` behavior.
+
+Service-level proof exists in `tests/unit/services/query_service/services/test_position_service.py`
+for history-row mapping and truthful not-found handling.
+
+Repository-level proof exists in
+`tests/unit/services/query_service/repositories/test_unit_query_position_repo.py`.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording, parameter descriptions, and `404` example.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core #56` OpenAPI 404 contract gap | Stale for this route. `GET /portfolios/{portfolio_id}/position-history` now documents `404` in OpenAPI and the contract is covered by current integration tests. | Close as resolved by current OpenAPI and test coverage. |
+| Downstream repos | No open issue found in this pass | No downstream misuse or stale-contract binding was evidenced for this route, so no new issue was opened. |
+
 ## Certified Endpoint Slice: Reference Market Data Reads
 
 This certification pass covers:
