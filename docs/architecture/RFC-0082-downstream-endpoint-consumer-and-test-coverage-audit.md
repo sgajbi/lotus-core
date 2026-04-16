@@ -972,6 +972,74 @@ for requested-window and year-to-date aggregation behavior.
 | `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated income and activity summary routes directly. |
 | `lotus-report` | No open issue after direct downstream fix in this pass | Report now binds summary income and activity sections to the dedicated lotus-core routes instead of mining them from `core-snapshot`. |
 
+## Certified Endpoint Slice: Assets Under Management Operational Read
+
+This certification pass covers:
+
+1. `POST /reporting/assets-under-management/query`
+
+### Route Contract Decision
+
+This is the strategic lotus-core AUM route for governed source-owned assets-under-management
+figures.
+
+The boundary is explicit:
+
+1. use it for one-portfolio, portfolio-list, or booking-center AUM totals and per-portfolio AUM
+   breakdowns;
+2. prefer it over reconstructing AUM downstream from holdings rows when the downstream need is a
+   governed AUM figure;
+3. keep holdings publication, summary composition, and narrative reporting outside this route;
+4. treat it as an AUM operational read, not as a replacement for detailed holdings state.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /reporting/assets-under-management/query` | `lotus-gateway` | Correct. Gateway uses the dedicated route as the source-owned AUM input for portfolio workspace, liquidity, allocation, and position-book summary framing. |
+
+No active direct `lotus-report`, `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was
+evidenced against this route in this pass.
+
+### Upstream Integration Assessment
+
+The route is strong and domain-correct for PB/WM AUM needs:
+
+1. AUM is computed upstream from the governed snapshot scope rather than reconstructed by each
+   downstream consumer;
+2. reporting-currency restatement is source-owned and available where the scope requires it;
+3. one-portfolio and aggregated scope behavior are explicit rather than hidden in consumer-specific
+   heuristics;
+4. the route stays narrowly focused on AUM figures and per-portfolio AUM breakdowns.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. this is the source-owned AUM route for a resolved reporting scope;
+2. consumers should prefer it over reconstructing AUM from holdings rows when the need is a
+   governed AUM figure;
+3. the route is distinct from broad holdings publication and summary composition;
+4. response fields now carry clearer examples for resolved as-of date, reporting currency, AUM
+   totals, and position counts.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_reporting_router.py` for successful AUM routing.
+
+Service-level proof exists in `tests/unit/services/query_service/services/test_reporting_service.py`
+for single-portfolio defaults, portfolio-list reporting-currency handling, and multi-position AUM
+aggregation.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording and endpoint-specific schema examples.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `POST /reporting/assets-under-management/query` in this pass. |
+| `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated AUM route directly and propagates reporting currency where supported. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:

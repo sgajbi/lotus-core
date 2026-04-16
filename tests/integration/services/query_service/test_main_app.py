@@ -344,9 +344,10 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     cash_accounts_query = paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]
 
     assert (
-        "single portfolio, an explicit portfolio list, or a business unit"
+        "source-owned assets-under-management views for a resolved reporting scope"
         in aum_query["description"]
     )
+    assert "Prefer this route over reconstructing AUM from holdings rows" in aum_query["description"]
     assert "strategic allocation views" in allocation_query["description"]
     assert "Prefer this route over mining allocation views from `core-snapshot`" in allocation_query["description"]
     assert "per-account cash balances or translated cash totals" in cash_query["description"]
@@ -379,6 +380,12 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert aum_request["properties"]["reporting_currency"]["description"].startswith(
         "Optional reporting currency."
     )
+    assert components["AssetsUnderManagementResponse"]["properties"]["resolved_as_of_date"][
+        "examples"
+    ] == ["2026-03-27"]
+    assert components["AssetsUnderManagementResponse"]["properties"]["reporting_currency"][
+        "examples"
+    ] == ["USD"]
     assert allocation_response["properties"]["look_through"]["description"].startswith(
         "Applied look-through mode"
     )

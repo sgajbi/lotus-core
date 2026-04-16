@@ -311,6 +311,7 @@ class ReportingPortfolioSummary(BaseModel):
     position_count: int = Field(
         ...,
         description="Number of non-zero positions contributing to AUM.",
+        examples=[12],
     )
 
 
@@ -318,21 +319,33 @@ class AssetsUnderManagementTotals(BaseModel):
     portfolio_count: int = Field(
         ...,
         description="Number of portfolios included in the result.",
+        examples=[1],
     )
     position_count: int = Field(
         ...,
         description="Number of non-zero positions included in the result.",
+        examples=[12],
     )
     aum_reporting_currency: Decimal = Field(
-        ..., description="Aggregated assets under management in reporting currency."
+        ...,
+        description="Aggregated assets under management in reporting currency.",
+        examples=["1250000.50"],
     )
 
 
 class AssetsUnderManagementResponse(BaseModel):
     scope_type: ReportingScopeType = Field(..., description="Resolved reporting scope type.")
     scope: ReportingScope = Field(..., description="Echoed scope payload.")
-    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
-    reporting_currency: str = Field(..., description="Effective reporting currency.")
+    resolved_as_of_date: date = Field(
+        ...,
+        description="Effective as-of date used by the query.",
+        examples=["2026-03-27"],
+    )
+    reporting_currency: str = Field(
+        ...,
+        description="Effective reporting currency.",
+        examples=["USD"],
+    )
     totals: AssetsUnderManagementTotals = Field(..., description="Scope-level AUM totals.")
     portfolios: list[ReportingPortfolioSummary] = Field(
         ..., description="Per-portfolio AUM breakdown for the resolved scope."

@@ -35,9 +35,14 @@ def get_reporting_service(
     response_model=AssetsUnderManagementResponse,
     summary="Query Assets Under Management",
     description=(
-        "Returns assets-under-management views for a single portfolio, an explicit portfolio list, "
-        "or a business unit (booking center). Designed for PB/WM dashboards and reporting packs "
-        "using latest-snapshot, as-of-date semantics."
+        "What: Return source-owned assets-under-management views for a resolved reporting scope.\n"
+        "How: Resolves latest-snapshot or explicit as-of-date holdings totals for a single "
+        "portfolio, portfolio list, or business unit, with optional reporting-currency "
+        "restatement.\n"
+        "When: Use this contract when a downstream consumer needs AUM totals and per-portfolio "
+        "AUM breakdowns rather than broad holdings state or summary composition. Prefer this "
+        "route over reconstructing AUM from holdings rows when the downstream need is a governed "
+        "AUM figure."
     ),
 )
 async def query_assets_under_management(
