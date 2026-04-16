@@ -1324,6 +1324,85 @@ route-purpose wording, parameter descriptions, and concrete investigative not-fo
 | `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the BUY / SELL investigative state routes. |
 | Downstream repos | No open issue found in this pass | No downstream misuse or stale-contract binding was evidenced for these endpoints, so no new issue was opened. |
 
+## Certified Endpoint Slice: Portfolio Discovery And Detail Reads
+
+This certification pass covers:
+
+1. `GET /portfolios/`
+2. `GET /portfolios/{portfolio_id}`
+
+### Route Contract Decision
+
+These routes are the correct strategic portfolio identity reads.
+
+The boundary is explicit:
+
+1. use `GET /portfolios/` for discovery, selector population, navigation scope lookup, and
+   operator filtering by portfolio, client grouping, or booking center;
+2. use `GET /portfolios/{portfolio_id}` for the canonical portfolio identity and standing record
+   for one portfolio;
+3. do not treat either route as a substitute for workspace composition, positions, transactions,
+   cashflow outlook, or reporting contracts.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /portfolios/` | No active direct downstream caller evidenced in this pass | Correct strategic discovery contract with no overstated live adoption. Gateway documents a portfolio catalog surface in its own API, but this pass did not find active product code that should be described as a current direct caller of lotus-core list discovery. |
+| `GET /portfolios/{portfolio_id}` | `lotus-gateway` | Correct. Gateway actively calls the canonical single-portfolio detail route before composing downstream workspace and related portfolio views. |
+
+The split matters. Single-portfolio identity is a live downstream dependency today, while list
+discovery remains catalog-correct without enough direct evidence in this pass to describe it as an
+active bound route.
+
+### Upstream Integration Assessment
+
+The route pair is strong and appropriately narrow:
+
+1. list discovery supports exact portfolio ID, multi-portfolio ID, client grouping, and booking
+   center filters with deterministic ordering;
+2. single-portfolio detail publishes canonical identity, lifecycle, advisory, booking-center, and
+   cost-basis metadata without bleeding into holdings or reporting concerns;
+3. not-found behavior for single-portfolio detail is truthful and explicit;
+4. the pair keeps identity/discovery separate from broader portfolio-state composition, which is
+   the right operational-read boundary for downstream systems.
+
+No upstream defect was found in this pass.
+
+### Swagger / OpenAPI Assessment
+
+For these endpoints, Swagger now makes the following explicit:
+
+1. `GET /portfolios/` is for discovery and navigation scope, not detailed portfolio state;
+2. `GET /portfolios/{portfolio_id}` is for canonical single-portfolio identity and standing
+   metadata;
+3. when-not-to-use guidance fences both routes away from positions, transactions, and reporting;
+4. filter parameter descriptions, schema field descriptions, and single-portfolio `404` examples
+   are explicit.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_portfolios_router_dependency.py` for success,
+single-portfolio lookup, `404`, and filter forwarding behavior.
+
+Service-level proof exists in
+`tests/unit/services/query_service/services/test_portfolio_service.py` for DTO mapping, empty-list
+behavior, single-portfolio lookup, and not-found handling.
+
+Repository-level proof exists in
+`tests/unit/services/query_service/repositories/test_query_portfolio_repository.py` for no-filter
+reads, exact-ID filters, multi-ID filters, client/booking-center filters, ordering, and single-ID
+lookup.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording, field descriptions, and single-portfolio not-found example.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the portfolio discovery/detail routes. |
+| Downstream repos | No open issue found in this pass | No stale or incorrect downstream contract usage was evidenced for these endpoints, so no new issue was opened. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:

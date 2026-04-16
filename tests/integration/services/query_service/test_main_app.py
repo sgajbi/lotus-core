@@ -625,9 +625,19 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    components = schema["components"]["schemas"]
 
     portfolio_query = schema["paths"]["/portfolios/"]["get"]
     single_portfolio = schema["paths"]["/portfolios/{portfolio_id}"]["get"]
+
+    assert "portfolio lookup, selector population, and navigation scope discovery" in (
+        portfolio_query["description"]
+    )
+    assert "do not use it as a substitute for single-portfolio detail" in (
+        portfolio_query["description"]
+    )
+    assert "canonical portfolio identity and standing metadata" in single_portfolio["description"]
+    assert "do not use it as a substitute for portfolio positions" in single_portfolio["description"]
 
     client_id = next(
         parameter for parameter in portfolio_query["parameters"] if parameter["name"] == "client_id"
@@ -651,6 +661,18 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
         if parameter["name"] == "portfolio_id"
     )
     assert portfolio_id["description"] == "Portfolio identifier."
+
+    portfolio_query_response = components["PortfolioQueryResponse"]
+    portfolio_record = components["PortfolioRecord"]
+    assert portfolio_query_response["properties"]["portfolios"]["description"] == (
+        "List of portfolio records matching the applied query filters."
+    )
+    assert portfolio_record["properties"]["objective"]["description"] == (
+        "Primary client objective for this portfolio."
+    )
+    assert portfolio_record["properties"]["cost_basis_method"]["description"] == (
+        "Portfolio-level cost-basis accounting method used by lot accounting."
+    )
 
     not_found = single_portfolio["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-DISC-001 not found"

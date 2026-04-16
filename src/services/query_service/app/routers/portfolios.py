@@ -24,10 +24,13 @@ def get_portfolio_service(
 @router.get(
     "/",
     response_model=PortfolioQueryResponse,
-    summary="Get Portfolio Details",
+    summary="Get portfolio discovery records",
     description=(
-        "Returns portfolios with optional filtering by portfolio ID, CIF, and booking center. "
-        "Used by UI/lotus-gateway for portfolio discovery and navigation."
+        "Returns canonical portfolio discovery records with optional filtering by portfolio ID, "
+        "portfolio identifier list, client grouping ID, and booking center. Use this route for "
+        "portfolio lookup, selector population, and navigation scope discovery; do not use it as "
+        "a substitute for single-portfolio detail, workspace composition, or holdings/reporting "
+        "reads."
     ),
 )
 async def get_portfolios(
@@ -76,8 +79,13 @@ async def get_portfolios(
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
         }
     },
-    summary="Get a Single Portfolio by ID",
-    description="Returns the canonical portfolio record for a single portfolio identifier.",
+    summary="Get canonical portfolio detail by ID",
+    description=(
+        "Returns the canonical portfolio identity and standing metadata for one portfolio "
+        "identifier. Use this route when a downstream workflow needs the source-owned portfolio "
+        "record before composing workspace, holdings, transaction, or reporting reads; do not use "
+        "it as a substitute for portfolio positions, transaction-ledger, or reporting routes."
+    ),
 )
 async def get_portfolio_by_id(
     portfolio_id: str = Path(

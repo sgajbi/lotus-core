@@ -125,3 +125,25 @@ async def test_get_portfolios_forwards_portfolio_ids(async_test_client):
         client_id=None,
         booking_center_code=None,
     )
+
+
+async def test_get_portfolios_forwards_discovery_filters(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolios.return_value = {"portfolios": []}
+
+    response = await client.get(
+        "/portfolios/",
+        params={
+            "portfolio_id": "P1",
+            "client_id": "CIF-1",
+            "booking_center_code": "SGPB",
+        },
+    )
+
+    assert response.status_code == 200
+    mock_service.get_portfolios.assert_awaited_once_with(
+        portfolio_id="P1",
+        portfolio_ids=None,
+        client_id="CIF-1",
+        booking_center_code="SGPB",
+    )
