@@ -88,12 +88,11 @@ async def query_asset_allocation(
         "What: Return cash-account balances and translated cash totals for one portfolio.\n"
         "How: Publishes per-account native balances together with portfolio-currency and "
         "reporting-currency restatement for the resolved as-of date.\n"
-        "When: Use this compatibility route only when a downstream consumer genuinely needs "
-        "per-account cash balances or translated cash totals that are not yet published by the "
-        "strategic HoldingsAsOf operational read. This route remains a pre-live convenience "
-        "shape for the RFC-0083 HoldingsAsOf source-data product and should not absorb broader "
-        "holdings, performance, or reporting composition behavior. For large-scale export "
-        "workflows, prefer a dedicated async export contract."
+        "When: Use this compatibility route only when a downstream consumer has not yet migrated "
+        "to `GET /portfolios/{portfolio_id}/cash-balances`. This route remains a pre-live "
+        "convenience shape for the RFC-0083 HoldingsAsOf source-data product and should not "
+        "absorb broader holdings, performance, or reporting composition behavior. For large-scale "
+        "export workflows, prefer a dedicated async export contract."
     ),
     deprecated=True,
     openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),

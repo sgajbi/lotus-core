@@ -105,6 +105,7 @@ These endpoints expose canonical read models and domain drill-downs. They are co
 | `GET /portfolios/{portfolio_id}/positions` | Operational Read | gateway, manage, support | Correct | Latest position read model. |
 | `GET /portfolios/{portfolio_id}/position-history` | Operational Read | gateway, manage, support | Correct | Historical position read model. |
 | `GET /portfolios/{portfolio_id}/transactions` | Operational Read | gateway, manage, support | Correct | Transaction ledger read model. |
+| `GET /portfolios/{portfolio_id}/cash-balances` | Operational Read | gateway, advise, report | Correct | Strategic `HoldingsAsOf` cash-account balance publication. |
 | `GET /portfolios/{portfolio_id}/cash-accounts` | Operational Read | gateway, manage, support | Correct | Cash account state. |
 | `GET /portfolios/{portfolio_id}/cashflow-projection` | Operational Read | gateway, manage, support | Correct, monitor semantics | Acceptable while it remains core-derived cashflow state; do not expand into performance forecasting. |
 | `GET /portfolios/{portfolio_id}/positions/{security_id}/lots` | Operational Read | gateway, support | Correct | BUY state drill-down. |
@@ -127,7 +128,7 @@ These endpoints are currently classified as operational read contracts because t
 | --- | --- | --- | --- | --- |
 | `POST /reporting/assets-under-management/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Source-data query, not report composition. |
 | `POST /reporting/asset-allocation/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Must remain core-held allocation source truth. |
-| `POST /reporting/cash-balances/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Cash source-data summary; target product is `HoldingsAsOf`. |
+| `POST /reporting/cash-balances/query` | Operational Read | gateway, advise | Deprecated convenience shape | Cash source-data summary; strategic replacement is `GET /portfolios/{portfolio_id}/cash-balances` in `HoldingsAsOf`. |
 | `POST /reporting/portfolio-summary/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Avoid absorbing analytics narrative. |
 | `POST /reporting/holdings-snapshot/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Holdings snapshot query; target product is `HoldingsAsOf`. |
 | `POST /reporting/income-summary/query` | Operational Read | `lotus-report`, gateway | Deprecated convenience shape | Income source-data summary; target product is `TransactionLedgerWindow`. |

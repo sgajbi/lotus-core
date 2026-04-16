@@ -21,10 +21,8 @@ from ..dtos.reporting_dto import (
     AssetsUnderManagementQueryRequest,
     AssetsUnderManagementResponse,
     AssetsUnderManagementTotals,
-    CashAccountBalanceRecord,
     CashBalancesQueryRequest,
     CashBalancesResponse,
-    CashBalancesTotals,
     FlowPeriodSummary,
     HoldingSnapshotRecord,
     HoldingsSnapshotQueryRequest,
@@ -51,6 +49,7 @@ from ..repositories.reporting_repository import (
     ReportingRepository,
 )
 from .allocation_calculator import AllocationInputRow, calculate_allocation_views
+from .cash_balance_service import CashBalanceResolver
 from .reporting_classification import resolve_region
 
 ZERO = Decimal("0")
@@ -61,6 +60,10 @@ class ReportingService:
     def __init__(self, db: AsyncSession):
         self.repo = ReportingRepository(db)
         self._fx_cache: dict[tuple[str, str, date], Decimal] = {}
+        self._cash_balance_resolver = CashBalanceResolver(
+            repo=self.repo,
+            convert_amount=self._convert_amount,
+        )
 
     async def get_assets_under_management(
         self, request: AssetsUnderManagementQueryRequest
@@ -208,37 +211,11 @@ class ReportingService:
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        cash_rows = [row for row in rows if self._is_cash_row(row)]
-        account_records = await self._build_cash_account_balance_records(
+        return await self._cash_balance_resolver.build_cash_balances_response(
             portfolio=portfolio,
-            cash_rows=cash_rows,
             resolved_as_of_date=resolved_as_of_date,
             reporting_currency=reporting_currency,
-        )
-        total_portfolio_currency = sum(
-            (record.balance_portfolio_currency for record in account_records),
-            ZERO,
-        )
-        total_reporting_currency = sum(
-            (record.balance_reporting_currency for record in account_records),
-            ZERO,
-        )
-
-        return CashBalancesResponse(
-            portfolio_id=portfolio.portfolio_id,
-            portfolio_currency=portfolio.base_currency,
-            reporting_currency=reporting_currency,
-            resolved_as_of_date=resolved_as_of_date,
-            totals=CashBalancesTotals(
-                cash_account_count=len(account_records),
-                total_balance_portfolio_currency=total_portfolio_currency,
-                total_balance_reporting_currency=total_reporting_currency,
-            ),
-            cash_accounts=account_records,
-            **source_data_product_runtime_metadata(
-                as_of_date=resolved_as_of_date,
-                latest_evidence_timestamp=self._latest_snapshot_evidence_timestamp(cash_rows),
-            ),
+            rows=rows,
         )
 
     async def get_portfolio_summary(
@@ -257,8 +234,8 @@ class ReportingService:
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        cash_rows = [row for row in rows if self._is_cash_row(row)]
-        cash_account_records = await self._build_cash_account_balance_records(
+        cash_rows = [row for row in rows if self._cash_balance_resolver.is_cash_row(row)]
+        cash_account_records = await self._cash_balance_resolver.build_cash_account_balance_records(
             portfolio=portfolio,
             cash_rows=cash_rows,
             resolved_as_of_date=resolved_as_of_date,
@@ -408,123 +385,6 @@ class ReportingService:
             ),
         )
 
-    async def _build_cash_account_balance_records(
-        self,
-        *,
-        portfolio,
-        cash_rows: list,
-        resolved_as_of_date: date,
-        reporting_currency: str,
-    ) -> list[CashAccountBalanceRecord]:
-        cash_security_ids = [row.snapshot.security_id for row in cash_rows]
-        master_rows = await self.repo.list_cash_account_masters(
-            portfolio_id=portfolio.portfolio_id,
-            as_of_date=resolved_as_of_date,
-        )
-        master_by_security_id = {row.security_id: row for row in master_rows}
-        fallback_cash_account_ids = await self.repo.get_latest_cash_account_ids(
-            portfolio_id=portfolio.portfolio_id,
-            cash_security_ids=cash_security_ids,
-            as_of_date=resolved_as_of_date,
-        )
-        snapshot_by_security_id = {row.snapshot.security_id: row for row in cash_rows}
-
-        account_records: list[CashAccountBalanceRecord] = []
-        emitted_cash_account_ids: set[str] = set()
-
-        for master_row in master_rows:
-            snapshot_row = snapshot_by_security_id.get(master_row.security_id)
-            account_record = await self._build_cash_account_balance_record(
-                portfolio=portfolio,
-                snapshot_row=snapshot_row,
-                resolved_as_of_date=resolved_as_of_date,
-                reporting_currency=reporting_currency,
-                cash_account_id=master_row.cash_account_id,
-                security_id=master_row.security_id,
-                instrument_name=(
-                    snapshot_row.instrument.name
-                    if snapshot_row and snapshot_row.instrument
-                    else master_row.display_name
-                ),
-                account_currency=master_row.account_currency,
-            )
-            account_records.append(account_record)
-            emitted_cash_account_ids.add(master_row.cash_account_id)
-
-        for cash_row in cash_rows:
-            master_row = master_by_security_id.get(cash_row.snapshot.security_id)
-            fallback_cash_account_id = (
-                master_row.cash_account_id
-                if master_row is not None
-                else fallback_cash_account_ids.get(cash_row.snapshot.security_id)
-                or cash_row.snapshot.security_id
-            )
-            if fallback_cash_account_id in emitted_cash_account_ids:
-                continue
-            account_records.append(
-                await self._build_cash_account_balance_record(
-                    portfolio=portfolio,
-                    snapshot_row=cash_row,
-                    resolved_as_of_date=resolved_as_of_date,
-                    reporting_currency=reporting_currency,
-                    cash_account_id=fallback_cash_account_id,
-                    security_id=cash_row.snapshot.security_id,
-                    instrument_name=(
-                        cash_row.instrument.name
-                        if cash_row.instrument is not None
-                        else cash_row.snapshot.security_id
-                    ),
-                    account_currency=(
-                        cash_row.instrument.currency
-                        if cash_row.instrument and cash_row.instrument.currency
-                        else portfolio.base_currency
-                    ),
-                )
-            )
-
-        account_records.sort(key=lambda row: (row.account_currency, row.cash_account_id))
-        return account_records
-
-    async def _build_cash_account_balance_record(
-        self,
-        *,
-        portfolio,
-        snapshot_row,
-        resolved_as_of_date: date,
-        reporting_currency: str,
-        cash_account_id: str,
-        security_id: str,
-        instrument_name: str,
-        account_currency: str,
-    ) -> CashAccountBalanceRecord:
-        if snapshot_row is None:
-            native_balance = ZERO
-            portfolio_balance = ZERO
-        else:
-            native_source_value = (
-                snapshot_row.snapshot.market_value_local
-                or snapshot_row.snapshot.market_value
-                or ZERO
-            )
-            native_balance = Decimal(str(native_source_value))
-            portfolio_balance = Decimal(str(snapshot_row.snapshot.market_value or ZERO))
-        reporting_balance = await self._convert_amount(
-            amount=portfolio_balance,
-            from_currency=portfolio.base_currency,
-            to_currency=reporting_currency,
-            as_of_date=resolved_as_of_date,
-        )
-        return CashAccountBalanceRecord(
-            cash_account_id=cash_account_id,
-            instrument_id=security_id,
-            security_id=security_id,
-            account_currency=account_currency,
-            instrument_name=instrument_name,
-            balance_account_currency=native_balance,
-            balance_portfolio_currency=portfolio_balance,
-            balance_reporting_currency=reporting_balance,
-        )
-
     async def _resolve_allocation_rows(
         self,
         *,
@@ -581,7 +441,7 @@ class ReportingService:
             components = components_by_parent.get(row.snapshot.security_id, [])
             if row.snapshot.security_id not in decomposable_parent_ids:
                 allocation_rows.append((row.instrument, row.snapshot, reporting_value))
-                if not self._is_cash_row(row):
+                if not self._cash_balance_resolver.is_cash_row(row):
                     undecomposed_requested_count += 1
                 continue
 
@@ -633,13 +493,6 @@ class ReportingService:
             ZERO,
         )
         return abs(total_weight - Decimal("1")) <= Decimal("0.000001")
-
-    @staticmethod
-    def _is_cash_row(row) -> bool:
-        return (
-            row.instrument is not None
-            and str(row.instrument.asset_class or "").upper() == CASH_ASSET_CLASS
-        )
 
     async def get_income_summary(self, request: IncomeSummaryQueryRequest) -> IncomeSummaryResponse:
         portfolios, _ = await self._resolve_scope_portfolios_and_date(

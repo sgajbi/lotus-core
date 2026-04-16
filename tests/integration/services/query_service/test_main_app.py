@@ -276,6 +276,7 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     paths = response.json()["paths"]
 
     assert "404" in paths["/portfolios/{portfolio_id}"]["get"]["responses"]
+    assert "404" in paths["/portfolios/{portfolio_id}/cash-balances"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/positions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]["responses"]
@@ -290,6 +291,7 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
 
     assert "/reporting/assets-under-management/query" in paths
     assert "/reporting/asset-allocation/query" in paths
+    assert "/portfolios/{portfolio_id}/cash-balances" in paths
     assert "/reporting/cash-balances/query" in paths
     assert "/reporting/portfolio-summary/query" in paths
     assert "/reporting/holdings-snapshot/query" in paths
@@ -341,6 +343,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     income_query = paths["/reporting/income-summary/query"]["post"]
     activity_query = paths["/reporting/activity-summary/query"]["post"]
     portfolios_query = paths["/portfolios/"]["get"]
+    strategic_cash_balances_query = paths["/portfolios/{portfolio_id}/cash-balances"]["get"]
     cash_accounts_query = paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]
 
     assert (
@@ -350,8 +353,9 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert "Prefer this route over reconstructing AUM from holdings rows" in aum_query["description"]
     assert "strategic allocation views" in allocation_query["description"]
     assert "Prefer this route over mining allocation views from `core-snapshot`" in allocation_query["description"]
-    assert "per-account cash balances or translated cash totals" in cash_query["description"]
-    assert "pre-live convenience shape for the RFC-0083 HoldingsAsOf source-data product" in cash_query["description"]
+    assert "strategic HoldingsAsOf cash-account balance read" in strategic_cash_balances_query["description"]
+    assert "Prefer this contract over `POST /reporting/cash-balances/query`" in strategic_cash_balances_query["description"]
+    assert "migrated to `GET /portfolios/{portfolio_id}/cash-balances`" in cash_query["description"]
     assert "strategic historical portfolio summary" in portfolio_summary_query["description"]
     assert "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`" in portfolio_summary_query["description"]
     assert "correct lotus-core summary seam for report-ready wealth totals" in portfolio_summary_query["description"]
@@ -360,6 +364,24 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert "portfolio-level flow buckets" in activity_query["description"]
     assert "canonical cash-account master records" in cash_accounts_query["description"]
     assert "Do not use this route for per-account balances" in cash_accounts_query["description"]
+
+    strategic_cash_balances_as_of_date = next(
+        parameter
+        for parameter in strategic_cash_balances_query["parameters"]
+        if parameter["name"] == "as_of_date"
+    )
+    assert strategic_cash_balances_as_of_date["description"] == (
+        "Optional as-of date for booked cash-account balances. When omitted, lotus-core resolves the latest booked business date."
+    )
+
+    strategic_cash_balances_reporting_currency = next(
+        parameter
+        for parameter in strategic_cash_balances_query["parameters"]
+        if parameter["name"] == "reporting_currency"
+    )
+    assert strategic_cash_balances_reporting_currency["description"] == (
+        "Optional reporting currency. Defaults to the portfolio currency when omitted."
+    )
 
     portfolio_ids = next(
         parameter

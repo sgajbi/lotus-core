@@ -72,9 +72,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         route_family=OPERATIONAL_READ,
         serving_plane=QUERY_SERVICE,
         owner="lotus-core",
-        consumers=("lotus-gateway", "lotus-risk", "lotus-report", "lotus-manage"),
+        consumers=("lotus-gateway", "lotus-risk", "lotus-report", "lotus-manage", "lotus-advise"),
         current_routes=(
             "/portfolios/{portfolio_id}/positions",
+            "/portfolios/{portfolio_id}/cash-balances",
             "/reporting/holdings-snapshot/query",
             "/reporting/cash-balances/query",
         ),

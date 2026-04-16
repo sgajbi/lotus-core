@@ -830,64 +830,68 @@ route purpose, parameter descriptions, and `HoldingsAsOf` product identity.
 
 This certification pass covers:
 
-1. `POST /reporting/cash-balances/query`
+1. `GET /portfolios/{portfolio_id}/cash-balances`
+2. `POST /reporting/cash-balances/query`
 
 ### Route Contract Decision
 
-This remains a deprecated compatibility route, but it still serves a real gap in the current
-strategic holdings publication surface.
+`GET /portfolios/{portfolio_id}/cash-balances` is now the strategic `HoldingsAsOf` cash-account
+balance publication route.
+
+`POST /reporting/cash-balances/query` remains a deprecated compatibility route for downstreams that
+have not yet migrated.
 
 The boundary is now explicit:
 
-1. use it only when a downstream consumer genuinely needs per-account cash balances or translated
-   cash totals;
-2. do not describe it as the strategic default `HoldingsAsOf` route for new operational-read
-   adoption;
-3. do not use it as a substitute for broad holdings publication, performance output, or report
+1. use `GET /portfolios/{portfolio_id}/cash-balances` for new operational-read adoption that needs
+   per-account cash balances or translated cash totals;
+2. keep `POST /reporting/cash-balances/query` only as a migration bridge for existing consumers;
+3. do not use either route as a substitute for broad holdings publication, performance output, or report
    composition;
-4. acknowledge that current strategic routes do not yet publish the full cash-account balance
-   detail needed by some active consumers.
+4. use `GET /portfolios/{portfolio_id}/cash-accounts` only for cash-account identity and lifecycle
+   metadata, not balances.
 
 ### Downstream Consumer Reality
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `POST /reporting/cash-balances/query` | `lotus-gateway`, `lotus-advise` | Mixed. Gateway still carries migration debt where positions-family reads should become the default when they satisfy the consumer need. Advise has a currently justified direct dependency because its stateful context needs per-currency cash balances and derived FX context that the strategic holdings and canonical cash-account routes do not yet publish in one governed contract. |
+| `GET /portfolios/{portfolio_id}/cash-balances` | No direct downstream caller evidenced yet in this repo pass | New strategic route published to close the upstream gap and support downstream migration away from the deprecated convenience shape. |
+| `POST /reporting/cash-balances/query` | `lotus-gateway`, `lotus-advise` | Migration path now exists. Gateway and advise should move to the strategic route unless a remaining workflow needs compatibility behavior not covered by the new contract. |
 
 No active direct `lotus-report` consumer was evidenced in this pass.
 
 ### Upstream Integration Assessment
 
-The route itself is strong for the narrow contract it serves:
+The strategic route is now strong for the intended contract:
 
 1. it publishes per-account native cash balances together with portfolio-currency and
    reporting-currency restatement;
-2. it exposes enough per-currency detail for advisory simulation state and gateway liquidity views;
+2. it exposes enough per-currency detail for advisory state and gateway liquidity views;
 3. it keeps cash-account balance publication explicit instead of forcing downstream reconstruction
    from broad holdings payloads or account master records;
-4. however, the broader target-state posture is incomplete because the current strategic
-   `HoldingsAsOf` operational read does not yet expose equivalent cash-account balance detail, and
-   `GET /portfolios/{portfolio_id}/cash-accounts` intentionally publishes identity metadata rather
-   than balances.
+4. `GET /portfolios/{portfolio_id}/cash-accounts` intentionally remains identity metadata only.
 
 ### Swagger / OpenAPI Assessment
 
 For this endpoint, Swagger now makes the following explicit:
 
-1. this route is still a compatibility shape, not the strategic default holdings read;
-2. it should be used only where per-account cash balances or translated cash totals are genuinely
-   required;
-3. broader holdings or reporting composition should not anchor on this route;
-4. endpoint-specific cash balance fields now carry clearer examples for cash-account identity,
+1. `GET /portfolios/{portfolio_id}/cash-balances` is the strategic `HoldingsAsOf` balance read;
+2. `POST /reporting/cash-balances/query` is explicitly documented as the deprecated migration path;
+3. broader holdings or reporting composition should not anchor on either route;
+4. endpoint-specific cash balance fields carry clearer examples for cash-account identity,
    balances, totals, portfolio currency, reporting currency, and resolved as-of date.
 
 Focused HTTP-level dependency proof exists in
-`tests/integration/services/query_service/test_reporting_router.py` for successful cash-balance
-routing and request validation behavior.
+`tests/integration/services/query_service/test_cash_balances_router.py` for strategic route
+routing, parameter forwarding, and 404/400 mapping behavior.
 
-Service-level proof exists in `tests/unit/services/query_service/services/test_reporting_service.py`
+Compatibility-route proof remains in
+`tests/integration/services/query_service/test_reporting_router.py`.
+
+Service-level proof exists in `tests/unit/services/query_service/services/test_cash_balance_service.py`
 for translated totals, account-level balance resolution, zero-balance account handling, and product
-identity metadata.
+identity metadata. Reporting-service regression proof remains in
+`tests/unit/services/query_service/services/test_reporting_service.py`.
 
 OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
 route-purpose wording and endpoint-specific schema examples.
@@ -896,9 +900,9 @@ route-purpose wording and endpoint-specific schema examples.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core` | No open issue before this pass, but a real upstream target-state gap exists | Open a new lotus-core issue to publish a strategic cash-account balance contract within the `HoldingsAsOf` family so active consumers can retire the deprecated route truthfully. |
-| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway should keep shrinking dependence on this convenience route wherever position-book or other strategic holdings reads already satisfy the UI need. | Keep open until gateway narrows or removes deprecated `cash-balances/query` usage where a strategic route already meets the requirement. |
-| `lotus-advise` | No downstream defect issue opened in this pass | Current advise dependence is justified until lotus-core publishes a strategic replacement that includes per-currency cash-account balances and the related FX derivation inputs. |
+| `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Resolved by this slice. lotus-core now publishes `GET /portfolios/{portfolio_id}/cash-balances`. | Close once focused validation evidence is recorded and downstream migration notes are posted. |
+| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway should migrate to `GET /portfolios/{portfolio_id}/cash-balances` where it needs per-account balances or translated cash totals. | Keep open until gateway removes deprecated `cash-balances/query` usage. |
+| `lotus-advise #92` downstream adoption of enrichment/state route hardening | Open and still valid. Advise now has a strategic replacement for cash-account balance publication. | Update the issue to migrate any direct cash-balance reads from the deprecated reporting route to `GET /portfolios/{portfolio_id}/cash-balances`. |
 
 ## Certified Endpoint Slice: Cash Account Master Operational Read
 
@@ -917,9 +921,9 @@ The contract boundary is explicit:
    specific business date;
 3. do not use this route as a liquidity or balance view, because it intentionally does not publish
    native balances or translated cash totals;
-4. when a downstream workflow genuinely needs per-account balances, treat
-   `POST /reporting/cash-balances/query` as the current compatibility route until the strategic
-   `HoldingsAsOf` balance gap tracked in `lotus-core #308` is closed.
+4. when a downstream workflow genuinely needs per-account balances, use
+   `GET /portfolios/{portfolio_id}/cash-balances`; keep
+   `POST /reporting/cash-balances/query` only as compatibility during migration.
 
 ### Downstream Consumer Reality
 
@@ -945,8 +949,9 @@ The route is tight and production-grade for its intended purpose:
 4. it keeps cash-account identity publication separate from cash-balance publication, which avoids
    ambiguous mixed-purpose payloads.
 
-The only material upstream gap near this route remains strategic balance publication, already
-tracked in `lotus-core #308`. That is adjacent to this endpoint, not a flaw in this endpoint.
+The adjacent strategic balance-publication gap is now closed by
+`GET /portfolios/{portfolio_id}/cash-balances`. That remains adjacent to this endpoint rather than
+a flaw in this endpoint.
 
 ### Swagger / OpenAPI Assessment
 
@@ -976,8 +981,8 @@ route-purpose wording, parameter descriptions, and cash-account response example
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Open. Still valid, but it is not a defect in `GET /portfolios/{portfolio_id}/cash-accounts` itself. This route is intentionally metadata-only. | Keep open until lotus-core publishes a strategic non-deprecated balance contract. |
-| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Adjacent and still valid. Gateway should not be redirected to `GET /portfolios/{portfolio_id}/cash-accounts` for liquidity views because this route does not publish balances. | Keep open against the balance/publication migration problem, not against the cash-account master route. |
+| `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Resolved. It was never a defect in `GET /portfolios/{portfolio_id}/cash-accounts` itself. This route remains intentionally metadata-only. | Close against the new strategic cash-balance route, not against this endpoint. |
+| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Adjacent and still valid. Gateway should use `GET /portfolios/{portfolio_id}/cash-balances` for liquidity views, not `GET /portfolios/{portfolio_id}/cash-accounts`. | Keep open against the downstream migration problem, not against the cash-account master route. |
 
 ## Certified Endpoint Slice: Income And Activity Operational Reads
 

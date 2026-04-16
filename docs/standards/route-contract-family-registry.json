@@ -131,6 +131,7 @@
         "GET /lookups/portfolios",
         "GET /portfolios",
         "GET /portfolios/{portfolio_id}",
+        "GET /portfolios/{portfolio_id}/cash-balances",
         "GET /portfolios/{portfolio_id}/cash-accounts",
         "GET /portfolios/{portfolio_id}/cashflow-projection",
         "GET /portfolios/{portfolio_id}/position-history",
