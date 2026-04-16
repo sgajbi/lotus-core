@@ -35,7 +35,9 @@ def get_sell_state_service(db: AsyncSession = Depends(get_async_db_session)) -> 
     description=(
         "Returns SELL disposal records for a portfolio-security key, including disposed quantity, "
         "disposed cost basis, realized P&L, and policy/linkage metadata for audit and "
-        "reconciliation."
+        "reconciliation. Use this endpoint for transaction-state audit, realized-P&L "
+        "traceability, and disposal-method investigation when the caller needs persisted SELL "
+        "disposal rows; do not use it as a general performance, tax-reporting, or holdings read."
     ),
 )
 async def get_sell_disposals(
@@ -71,7 +73,9 @@ async def get_sell_disposals(
     summary="Get SELL Cash Linkage State",
     description=(
         "Returns security-side SELL linkage fields and linked settlement cashflow details "
-        "for deterministic reconciliation."
+        "for deterministic reconciliation. Use this endpoint for transaction-level settlement "
+        "audit when a caller needs the persisted SELL-to-cash linkage; do not use it as a "
+        "portfolio cashflow, liquidity, or reporting summary route."
     ),
 )
 async def get_sell_cash_linkage(

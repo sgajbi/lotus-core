@@ -1240,6 +1240,90 @@ advanced filter descriptions and strategic route wording.
 | `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `GET /portfolios/{portfolio_id}/transactions` in this pass. |
 | `lotus-gateway #120` advanced transaction-ledger filter posture | Open. Still valid as downstream adoption work. Gateway currently exposes only a subset of the upstream filter and sorting surface even though lotus-core already supports richer FX/event drill-down filters. | Keep open until gateway makes and documents an explicit product decision on the full transaction-ledger filter surface, and implements whichever strategically useful options should be exposed. |
 
+## Certified Endpoint Slice: BUY / SELL Investigative State Reads
+
+This certification pass covers:
+
+1. `GET /portfolios/{portfolio_id}/positions/{security_id}/lots`
+2. `GET /portfolios/{portfolio_id}/positions/{security_id}/accrued-offsets`
+3. `GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage`
+4. `GET /portfolios/{portfolio_id}/positions/{security_id}/sell-disposals`
+5. `GET /portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage`
+
+### Route Contract Decision
+
+These routes are correct and intentionally narrow investigative reads.
+
+The contract boundary is explicit:
+
+1. use them for transaction-state audit, reconciliation, support investigation, disposal tracing,
+   and settlement-linkage proof;
+2. do not use them as general holdings, cash-balance, portfolio cashflow, performance, or
+   reporting-summary routes;
+3. treat them as support-plane operational evidence for BUY/SELL lifecycle state, not as the
+   default downstream portfolio workspace read model.
+
+### Downstream Consumer Reality
+
+| Route family | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| BUY / SELL investigative state reads | No active direct downstream caller evidenced in `lotus-gateway`, `lotus-manage`, or `lotus-report` during this pass | Correct investigative support contract with no overstated live front-office adoption. The family remains catalog-correct for gateway and support troubleshooting use cases, but this pass did not find product code that should be described as an active direct dependency. |
+
+That is a healthy result rather than a defect. These routes exist to answer narrow operational
+questions about lots, accrual offsets, and security-to-cash linkage. They should not be forced into
+front-office product flows when broader portfolio or reporting routes already satisfy the use case.
+
+### Upstream Integration Assessment
+
+The family is strong for its intended purpose:
+
+1. BUY lot state publishes acquisition-date, quantity, basis, and policy/linkage metadata needed
+   for private-banking auditability;
+2. BUY accrued-offset state keeps fixed-income accrued-interest offsets explicit instead of forcing
+   downstream inference from transaction rows;
+3. BUY and SELL cash-linkage routes publish the persisted transaction-to-cash relationship needed
+   for deterministic reconciliation;
+4. SELL disposal state exposes disposed quantity, disposed basis, realized gain/loss, and policy
+   metadata in a way that remains readable for audit and support workflows;
+5. the service layer preserves truthful `404` behavior for missing portfolios or transactions
+   rather than collapsing investigative misses into empty generic payloads.
+
+No upstream defect was found in this pass. The family is narrow by design, and that narrowness is
+appropriate.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the following explicit:
+
+1. each route is framed as an investigative BUY/SELL state endpoint, not a broad portfolio read;
+2. when-to-use and when-not-to-use guidance is explicit in the route descriptions;
+3. security and transaction path parameters are documented with endpoint-specific descriptions;
+4. concrete `404` examples exist for BUY state, SELL state, and both cash-linkage routes.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_buy_state_router.py` and
+`tests/integration/services/query_service/test_sell_state_router.py` for success and `404`
+behavior across the family.
+
+Service-level proof exists in `tests/unit/services/query_service/services/test_buy_state_service.py`
+and `tests/unit/services/query_service/services/test_sell_state_service.py` for mapping of lot,
+offset, disposal, proceeds, and cash-linkage semantics.
+
+Repository-level proof exists in
+`tests/unit/services/query_service/repositories/test_buy_state_repository.py` and
+`tests/unit/services/query_service/repositories/test_sell_state_repository.py` for the underlying
+BUY/SELL query joins and filters.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording, parameter descriptions, and concrete investigative not-found examples.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the BUY / SELL investigative state routes. |
+| Downstream repos | No open issue found in this pass | No downstream misuse or stale-contract binding was evidenced for these endpoints, so no new issue was opened. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:

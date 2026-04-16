@@ -38,7 +38,9 @@ def get_buy_state_service(db: AsyncSession = Depends(get_async_db_session)) -> B
     summary="Get BUY Lot State for a Position",
     description=(
         "Returns durable BUY lot records for a portfolio-security key, including linkage and "
-        "policy metadata used for lifecycle traceability."
+        "policy metadata used for lifecycle traceability. Use this endpoint for transaction-state "
+        "audit, reconciliation, and support investigation when a caller needs the underlying BUY "
+        "lot ledger; do not use it as a general holdings or reporting read."
     ),
 )
 async def get_position_lots(
@@ -72,7 +74,9 @@ async def get_position_lots(
     summary="Get BUY Accrued-Income Offset State",
     description=(
         "Returns accrued-income offset state initialized by BUY events for a "
-        "portfolio-security key."
+        "portfolio-security key. Use this endpoint for fixed-income audit, income-support, and "
+        "reconciliation investigation when the caller needs the persisted BUY-side offset ledger; "
+        "do not use it as a portfolio-income summary route."
     ),
 )
 async def get_accrued_offsets(
@@ -107,7 +111,10 @@ async def get_accrued_offsets(
     },
     summary="Get BUY Cash Linkage State",
     description=(
-        "Returns security-side BUY linkage fields and linked cashflow details for reconciliation."
+        "Returns security-side BUY linkage fields and linked cashflow details for reconciliation. "
+        "Use this endpoint for transaction-level audit and settlement investigation when a caller "
+        "needs the persisted BUY-to-cash linkage; do not use it as a general cash-balance or "
+        "portfolio-cashflow read."
     ),
 )
 async def get_buy_cash_linkage(

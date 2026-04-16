@@ -745,6 +745,12 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
     schema = response.json()
 
     buy_lots = schema["paths"]["/portfolios/{portfolio_id}/positions/{security_id}/lots"]["get"]
+    buy_offsets = schema["paths"][
+        "/portfolios/{portfolio_id}/positions/{security_id}/accrued-offsets"
+    ]["get"]
+    buy_cash_linkage = schema["paths"][
+        "/portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage"
+    ]["get"]
     sell_disposals = schema["paths"][
         "/portfolios/{portfolio_id}/positions/{security_id}/sell-disposals"
     ]["get"]
@@ -752,10 +758,29 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
         "/portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage"
     ]["get"]
 
+    assert "do not use it as a general holdings or reporting read" in buy_lots["description"]
+    assert "do not use it as a portfolio-income summary route" in buy_offsets["description"]
+    assert "do not use it as a general cash-balance or portfolio-cashflow read" in buy_cash_linkage[
+        "description"
+    ]
+    assert "do not use it as a general performance, tax-reporting, or holdings read" in (
+        sell_disposals["description"]
+    )
+    assert "do not use it as a portfolio cashflow, liquidity, or reporting summary route" in (
+        sell_cash_linkage["description"]
+    )
+
     buy_security_id = next(
         parameter for parameter in buy_lots["parameters"] if parameter["name"] == "security_id"
     )
     assert buy_security_id["description"] == "Security identifier for the BUY-state position key."
+
+    buy_transaction_id = next(
+        parameter
+        for parameter in buy_cash_linkage["parameters"]
+        if parameter["name"] == "transaction_id"
+    )
+    assert buy_transaction_id["description"] == "Security-side BUY transaction identifier."
 
     sell_security_id = next(
         parameter
@@ -772,12 +797,26 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
     assert sell_transaction_id["description"] == "Security-side SELL transaction identifier."
 
     buy_not_found = buy_lots["responses"]["404"]["content"]["application/json"]["example"]
+    buy_cash_not_found = buy_cash_linkage["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     sell_not_found = sell_disposals["responses"]["404"]["content"]["application/json"]["example"]
+    sell_cash_not_found = sell_cash_linkage["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     assert buy_not_found["detail"] == (
         "BUY state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
     )
+    assert buy_cash_not_found["detail"] == (
+        "BUY cash linkage not found for portfolio PORT-STATE-001 and transaction "
+        "TXN-BUY-2026-0001"
+    )
     assert sell_not_found["detail"] == (
         "SELL state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
+    )
+    assert sell_cash_not_found["detail"] == (
+        "SELL cash linkage not found for portfolio PORT-STATE-001 and transaction "
+        "TXN-SELL-2026-0001"
     )
 
 
