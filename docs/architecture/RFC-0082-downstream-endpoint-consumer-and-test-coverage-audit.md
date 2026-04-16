@@ -549,9 +549,10 @@ narrow governed-scope reads such as index-only classification pulls.
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #306` missing sector labels for canonical benchmark indices | Closed. Current repo truth indicates the issue was stale rather than an active contract defect. The canonical demo/seed bundle now publishes governed broad-market sector labels for `IDX_GLOBAL_EQUITY_TR` and `IDX_GLOBAL_BOND_TR`, repository coverage proves effective-dated index catalog resolution keeps those labels, and the `indices/catalog` contract now documents that broad benchmark component indices can legitimately publish broad-market sector labels instead of issuer sectors. | Re-open only if fresh live ingestion/runtime evidence again omits the labels. |
+| `lotus-advise #94` adopt lotus-core classification taxonomy to reduce local advisory label drift | Opened in this pass. `lotus-advise` still contains local asset-class/product-type classification heuristics in stateful context assembly, so the taxonomy route should be reviewed as the governed source for shared labels before those heuristics drift further. | Keep open in `lotus-advise` until advisory docs/tests and classification fallback posture are rechecked against the certified taxonomy route. |
 
-No new downstream migration issue is required from this slice. The active need here is classification
-coverage quality, not route replacement.
+The active need here is downstream taxonomy adoption and classification-coverage quality, not route
+replacement inside lotus-core.
 
 ## Certified Endpoint Slice: Support And Lineage Evidence
 
