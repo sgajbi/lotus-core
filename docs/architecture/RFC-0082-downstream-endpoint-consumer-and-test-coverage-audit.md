@@ -826,6 +826,76 @@ route purpose, parameter descriptions, and `HoldingsAsOf` product identity.
 | `lotus-core` | No open issue | The strategic positions route is contract-tight in this pass. No open lotus-core defect was found against `GET /portfolios/{portfolio_id}/positions`. |
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway remains correctly bound to the strategic positions route for position-book reads, but related holdings workflows still depend on a deprecated convenience shape in the same product family. | Keep open until gateway narrows or removes deprecated `HoldingsAsOf` convenience-route dependence in holdings-position workflows. |
 
+## Certified Endpoint Slice: Portfolio Summary Operational Read
+
+This certification pass covers:
+
+1. `POST /reporting/portfolio-summary/query`
+
+### Route Contract Decision
+
+This is the strategic lotus-core summary route for one-portfolio historical wealth totals.
+
+The boundary is now explicit:
+
+1. use this route when a downstream consumer needs snapshot-backed total market value, cash versus
+   invested split, and summary coverage metadata for one portfolio and as-of date;
+2. prefer this route over reconstructing summary figures from `HoldingsAsOf` rows or
+   `core-snapshot` section payloads;
+3. keep performance, risk, and narrative reporting ownership outside this route;
+4. treat it as a report-ready operational read, not as a replacement for sectioned state or
+   analytics-serving contracts.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /reporting/portfolio-summary/query` | `lotus-report` | Correct after direct downstream fix in this pass. Report now uses the dedicated summary contract for wealth totals instead of reconstructing those figures from `core-snapshot`. |
+
+`lotus-gateway` remains an intended consumer through report-owned or gateway-owned summary surfaces,
+but this pass did not evidence a direct gateway call into lotus-core for this route itself.
+
+### Upstream Integration Assessment
+
+The route is strong and domain-correct for quant and private-banking summary expectations:
+
+1. totals are snapshot-backed and restated into reporting currency rather than left for downstream
+   reconstruction;
+2. cash versus invested split is explicit and removes downstream guesswork around whether cash was
+   netted out or derived from holdings rows;
+3. summary coverage metadata publishes valued versus unvalued position counts so consumers can
+   reason about supportability instead of trusting a single headline figure blindly;
+4. the route stays narrow and avoids absorbing analytics narrative that belongs in performance,
+   risk, or report-owned composition layers.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. this is the strategic lotus-core summary seam for report-ready wealth totals;
+2. downstream consumers should prefer it over `core-snapshot` or holdings-row reconstruction when
+   the need is summary figures;
+3. it does not own performance, risk, or narrative reporting outputs;
+4. endpoint-specific DTO fields now carry clearer examples for portfolio classification, risk
+   posture, lifecycle status, totals, and snapshot metadata.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_reporting_router.py` for successful summary routing
+and request validation behavior.
+
+Service-level proof exists in `tests/unit/services/query_service/services/test_reporting_service.py`
+for historical restated totals, cash versus invested split, and summary coverage metadata.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording and endpoint-specific schema examples.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | The source route is contract-tight in this pass. No open lotus-core defect remains against `POST /reporting/portfolio-summary/query`. |
+| `lotus-report` | No open issue after direct downstream fix in this pass | `lotus-report` now binds wealth totals to the dedicated summary contract instead of reconstructing them from `core-snapshot`. Keep watching downstream test coverage, but no tracking issue is needed for this route today. |
+
 ## Certified Endpoint Slice: Effective Integration Policy
 
 This certification pass covers:

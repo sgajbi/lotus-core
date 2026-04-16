@@ -350,6 +350,8 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert "classification dimensions" in allocation_query["description"]
     assert "portfolio currency and reporting currency" in cash_query["description"]
     assert "true historical as-of portfolio summary" in portfolio_summary_query["description"]
+    assert "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`" in portfolio_summary_query["description"]
+    assert "correct lotus-core summary seam for report-ready wealth totals" in portfolio_summary_query["description"]
     assert "true historical as-of holdings snapshot" in holdings_snapshot_query["description"]
     assert "requested reporting window and year-to-date" in income_query["description"]
     assert "portfolio-level flow buckets" in activity_query["description"]
@@ -385,6 +387,11 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
         portfolio_summary_response["properties"]["snapshot_metadata"]["description"]
         == "Resolved snapshot metadata for the summary query."
     )
+    assert portfolio_summary_response["properties"]["portfolio_type"]["examples"] == [
+        "DISCRETIONARY"
+    ]
+    assert portfolio_summary_response["properties"]["risk_exposure"]["examples"] == ["BALANCED"]
+    assert portfolio_summary_response["properties"]["status"]["examples"] == ["ACTIVE"]
     assert holdings_snapshot_response["properties"]["positions"]["description"].startswith(
         "Holdings snapshot rows"
     )

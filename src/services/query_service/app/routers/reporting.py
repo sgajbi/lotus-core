@@ -99,10 +99,16 @@ async def query_cash_balances(
     response_model=PortfolioSummaryResponse,
     summary="Query Portfolio Summary Snapshot",
     description=(
-        "Returns a true historical as-of portfolio summary for one portfolio, including market "
-        "value totals, cash versus invested split, and snapshot coverage metadata. Use this "
-        "contract when UI or reporting consumers need a restated summary in portfolio currency "
-        "and reporting currency without rebuilding holdings totals client-side."
+        "What: Return the strategic historical portfolio summary for one portfolio and as-of "
+        "date.\n"
+        "How: Resolves snapshot-backed holdings totals, cash versus invested split, and summary "
+        "coverage metadata with reporting-currency restatement.\n"
+        "When: Use this contract when UI or reporting consumers need a restated summary in "
+        "portfolio currency and reporting currency without rebuilding holdings totals client-side. "
+        "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot` "
+        "when the consumer needs summary figures rather than sectioned source-state payloads. "
+        "This is the correct lotus-core summary seam for report-ready wealth totals; it should not "
+        "absorb performance, risk, or narrative reporting ownership."
     ),
 )
 async def query_portfolio_summary(

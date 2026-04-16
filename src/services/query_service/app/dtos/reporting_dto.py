@@ -465,40 +465,60 @@ class PortfolioSummaryTotals(BaseModel):
     total_market_value_portfolio_currency: Decimal = Field(
         ...,
         description="Total portfolio market value in portfolio currency.",
+        examples=[1000000.0],
     )
     total_market_value_reporting_currency: Decimal = Field(
         ...,
         description="Total portfolio market value in reporting currency.",
+        examples=[1000000.0],
     )
     cash_balance_portfolio_currency: Decimal = Field(
         ...,
         description="Cash balance subtotal in portfolio currency.",
+        examples=[120000.0],
     )
     cash_balance_reporting_currency: Decimal = Field(
         ...,
         description="Cash balance subtotal in reporting currency.",
+        examples=[120000.0],
     )
     invested_market_value_portfolio_currency: Decimal = Field(
         ...,
         description="Non-cash invested market value in portfolio currency.",
+        examples=[880000.0],
     )
     invested_market_value_reporting_currency: Decimal = Field(
         ...,
         description="Non-cash invested market value in reporting currency.",
+        examples=[880000.0],
     )
 
 
 class PortfolioSummarySnapshotMetadata(BaseModel):
-    snapshot_date: date = Field(..., description="Resolved snapshot date backing the summary.")
-    position_count: int = Field(..., description="Number of positions in the snapshot.")
-    cash_account_count: int = Field(..., description="Number of cash accounts represented.")
+    snapshot_date: date = Field(
+        ...,
+        description="Resolved snapshot date backing the summary.",
+        examples=["2026-03-27"],
+    )
+    position_count: int = Field(
+        ...,
+        description="Number of positions in the snapshot.",
+        examples=[12],
+    )
+    cash_account_count: int = Field(
+        ...,
+        description="Number of cash accounts represented.",
+        examples=[2],
+    )
     valued_position_count: int = Field(
         ...,
         description="Number of snapshot positions with non-UNVALUED coverage.",
+        examples=[11],
     )
     unvalued_position_count: int = Field(
         ...,
         description="Number of snapshot positions still lacking valuation coverage.",
+        examples=[1],
     )
 
 
@@ -512,11 +532,31 @@ class PortfolioSummaryResponse(BaseModel):
         description="Effective reporting currency.",
         examples=["USD"],
     )
-    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
-    portfolio_type: str = Field(..., description="Portfolio product/type classification.")
-    objective: str | None = Field(None, description="Primary portfolio objective.")
-    risk_exposure: str = Field(..., description="Risk-exposure classification.")
-    status: str = Field(..., description="Portfolio lifecycle status.")
+    resolved_as_of_date: date = Field(
+        ...,
+        description="Effective as-of date used by the query.",
+        examples=["2026-03-27"],
+    )
+    portfolio_type: str = Field(
+        ...,
+        description="Portfolio product/type classification.",
+        examples=["DISCRETIONARY"],
+    )
+    objective: str | None = Field(
+        None,
+        description="Primary portfolio objective.",
+        examples=["Growth"],
+    )
+    risk_exposure: str = Field(
+        ...,
+        description="Risk-exposure classification.",
+        examples=["BALANCED"],
+    )
+    status: str = Field(
+        ...,
+        description="Portfolio lifecycle status.",
+        examples=["ACTIVE"],
+    )
     totals: PortfolioSummaryTotals = Field(..., description="Portfolio summary totals.")
     snapshot_metadata: PortfolioSummarySnapshotMetadata = Field(
         ...,
