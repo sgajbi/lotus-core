@@ -404,7 +404,7 @@ The boundary is now made explicit in Swagger and tests:
 
 | Route family | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `/simulation-sessions/*` | `lotus-gateway` | Correct. Gateway currently calls create-session, add-change, projected-positions, and projected-summary through the control-plane base path; direct session read/close are available for future workflow expansion but are not overstated as live gateway calls in this pass. |
+| `/simulation-sessions/*` | `lotus-gateway` direct; `lotus-workbench` indirect through gateway | Correct. Gateway currently calls create-session, add-change, projected-positions, and projected-summary through the control-plane base path; Workbench consumes the sandbox flow only through the governed gateway contract. Direct session read/close are available for future workflow expansion but are not overstated as live gateway calls in this pass. |
 | `/integration/advisory/proposals/simulate-execution` | `lotus-advise` | Separate but related strategic route. Advise does not call raw simulation-session lifecycle routes directly for canonical proposal execution. |
 
 `lotus-manage` remains an intended consumer in the RFC-0082 inventory, but no active direct code
@@ -447,8 +447,8 @@ error bucket.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `#54` simulation OpenAPI error-response gap | Addressed. Negative response codes are documented and guarded by integration tests. | Closed in `lotus-core`; keep the OpenAPI integration assertions as the regression guard. |
-| `#52` unknown portfolio leaks raw DB 500 on create-session | Addressed in this slice. Service now prevalidates portfolio existence and the router returns a sanitized 404/500 contract. | Closed in `lotus-core`; keep the router dependency proof to prevent a DB-leak regression. |
+| `#54` simulation OpenAPI error-response gap | Closed. Negative response codes are documented and guarded by integration tests. | Keep the OpenAPI integration assertions as the regression guard. |
+| `#52` unknown portfolio leaks raw DB 500 on create-session | Closed. Service now prevalidates portfolio existence and the router returns a sanitized 404/500 contract. | Keep the router dependency proof to prevent a DB-leak regression. |
 
 ## Certified Endpoint Slice: Advisory Simulation Execution
 
