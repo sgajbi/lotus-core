@@ -578,7 +578,7 @@ They should not be presented to downstream teams as calculation-grade portfolio 
 
 | Route family | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| portfolio support overview/readiness | `lotus-gateway` | Active direct use exists for workspace supportability and readiness context. |
+| portfolio support overview/readiness | `lotus-gateway` direct; `lotus-workbench` indirect through gateway | Active direct use exists in gateway for workspace supportability and readiness context. Workbench depends on the governed gateway contract rather than calling lotus-core directly. |
 | deeper reconciliation / replay / lineage evidence | no strong active direct consumer found in this pass | Contract is published and documented, but live product-flow evidence remains limited. Treat these routes as support-plane ready, not fully downstream-proven product surfaces. |
 
 This is an important distinction: the endpoints are useful and intentionally governed, but the
@@ -636,10 +636,11 @@ mode instead of collapsing that route into a generic portfolio-only not-found ex
 
 ### Issue Disposition For This Endpoint Family
 
-No active GitHub issue was found that changes the current contract decision for this family.
-The main follow-up remains product adoption and downstream workflow testing in repos such as
-`lotus-gateway`, `lotus-manage`, and `lotus-report` when they start relying on these deeper support
-surfaces directly.
+| Issue | Status in this pass | Action |
+| --- | --- | --- |
+| `lotus-gateway #116` | Still valid downstream adoption issue. Gateway is the active direct consumer of `overview` and `readiness`, and it must keep tests/docs aligned with the current operator-evidence boundary and 400-vs-404 error behavior. | Keep open in gateway until downstream validation closes it. |
+| `lotus-manage #32` | Still valid future-adoption issue. No active direct client was evidenced in this pass, so manage should treat the issue as adoption guidance rather than proof of live dependency. | Keep open in manage until direct operator workflow binding exists and is tested. |
+| `lotus-report #38` | Opened in this pass as future-adoption guidance. Report remains a catalog-intended support/evidence consumer, but this pass did not find active direct client code. | Keep open in report until direct workflow binding and tests exist. |
 
 ## Certified Endpoint Slice: Effective Integration Policy
 
