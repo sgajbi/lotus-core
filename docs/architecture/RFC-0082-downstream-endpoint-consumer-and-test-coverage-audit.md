@@ -567,6 +567,11 @@ They exist to publish:
 2. deterministic lineage state for recovery and investigation,
 3. durable support metadata without requiring direct database access.
 
+The single-key lineage route remains an operational lineage-evidence endpoint rather than a full
+source-data-product envelope. The governed `IngestionEvidenceBundle` product covers the paged
+lineage/reprocessing evidence routes, while this route stays documented as a focused
+portfolio-security investigation helper.
+
 They should not be presented to downstream teams as calculation-grade portfolio analytics APIs.
 
 ### Downstream Consumer Reality
