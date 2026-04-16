@@ -24,7 +24,7 @@ move is:
 | Route | Current family | Target product | Disposition |
 | --- | --- | --- | --- |
 | `POST /reporting/cash-balances/query` | Operational Read | `HoldingsAsOf` | Deprecated in OpenAPI; strategic replacement is `GET /portfolios/{portfolio_id}/cash-balances`; current internal downstream scans show no active direct consumer, but keep handler until merged or external consumer truth allows retirement |
-| `POST /reporting/holdings-snapshot/query` | Operational Read | `HoldingsAsOf` | Deprecated in OpenAPI; keep handler until consumers migrate |
+| `POST /reporting/holdings-snapshot/query` | Operational Read | `HoldingsAsOf` | Deprecated in OpenAPI; current internal downstream scans show no active direct consumer, but keep handler until merged or external consumer truth allows retirement |
 | `POST /reporting/income-summary/query` | Operational Read | `TransactionLedgerWindow` | Deprecated in OpenAPI; current internal downstream scans show no active direct consumer, but keep handler until merged or external consumer truth allows retirement |
 | `POST /reporting/activity-summary/query` | Operational Read | `TransactionLedgerWindow` | Deprecated in OpenAPI; current internal downstream scans show no active direct consumer, but keep handler until merged or external consumer truth allows retirement |
 
