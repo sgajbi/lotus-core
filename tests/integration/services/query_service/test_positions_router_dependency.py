@@ -19,7 +19,7 @@ pytestmark = pytest.mark.asyncio
 async def async_test_client():
     mock_service = AsyncMock()
     app.dependency_overrides[get_position_service] = lambda: mock_service
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_position_service, None)
@@ -57,7 +57,8 @@ async def test_get_position_history_unexpected_maps_to_500(async_test_client):
     response = await client.get("/portfolios/P1/position-history?security_id=S1")
 
     assert response.status_code == 500
-    assert "unexpected error" in response.json()["detail"].lower()
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
 
 
 async def test_get_latest_positions_success(async_test_client):
@@ -103,12 +104,13 @@ async def test_get_latest_positions_unexpected_maps_to_500(async_test_client):
     response = await client.get("/portfolios/P1/positions")
 
     assert response.status_code == 500
-    assert "unexpected error" in response.json()["detail"].lower()
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
 
 
 async def test_get_position_history_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_position_history.side_effect = ValueError("not found")
+    mock_service.get_position_history.side_effect = LookupError("not found")
 
     response = await client.get("/portfolios/P404/position-history?security_id=S1")
 
@@ -118,7 +120,7 @@ async def test_get_position_history_not_found_maps_to_404(async_test_client):
 
 async def test_get_latest_positions_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_portfolio_positions.side_effect = ValueError("not found")
+    mock_service.get_portfolio_positions.side_effect = LookupError("not found")
 
     response = await client.get("/portfolios/P404/positions")
 

@@ -1457,8 +1457,9 @@ that way.
 The route is strong for its intended purpose:
 
 1. it publishes dated position-history rows for one portfolio-security key;
-2. it preserves truthful `404` and `500` behavior rather than silently degrading failed drill-down
-   requests;
+2. it now aligns to the shared query-service error posture: lookup misses map to truthful `404`
+   while unexpected failures fall through to the global `500` envelope rather than bespoke
+   router-local error strings;
 3. it keeps historical security-state inspection separate from latest holdings and transaction
    ledger publication;
 4. service-level tests already cover not-found handling and history-row mapping.
@@ -1492,7 +1493,7 @@ route-purpose wording, parameter descriptions, and `404` example.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #56` OpenAPI 404 contract gap | Stale for this route. `GET /portfolios/{portfolio_id}/position-history` now documents `404` in OpenAPI and the contract is covered by current integration tests. | Close as resolved by current OpenAPI and test coverage. |
+| `lotus-core #56` OpenAPI 404 contract gap | Already closed. Current route truth still matches the closure rationale: `GET /portfolios/{portfolio_id}/position-history` documents `404` in OpenAPI and the contract remains covered by current integration tests. | Keep closed. No new lotus-core issue is needed for this route in this pass. |
 | Downstream repos | No open issue found in this pass | No downstream misuse or stale-contract binding was evidenced for this route, so no new issue was opened. |
 
 ## Certified Endpoint Slice: Reference Market Data Reads

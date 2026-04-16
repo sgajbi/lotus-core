@@ -69,13 +69,8 @@ async def get_position_history(
             start_date=start_date,
             end_date=end_date,
         )
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {exc}",
-        )
 
 
 @router.get(
@@ -134,10 +129,5 @@ async def get_latest_positions(
             as_of_date=as_of_date,
             include_projected=include_projected,
         )
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {exc}",
-        )
