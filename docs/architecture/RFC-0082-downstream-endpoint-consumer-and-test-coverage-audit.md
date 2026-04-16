@@ -900,6 +900,78 @@ route-purpose wording and endpoint-specific schema examples.
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway should keep shrinking dependence on this convenience route wherever position-book or other strategic holdings reads already satisfy the UI need. | Keep open until gateway narrows or removes deprecated `cash-balances/query` usage where a strategic route already meets the requirement. |
 | `lotus-advise` | No downstream defect issue opened in this pass | Current advise dependence is justified until lotus-core publishes a strategic replacement that includes per-currency cash-account balances and the related FX derivation inputs. |
 
+## Certified Endpoint Slice: Income And Activity Operational Reads
+
+This certification pass covers:
+
+1. `POST /reporting/income-summary/query`
+2. `POST /reporting/activity-summary/query`
+
+### Route Contract Decision
+
+These remain deprecated compatibility routes in the `TransactionLedgerWindow` family, but they are
+still the correct downstream choice when a consumer needs source-owned income or portfolio-flow
+summaries rather than raw transaction rows or broad snapshot payloads.
+
+The boundary is explicit:
+
+1. use these routes for source-owned requested-window and year-to-date summary outputs;
+2. prefer them over mining income or activity aggregates from `core-snapshot` when the downstream
+   need is summary data rather than broader state publication;
+3. do not use them as a substitute for raw transaction-ledger exploration when row-level
+   transaction evidence is required;
+4. keep performance, risk, and narrative report composition outside these contracts.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /reporting/income-summary/query` | `lotus-gateway`, `lotus-report` | Correct. Gateway already uses the dedicated route for income views. Report now uses the dedicated route for summary income sections instead of reading income aggregates from `core-snapshot`. |
+| `POST /reporting/activity-summary/query` | `lotus-gateway`, `lotus-report` | Correct. Gateway already uses the dedicated route for activity views. Report now uses the dedicated route for summary activity sections instead of reading activity aggregates from `core-snapshot`. |
+
+No active direct `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was evidenced against
+these endpoint shapes in this pass.
+
+### Upstream Integration Assessment
+
+These routes are strong and domain-correct for operational summary needs:
+
+1. they publish source-owned requested-window and year-to-date income/flow summaries rather than
+   forcing downstream consumers to re-aggregate transaction rows;
+2. they keep reporting-currency restatement and canonical transaction-type or bucket semantics
+   upstream-owned;
+3. they let downstream consumers consume summary outputs without coupling to the broader
+   `core-snapshot` state bundle;
+4. they remain intentionally separate from raw ledger exploration and from performance or advisory
+   interpretation layers.
+
+### Swagger / OpenAPI Assessment
+
+For these endpoints, Swagger already makes the following explicit:
+
+1. income summary is grouped by canonical Lotus income transaction types for the requested window
+   and year-to-date;
+2. activity summary is grouped into canonical portfolio-flow buckets for the requested window and
+   year-to-date;
+3. both routes are deprecated compatibility shapes mapped to the `TransactionLedgerWindow`
+   source-data product;
+4. the route purposes are self-explanatory for downstream consumers deciding between summary and raw
+   transaction use cases.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_reporting_router.py` for both routes.
+
+Service-level proof exists in `tests/unit/services/query_service/services/test_reporting_service.py`
+for requested-window and year-to-date aggregation behavior.
+
+### Issue Disposition For These Endpoints
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against these two routes in this pass. |
+| `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated income and activity summary routes directly. |
+| `lotus-report` | No open issue after direct downstream fix in this pass | Report now binds summary income and activity sections to the dedicated lotus-core routes instead of mining them from `core-snapshot`. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:
