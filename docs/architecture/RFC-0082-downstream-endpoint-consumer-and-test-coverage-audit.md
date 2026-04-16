@@ -1185,7 +1185,9 @@ For this endpoint, Swagger now makes the following explicit:
 4. parameter descriptions and 404 example remain clear and specific.
 
 Focused HTTP-level dependency proof exists in
-`tests/integration/services/query_service/test_cashflow_projection_router_dependency.py`.
+`tests/integration/services/query_service/test_cashflow_projection_router_dependency.py` for
+success, parameter forwarding, truthful `404` mapping, and shared `500` envelope behavior on
+unexpected failures.
 
 OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
 route-purpose wording and request-parameter descriptions.
