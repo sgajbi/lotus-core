@@ -156,7 +156,9 @@ class CashBalanceResolver:
             portfolio_balance = ZERO
         else:
             native_source_value = (
-                snapshot_row.snapshot.market_value_local or snapshot_row.snapshot.market_value or ZERO
+                snapshot_row.snapshot.market_value_local
+                or snapshot_row.snapshot.market_value
+                or ZERO
             )
             native_balance = Decimal(str(native_source_value))
             portfolio_balance = Decimal(str(snapshot_row.snapshot.market_value or ZERO))

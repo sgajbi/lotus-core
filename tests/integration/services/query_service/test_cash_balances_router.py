@@ -37,7 +37,7 @@ def _runtime_metadata(as_of_date: date) -> dict:
 async def async_test_client():
     mock_service = AsyncMock(spec=CashBalanceService)
     app.dependency_overrides[get_cash_balance_service] = lambda: mock_service
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_cash_balance_service, None)
@@ -119,3 +119,14 @@ async def test_get_cash_balances_maps_other_resolution_errors_to_400(async_test_
 
     assert response.status_code == 400
     assert response.json()["detail"] == "No business date is available for cash balance queries."
+
+
+async def test_get_cash_balances_unexpected_uses_global_500_envelope(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_cash_balances.side_effect = RuntimeError("boom")
+
+    response = await client.get("/portfolios/P1/cash-balances")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()

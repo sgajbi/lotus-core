@@ -838,8 +838,8 @@ This certification pass covers:
 `GET /portfolios/{portfolio_id}/cash-balances` is now the strategic `HoldingsAsOf` cash-account
 balance publication route.
 
-`POST /reporting/cash-balances/query` remains a deprecated compatibility route for downstreams that
-have not yet migrated.
+`POST /reporting/cash-balances/query` remains a deprecated compatibility route, but no active
+direct internal downstream consumer was evidenced in this pass.
 
 The boundary is now explicit:
 
@@ -855,8 +855,8 @@ The boundary is now explicit:
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `GET /portfolios/{portfolio_id}/cash-balances` | `lotus-advise` | Active direct consumer now evidenced. Advise stateful context uses the strategic route for per-currency cash balances. Gateway should adopt the same route for remaining liquidity and workspace cash-account views. |
-| `POST /reporting/cash-balances/query` | `lotus-gateway` | Migration path exists and the remaining deprecated dependence is now concentrated in gateway. Gateway commit `8cf0cc4` already moved cash-summary derivation for holdings-oriented flows onto the strategic positions route, but live deprecated usage still remains for explicit cash-account-row workflows. |
+| `GET /portfolios/{portfolio_id}/cash-balances` | `lotus-gateway`, `lotus-advise` | Active direct consumers are now evidenced on the strategic route. Gateway local repo truth uses `get_portfolio_cash_balances(...)` for workspace, book, and liquidity cash-account views, and advise stateful context uses the same route for per-currency cash balances. |
+| `POST /reporting/cash-balances/query` | No active direct internal downstream consumer evidenced | Deprecated compatibility route only. Local scans across `lotus-gateway`, `lotus-report`, `lotus-advise`, `lotus-risk`, `lotus-performance`, and `lotus-manage` did not show a remaining direct binding in live source code. |
 
 No active direct `lotus-report` consumer was evidenced in this pass.
 
@@ -883,7 +883,7 @@ For this endpoint, Swagger now makes the following explicit:
 
 Focused HTTP-level dependency proof exists in
 `tests/integration/services/query_service/test_cash_balances_router.py` for strategic route
-routing, parameter forwarding, and 404/400 mapping behavior.
+routing, parameter forwarding, shared `500` envelope behavior, and 404/400 mapping behavior.
 
 Compatibility-route proof remains in
 `tests/integration/services/query_service/test_reporting_router.py`.
@@ -901,7 +901,8 @@ route-purpose wording and endpoint-specific schema examples.
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Closed. lotus-core now publishes `GET /portfolios/{portfolio_id}/cash-balances` and the implementation evidence has been recorded. | Re-open only if a fresh downstream requirement exposes a real gap in the strategic route. |
-| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway commit `8cf0cc4` narrowed the issue materially by moving cash-summary derivation for holdings-oriented flows onto the strategic positions route. Remaining work is to migrate the explicit cash-account-row reads to `GET /portfolios/{portfolio_id}/cash-balances`. | Keep open until gateway removes deprecated `cash-balances/query` usage. |
+| `lotus-core #310` retire deprecated `POST /reporting/cash-balances/query` compatibility route | Open. Current internal downstream scans and gateway issue closure suggest the deprecated route may now be orphaned, but retirement should stay deliberate until any non-repo dependency is ruled out. | Track explicit keep-or-remove decision for the deprecated compatibility handler. |
+| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Current gateway repo truth and issue evidence show migration to strategic `GET /portfolios/{portfolio_id}/cash-balances` in local commit `36ccce9`. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated `cash-balances/query` usage. |
 | `lotus-advise #92` downstream adoption of enrichment/state route hardening | Closed on current repo truth. Advise stateful context now uses `GET /portfolios/{portfolio_id}/cash-balances`, and the remaining active advise bindings stay aligned with the hardened enrichment/state routes. | Re-open only if a later core contract change exposes advise-side drift. |
 
 ## Certified Endpoint Slice: Cash Account Master Operational Read
