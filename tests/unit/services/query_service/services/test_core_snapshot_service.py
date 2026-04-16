@@ -704,7 +704,7 @@ async def test_get_instrument_enrichment_bulk_rejects_empty_request(mock_depende
 
     with pytest.raises(
         CoreSnapshotBadRequestError,
-        match="security_ids must contain at least one value",
+        match="security_ids must contain at least one identifier",
     ):
         await service.get_instrument_enrichment_bulk(["", "  "])
 

@@ -2042,6 +2042,16 @@ For this endpoint, Swagger now makes the following explicit:
 | `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Closed. The route documents 404 behavior and integration tests assert the not-found response example. | Re-open only if fresh contrary runtime evidence appears. |
 | `lotus-gateway #118` legacy `core-snapshot` envelope assumption in foundation workspace | Closed on April 16, 2026. Verified fixed in gateway commit `6ec3977`. Foundation workspace parsing now consumes the canonical top-level `PortfolioStateSnapshot` envelope, fetches separate identity data only where required, and regression tests fail if legacy nested `portfolio` / `metadata` assumptions return. | Keep closed unless fresh gateway code reintroduces legacy envelope dependence. |
 
+Focused certification evidence on April 16, 2026:
+
+1. `lotus-core`: `python -m pytest tests\unit\services\query_service\services\test_core_snapshot_service.py tests\integration\services\query_control_plane_service\test_integration_router_dependency.py tests\integration\services\query_control_plane_service\test_control_plane_app.py -q`
+2. `lotus-gateway`: `python -m pytest tests\unit\test_foundation_service.py tests\unit\test_workbench_service.py tests\unit\test_upstream_clients.py tests\integration\test_foundation_router.py tests\integration\test_workbench_router.py -q`
+3. `lotus-risk`: `python -m pytest tests\unit\test_lotus_core_client.py tests\unit\test_concentration_engine_characterization.py tests\unit\test_concentration_engine_modes.py tests\integration\test_concentration_lotus_core_characterization.py -q`
+
+No open route-specific GitHub issue remains for `core-snapshot` in `lotus-core`, `lotus-gateway`,
+or `lotus-risk` after closure of `lotus-gateway #118`; keep the family under normal regression
+watch rather than issue-tracker escalation unless fresh route-level drift appears.
+
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |
