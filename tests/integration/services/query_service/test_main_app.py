@@ -733,10 +733,22 @@ async def test_openapi_describes_lookup_catalog_contract_examples(async_test_cli
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    components = schema["components"]["schemas"]
 
     portfolio_lookups = schema["paths"]["/lookups/portfolios"]["get"]
     instrument_lookups = schema["paths"]["/lookups/instruments"]["get"]
     currency_lookups = schema["paths"]["/lookups/currencies"]["get"]
+
+    assert "thin selector catalogs only" in portfolio_lookups["description"]
+    assert "do not use it as a substitute for canonical portfolio detail" in (
+        portfolio_lookups["description"]
+    )
+    assert "thin selector catalogs only" in instrument_lookups["description"]
+    assert "do not use it as a substitute for canonical instrument reference reads" in (
+        instrument_lookups["description"]
+    )
+    assert "selector population only" in currency_lookups["description"]
+    assert "do not use it as a substitute for FX-rate history" in currency_lookups["description"]
 
     portfolio_client_id = next(
         parameter
@@ -759,6 +771,18 @@ async def test_openapi_describes_lookup_catalog_contract_examples(async_test_cli
     )
     assert currency_source["description"] == (
         "Currency source scope. Use ALL, PORTFOLIOS, or INSTRUMENTS."
+    )
+
+    lookup_response = components["LookupResponse"]
+    lookup_item = components["LookupItem"]
+    assert lookup_response["properties"]["items"]["description"] == (
+        "Lookup options returned for the requested catalog."
+    )
+    assert lookup_item["properties"]["id"]["description"] == (
+        "Canonical identifier used by UI selectors."
+    )
+    assert lookup_item["properties"]["label"]["description"] == (
+        "Display label for UI selector option."
     )
 
 

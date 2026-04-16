@@ -1484,6 +1484,81 @@ route-purpose wording, parameter descriptions, and response-schema field descrip
 | `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the raw reference market-data routes. |
 | Downstream repos | No open issue found in this pass | No downstream misuse or stale direct-contract binding was evidenced for these endpoints, so no new issue was opened. |
 
+## Certified Endpoint Slice: Lookup Catalog Reads
+
+This certification pass covers:
+
+1. `GET /lookups/portfolios`
+2. `GET /lookups/instruments`
+3. `GET /lookups/currencies`
+
+### Route Contract Decision
+
+These routes are the correct strategic selector-catalog reads.
+
+The boundary is explicit:
+
+1. use them for thin UI and gateway selector catalogs only;
+2. do not use them as substitutes for canonical portfolio detail, canonical instrument reference,
+   FX-rate history, or broader portfolio/reporting reads;
+3. keep them limited to stable `id` / `label` selector payloads rather than expanding them into
+   generic data APIs.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /lookups/portfolios` | `lotus-gateway` | Correct. Gateway has an explicit lotus-core client binding and contract/integration tests for the portfolio lookup catalog through intake and foundation-facing selector surfaces. |
+| `GET /lookups/instruments` | `lotus-gateway` | Correct. Gateway has an explicit lotus-core client binding and contract/integration tests for the instrument lookup catalog in intake workflows. |
+| `GET /lookups/currencies` | `lotus-gateway` | Correct. Gateway has an explicit lotus-core client binding and contract/integration tests for the currency lookup catalog. |
+
+This is real downstream adoption, but the route family remains intentionally thin. Gateway is using
+them correctly as selector catalogs rather than trying to stretch them into rich portfolio or
+market-data contracts.
+
+### Upstream Integration Assessment
+
+The family is strong for its intended purpose:
+
+1. portfolio lookups are derived from canonical portfolio records with optional CIF and
+   booking-center scoping;
+2. instrument lookups are derived from canonical instrument records with optional product-type
+   filtering;
+3. currency lookups are derived deterministically from portfolio base currencies and instrument
+   currencies, with source scoping and full pagination over instrument pages;
+4. the routes intentionally reduce the payload to selector-safe `id` / `label` records.
+
+No upstream defect was found in this pass.
+
+### Swagger / OpenAPI Assessment
+
+For this family, Swagger now makes the following explicit:
+
+1. the routes are selector catalogs, not generic data APIs;
+2. when-to-use and when-not-to-use guidance is explicit for all three catalogs;
+3. filter and scope parameters remain clearly documented;
+4. response schema field descriptions are explicit for lookup items and lookup collections.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_reference_data_routers.py` for portfolio,
+instrument, and currency lookup success, filtering, source scoping, pagination-driven currency
+derivation, and output ordering.
+
+Gateway-side direct-consumer proof exists in
+`lotus-gateway/src/app/clients/lotus_core_query_client.py`,
+`lotus-gateway/tests/contract/test_lookup_contract.py`, and
+`lotus-gateway/tests/integration/test_intake_router.py`.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording, parameter descriptions, and lookup schema field descriptions.
+
+### Issue Disposition For This Endpoint Family
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the lookup catalog routes. |
+| Downstream repos | No open issue found in this pass | Gateway appears to be using the lookup contracts correctly, so no downstream issue was opened. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:

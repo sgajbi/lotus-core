@@ -35,9 +35,11 @@ def _filter_limit_sort_items(
 @router.get(
     "/portfolios",
     response_model=LookupResponse,
-    summary="Portfolio Lookup Catalog",
+    summary="Get portfolio selector catalog",
     description=(
-        "Returns portfolio selector options for lotus-gateway/UI portfolio selection workflows."
+        "Returns portfolio selector options for lotus-gateway and UI portfolio selection "
+        "workflows. Use this route for thin selector catalogs only; do not use it as a substitute "
+        "for canonical portfolio detail or broader portfolio-state reads."
     ),
 )
 async def get_portfolio_lookups(
@@ -83,9 +85,11 @@ async def get_portfolio_lookups(
 @router.get(
     "/instruments",
     response_model=LookupResponse,
-    summary="Instrument Lookup Catalog",
+    summary="Get instrument selector catalog",
     description=(
-        "Returns instrument selector options for lotus-gateway/UI trade and intake workflows."
+        "Returns instrument selector options for lotus-gateway and UI trade/intake workflows. Use "
+        "this route for thin selector catalogs only; do not use it as a substitute for canonical "
+        "instrument reference reads or enrichment output."
     ),
 )
 async def get_instrument_lookups(
@@ -126,10 +130,11 @@ async def get_instrument_lookups(
 @router.get(
     "/currencies",
     response_model=LookupResponse,
-    summary="Currency Lookup Catalog",
+    summary="Get currency selector catalog",
     description=(
         "Returns distinct currency selector options derived from portfolio base currencies "
-        "and instrument currencies."
+        "and instrument currencies. Use this route for selector population only; do not use it as "
+        "a substitute for FX-rate history or broader market-data contracts."
     ),
 )
 async def get_currency_lookups(
