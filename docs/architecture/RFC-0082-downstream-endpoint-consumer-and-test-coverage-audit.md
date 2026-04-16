@@ -368,7 +368,7 @@ Automated proof now includes a risk-free schema-family completeness assertion in
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #294` risk-free data missing for USD live window | Current repo and recorded live evidence indicate this is likely stale rather than a standing publication defect: the canonical front-office seed bundle extends USD risk-free series through `2026-05-10`, and the 2026-04-15 production-readiness closure records live USD coverage of `90` points with zero missing dates for `2026-01-01` to `2026-03-31`. | Closure comment posted with seed and live-evidence references; re-open only if fresh canonical/live probes again show empty USD series for the governed window. |
+| `lotus-core #294` risk-free data missing for USD live window | Closed. Current repo and recorded live evidence indicate the issue was stale rather than a standing publication defect: the canonical front-office seed bundle extends USD risk-free series through `2026-05-10`, and the 2026-04-15 production-readiness closure records live USD coverage of `90` points with zero missing dates for `2026-01-01` to `2026-03-31`. | Re-open only if fresh canonical/live probes again show empty USD series for the governed window. |
 | `lotus-risk #77` rolling Sharpe follow-up after upstream fix | Still valid downstream follow-up issue. | Keep open until `lotus-core #294` is closed and live revalidation passes. |
 | `lotus-gateway #112` stale zero-risk-free fallback wording | Still valid product-surface issue in gateway. Core route semantics are now documented truthfully, but gateway messaging still needs to align. | Keep open in gateway. |
 
@@ -541,7 +541,7 @@ narrow governed-scope reads such as index-only classification pulls.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #306` missing sector labels for canonical benchmark indices | Current repo truth indicates this is likely stale rather than an active contract defect. The canonical demo/seed bundle now publishes governed broad-market sector labels for `IDX_GLOBAL_EQUITY_TR` and `IDX_GLOBAL_BOND_TR`, repository coverage proves effective-dated index catalog resolution keeps those labels, and the `indices/catalog` contract now documents that broad benchmark component indices can legitimately publish broad-market sector labels instead of issuer sectors. | Closure comment should reference the canonical seed and repository evidence; re-open only if fresh live ingestion/runtime evidence again omits the labels. |
+| `lotus-core #306` missing sector labels for canonical benchmark indices | Closed. Current repo truth indicates the issue was stale rather than an active contract defect. The canonical demo/seed bundle now publishes governed broad-market sector labels for `IDX_GLOBAL_EQUITY_TR` and `IDX_GLOBAL_BOND_TR`, repository coverage proves effective-dated index catalog resolution keeps those labels, and the `indices/catalog` contract now documents that broad benchmark component indices can legitimately publish broad-market sector labels instead of issuer sectors. | Re-open only if fresh live ingestion/runtime evidence again omits the labels. |
 
 No new downstream migration issue is required from this slice. The active need here is classification
 coverage quality, not route replacement.
@@ -859,7 +859,7 @@ For this endpoint, Swagger now makes the following explicit:
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Already addressed for core-snapshot. The route documents 404 behavior and integration tests assert the not-found response example. | Closure comment posted; close as implemented unless fresh contrary evidence appears. |
+| `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Closed. The route documents 404 behavior and integration tests assert the not-found response example. | Re-open only if fresh contrary runtime evidence appears. |
 
 ## Downstream Consumer Matrix
 
