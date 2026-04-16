@@ -341,21 +341,37 @@ class AssetsUnderManagementResponse(BaseModel):
 
 class AllocationBucket(BaseModel):
     dimension_value: str = Field(
-        ..., description="Resolved classification label for the allocation bucket."
+        ...,
+        description="Resolved classification label for the allocation bucket.",
+        examples=["Equity"],
     )
     market_value_reporting_currency: Decimal = Field(
-        ..., description="Bucket market value in the effective reporting currency."
+        ...,
+        description="Bucket market value in the effective reporting currency.",
+        examples=[600000.0],
     )
     weight: Decimal = Field(
-        ..., description="Bucket market-value weight versus the total AUM of the scope."
+        ...,
+        description="Bucket market-value weight versus the total AUM of the scope.",
+        examples=[0.6],
     )
-    position_count: int = Field(..., description="Number of positions contributing to the bucket.")
+    position_count: int = Field(
+        ...,
+        description="Number of positions contributing to the bucket.",
+        examples=[3],
+    )
 
 
 class AllocationView(BaseModel):
-    dimension: AllocationDimension = Field(..., description="Classification dimension.")
+    dimension: AllocationDimension = Field(
+        ...,
+        description="Classification dimension.",
+        examples=["asset_class"],
+    )
     total_market_value_reporting_currency: Decimal = Field(
-        ..., description="Total market value represented by this view."
+        ...,
+        description="Total market value represented by this view.",
+        examples=[1000000.0],
     )
     buckets: list[AllocationBucket] = Field(
         ..., description="Allocation buckets for the requested dimension."
@@ -365,10 +381,20 @@ class AllocationView(BaseModel):
 class AssetAllocationResponse(BaseModel):
     scope_type: ReportingScopeType = Field(..., description="Resolved reporting scope type.")
     scope: ReportingScope = Field(..., description="Echoed scope payload.")
-    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
-    reporting_currency: str = Field(..., description="Effective reporting currency.")
+    resolved_as_of_date: date = Field(
+        ...,
+        description="Effective as-of date used by the query.",
+        examples=["2026-03-27"],
+    )
+    reporting_currency: str = Field(
+        ...,
+        description="Effective reporting currency.",
+        examples=["USD"],
+    )
     total_market_value_reporting_currency: Decimal = Field(
-        ..., description="Total AUM represented by the allocation views."
+        ...,
+        description="Total AUM represented by the allocation views.",
+        examples=[1000000.0],
     )
     look_through: "AllocationLookThroughInfo" = Field(
         ...,
@@ -383,22 +409,27 @@ class AllocationLookThroughInfo(BaseModel):
     requested_mode: LookThroughMode = Field(
         ...,
         description="Look-through mode requested by the caller.",
+        examples=["prefer_look_through"],
     )
     applied_mode: LookThroughMode = Field(
         ...,
         description="Look-through mode actually applied to the response.",
+        examples=["direct_only"],
     )
     supported: bool = Field(
         ...,
         description="Whether source-owned look-through decomposition was available for the query.",
+        examples=[True],
     )
     decomposed_position_count: int = Field(
         ...,
         description="Number of parent positions decomposed into underlying components.",
+        examples=[2],
     )
     limitation_reason: str | None = Field(
         None,
         description="Explanation when look-through was requested but could not be applied.",
+        examples=["Look-through was unavailable for one or more parent fund positions."],
     )
 
 

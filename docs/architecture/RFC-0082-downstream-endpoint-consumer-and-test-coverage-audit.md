@@ -826,6 +826,77 @@ route purpose, parameter descriptions, and `HoldingsAsOf` product identity.
 | `lotus-core` | No open issue | The strategic positions route is contract-tight in this pass. No open lotus-core defect was found against `GET /portfolios/{portfolio_id}/positions`. |
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway remains correctly bound to the strategic positions route for position-book reads, but related holdings workflows still depend on a deprecated convenience shape in the same product family. | Keep open until gateway narrows or removes deprecated `HoldingsAsOf` convenience-route dependence in holdings-position workflows. |
 
+## Certified Endpoint Slice: Asset Allocation Operational Read
+
+This certification pass covers:
+
+1. `POST /reporting/asset-allocation/query`
+
+### Route Contract Decision
+
+This is the strategic lotus-core allocation route for report-ready and UI-ready bucketed allocation
+analysis.
+
+The boundary is now explicit:
+
+1. use this route when a downstream consumer needs allocation buckets across supported dimensions
+   such as asset class, currency, sector, country, region, product type, rating, or issuer;
+2. use it when explicit look-through request versus applied-mode posture matters;
+3. prefer it over pulling allocation views out of `core-snapshot` when the consumer does not need
+   broader source-state sections;
+4. keep downstream composition focused on presentation, not on rebuilding allocation analytics from
+   broad state payloads.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `POST /reporting/asset-allocation/query` | `lotus-gateway`, `lotus-report` | Correct. Gateway already uses the dedicated allocation route for modular allocation APIs. Report now uses this route for summary allocation sections and honors requested allocation dimensions instead of mining allocation from `core-snapshot`. |
+
+No active direct `lotus-advise`, `lotus-risk`, or `lotus-manage` client was evidenced against this
+route in this pass.
+
+### Upstream Integration Assessment
+
+The route is strong and domain-correct for quant and private-banking allocation expectations:
+
+1. allocation buckets are computed centrally in lotus-core rather than reconstructed downstream from
+   holdings rows;
+2. reporting-currency restatement is upstream-owned and consistent across dimensions;
+3. look-through capability is explicit, so consumers can distinguish requested mode from applied
+   mode honestly;
+4. the route stays focused on allocation analysis rather than collapsing broader source-state
+   publication into one consumer-specific payload.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. this is the strategic allocation seam for downstream allocation analysis;
+2. consumers should prefer it over mining allocation from `core-snapshot` when only allocation
+   buckets are needed;
+3. look-through request versus applied behavior is part of the governed contract;
+4. bucket, view, response, and look-through metadata fields now carry clearer examples.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_reporting_router.py` for successful asset-allocation
+routing and request validation behavior.
+
+Service-level proof exists in
+`tests/unit/services/query_service/services/test_reporting_service.py` for multi-dimension
+allocation output and look-through behavior.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording and endpoint-specific schema examples.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | The source route is contract-tight in this pass. No open lotus-core defect remains against `POST /reporting/asset-allocation/query`. |
+| `lotus-gateway #72` region and look-through allocation support | Closed before this pass. Current gateway code and tests already support region allocation views, look-through request propagation, capability metadata, and OpenAPI coverage. | Keep closed unless new contrary runtime evidence appears. |
+| `lotus-report` | No open issue after direct downstream fix in this pass | Report now uses the dedicated allocation route for summary allocation sections and honors requested allocation dimensions. No tracking issue is needed for this route today. |
+
 ## Certified Endpoint Slice: Portfolio Summary Operational Read
 
 This certification pass covers:
