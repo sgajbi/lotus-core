@@ -900,6 +900,85 @@ route-purpose wording and endpoint-specific schema examples.
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway should keep shrinking dependence on this convenience route wherever position-book or other strategic holdings reads already satisfy the UI need. | Keep open until gateway narrows or removes deprecated `cash-balances/query` usage where a strategic route already meets the requirement. |
 | `lotus-advise` | No downstream defect issue opened in this pass | Current advise dependence is justified until lotus-core publishes a strategic replacement that includes per-currency cash-account balances and the related FX derivation inputs. |
 
+## Certified Endpoint Slice: Cash Account Master Operational Read
+
+This certification pass covers:
+
+1. `GET /portfolios/{portfolio_id}/cash-accounts`
+
+### Route Contract Decision
+
+This is the correct strategic route for cash-account master data.
+
+The contract boundary is explicit:
+
+1. use this route for canonical cash-account identity, currency, role, and lifecycle metadata;
+2. use `as_of_date` when the caller needs the account set filtered by open/close window on a
+   specific business date;
+3. do not use this route as a liquidity or balance view, because it intentionally does not publish
+   native balances or translated cash totals;
+4. when a downstream workflow genuinely needs per-account balances, treat
+   `POST /reporting/cash-balances/query` as the current compatibility route until the strategic
+   `HoldingsAsOf` balance gap tracked in `lotus-core #308` is closed.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /portfolios/{portfolio_id}/cash-accounts` | No active direct downstream caller evidenced in this pass | Correct strategic contract with no overstated live adoption. Gateway, manage, and support remain the intended operational consumers for account-master workflows, but this pass did not find product code that should be described as a current direct binding. |
+
+This matters because downstreams should not be pushed onto the cash-account master route where
+they actually need balances. The absence of a live direct consumer here is not a route defect; it
+is consistent with current product behavior, where gateway and advise mostly need cash-account
+balances rather than master-data-only publication.
+
+### Upstream Integration Assessment
+
+The route is tight and production-grade for its intended purpose:
+
+1. it checks portfolio existence before returning account-master rows, so missing scope fails
+   truthfully as `404`;
+2. it publishes source-owned identifiers, linked cash security, account currency, optional role,
+   lifecycle status, open date, close date, and source system without mixing in balance semantics;
+3. it supports as-of filtering through account open/close windows, which is the right operational
+   read behavior for historical support and evidence workflows;
+4. it keeps cash-account identity publication separate from cash-balance publication, which avoids
+   ambiguous mixed-purpose payloads.
+
+The only material upstream gap near this route remains strategic balance publication, already
+tracked in `lotus-core #308`. That is adjacent to this endpoint, not a flaw in this endpoint.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. this route publishes canonical cash-account master records, not balances;
+2. `portfolio_id` and `as_of_date` parameter purpose is explicit;
+3. response attributes now carry endpoint-specific descriptions and a concrete account example;
+4. the description explains when to use this route and when to use the balance route instead.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_cash_accounts_router.py` for success, explicit
+`as_of_date` forwarding, omitted-`as_of_date` behavior, and `404` mapping.
+
+Repository-level query proof exists in
+`tests/unit/services/query_service/repositories/test_cash_account_repository.py` for
+portfolio-existence checks, open/close-window filtering, and deterministic ordering.
+
+Service-level proof exists in
+`tests/unit/services/query_service/services/test_cash_account_service.py` for master-record
+serialization and truthful not-found handling.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording, parameter descriptions, and cash-account response examples.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Open. Still valid, but it is not a defect in `GET /portfolios/{portfolio_id}/cash-accounts` itself. This route is intentionally metadata-only. | Keep open until lotus-core publishes a strategic non-deprecated balance contract. |
+| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Adjacent and still valid. Gateway should not be redirected to `GET /portfolios/{portfolio_id}/cash-accounts` for liquidity views because this route does not publish balances. | Keep open against the balance/publication migration problem, not against the cash-account master route. |
+
 ## Certified Endpoint Slice: Income And Activity Operational Reads
 
 This certification pass covers:

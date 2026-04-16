@@ -29,11 +29,13 @@ def get_cash_account_service(
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
         }
     },
-    summary="Get canonical cash accounts for a portfolio",
+    summary="Get canonical cash-account master records for a portfolio",
     description=(
         "Returns source-owned canonical cash-account master records for one portfolio. "
-        "Use this endpoint for canonical account identity and lifecycle metadata; "
-        "use reporting cash-balances when balances and translated totals are required."
+        "Use this endpoint when a downstream consumer needs canonical account identity, "
+        "currency, role, and lifecycle metadata for operator, support, or source-reference "
+        "workflows. Do not use this route for per-account balances, translated cash totals, "
+        "or liquidity analytics; use reporting cash-balances when balance publication is required."
     ),
 )
 async def get_cash_accounts(

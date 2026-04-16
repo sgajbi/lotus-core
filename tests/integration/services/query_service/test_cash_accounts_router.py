@@ -49,6 +49,24 @@ async def test_get_cash_accounts(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["cash_accounts"][0]["cash_account_id"] == "CASH-ACC-USD-001"
+    mock_service.get_cash_accounts.assert_awaited_once_with(
+        "P1", as_of_date=date(2026, 3, 27)
+    )
+
+
+async def test_get_cash_accounts_without_as_of_date_forwards_none(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_cash_accounts.return_value = {
+        "portfolio_id": "P1",
+        "resolved_as_of_date": None,
+        "cash_accounts": [],
+    }
+
+    response = await client.get("/portfolios/P1/cash-accounts")
+
+    assert response.status_code == 200
+    assert response.json()["resolved_as_of_date"] is None
+    mock_service.get_cash_accounts.assert_awaited_once_with("P1", as_of_date=None)
 
 
 async def test_get_cash_accounts_maps_missing_portfolio_to_404(async_test_client):

@@ -359,6 +359,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert "requested reporting window and year-to-date" in income_query["description"]
     assert "portfolio-level flow buckets" in activity_query["description"]
     assert "canonical cash-account master records" in cash_accounts_query["description"]
+    assert "Do not use this route for per-account balances" in cash_accounts_query["description"]
 
     portfolio_ids = next(
         parameter
@@ -420,6 +421,35 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert activity_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
     assert cash_account_query_response["properties"]["cash_accounts"]["description"] == (
         "Canonical cash accounts linked to the portfolio."
+    )
+    assert cash_account_query_response["properties"]["cash_accounts"]["examples"] == [
+        [
+            {
+                "cash_account_id": "CASH-ACC-USD-001",
+                "portfolio_id": "PORT-001",
+                "security_id": "CASH_USD",
+                "display_name": "USD Operating Cash",
+                "account_currency": "USD",
+                "account_role": "OPERATING_CASH",
+                "lifecycle_status": "ACTIVE",
+                "opened_on": "2026-01-01",
+                "source_system": "lotus-manage",
+            }
+        ]
+    ]
+    portfolio_id_param = next(
+        parameter
+        for parameter in cash_accounts_query["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_id_param["description"] == "Portfolio identifier."
+    as_of_date_param = next(
+        parameter
+        for parameter in cash_accounts_query["parameters"]
+        if parameter["name"] == "as_of_date"
+    )
+    assert as_of_date_param["description"] == (
+        "Optional as-of date used to filter cash-account master records by open/close window."
     )
     assert transaction_record["properties"]["trade_fee"]["description"] == (
         "Primary trade fee recorded directly on the transaction."
