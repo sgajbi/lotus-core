@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 CATALOG_VERSION = "2026-04-15"
 
 OPERATIONAL_READ = "Operational Read"
@@ -76,13 +75,9 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=(
             "/portfolios/{portfolio_id}/positions",
             "/portfolios/{portfolio_id}/cash-balances",
-            "/reporting/holdings-snapshot/query",
             "/reporting/cash-balances/query",
         ),
-        replaces_convenience_shapes=(
-            "/reporting/holdings-snapshot/query",
-            "/reporting/cash-balances/query",
-        ),
+        replaces_convenience_shapes=("/reporting/cash-balances/query",),
         notes="Canonical holdings and cash state for an as-of date.",
     ),
     SourceDataProductDefinition(

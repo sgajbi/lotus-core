@@ -150,41 +150,6 @@ async def test_query_portfolio_summary(async_test_client):
     assert response.json()["totals"]["cash_balance_portfolio_currency"] == "200"
 
 
-async def test_query_holdings_snapshot(async_test_client):
-    client, mock_service = async_test_client
-    mock_service.get_holdings_snapshot.return_value = {
-        "portfolio_id": "P1",
-        "portfolio_currency": "USD",
-        "reporting_currency": "USD",
-        "resolved_as_of_date": date(2026, 3, 27),
-        "snapshot_date": date(2026, 3, 27),
-        "total_market_value_portfolio_currency": Decimal("1000"),
-        "total_market_value_reporting_currency": Decimal("1000"),
-        "positions": [
-            {
-                "security_id": "SEC1",
-                "instrument_name": "Apple Inc.",
-                "asset_class": "EQUITY",
-                "sector": "TECH",
-                "country": "US",
-                "region": "North America",
-                "account_currency": "USD",
-                "quantity": Decimal("10"),
-                "market_value_portfolio_currency": Decimal("1000"),
-                "market_value_reporting_currency": Decimal("1000"),
-                "weight": Decimal("1"),
-                "valuation_status": "VALUED",
-            }
-        ],
-        **_runtime_metadata(date(2026, 3, 27)),
-    }
-
-    response = await client.post("/reporting/holdings-snapshot/query", json={"portfolio_id": "P1"})
-
-    assert response.status_code == 200
-    assert response.json()["positions"][0]["region"] == "North America"
-
-
 async def test_reporting_router_maps_value_errors_to_400(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_assets_under_management.side_effect = ValueError("bad scope")
@@ -315,12 +280,6 @@ async def test_query_activity_summary(async_test_client):
             {"portfolio_id": "P1"},
             "get_portfolio_summary",
             "bad snapshot request",
-        ),
-        (
-            "/reporting/holdings-snapshot/query",
-            {"portfolio_id": "P1"},
-            "get_holdings_snapshot",
-            "bad holdings request",
         ),
         (
             "/reporting/income-summary/query",

@@ -112,7 +112,6 @@ async def test_openapi_exposes_holdings_as_of_runtime_supportability_metadata(
     holdings_response_schemas = [
         components["PortfolioPositionsResponse"],
         components["CashBalancesResponse"],
-        components["HoldingsSnapshotResponse"],
     ]
 
     for response_schema in holdings_response_schemas:
@@ -295,7 +294,6 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/portfolios/{portfolio_id}/cash-balances" in paths
     assert "/reporting/cash-balances/query" in paths
     assert "/reporting/portfolio-summary/query" in paths
-    assert "/reporting/holdings-snapshot/query" in paths
     assert "/reporting/income-summary/query" in paths
     assert "/reporting/activity-summary/query" in paths
     assert "/portfolios/{portfolio_id}/cash-accounts" in paths
@@ -315,7 +313,6 @@ async def test_openapi_deprecates_reporting_convenience_shapes(async_test_client
 
     assert deprecated_routes == {
         "/reporting/cash-balances/query": "HoldingsAsOf",
-        "/reporting/holdings-snapshot/query": "HoldingsAsOf",
         "/reporting/income-summary/query": "TransactionLedgerWindow",
         "/reporting/activity-summary/query": "TransactionLedgerWindow",
     }
@@ -340,7 +337,6 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     allocation_query = paths["/reporting/asset-allocation/query"]["post"]
     cash_query = paths["/reporting/cash-balances/query"]["post"]
     portfolio_summary_query = paths["/reporting/portfolio-summary/query"]["post"]
-    holdings_snapshot_query = paths["/reporting/holdings-snapshot/query"]["post"]
     income_query = paths["/reporting/income-summary/query"]["post"]
     activity_query = paths["/reporting/activity-summary/query"]["post"]
     portfolios_query = paths["/portfolios/"]["get"]
@@ -360,7 +356,6 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert "strategic historical portfolio summary" in portfolio_summary_query["description"]
     assert "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`" in portfolio_summary_query["description"]
     assert "correct lotus-core summary seam for report-ready wealth totals" in portfolio_summary_query["description"]
-    assert "true historical as-of holdings snapshot" in holdings_snapshot_query["description"]
     assert "requested reporting window and year-to-date" in income_query["description"]
     assert "portfolio-level flow buckets" in activity_query["description"]
     assert "canonical cash-account master records" in cash_accounts_query["description"]
@@ -395,7 +390,6 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     allocation_response = components["AssetAllocationResponse"]
     cash_response = components["CashBalancesResponse"]
     portfolio_summary_response = components["PortfolioSummaryResponse"]
-    holdings_snapshot_response = components["HoldingsSnapshotResponse"]
     income_response = components["IncomeSummaryResponse"]
     activity_response = components["ActivitySummaryResponse"]
     cash_account_query_response = components["CashAccountQueryResponse"]
@@ -432,10 +426,6 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     ]
     assert portfolio_summary_response["properties"]["risk_exposure"]["examples"] == ["BALANCED"]
     assert portfolio_summary_response["properties"]["status"]["examples"] == ["ACTIVE"]
-    assert holdings_snapshot_response["properties"]["positions"]["description"].startswith(
-        "Holdings snapshot rows"
-    )
-    assert holdings_snapshot_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert income_response["properties"]["totals"]["description"] == "Scope-level income totals."
     assert income_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
     assert (

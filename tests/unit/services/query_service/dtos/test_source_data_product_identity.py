@@ -4,6 +4,7 @@ import pytest
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
+
 from src.services.query_service.app.dtos.analytics_input_dto import (
     PortfolioAnalyticsTimeseriesResponse,
     PositionAnalyticsTimeseriesResponse,
@@ -20,7 +21,6 @@ from src.services.query_service.app.dtos.position_dto import PortfolioPositionsR
 from src.services.query_service.app.dtos.reporting_dto import (
     ActivitySummaryResponse,
     CashBalancesResponse,
-    HoldingsSnapshotResponse,
     IncomeSummaryResponse,
 )
 from src.services.query_service.app.dtos.source_data_product_identity import (
@@ -42,7 +42,6 @@ from src.services.query_service.app.dtos.transaction_dto import PaginatedTransac
         (ReconciliationFindingListResponse, "ReconciliationEvidenceBundle"),
         (PortfolioPositionsResponse, "HoldingsAsOf"),
         (CashBalancesResponse, "HoldingsAsOf"),
-        (HoldingsSnapshotResponse, "HoldingsAsOf"),
         (PaginatedTransactionResponse, "TransactionLedgerWindow"),
         (IncomeSummaryResponse, "TransactionLedgerWindow"),
         (ActivitySummaryResponse, "TransactionLedgerWindow"),

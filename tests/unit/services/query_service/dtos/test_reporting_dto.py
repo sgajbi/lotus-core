@@ -8,7 +8,6 @@ from src.services.query_service.app.dtos.reporting_dto import (
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
     CashBalancesQueryRequest,
-    HoldingsSnapshotQueryRequest,
     IncomeSummaryQueryRequest,
     PortfolioSummaryQueryRequest,
     ReportingScope,
@@ -88,11 +87,3 @@ def test_portfolio_summary_request_is_single_portfolio_contract() -> None:
     assert request.reporting_currency == "USD"
 
 
-def test_holdings_snapshot_request_supports_include_cash_toggle() -> None:
-    request = HoldingsSnapshotQueryRequest(
-        portfolio_id="P1",
-        include_cash_positions=False,
-    )
-
-    assert request.portfolio_id == "P1"
-    assert request.include_cash_positions is False

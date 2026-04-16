@@ -12,8 +12,6 @@ from ..dtos.reporting_dto import (
     AssetsUnderManagementResponse,
     CashBalancesQueryRequest,
     CashBalancesResponse,
-    HoldingsSnapshotQueryRequest,
-    HoldingsSnapshotResponse,
     IncomeSummaryQueryRequest,
     IncomeSummaryResponse,
     PortfolioSummaryQueryRequest,
@@ -130,31 +128,6 @@ async def query_portfolio_summary(
 ):
     try:
         return await service.get_portfolio_summary(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-
-
-@router.post(
-    "/holdings-snapshot/query",
-    response_model=HoldingsSnapshotResponse,
-    summary="Query Historical Holdings Snapshot",
-    description=(
-        "Returns a true historical as-of holdings snapshot for one portfolio with reporting-"
-        "currency restatement and portfolio-workspace classifications. Use this contract for "
-        "UI holdings views and reporting extracts that need region-aware, restated holdings rows. "
-        "This route is a pre-live convenience shape for the RFC-0083 HoldingsAsOf source-data "
-        "product. New consumers should bind to the named source-data product contract when it is "
-        "available."
-    ),
-    deprecated=True,
-    openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
-)
-async def query_holdings_snapshot(
-    request: HoldingsSnapshotQueryRequest,
-    service: ReportingService = Depends(get_reporting_service),
-):
-    try:
-        return await service.get_holdings_snapshot(request)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

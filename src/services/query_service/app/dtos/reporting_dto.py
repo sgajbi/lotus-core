@@ -203,31 +203,6 @@ class PortfolioSummaryQueryRequest(BaseModel):
     )
 
 
-class HoldingsSnapshotQueryRequest(BaseModel):
-    portfolio_id: str = Field(
-        ...,
-        description="Portfolio identifier for the holdings snapshot query.",
-        examples=["PORT-001"],
-    )
-    as_of_date: date | None = Field(
-        None,
-        description=(
-            "As-of date for the historical holdings snapshot. Defaults to latest business date."
-        ),
-        examples=["2026-03-27"],
-    )
-    reporting_currency: str | None = Field(
-        None,
-        description="Optional reporting currency. Defaults to the portfolio currency.",
-        examples=["USD"],
-    )
-    include_cash_positions: bool = Field(
-        True,
-        description="When false, excludes cash positions from the holdings snapshot.",
-        examples=[True],
-    )
-
-
 class IncomeSummaryQueryRequest(BaseModel):
     scope: ReportingScope = Field(..., description="Portfolio, multi-portfolio, or BU scope.")
     window: ReportingWindow = Field(
@@ -639,56 +614,6 @@ class PortfolioSummaryResponse(BaseModel):
     snapshot_metadata: PortfolioSummarySnapshotMetadata = Field(
         ...,
         description="Resolved snapshot metadata for the summary query.",
-    )
-
-
-class HoldingSnapshotRecord(BaseModel):
-    security_id: str = Field(..., description="Security identifier.", examples=["SEC-US-AAPL"])
-    instrument_name: str = Field(..., description="Instrument display name.")
-    asset_class: str | None = Field(None, description="Asset class classification.")
-    sector: str | None = Field(None, description="Sector classification.")
-    country: str | None = Field(None, description="Country of risk classification.")
-    region: str | None = Field(None, description="Derived region classification.")
-    account_currency: str | None = Field(None, description="Instrument or account currency.")
-    quantity: Decimal = Field(..., description="Position quantity.")
-    market_value_portfolio_currency: Decimal = Field(
-        ...,
-        description="Position market value in portfolio currency.",
-    )
-    market_value_reporting_currency: Decimal = Field(
-        ...,
-        description="Position market value in reporting currency.",
-    )
-    weight: Decimal = Field(..., description="Position weight versus total snapshot market value.")
-    valuation_status: str | None = Field(None, description="Snapshot valuation status.")
-
-
-class HoldingsSnapshotResponse(SourceDataProductRuntimeMetadata):
-    product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
-    product_version: Literal["v1"] = product_version_field()
-    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-001"])
-    portfolio_currency: str = Field(..., description="Portfolio base currency.", examples=["USD"])
-    reporting_currency: str = Field(
-        ...,
-        description="Effective reporting currency.",
-        examples=["USD"],
-    )
-    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
-    snapshot_date: date = Field(
-        ...,
-        description="Resolved snapshot date backing the holdings view.",
-    )
-    total_market_value_portfolio_currency: Decimal = Field(
-        ...,
-        description="Total snapshot market value in portfolio currency.",
-    )
-    total_market_value_reporting_currency: Decimal = Field(
-        ...,
-        description="Total snapshot market value in reporting currency.",
-    )
-    positions: list[HoldingSnapshotRecord] = Field(
-        ...,
-        description="Holdings snapshot rows for the resolved portfolio and as-of date.",
     )
 
 

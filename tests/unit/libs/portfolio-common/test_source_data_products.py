@@ -114,7 +114,6 @@ def test_holdings_product_records_convenience_shapes_to_consolidate() -> None:
 
     assert product.route_family == OPERATIONAL_READ
     assert "/portfolios/{portfolio_id}/cash-balances" in product.current_routes
-    assert "/reporting/holdings-snapshot/query" in product.replaces_convenience_shapes
     assert "/reporting/cash-balances/query" in product.replaces_convenience_shapes
 
 

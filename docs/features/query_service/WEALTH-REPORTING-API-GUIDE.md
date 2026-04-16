@@ -16,7 +16,7 @@ This guide also covers the portfolio-workspace follow-up contracts that make his
 portfolio workspaces trustworthy for PB/WM consumers:
 
 - canonical cash-account master ingestion and query
-- true historical as-of portfolio summary and holdings snapshot contracts
+- true historical as-of portfolio summary contracts
 - reporting-currency restatement for portfolio workspace modules
 - region and look-through allocation support
 
@@ -236,30 +236,6 @@ Behavior:
   - position count
   - cash-account count
   - valued / unvalued counts
-
-### Holdings Snapshot
-
-- `POST /reporting/holdings-snapshot/query`
-
-Inputs:
-
-- `portfolio_id`
-- `as_of_date`
-- optional `reporting_currency`
-- `include_cash_positions`
-
-Behavior:
-
-- returns a true historical as-of holdings snapshot
-- returns each holding in:
-  - portfolio currency
-  - reporting currency
-- returns portfolio-workspace classifications including:
-  - asset class
-  - sector
-  - country
-  - region
-- supports excluding cash positions for pure investment holdings views
 
 ### Cash Balances
 

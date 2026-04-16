@@ -11,7 +11,6 @@ from src.services.query_service.app.dtos.reporting_dto import (
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
     CashBalancesQueryRequest,
-    HoldingsSnapshotQueryRequest,
     IncomeSummaryQueryRequest,
     PortfolioSummaryQueryRequest,
     ReportingScope,
@@ -355,68 +354,6 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
     assert response.snapshot_metadata.cash_account_count == 1
     assert response.snapshot_metadata.valued_position_count == 1
     assert response.snapshot_metadata.unvalued_position_count == 1
-
-
-async def test_get_holdings_snapshot_restates_reporting_currency_and_region() -> None:
-    repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
-    repo.get_portfolio_by_id.return_value = portfolio
-    repo.get_latest_business_date.return_value = date(2026, 3, 27)
-    repo.list_latest_snapshot_rows.return_value = [
-        ReportingSnapshotRow(
-            portfolio=portfolio,
-            snapshot=_snapshot(
-                "SEC1",
-                market_value="100",
-                updated_at=datetime(2026, 3, 27, 12, 10, tzinfo=UTC),
-            ),
-            instrument=_instrument(
-                "SEC1",
-                asset_class="EQUITY",
-                sector="TECH",
-                country_of_risk="US",
-            ),
-        ),
-        ReportingSnapshotRow(
-            portfolio=portfolio,
-            snapshot=_snapshot("CASH_USD", market_value="50"),
-            instrument=_instrument(
-                "CASH_USD",
-                asset_class="CASH",
-                sector="CASH",
-                product_type="CASH",
-            ),
-        ),
-    ]
-    repo.get_latest_fx_rate.return_value = Decimal("1.2")
-
-    with patch(
-        "src.services.query_service.app.services.reporting_service.ReportingRepository",
-        return_value=repo,
-    ):
-        service = ReportingService(AsyncMock(spec=AsyncSession))
-        response = await service.get_holdings_snapshot(
-            HoldingsSnapshotQueryRequest(
-                portfolio_id="P1",
-                reporting_currency="SGD",
-                include_cash_positions=False,
-            )
-        )
-
-    assert response.total_market_value_portfolio_currency == Decimal("100")
-    assert response.total_market_value_reporting_currency == Decimal("120.0")
-    assert len(response.positions) == 1
-    assert response.positions[0].region == "North America"
-    assert response.positions[0].weight == Decimal("1")
-    assert response.product_name == "HoldingsAsOf"
-    assert response.product_version == "v1"
-    assert response.as_of_date == date(2026, 3, 27)
-    assert response.generated_at.tzinfo is not None
-    assert response.restatement_version == "current"
-    assert response.reconciliation_status == "UNKNOWN"
-    assert response.data_quality_status == "UNKNOWN"
-    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 12, 10, tzinfo=UTC)
-    assert response.correlation_id is None
 
 
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:

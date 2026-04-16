@@ -130,7 +130,6 @@ operationally portfolio-centric.
 - `POST /reporting/assets-under-management/query`
 - `POST /reporting/asset-allocation/query`
 - `POST /reporting/portfolio-summary/query`
-- `POST /reporting/holdings-snapshot/query`
 - `POST /reporting/cash-balances/query`
 - `POST /reporting/income-summary/query`
 - `POST /reporting/activity-summary/query`

@@ -24,9 +24,6 @@ from ..dtos.reporting_dto import (
     CashBalancesQueryRequest,
     CashBalancesResponse,
     FlowPeriodSummary,
-    HoldingSnapshotRecord,
-    HoldingsSnapshotQueryRequest,
-    HoldingsSnapshotResponse,
     IncomePeriodSummary,
     IncomeSummaryQueryRequest,
     IncomeSummaryResponse,
@@ -50,10 +47,8 @@ from ..repositories.reporting_repository import (
 )
 from .allocation_calculator import AllocationInputRow, calculate_allocation_views
 from .cash_balance_service import CashBalanceResolver
-from .reporting_classification import resolve_region
 
 ZERO = Decimal("0")
-CASH_ASSET_CLASS = "CASH"
 
 
 class ReportingService:
@@ -297,91 +292,6 @@ class ReportingService:
                 cash_account_count=len(cash_account_records),
                 valued_position_count=valued_position_count,
                 unvalued_position_count=unvalued_position_count,
-            ),
-        )
-
-    async def get_holdings_snapshot(
-        self, request: HoldingsSnapshotQueryRequest
-    ) -> HoldingsSnapshotResponse:
-        portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
-        if portfolio is None:
-            raise ValueError(f"Portfolio with id {request.portfolio_id} not found")
-
-        resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
-        if resolved_as_of_date is None:
-            raise ValueError("No business date is available for holdings snapshot queries.")
-        reporting_currency = request.reporting_currency or portfolio.base_currency
-
-        rows = await self.repo.list_latest_snapshot_rows(
-            portfolio_ids=[portfolio.portfolio_id],
-            as_of_date=resolved_as_of_date,
-        )
-        if not request.include_cash_positions:
-            rows = [
-                row
-                for row in rows
-                if not (
-                    row.instrument is not None
-                    and str(row.instrument.asset_class or "").upper() == CASH_ASSET_CLASS
-                )
-            ]
-
-        snapshot_date = resolved_as_of_date
-        total_portfolio_value = ZERO
-        reporting_values: list[Decimal] = []
-        portfolio_values: list[Decimal] = []
-
-        for row in rows:
-            snapshot_date = max(snapshot_date, row.snapshot.date)
-            portfolio_value = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_value = await self._convert_amount(
-                amount=portfolio_value,
-                from_currency=portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=resolved_as_of_date,
-            )
-            portfolio_values.append(portfolio_value)
-            reporting_values.append(reporting_value)
-            total_portfolio_value += portfolio_value
-
-        holdings: list[HoldingSnapshotRecord] = []
-        total_reporting_value = sum(reporting_values, ZERO)
-        for row, portfolio_value, reporting_value in zip(rows, portfolio_values, reporting_values):
-            holdings.append(
-                HoldingSnapshotRecord(
-                    security_id=row.snapshot.security_id,
-                    instrument_name=(
-                        row.instrument.name if row.instrument else row.snapshot.security_id
-                    ),
-                    asset_class=(row.instrument.asset_class if row.instrument else None),
-                    sector=(row.instrument.sector if row.instrument else None),
-                    country=(row.instrument.country_of_risk if row.instrument else None),
-                    region=(
-                        resolve_region(row.instrument.country_of_risk) if row.instrument else None
-                    ),
-                    account_currency=(row.instrument.currency if row.instrument else None),
-                    quantity=Decimal(str(row.snapshot.quantity)),
-                    market_value_portfolio_currency=portfolio_value,
-                    market_value_reporting_currency=reporting_value,
-                    weight=(
-                        portfolio_value / total_portfolio_value if total_portfolio_value else ZERO
-                    ),
-                    valuation_status=row.snapshot.valuation_status,
-                )
-            )
-
-        return HoldingsSnapshotResponse(
-            portfolio_id=portfolio.portfolio_id,
-            portfolio_currency=portfolio.base_currency,
-            reporting_currency=reporting_currency,
-            resolved_as_of_date=resolved_as_of_date,
-            snapshot_date=snapshot_date,
-            total_market_value_portfolio_currency=total_portfolio_value,
-            total_market_value_reporting_currency=total_reporting_value,
-            positions=holdings,
-            **source_data_product_runtime_metadata(
-                as_of_date=resolved_as_of_date,
-                latest_evidence_timestamp=self._latest_snapshot_evidence_timestamp(rows),
             ),
         )
 

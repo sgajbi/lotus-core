@@ -751,7 +751,6 @@ mode instead of collapsing that route into a generic portfolio-only not-found ex
 This certification pass covers:
 
 1. `GET /portfolios/{portfolio_id}/positions`
-2. `POST /reporting/holdings-snapshot/query`
 
 ### Route Contract Decision
 
@@ -765,16 +764,13 @@ The boundary is now explicit:
 3. use `include_projected=true` only when the consumer intentionally wants future-dated projected
    holdings beyond the latest booked business date;
 4. do not treat this route as a substitute for performance, risk, or reporting-specific
-   aggregations;
-5. `POST /reporting/holdings-snapshot/query` remains a deprecated convenience shape in the same
-   `HoldingsAsOf` product family and should not be the default choice for new downstream bindings.
+   aggregations.
 
 ### Downstream Consumer Reality
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
 | `GET /portfolios/{portfolio_id}/positions` | `lotus-gateway` | Correct. Gateway uses the strategic positions route for portfolio position-book workflows. |
-| `POST /reporting/holdings-snapshot/query` | No active direct downstream caller evidenced in this pass | Deprecated convenience shape. Core coverage remains strong, but this pass did not find a live downstream product binding that should be described as the preferred route. |
 
 Earlier gateway holdings-flow dependence on the deprecated sibling convenience route
 `POST /reporting/cash-balances/query` has now been resolved in current local gateway repo truth and
@@ -806,8 +802,7 @@ For this family, Swagger now makes the following explicit:
    parameter descriptions;
 3. the route is fenced away from performance, risk, and reporting-specific aggregation contracts;
 4. the response schema now describes holdings rows as the governed `HoldingsAsOf` scope rather than
-   a generic positions list;
-5. `POST /reporting/holdings-snapshot/query` remains documented as a deprecated convenience shape.
+   a generic positions list.
 
 Focused HTTP-level dependency proof exists in
 `tests/integration/services/query_service/test_positions_router_dependency.py` for success, 404,
@@ -824,7 +819,7 @@ route purpose, parameter descriptions, and `HoldingsAsOf` product identity.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #312` retire deprecated `POST /reporting/holdings-snapshot/query` compatibility route | Open. Fresh local scans across `lotus-gateway`, `lotus-report`, `lotus-advise`, `lotus-risk`, `lotus-performance`, and `lotus-manage` did not show an active direct binding to the deprecated convenience route. | Track explicit keep-or-remove decision for the deprecated compatibility handler while keeping `GET /portfolios/{portfolio_id}/positions` as the strategic `HoldingsAsOf` route. |
+| `lotus-core #312` retire deprecated `POST /reporting/holdings-snapshot/query` compatibility route | Closed on 2026-04-16. The deprecated handler, DTOs, service path, route-catalog entries, and direct router/OpenAPI coverage were removed after fresh local scans showed no active downstream binding. | Keep closed unless fresh evidence shows a real consumer still depended on the retired compatibility route. |
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Current gateway repo truth and remote issue closure both align to strategic `GET /portfolios/{portfolio_id}/cash-balances` adoption. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated `cash-balances/query` usage. |
 
 ## Certified Endpoint Slice: Cash Balances Operational Read
