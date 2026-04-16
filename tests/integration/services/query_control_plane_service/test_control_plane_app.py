@@ -1504,6 +1504,12 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "Deterministic fingerprint of the full core snapshot request contract."
     )
     assert "portfolio-state source data" in core_snapshot["description"]
+    assert (
+        "does not publish a legacy nested `portfolio` or `metadata` envelope"
+        in (core_snapshot["description"])
+    )
+    assert "top-level source-data runtime metadata" in core_snapshot["description"]
+    assert "valuation_context" in core_snapshot["description"]
     assert core_snapshot_request["properties"]["simulation"]["description"].startswith(
         "Simulation options required only when snapshot_mode=SIMULATION."
     )

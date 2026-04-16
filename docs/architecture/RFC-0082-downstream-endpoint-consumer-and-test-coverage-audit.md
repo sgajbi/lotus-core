@@ -2,7 +2,7 @@
 
 Status: Draft implementation audit  
 Owner: lotus-core  
-Last reviewed: 2026-04-15  
+Last reviewed: 2026-04-16  
 Scope: query-control-plane source-data products and downstream integration posture
 
 ## Purpose
@@ -828,6 +828,13 @@ was not found in this pass and should not be overstated as live validated. The s
 `lotus-advise` on this specific route family: advisory work is currently anchored more strongly to
 simulation and stateful-context seams than to direct `core-snapshot` reads.
 
+One downstream mismatch was found in this pass: `lotus-gateway` foundation workspace tests and
+parser helpers still model an older upstream payload shape with nested `portfolio` and `metadata`
+blocks. That is not the governed `PortfolioStateSnapshot` contract. Gateway should read the
+current top-level source-data runtime metadata, `portfolio_id`, `valuation_context`, and requested
+`sections`, and only fetch separate portfolio identity context from dedicated routes when the UI
+needs it.
+
 ### Swagger / OpenAPI Assessment
 
 For this endpoint, Swagger now makes the following explicit:
@@ -835,7 +842,9 @@ For this endpoint, Swagger now makes the following explicit:
 1. this route publishes portfolio-state source sections, not analytics conclusions;
 2. simulation request block semantics are explicit and exampled;
 3. request options and section payload semantics are explicit and exampled;
-4. the full core-snapshot schema family is now protected by a recursive OpenAPI completeness guard.
+4. the governed response shape is top-level source-data runtime metadata plus `valuation_context`
+   and `sections`, not a legacy nested `portfolio` or `metadata` envelope;
+5. the full core-snapshot schema family is now protected by a recursive OpenAPI completeness guard.
 
 ### Issue Disposition For This Endpoint
 

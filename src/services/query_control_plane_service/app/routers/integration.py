@@ -169,7 +169,10 @@ async def get_effective_integration_policy(
         "totals, delta, or enrichment views without direct query-service coupling. Other "
         "downstream consumers may adopt it later, but this route publishes portfolio-state "
         "source data, not downstream analytics conclusions such as performance returns, "
-        "risk metrics, or advisory recommendation ownership."
+        "risk metrics, or advisory recommendation ownership.\n"
+        "Contract note: the governed response does not publish a legacy nested `portfolio` "
+        "or `metadata` envelope. Consumer context should be read from the top-level "
+        "source-data runtime metadata, `valuation_context`, and the requested `sections`."
     ),
     openapi_extra=source_data_product_openapi_extra("PortfolioStateSnapshot"),
 )
