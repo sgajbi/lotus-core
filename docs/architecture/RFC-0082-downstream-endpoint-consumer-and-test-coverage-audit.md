@@ -997,7 +997,7 @@ This certification pass covers:
 ### Route Contract Decision
 
 These remain deprecated compatibility routes in the `TransactionLedgerWindow` family, but they are
-are no longer the strategic downstream integration seam. The strategic source-data route for new
+no longer the strategic downstream integration seam. The strategic source-data route for new
 or migrating consumers is `GET /portfolios/{portfolio_id}/transactions`.
 
 The boundary is explicit:
@@ -1014,8 +1014,8 @@ The boundary is explicit:
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `POST /reporting/income-summary/query` | `lotus-gateway`, `lotus-report` | Transitional only. Both consumers use the deprecated compatibility route directly instead of mining `core-snapshot`, but they should migrate to the strategic transaction-ledger route. |
-| `POST /reporting/activity-summary/query` | `lotus-gateway`, `lotus-report` | Transitional only. Both consumers use the deprecated compatibility route directly instead of mining `core-snapshot`, but they should migrate to the strategic transaction-ledger route. |
+| `POST /reporting/income-summary/query` | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated compatibility route only. Gateway issue `#122` is closed, and local `lotus-report` commit `bd866ef` now derives the same summary from strategic `GET /portfolios/{portfolio_id}/transactions` instead of calling the deprecated route. |
+| `POST /reporting/activity-summary/query` | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated compatibility route only. Gateway issue `#122` is closed, and local `lotus-report` commit `bd866ef` now derives the same summary from strategic `GET /portfolios/{portfolio_id}/transactions` instead of calling the deprecated route. |
 
 No active direct `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was evidenced against
 these endpoint shapes in this pass.
@@ -1032,6 +1032,10 @@ These routes are strong and domain-correct for operational summary needs:
    `core-snapshot` state bundle;
 4. they remain intentionally separate from raw ledger exploration and from performance or advisory
    interpretation layers.
+
+The key posture change in this pass is no longer about correctness of the compatibility outputs. It
+is endpoint-retirement readiness: current local downstream repo truth no longer shows an internal
+consumer that still needs these routes for implementation.
 
 ### Swagger / OpenAPI Assessment
 
@@ -1057,8 +1061,9 @@ for requested-window and year-to-date aggregation behavior.
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #309` | Closed on April 16, 2026. The strategic transaction-ledger contract now supports optional `reporting_currency` restatement and publishes explicit reporting-currency transaction amount fields required for downstream income/activity summary derivation. | Keep closed unless fresh evidence shows the strategic ledger still cannot replace the deprecated summary compatibility routes for valid downstream reporting use cases. |
-| `lotus-gateway #122` | Open. Valid downstream migration work. Gateway still calls the deprecated income/activity summary routes directly and should move UI-facing summary flows onto the strategic `GET /portfolios/{portfolio_id}/transactions` contract. | Keep open until gateway no longer calls either deprecated summary route. |
-| `lotus-report #39` | Open. Valid downstream migration work. Report still builds income/activity sections from the deprecated compatibility routes and should derive them from the strategic transaction-ledger contract instead. | Keep open until report no longer calls either deprecated summary route. |
+| `lotus-gateway #122` | Closed on 2026-04-16. Current gateway repo truth derives both UI-facing summaries from strategic `GET /portfolios/{portfolio_id}/transactions`. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated summary-route calls. |
+| `lotus-report #39` | Open, but local implementation work is now done in commit `bd866ef`. Current local report repo truth derives both summary sections from strategic `GET /portfolios/{portfolio_id}/transactions`; the issue remains open pending merge/push posture. | Keep open until merged downstream truth is reflected remotely. |
+| `lotus-core #311` retire deprecated income/activity summary compatibility routes | Open. Current local downstream scans suggest both deprecated routes may now be orphaned internally, but retirement should stay deliberate until any non-repo dependency is ruled out. | Track explicit keep-or-remove decision for the deprecated compatibility handlers. |
 
 ## Certified Endpoint Slice: Assets Under Management Operational Read
 
