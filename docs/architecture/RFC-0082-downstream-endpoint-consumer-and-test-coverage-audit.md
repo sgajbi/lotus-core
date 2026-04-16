@@ -369,8 +369,9 @@ Automated proof now includes a risk-free schema-family completeness assertion in
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #294` risk-free data missing for USD live window | Closed. Current repo and recorded live evidence indicate the issue was stale rather than a standing publication defect: the canonical front-office seed bundle extends USD risk-free series through `2026-05-10`, and the 2026-04-15 production-readiness closure records live USD coverage of `90` points with zero missing dates for `2026-01-01` to `2026-03-31`. | Re-open only if fresh canonical/live probes again show empty USD series for the governed window. |
-| `lotus-risk #77` rolling Sharpe follow-up after upstream fix | Still valid downstream follow-up issue. | Keep open until `lotus-core #294` is closed and live revalidation passes. |
-| `lotus-gateway #112` stale zero-risk-free fallback wording | Still valid product-surface issue in gateway. Core route semantics are now documented truthfully, but gateway messaging still needs to align. | Keep open in gateway. |
+| `lotus-risk #77` rolling Sharpe follow-up after upstream fix | Stale. `lotus-risk` now records the canonical portfolio as live validated for stateful `ROLLING_SHARPE` in `docs/operations/live-risk-validation-matrix.md`, so the original follow-up condition has already been satisfied. | Close in `lotus-risk` unless fresh live validation again fails for the governed canonical scenario. |
+| `lotus-gateway #112` stale zero-risk-free fallback wording | Still valid product-surface issue in gateway. Core route semantics are now documented truthfully, but gateway rolling-risk messaging still needs to align. | Keep open in gateway. |
+| `lotus-gateway #114` stale zero-risk-free fallback wording in summary supportability | Still valid product-surface issue in gateway. The risk summary surface should not imply a zero-risk-free Sharpe fallback unless gateway explicitly governs that methodology. | Keep open in gateway. |
 
 No new downstream migration issue is required from this slice. The known work here is live data
 availability and downstream messaging alignment, not route replacement.
