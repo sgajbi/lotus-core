@@ -696,7 +696,10 @@ The HTTP dependency lane now proves both:
 
 ### Issue Disposition For This Endpoint
 
-No lotus-core issue is open against this route at the moment.
+| Repository issue | Status | Certification read |
+| --- | --- | --- |
+| `lotus-core` | No open issue | The source route is already contract-tight in this pass. No lotus-core behavior or documentation defect remains open against `GET /integration/policy/effective`. |
+| `lotus-gateway #116` | Open | Still valid as downstream adoption work. Gateway is the active direct consumer and should keep aligning to the canonical snake_case query contract, default `lotus-gateway/default` resolution semantics, and the route's policy-diagnostics-only purpose. |
 
 ## Certified Endpoint Slice: Integration Capabilities
 
