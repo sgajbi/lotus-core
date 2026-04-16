@@ -190,8 +190,9 @@ async def query_income_summary(
     description=(
         "Returns portfolio-level flow buckets for the requested reporting window and year-to-date. "
         "The summary is intentionally scoped to portfolio flows: inflows, outflows, fees, and "
-        "taxes, with values translated to portfolio currency and reporting currency. This route is "
-        "a pre-live convenience shape for the RFC-0083 TransactionLedgerWindow source-data product. "
+        "taxes, with values translated to portfolio currency and reporting currency. This route "
+        "is a pre-live convenience shape for the RFC-0083 TransactionLedgerWindow source-data "
+        "product. "
         "New consumers should bind to the named source-data product contract when it is available."
     ),
     deprecated=True,
