@@ -750,14 +750,13 @@ defaults.
 
 ### Issue Disposition For This Endpoint
 
-No lotus-core issue is open against this route at the moment.
-
-Related downstream follow-up remains valid:
-
-| Issue | Assessment | Disposition |
+| Repository issue | Status | Certification read |
 | --- | --- | --- |
-| `lotus-gateway #109` | Downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. | Keep open in gateway. |
-| `lotus-gateway #73` | Platform capabilities latency issue in gateway aggregation, not a lotus-core publication defect. | Keep open in gateway. |
+| `lotus-core` | No open issue | The source route is already contract-tight in this pass. No lotus-core behavior or documentation defect remains open against `GET /integration/capabilities`. |
+| `lotus-gateway #117` | Open | Active downstream defect. Gateway still sends camelCase query params to lotus-core capabilities in its core query client and should align to canonical snake_case `consumer_system` / `tenant_id`. |
+| `lotus-gateway #73` | Open | Still valid, but it is a gateway aggregation-latency issue rather than a lotus-core publication defect. |
+| `lotus-gateway #116` | Open | Remains the broader gateway adoption umbrella for recently hardened lotus-core control-plane routes, including capability and policy semantics. |
+| `lotus-gateway #109` | Open | Adjacent downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. |
 
 The same certification lane now also protects the adjacent instrument-enrichment contract family
 with recursive OpenAPI schema-family guards, so nested enrichment fields do not regress silently
