@@ -75,9 +75,7 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=(
             "/portfolios/{portfolio_id}/positions",
             "/portfolios/{portfolio_id}/cash-balances",
-            "/reporting/cash-balances/query",
         ),
-        replaces_convenience_shapes=("/reporting/cash-balances/query",),
         notes="Canonical holdings and cash state for an as-of date.",
     ),
     SourceDataProductDefinition(

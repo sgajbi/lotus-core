@@ -10,8 +10,6 @@ from ..dtos.reporting_dto import (
     AssetAllocationResponse,
     AssetsUnderManagementQueryRequest,
     AssetsUnderManagementResponse,
-    CashBalancesQueryRequest,
-    CashBalancesResponse,
     IncomeSummaryQueryRequest,
     IncomeSummaryResponse,
     PortfolioSummaryQueryRequest,
@@ -74,33 +72,6 @@ async def query_asset_allocation(
 ):
     try:
         return await service.get_asset_allocation(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-
-
-@router.post(
-    "/cash-balances/query",
-    response_model=CashBalancesResponse,
-    summary="Query Cash Balances",
-    description=(
-        "What: Return cash-account balances and translated cash totals for one portfolio.\n"
-        "How: Publishes per-account native balances together with portfolio-currency and "
-        "reporting-currency restatement for the resolved as-of date.\n"
-        "When: Use this compatibility route only when a downstream consumer has not yet migrated "
-        "to `GET /portfolios/{portfolio_id}/cash-balances`. This route remains a pre-live "
-        "convenience shape for the RFC-0083 HoldingsAsOf source-data product and should not "
-        "absorb broader holdings, performance, or reporting composition behavior. For large-scale "
-        "export workflows, prefer a dedicated async export contract."
-    ),
-    deprecated=True,
-    openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
-)
-async def query_cash_balances(
-    request: CashBalancesQueryRequest,
-    service: ReportingService = Depends(get_reporting_service),
-):
-    try:
-        return await service.get_cash_balances(request)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

@@ -42,9 +42,9 @@ def get_cash_balance_service(
         "source-owned per-account identity, and publishes native, portfolio-currency, and "
         "reporting-currency balances with HoldingsAsOf runtime metadata.\n"
         "When: Use this route when a downstream consumer needs cash-account balances or translated "
-        "cash totals without falling back to the deprecated reporting convenience route. Prefer "
-        "this contract over `POST /reporting/cash-balances/query` for new gateway, advise, or "
-        "report integrations. Do not use it as a substitute for canonical cash-account master "
+        "cash totals without rebuilding them from broad holdings state. Prefer this contract for "
+        "new gateway, advise, or report integrations. Do not use it as a substitute for canonical "
+        "cash-account master "
         "metadata, broad holdings publication, or performance/risk aggregation."
     ),
     openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),

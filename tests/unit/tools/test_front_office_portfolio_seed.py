@@ -1,30 +1,30 @@
+import sys
 from datetime import date
 from decimal import Decimal
-import sys
 
 import pytest
 
+import tools.front_office_seed_contract as front_office_seed_contract_module
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_SEED_CONTRACT,
-    _validate_front_office_cash_transactions,
-    _validate_front_office_internal_transaction_pairs,
-    _verify_front_office_portfolio,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
     _extract_support_overview_summary,
     _front_office_analytics_are_fresh,
     _ingest_front_office_core_data,
     _reprocess_front_office_transactions,
+    _validate_front_office_cash_transactions,
+    _validate_front_office_internal_transaction_pairs,
+    _verify_front_office_portfolio,
     _wait_for_portfolio_persistence,
-    build_portfolio_seed_cleanup_sql,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
+    build_portfolio_seed_cleanup_sql,
     parse_args,
 )
 from tools.front_office_seed_contract import load_front_office_seed_contract
-import tools.front_office_seed_contract as front_office_seed_contract_module
 
 
 def _build_bundle():
@@ -714,7 +714,10 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
             200,
             {"views": [{"id": "asset_class"}, {"id": "sector"}]},
         ),
-        "http://query.dev/reporting/cash-balances/query": (
+        (
+            "http://query.dev/portfolios/P1/cash-balances"
+            "?as_of_date=2026-04-10&reporting_currency=USD"
+        ): (
             200,
             {"cash_accounts": [{"id": "USD"}, {"id": "EUR"}]},
         ),
@@ -734,11 +737,18 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
             200,
             {"performance_end_date": "2026-04-10"},
         ),
-        "http://query.dev/portfolios/P1/cashflow-projection?as_of_date=2026-04-10&horizon_days=30&include_projected=true": (
+        (
+            "http://query.dev/portfolios/P1/cashflow-projection"
+            "?as_of_date=2026-04-10&horizon_days=30&include_projected=true"
+        ): (
             200,
             {"points": [{"net_cashflow": "100.00"}]},
         ),
-        "http://gateway.dev/api/v1/workbench/P1/performance/summary?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class&attribution_dimension=asset_class&detail_basis=NET": (
+        (
+            "http://gateway.dev/api/v1/workbench/P1/performance/summary"
+            "?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class"
+            "&attribution_dimension=asset_class&detail_basis=NET"
+        ): (
             200,
             {
                 "benchmark_code": "BMK-1",

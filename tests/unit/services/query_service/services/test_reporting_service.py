@@ -10,7 +10,6 @@ from src.services.query_service.app.dtos.reporting_dto import (
     ActivitySummaryQueryRequest,
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
-    CashBalancesQueryRequest,
     IncomeSummaryQueryRequest,
     PortfolioSummaryQueryRequest,
     ReportingScope,
@@ -178,116 +177,6 @@ async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversi
     assert bond_bucket.market_value_reporting_currency == Decimal("60")
 
 
-async def test_get_cash_balances_returns_cash_accounts_and_totals() -> None:
-    repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
-    repo.get_portfolio_by_id.return_value = portfolio
-    repo.get_latest_business_date.return_value = date(2026, 3, 27)
-    repo.list_latest_snapshot_rows.return_value = [
-        ReportingSnapshotRow(
-            portfolio=portfolio,
-            snapshot=_snapshot(
-                "CASH_USD",
-                market_value="250",
-                market_value_local="250",
-                updated_at=datetime(2026, 3, 27, 11, 15, tzinfo=UTC),
-            ),
-            instrument=_instrument(
-                "CASH_USD",
-                name="USD Cash Account",
-                currency="USD",
-                asset_class="CASH",
-                sector="CASH",
-                product_type="CASH",
-            ),
-        ),
-        ReportingSnapshotRow(
-            portfolio=portfolio,
-            snapshot=_snapshot("SEC1", market_value="100"),
-            instrument=_instrument("SEC1", asset_class="EQUITY"),
-        ),
-    ]
-    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
-    repo.get_latest_fx_rate.side_effect = lambda **kwargs: Decimal("1.2")
-
-    with patch(
-        "src.services.query_service.app.services.reporting_service.ReportingRepository",
-        return_value=repo,
-    ):
-        service = ReportingService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cash_balances(
-            CashBalancesQueryRequest(portfolio_id="P1", reporting_currency="SGD")
-        )
-
-    assert response.portfolio_id == "P1"
-    assert response.totals.cash_account_count == 1
-    assert response.totals.total_balance_portfolio_currency == Decimal("250")
-    assert response.totals.total_balance_reporting_currency == Decimal("300.0")
-    assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
-    assert response.product_name == "HoldingsAsOf"
-    assert response.product_version == "v1"
-    assert response.as_of_date == date(2026, 3, 27)
-    assert response.generated_at.tzinfo is not None
-    assert response.restatement_version == "current"
-    assert response.reconciliation_status == "UNKNOWN"
-    assert response.data_quality_status == "UNKNOWN"
-    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 15, tzinfo=UTC)
-    assert response.correlation_id is None
-
-
-async def test_get_cash_balances_prefers_cash_account_master_and_keeps_zero_balance_accounts() -> (
-    None
-):
-    repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
-    repo.get_portfolio_by_id.return_value = portfolio
-    repo.get_latest_business_date.return_value = date(2026, 3, 27)
-    repo.list_latest_snapshot_rows.return_value = [
-        ReportingSnapshotRow(
-            portfolio=portfolio,
-            snapshot=_snapshot("CASH_USD", market_value="250", market_value_local="250"),
-            instrument=_instrument(
-                "CASH_USD",
-                name="USD Cash Account",
-                currency="USD",
-                asset_class="CASH",
-                sector="CASH",
-                product_type="CASH",
-            ),
-        )
-    ]
-    repo.list_cash_account_masters.return_value = [
-        SimpleNamespace(
-            cash_account_id="CASH-ACC-USD-001",
-            security_id="CASH_USD",
-            display_name="USD Operating Cash",
-            account_currency="USD",
-        ),
-        SimpleNamespace(
-            cash_account_id="CASH-ACC-SGD-001",
-            security_id="CASH_SGD",
-            display_name="SGD Reserve Cash",
-            account_currency="SGD",
-        ),
-    ]
-    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "LEGACY-MAP"}
-
-    with patch(
-        "src.services.query_service.app.services.reporting_service.ReportingRepository",
-        return_value=repo,
-    ):
-        service = ReportingService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cash_balances(CashBalancesQueryRequest(portfolio_id="P1"))
-
-    assert [record.cash_account_id for record in response.cash_accounts] == [
-        "CASH-ACC-SGD-001",
-        "CASH-ACC-USD-001",
-    ]
-    assert response.cash_accounts[0].balance_portfolio_currency == Decimal("0")
-    assert response.cash_accounts[1].balance_portfolio_currency == Decimal("250")
-    assert response.totals.cash_account_count == 2
-
-
 async def test_get_portfolio_summary_returns_historical_restated_totals() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
@@ -452,19 +341,6 @@ async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mod
     assert response.look_through.requested_mode == "direct_only"
     assert response.look_through.applied_mode == "direct_only"
     assert response.look_through.supported is True
-
-
-async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
-    repo = AsyncMock()
-    repo.get_portfolio_by_id.return_value = None
-
-    with patch(
-        "src.services.query_service.app.services.reporting_service.ReportingRepository",
-        return_value=repo,
-    ):
-        service = ReportingService(AsyncMock(spec=AsyncSession))
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
-            await service.get_cash_balances(CashBalancesQueryRequest(portfolio_id="P404"))
 
 
 async def test_get_income_summary_returns_requested_window_and_ytd_amounts() -> None:

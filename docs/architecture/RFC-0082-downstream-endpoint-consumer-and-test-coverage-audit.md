@@ -827,24 +827,19 @@ route purpose, parameter descriptions, and `HoldingsAsOf` product identity.
 This certification pass covers:
 
 1. `GET /portfolios/{portfolio_id}/cash-balances`
-2. `POST /reporting/cash-balances/query`
 
 ### Route Contract Decision
 
 `GET /portfolios/{portfolio_id}/cash-balances` is now the strategic `HoldingsAsOf` cash-account
 balance publication route.
 
-`POST /reporting/cash-balances/query` remains a deprecated compatibility route, but no active
-direct internal downstream consumer was evidenced in this pass.
-
 The boundary is now explicit:
 
 1. use `GET /portfolios/{portfolio_id}/cash-balances` for new operational-read adoption that needs
    per-account cash balances or translated cash totals;
-2. keep `POST /reporting/cash-balances/query` only as a migration bridge for existing consumers;
-3. do not use either route as a substitute for broad holdings publication, performance output, or report
+2. do not use the route as a substitute for broad holdings publication, performance output, or report
    composition;
-4. use `GET /portfolios/{portfolio_id}/cash-accounts` only for cash-account identity and lifecycle
+3. use `GET /portfolios/{portfolio_id}/cash-accounts` only for cash-account identity and lifecycle
    metadata, not balances.
 
 ### Downstream Consumer Reality
@@ -852,7 +847,6 @@ The boundary is now explicit:
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
 | `GET /portfolios/{portfolio_id}/cash-balances` | `lotus-gateway`, `lotus-advise` | Active direct consumers are now evidenced on the strategic route. Gateway local repo truth uses `get_portfolio_cash_balances(...)` for workspace, book, and liquidity cash-account views, and advise stateful context uses the same route for per-currency cash balances. |
-| `POST /reporting/cash-balances/query` | No active direct internal downstream consumer evidenced | Deprecated compatibility route only. Local scans across `lotus-gateway`, `lotus-report`, `lotus-advise`, `lotus-risk`, `lotus-performance`, and `lotus-manage` did not show a remaining direct binding in live source code. |
 
 No active direct `lotus-report` consumer was evidenced in this pass.
 
@@ -872,22 +866,17 @@ The strategic route is now strong for the intended contract:
 For this endpoint, Swagger now makes the following explicit:
 
 1. `GET /portfolios/{portfolio_id}/cash-balances` is the strategic `HoldingsAsOf` balance read;
-2. `POST /reporting/cash-balances/query` is explicitly documented as the deprecated migration path;
-3. broader holdings or reporting composition should not anchor on either route;
-4. endpoint-specific cash balance fields carry clearer examples for cash-account identity,
+2. broader holdings or reporting composition should not anchor on this route;
+3. endpoint-specific cash balance fields carry clearer examples for cash-account identity,
    balances, totals, portfolio currency, reporting currency, and resolved as-of date.
 
 Focused HTTP-level dependency proof exists in
 `tests/integration/services/query_service/test_cash_balances_router.py` for strategic route
 routing, parameter forwarding, shared `500` envelope behavior, and 404/400 mapping behavior.
 
-Compatibility-route proof remains in
-`tests/integration/services/query_service/test_reporting_router.py`.
-
 Service-level proof exists in `tests/unit/services/query_service/services/test_cash_balance_service.py`
 for translated totals, account-level balance resolution, zero-balance account handling, and product
-identity metadata. Reporting-service regression proof remains in
-`tests/unit/services/query_service/services/test_reporting_service.py`.
+identity metadata.
 
 OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
 route-purpose wording and endpoint-specific schema examples.
@@ -897,7 +886,7 @@ route-purpose wording and endpoint-specific schema examples.
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Closed. lotus-core now publishes `GET /portfolios/{portfolio_id}/cash-balances` and the implementation evidence has been recorded. | Re-open only if a fresh downstream requirement exposes a real gap in the strategic route. |
-| `lotus-core #310` retire deprecated `POST /reporting/cash-balances/query` compatibility route | Open. Current internal downstream scans and gateway issue closure suggest the deprecated route may now be orphaned, but retirement should stay deliberate until any non-repo dependency is ruled out. | Track explicit keep-or-remove decision for the deprecated compatibility handler. |
+| `lotus-core #310` retire deprecated `POST /reporting/cash-balances/query` compatibility route | Closed on 2026-04-16. The deprecated handler, request DTO, reporting-service bridge, route-catalog entries, and direct router/OpenAPI coverage were removed after internal downstream scans plus remote gateway closure evidence showed no active binding. | Keep closed unless fresh evidence shows a real consumer still depended on the retired compatibility route. |
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Current gateway repo truth and remote issue closure both align to strategic `GET /portfolios/{portfolio_id}/cash-balances` adoption. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated `cash-balances/query` usage. |
 | `lotus-advise #92` downstream adoption of enrichment/state route hardening | Closed on current repo truth. Advise stateful context now uses `GET /portfolios/{portfolio_id}/cash-balances`, and the remaining active advise bindings stay aligned with the hardened enrichment/state routes. | Re-open only if a later core contract change exposes advise-side drift. |
 
@@ -919,8 +908,7 @@ The contract boundary is explicit:
 3. do not use this route as a liquidity or balance view, because it intentionally does not publish
    native balances or translated cash totals;
 4. when a downstream workflow genuinely needs per-account balances, use
-   `GET /portfolios/{portfolio_id}/cash-balances`; keep
-   `POST /reporting/cash-balances/query` only as compatibility during migration.
+   `GET /portfolios/{portfolio_id}/cash-balances`.
 
 ### Downstream Consumer Reality
 

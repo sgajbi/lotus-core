@@ -92,28 +92,6 @@ async def test_query_asset_allocation(async_test_client):
     assert response.json()["total_market_value_reporting_currency"] == "150"
 
 
-async def test_query_cash_balances(async_test_client):
-    client, mock_service = async_test_client
-    mock_service.get_cash_balances.return_value = {
-        "portfolio_id": "P1",
-        "portfolio_currency": "USD",
-        "reporting_currency": "USD",
-        "resolved_as_of_date": date(2026, 3, 27),
-        "totals": {
-            "cash_account_count": 1,
-            "total_balance_portfolio_currency": Decimal("250"),
-            "total_balance_reporting_currency": Decimal("250"),
-        },
-        "cash_accounts": [],
-        **_runtime_metadata(date(2026, 3, 27)),
-    }
-
-    response = await client.post("/reporting/cash-balances/query", json={"portfolio_id": "P1"})
-
-    assert response.status_code == 200
-    assert response.json()["totals"]["cash_account_count"] == 1
-
-
 async def test_query_portfolio_summary(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_portfolio_summary.return_value = {
@@ -268,12 +246,6 @@ async def test_query_activity_summary(async_test_client):
             {"scope": {"portfolio_id": "P1"}, "dimensions": ["asset_class"]},
             "get_asset_allocation",
             "bad allocation scope",
-        ),
-        (
-            "/reporting/cash-balances/query",
-            {"portfolio_id": "P1"},
-            "get_cash_balances",
-            "bad cash scope",
         ),
         (
             "/reporting/portfolio-summary/query",

@@ -292,7 +292,6 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/reporting/assets-under-management/query" in paths
     assert "/reporting/asset-allocation/query" in paths
     assert "/portfolios/{portfolio_id}/cash-balances" in paths
-    assert "/reporting/cash-balances/query" in paths
     assert "/reporting/portfolio-summary/query" in paths
     assert "/reporting/income-summary/query" in paths
     assert "/reporting/activity-summary/query" in paths
@@ -312,7 +311,6 @@ async def test_openapi_deprecates_reporting_convenience_shapes(async_test_client
     }
 
     assert deprecated_routes == {
-        "/reporting/cash-balances/query": "HoldingsAsOf",
         "/reporting/income-summary/query": "TransactionLedgerWindow",
         "/reporting/activity-summary/query": "TransactionLedgerWindow",
     }
@@ -335,7 +333,6 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
 
     aum_query = paths["/reporting/assets-under-management/query"]["post"]
     allocation_query = paths["/reporting/asset-allocation/query"]["post"]
-    cash_query = paths["/reporting/cash-balances/query"]["post"]
     portfolio_summary_query = paths["/reporting/portfolio-summary/query"]["post"]
     income_query = paths["/reporting/income-summary/query"]["post"]
     activity_query = paths["/reporting/activity-summary/query"]["post"]
@@ -351,8 +348,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert "strategic allocation views" in allocation_query["description"]
     assert "Prefer this route over mining allocation views from `core-snapshot`" in allocation_query["description"]
     assert "strategic HoldingsAsOf cash-account balance read" in strategic_cash_balances_query["description"]
-    assert "Prefer this contract over `POST /reporting/cash-balances/query`" in strategic_cash_balances_query["description"]
-    assert "migrated to `GET /portfolios/{portfolio_id}/cash-balances`" in cash_query["description"]
+    assert "Prefer this contract for new gateway, advise, or report integrations" in strategic_cash_balances_query["description"]
     assert "strategic historical portfolio summary" in portfolio_summary_query["description"]
     assert "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`" in portfolio_summary_query["description"]
     assert "correct lotus-core summary seam for report-ready wealth totals" in portfolio_summary_query["description"]

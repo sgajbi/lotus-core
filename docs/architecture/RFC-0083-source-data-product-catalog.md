@@ -46,7 +46,7 @@ evidence reference rather than omitting the concept.
 | Product | Family | Serving plane | Primary consumers | Current route mapping |
 | --- | --- | --- | --- | --- |
 | `PortfolioStateSnapshot` | Snapshot and simulation | `query_control_plane_service` | gateway, advise, manage, risk | `/integration/portfolios/{portfolio_id}/core-snapshot` |
-| `HoldingsAsOf` | Operational read | `query_service` | gateway, risk, report, manage, advise | `/portfolios/{portfolio_id}/positions`, `/portfolios/{portfolio_id}/cash-balances`, `/reporting/cash-balances/query` |
+| `HoldingsAsOf` | Operational read | `query_service` | gateway, risk, report, manage, advise | `/portfolios/{portfolio_id}/positions`, `/portfolios/{portfolio_id}/cash-balances` |
 | `TransactionLedgerWindow` | Operational read | `query_service` | gateway, report, manage, risk | `/portfolios/{portfolio_id}/transactions`, `/reporting/activity-summary/query`, `/reporting/income-summary/query` |
 | `PositionTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/position-timeseries` |
 | `PortfolioTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` |
@@ -78,7 +78,6 @@ These route families are useful today but should not become the long-term produc
 | Convenience shape | Target product |
 | --- | --- |
 | `/portfolios/{portfolio_id}/cash-balances` | `HoldingsAsOf` |
-| `/reporting/cash-balances/query` | `HoldingsAsOf` |
 | `/reporting/activity-summary/query` | `TransactionLedgerWindow` |
 | `/reporting/income-summary/query` | `TransactionLedgerWindow` |
 

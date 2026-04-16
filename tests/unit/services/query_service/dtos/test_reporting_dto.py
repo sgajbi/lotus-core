@@ -7,7 +7,6 @@ from src.services.query_service.app.dtos.reporting_dto import (
     ActivitySummaryQueryRequest,
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
-    CashBalancesQueryRequest,
     IncomeSummaryQueryRequest,
     PortfolioSummaryQueryRequest,
     ReportingScope,
@@ -37,13 +36,6 @@ def test_asset_allocation_request_accepts_single_portfolio_without_reporting_cur
 
     assert request.scope.scope_type == "portfolio"
     assert request.reporting_currency is None
-
-
-def test_cash_balances_request_is_portfolio_scoped() -> None:
-    request = CashBalancesQueryRequest(portfolio_id="P1", reporting_currency="USD")
-
-    assert request.portfolio_id == "P1"
-    assert request.reporting_currency == "USD"
 
 
 def test_reporting_window_rejects_inverted_dates() -> None:

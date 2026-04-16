@@ -21,8 +21,6 @@ from ..dtos.reporting_dto import (
     AssetsUnderManagementQueryRequest,
     AssetsUnderManagementResponse,
     AssetsUnderManagementTotals,
-    CashBalancesQueryRequest,
-    CashBalancesResponse,
     FlowPeriodSummary,
     IncomePeriodSummary,
     IncomeSummaryQueryRequest,
@@ -190,27 +188,6 @@ class ReportingService:
             ),
             look_through=look_through_info,
             views=views,
-        )
-
-    async def get_cash_balances(self, request: CashBalancesQueryRequest) -> CashBalancesResponse:
-        portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
-        if portfolio is None:
-            raise ValueError(f"Portfolio with id {request.portfolio_id} not found")
-
-        resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
-        if resolved_as_of_date is None:
-            raise ValueError("No business date is available for cash balance queries.")
-        reporting_currency = request.reporting_currency or portfolio.base_currency
-
-        rows = await self.repo.list_latest_snapshot_rows(
-            portfolio_ids=[portfolio.portfolio_id],
-            as_of_date=resolved_as_of_date,
-        )
-        return await self._cash_balance_resolver.build_cash_balances_response(
-            portfolio=portfolio,
-            resolved_as_of_date=resolved_as_of_date,
-            reporting_currency=reporting_currency,
-            rows=rows,
         )
 
     async def get_portfolio_summary(

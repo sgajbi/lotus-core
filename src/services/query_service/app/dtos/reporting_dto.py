@@ -163,26 +163,6 @@ class AssetAllocationQueryRequest(BaseModel):
         return self
 
 
-class CashBalancesQueryRequest(BaseModel):
-    portfolio_id: str = Field(
-        ...,
-        description="Portfolio identifier for the cash-balance query.",
-        examples=["PORT-001"],
-    )
-    as_of_date: date | None = Field(
-        None,
-        description="As-of date for the valuation snapshot. Defaults to the latest business date.",
-        examples=["2026-03-27"],
-    )
-    reporting_currency: str | None = Field(
-        None,
-        description=(
-            "Optional reporting currency. Defaults to the portfolio currency when not provided."
-        ),
-        examples=["USD"],
-    )
-
-
 class PortfolioSummaryQueryRequest(BaseModel):
     portfolio_id: str = Field(
         ...,

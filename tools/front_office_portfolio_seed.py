@@ -1600,13 +1600,9 @@ def _verify_front_office_portfolio(
                 },
             )
             _, cash_payload = _request_json(
-                "POST",
-                f"{query_base_url}/reporting/cash-balances/query",
-                payload={
-                    "portfolio_id": expected.portfolio_id,
-                    "as_of_date": as_of_date,
-                    "reporting_currency": "USD",
-                },
+                "GET",
+                f"{query_base_url}/portfolios/{expected.portfolio_id}/cash-balances"
+                f"?as_of_date={as_of_date}&reporting_currency=USD",
             )
             _, income_payload = _request_json(
                 "POST",

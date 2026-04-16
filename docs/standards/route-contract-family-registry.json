@@ -146,7 +146,6 @@
         "POST /reporting/activity-summary/query",
         "POST /reporting/asset-allocation/query",
         "POST /reporting/assets-under-management/query",
-        "POST /reporting/cash-balances/query",
         "POST /reporting/income-summary/query",
         "POST /reporting/portfolio-summary/query"
       ]

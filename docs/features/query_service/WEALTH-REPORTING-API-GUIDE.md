@@ -239,7 +239,6 @@ Behavior:
 
 ### Cash Balances
 
-- `POST /reporting/cash-balances/query`
 
 Inputs:
 
