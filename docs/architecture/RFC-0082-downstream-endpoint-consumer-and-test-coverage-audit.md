@@ -668,7 +668,9 @@ Swagger now makes the following explicit:
 2. that `include_sections` is an optional evaluation input rather than a state read;
 3. that the response is policy provenance and section-allowance metadata;
 4. that the active direct use in this pass is `lotus-gateway` platform/bootstrap policy
-   inspection rather than portfolio-state retrieval.
+   inspection rather than portfolio-state retrieval;
+5. that canonical query names are snake_case only and camelCase aliases such as
+   `consumerSystem` / `tenantId` are unsupported.
 
 The HTTP dependency lane now proves both:
 
@@ -718,6 +720,8 @@ tests protect the capabilities response surface from documentation drift.
 Swagger now also states the active direct downstream use more plainly: `lotus-gateway` platform
 capability aggregation is the current direct consumer in this pass, and the route remains a
 control-plane discovery contract rather than a substitute for endpoint-specific source-data docs.
+The route contract now also states explicitly that canonical query names are snake_case only and
+camelCase aliases such as `consumerSystem` / `tenantId` are unsupported.
 
 The HTTP dependency lane also proves both the explicit consumer or tenant request shape and the
 default `consumer_system=lotus-gateway` plus `tenant_id=default` resolution path so downstream

@@ -1417,6 +1417,7 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert (
         "does not publish portfolio state or analytics inputs" in (effective_policy["description"])
     )
+    assert "`consumerSystem` and `tenantId` are not supported" in (effective_policy["description"])
 
     portfolio_param = next(
         parameter
@@ -1985,6 +1986,7 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert "supported lotus-core integration paths" in capabilities["description"]
     assert "snake_case query parameters" in capabilities["description"]
     assert "not a substitute for endpoint-specific OpenAPI" in capabilities["description"]
+    assert "`consumerSystem` and `tenantId` are not supported" in capabilities["description"]
 
     components = schema["components"]["schemas"]
     feature_capability = components["FeatureCapability"]

@@ -103,7 +103,9 @@ def get_core_snapshot_service(
         "other downstream clients that need to inspect lotus-core section policy before calling "
         "governed source-data routes such as "
         "`/integration/portfolios/{portfolio_id}/core-snapshot`. This route returns policy "
-        "diagnostics only; it does not publish portfolio state or analytics inputs."
+        "diagnostics only; it does not publish portfolio state or analytics inputs. Callers must "
+        "use the canonical snake_case query parameters `consumer_system` and `tenant_id`; "
+        "camelCase aliases such as `consumerSystem` and `tenantId` are not supported."
     ),
 )
 async def get_effective_integration_policy(

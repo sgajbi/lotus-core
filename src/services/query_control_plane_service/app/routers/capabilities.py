@@ -27,7 +27,8 @@ def get_capabilities_service() -> CapabilitiesService:
         "When: Used directly by lotus-gateway platform capability aggregation and other "
         "downstream discovery clients to enable only supported lotus-core integration paths. "
         "This route is a control-plane discovery contract, not a substitute for endpoint-specific "
-        "OpenAPI or source-data product contracts."
+        "OpenAPI or source-data product contracts. CamelCase aliases such as `consumerSystem` "
+        "and `tenantId` are not supported."
     ),
 )
 async def get_integration_capabilities(
