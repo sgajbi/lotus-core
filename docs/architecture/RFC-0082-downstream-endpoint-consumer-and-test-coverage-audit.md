@@ -776,9 +776,10 @@ The boundary is now explicit:
 | `GET /portfolios/{portfolio_id}/positions` | `lotus-gateway` | Correct. Gateway uses the strategic positions route for portfolio position-book workflows. |
 | `POST /reporting/holdings-snapshot/query` | No active direct downstream caller evidenced in this pass | Deprecated convenience shape. Core coverage remains strong, but this pass did not find a live downstream product binding that should be described as the preferred route. |
 
-Gateway still also uses the deprecated sibling convenience route
-`POST /reporting/cash-balances/query` in related holdings flows. That is now tracked as downstream
-migration issue `lotus-gateway #119`.
+Earlier gateway holdings-flow dependence on the deprecated sibling convenience route
+`POST /reporting/cash-balances/query` has now been resolved in current local gateway repo truth and
+is recorded later in this audit under the dedicated cash-balances slice and closure posture for
+`lotus-gateway #119`.
 
 ### Upstream Integration Assessment
 
@@ -824,7 +825,7 @@ route purpose, parameter descriptions, and `HoldingsAsOf` product identity.
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core` | No open issue | The strategic positions route is contract-tight in this pass. No open lotus-core defect was found against `GET /portfolios/{portfolio_id}/positions`. |
-| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Still valid as downstream adoption work. Gateway has already moved positions and allocation flows toward the strategic positions route, but workspace and liquidity paths still depend on the deprecated convenience shape for cash-account rows. | Keep open until gateway removes the remaining deprecated `HoldingsAsOf` convenience-route dependence and adopts `GET /portfolios/{portfolio_id}/cash-balances` for those flows. |
+| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Current gateway repo truth and issue evidence show migration to strategic `GET /portfolios/{portfolio_id}/cash-balances` in local commit `36ccce9`. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated `cash-balances/query` usage. |
 
 ## Certified Endpoint Slice: Cash Balances Operational Read
 
