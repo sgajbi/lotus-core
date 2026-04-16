@@ -1520,13 +1520,13 @@ The boundary is explicit:
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `GET /instruments/` | No active direct downstream caller evidenced in `lotus-gateway`, `lotus-risk`, `lotus-advise`, or `lotus-report` during this pass | Correct strategic raw reference-data contract with no overstated live adoption. Downstreams in this pass were more strongly bound to higher-level enrichment or portfolio-facing seams than to direct instrument-master reads. |
-| `GET /prices/` | No active direct downstream caller evidenced in this pass | Correct raw market-data contract with no overstated live adoption. This pass did not find downstream product code that should be described as a current direct caller. |
-| `GET /fx-rates/` | No active direct downstream caller evidenced in this pass | Correct raw FX-history contract with no overstated live adoption. This pass did not find downstream product code that should be described as a current direct caller. |
+| `GET /instruments/` | `lotus-advise` | Correct. Advise uses the raw instrument read as part of stateful context resolution for proposal construction support, while still preferring strategic enrichment for classification-heavy analytics semantics. |
+| `GET /prices/` | `lotus-advise` | Correct. Advise uses the raw price-history read as part of stateful context valuation support for proposal construction and simulation inputs. |
+| `GET /fx-rates/` | `lotus-advise`, `lotus-performance` | Correct. Advise uses the raw FX-history read for stateful context currency support, and performance directly uses it for multi-currency benchmark/performance workflows. |
 
-That posture is acceptable. These are foundational raw reads and should remain available, but the
-current active downstreams reviewed in this pass lean more heavily on portfolio-scoped, reporting,
-or integration/control-plane contracts than on these raw query surfaces directly.
+That posture is acceptable. These are foundational raw reads and the active downstream uses remain
+supporting seams inside broader stateful workflows rather than user-facing portfolio or reporting
+contracts in their own right.
 
 ### Upstream Integration Assessment
 
@@ -1537,7 +1537,9 @@ The family is strong for its intended purpose:
 2. price history stays scoped to one security plus an optional date window;
 3. FX history stays scoped to one currency pair plus an optional date window, with router-level
    currency canonicalization to uppercase;
-4. the family keeps raw market/reference publication separate from derived portfolio analytics and
+4. unexpected failures now have focused HTTP-level coverage proving the family falls through to the
+   shared global `500` envelope instead of bespoke router-local error strings;
+5. the family keeps raw market/reference publication separate from derived portfolio analytics and
    report composition.
 
 No upstream defect was found in this pass.
@@ -1555,7 +1557,7 @@ For this family, Swagger now makes the following explicit:
 
 Focused HTTP-level dependency proof exists in
 `tests/integration/services/query_service/test_reference_data_routers.py` for instrument, price,
-and FX success behavior.
+and FX success behavior plus shared-envelope unexpected failure behavior.
 
 Service-level proof exists in
 `tests/unit/services/query_service/services/test_instrument_service.py`,
@@ -1575,7 +1577,7 @@ route-purpose wording, parameter descriptions, and response-schema field descrip
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the raw reference market-data routes. |
-| Downstream repos | No open issue found in this pass | No downstream misuse or stale direct-contract binding was evidenced for these endpoints, so no new issue was opened. |
+| Downstream repos | No open issue found in this pass | Active direct bindings in `lotus-advise` and `lotus-performance` are strategically acceptable for this raw-data family, so no new issue was opened. |
 
 ## Certified Endpoint Slice: Lookup Catalog Reads
 

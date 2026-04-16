@@ -59,7 +59,7 @@ async def async_test_client():
             return_value=mock_instrument_service,
         ),
     ):
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield (
                 client,
@@ -132,6 +132,39 @@ async def test_get_prices_success(async_test_client):
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
     )
+
+
+async def test_get_fx_rates_unexpected_uses_global_500_envelope(async_test_client):
+    client, mock_fx_service, _, _, _ = async_test_client
+    mock_fx_service.get_fx_rates.side_effect = RuntimeError("boom")
+
+    response = await client.get("/fx-rates/?from_currency=USD&to_currency=SGD")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
+
+
+async def test_get_instruments_unexpected_uses_global_500_envelope(async_test_client):
+    client, _, mock_instrument_service, _, _ = async_test_client
+    mock_instrument_service.get_instruments.side_effect = RuntimeError("boom")
+
+    response = await client.get("/instruments/")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
+
+
+async def test_get_prices_unexpected_uses_global_500_envelope(async_test_client):
+    client, _, _, mock_price_service, _ = async_test_client
+    mock_price_service.get_prices.side_effect = RuntimeError("boom")
+
+    response = await client.get("/prices/?security_id=SEC_1")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
 
 
 async def test_get_portfolio_lookups(async_test_client):
