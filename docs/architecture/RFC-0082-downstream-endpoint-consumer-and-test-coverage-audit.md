@@ -297,10 +297,13 @@ Swagger now also makes the supporting-route boundary clearer for this adjacent f
 2. benchmark catalog is discovery-first, now explicitly documents `lotus-gateway` workspace
    benchmark-selection usage, and should give way to targeted benchmark routes once an identifier
    is known;
-3. raw index price-series and benchmark return-series routes now also document the active
-   `lotus-performance` sourcing modes they support, while remaining evidence/reference contracts
-   rather than substitutes for composition-window plus market-series sourcing when lower-level
-   benchmark reconstruction is required.
+3. index catalog is the governed metadata and classification lookup for benchmark component
+   identities, now explicitly documents direct `lotus-performance` benchmark exposure and
+   attribution sourcing usage, and should be preferred over downstream local classification maps;
+4. raw index price-series and benchmark return-series routes now also document the active
+   `lotus-performance` calculated-benchmark and vendor-series sourcing modes they support, while
+   remaining evidence/reference contracts rather than substitutes for composition-window plus
+   market-series sourcing when lower-level benchmark reconstruction is required.
 
 ## Certified Endpoint Slice: Risk-Free Reference Family
 
