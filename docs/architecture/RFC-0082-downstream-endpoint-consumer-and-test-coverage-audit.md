@@ -389,7 +389,7 @@ reference/catalog family.
 | --- | --- | --- |
 | `lotus-core #237` grouped benchmark analytics contract | Still valid. Targeted `index_ids` removes the old full-catalog-scan pain, but downstream consumers still compose grouped benchmark analytics from lower-level contracts client-side. | Keep open as the grouped benchmark follow-on, not as a defect in the current reference family. |
 | `lotus-core #246` broader benchmark source hardening | Still valid. This slice confirms the supporting reference contracts are truthful today, but does not claim the full benchmark-source program is complete. | Keep open. |
-| `lotus-performance #125` downstream adoption of latest lotus-core benchmark/reference hardening | Still valid as downstream conformance work. Performance is the primary active consumer for this family and should keep tests, mocks, and runtime assumptions aligned to the tightened route descriptions and payload semantics. | Keep open until downstream adoption review is complete. |
+| `lotus-performance #125` downstream adoption of latest lotus-core benchmark/reference hardening | Closed on April 16, 2026. Current performance repo truth on `main` includes merge commit `3d48e79` plus follow-up commits `6210e33` and `bf178e3`, and active client/tests still bind to the strategic benchmark, index, analytics-reference, and risk-free routes. | Keep closed unless fresh performance code or runtime evidence drifts from the governed route split. |
 
 No new downstream migration issue is required from this slice. The active consumers reviewed here
 are already using the governed routes rather than a stale duplicate seam.
@@ -1939,7 +1939,7 @@ coverage.
 | Repository issue | Status | Certification read |
 | --- | --- | --- |
 | `lotus-core` | No open issue | The source route is contract-tight in this pass. No lotus-core behavior or documentation defect remains open against `POST /integration/instruments/enrichment-bulk`. |
-| `lotus-risk #93` | Open | Still valid as downstream adoption work. Risk is an active direct consumer and should keep its concentration and attribution tests aligned to deterministic response order, null unknown-security handling, and upstream-owned enrichment semantics. |
+| `lotus-risk #93` | Closed on April 16, 2026 | Current risk repo truth on `main` includes merge commit `823524d` plus sync commits `177d722`, `fd94d45`, and `2fc86c6`. Active client/docs/tests remain aligned to `core-snapshot`, `position-timeseries`, `enrichment-bulk`, `risk-free-series`, and `risk-free-series/coverage`, including deterministic enrichment order and null unknown-security handling. |
 | `lotus-advise #92` | Closed | Closed on current repo truth. Advise remains an active direct enrichment consumer and its stateful-context tests/mocks are aligned to current enrichment semantics and null unknown-security handling. |
 
 ## Certified Endpoint Slice: Core Snapshot
