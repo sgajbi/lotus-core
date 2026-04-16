@@ -30,8 +30,13 @@ def get_cashflow_projection_service(
     },
     summary="Get Portfolio Cashflow Projection",
     description=(
-        "Returns portfolio-level daily net cashflow projection for operational liquidity "
-        "planning. Supports booked-only mode and projected mode for future-dated trades."
+        "What: Return the portfolio-level daily net cashflow projection for operational "
+        "liquidity planning.\n"
+        "How: Projects daily net cashflow points from the resolved as-of baseline across the "
+        "requested horizon, with booked-only mode and projected mode for future-dated trades.\n"
+        "When: Use this route when a downstream consumer needs a dedicated cashflow outlook "
+        "instead of broad portfolio state or performance interpretation. Keep forecasting, "
+        "performance analytics, and advisory recommendation logic outside this contract."
     ),
 )
 async def get_cashflow_projection(

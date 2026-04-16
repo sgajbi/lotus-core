@@ -1040,6 +1040,70 @@ route-purpose wording and endpoint-specific schema examples.
 | `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `POST /reporting/assets-under-management/query` in this pass. |
 | `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated AUM route directly and propagates reporting currency where supported. |
 
+## Certified Endpoint Slice: Cashflow Projection Operational Read
+
+This certification pass covers:
+
+1. `GET /portfolios/{portfolio_id}/cashflow-projection`
+
+### Route Contract Decision
+
+This is the strategic lotus-core operational-read route for portfolio cashflow outlook.
+
+The boundary is explicit:
+
+1. use it when a downstream consumer needs a dedicated portfolio-level daily cashflow outlook for a
+   chosen horizon;
+2. use booked-only versus projected mode honestly rather than inferring one from the other;
+3. do not use it as a substitute for broad portfolio state, performance forecasting, or advisory
+   recommendation logic;
+4. keep the route anchored to core-derived cashflow state rather than consumer-specific narrative
+   interpretation.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /portfolios/{portfolio_id}/cashflow-projection` | `lotus-gateway` | Correct. Gateway uses the route for the dedicated projected cashflow view and propagates `as_of_date`, `horizon_days`, and `include_projected` directly to lotus-core. |
+
+No active direct `lotus-report`, `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was
+evidenced against this route in this pass.
+
+### Upstream Integration Assessment
+
+The route is strong and domain-correct for operational liquidity planning:
+
+1. it publishes an explicit portfolio-level daily net cashflow path instead of forcing downstream
+   consumers to infer one from transaction rows;
+2. booked-only mode and projected mode are explicit request choices;
+3. the contract stays focused on liquidity outlook rather than drifting into performance
+   forecasting;
+4. the dependency lane already proves success, parameter forwarding, and 404 behavior through the
+   ASGI surface.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger now makes the following explicit:
+
+1. this route serves portfolio-level daily cashflow outlook for operational liquidity planning;
+2. booked-only versus projected mode semantics are explicit;
+3. forecasting, performance analytics, and advisory recommendation logic stay outside this
+   contract;
+4. parameter descriptions and 404 example remain clear and specific.
+
+Focused HTTP-level dependency proof exists in
+`tests/integration/services/query_service/test_cashflow_projection_router_dependency.py`.
+
+OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
+route-purpose wording and request-parameter descriptions.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `GET /portfolios/{portfolio_id}/cashflow-projection` in this pass. |
+| `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated projected cashflow route correctly. |
+
 ## Certified Endpoint Slice: Asset Allocation Operational Read
 
 This certification pass covers:

@@ -562,6 +562,8 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     schema = response.json()
 
     projection = schema["paths"]["/portfolios/{portfolio_id}/cashflow-projection"]["get"]
+    assert "portfolio-level daily net cashflow projection" in projection["description"]
+    assert "forecasting, performance analytics, and advisory recommendation logic outside this contract" in projection["description"]
 
     portfolio_id = next(
         parameter for parameter in projection["parameters"] if parameter["name"] == "portfolio_id"
