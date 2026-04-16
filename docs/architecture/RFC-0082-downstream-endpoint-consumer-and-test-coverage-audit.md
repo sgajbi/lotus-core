@@ -965,7 +965,8 @@ For this endpoint, Swagger now makes the following explicit:
 
 Focused HTTP-level dependency proof exists in
 `tests/integration/services/query_service/test_cash_accounts_router.py` for success, explicit
-`as_of_date` forwarding, omitted-`as_of_date` behavior, and `404` mapping.
+`as_of_date` forwarding, omitted-`as_of_date` behavior, shared `500` envelope behavior, and `404`
+mapping.
 
 Repository-level query proof exists in
 `tests/unit/services/query_service/repositories/test_cash_account_repository.py` for
@@ -983,7 +984,8 @@ route-purpose wording, parameter descriptions, and cash-account response example
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
 | `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Closed. It was never a defect in `GET /portfolios/{portfolio_id}/cash-accounts` itself. This route remains intentionally metadata-only. | Keep closed against the strategic cash-balance route unless a fresh gap appears. |
-| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Open. Adjacent and still valid. Gateway should use `GET /portfolios/{portfolio_id}/cash-balances` for liquidity views, not `GET /portfolios/{portfolio_id}/cash-accounts`. | Keep open against the downstream migration problem, not against the cash-account master route. |
+| `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Adjacent only. Current gateway truth is aligned to `GET /portfolios/{portfolio_id}/cash-balances`, not `GET /portfolios/{portfolio_id}/cash-accounts`. | Keep closed unless fresh route-level evidence shows deprecated cash-balance-route reintroduction. |
+| `lotus-manage #32` review latest lotus-core support and source-data contract hardening for operator adoption | Open and still valid, but broader than this route. It tracks operator-side review of current lotus-core support/source-data contracts rather than a defect in `GET /portfolios/{portfolio_id}/cash-accounts` specifically. | Keep open as downstream review work; do not treat it as a cash-account-master route bug. |
 
 ## Certified Endpoint Slice: Income And Activity Operational Reads
 
