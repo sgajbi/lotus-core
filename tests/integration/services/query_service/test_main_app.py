@@ -278,6 +278,7 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cash-balances"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/positions"]["get"]["responses"]
+    assert "400" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cashflow-projection"]["get"]["responses"]
@@ -527,10 +528,22 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         parameter for parameter in transactions["parameters"] if parameter["name"] == "component_type"
     )
     assert component_type["description"] == "Filter by FX component type such as FX_CONTRACT_OPEN."
+    reporting_currency = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "reporting_currency"
+    )
+    assert reporting_currency["description"] == (
+        "Optional reporting currency for restated monetary fields on each returned ledger row. "
+        "Use this when a downstream needs strategic transaction rows plus reporting-currency "
+        "amounts for reporting or aggregation workflows."
+    )
     assert transactions["summary"] == "Get Portfolio Transactions"
     assert "strategic TransactionLedgerWindow operational read" in transactions["description"]
     assert "FX and linked-event filters" in transactions["description"]
+    assert "optional reporting-currency restatement for monetary fields" in transactions["description"]
     assert "`component_type`, `linked_transaction_group_id`, `fx_contract_id`, `swap_event_id`" in transactions["description"]
+    assert "Use `reporting_currency` when a downstream reporting surface needs" in transactions["description"]
     assert (
         "Results default to latest-first ordering by `transaction_date` descending"
         in transactions["description"]
@@ -546,7 +559,19 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         "TransactionLedgerWindow"
     )
     assert transaction_response["properties"]["product_version"]["default"] == "v1"
+    assert transaction_response["properties"]["reporting_currency"]["description"].startswith(
+        "Resolved reporting currency for optional restated transaction amounts."
+    )
+    assert (
+        schema["components"]["schemas"]["TransactionRecord"]["properties"][
+            "gross_transaction_amount_reporting_currency"
+        ]["description"]
+        == "Gross transaction amount restated into the requested reporting currency when "
+        "`reporting_currency` is supplied on the route."
+    )
 
+    bad_request = transactions["responses"]["400"]["content"]["application/json"]["example"]
+    assert bad_request["detail"] == "FX rate not found for USD/SGD as of 2026-03-10."
     not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"
 

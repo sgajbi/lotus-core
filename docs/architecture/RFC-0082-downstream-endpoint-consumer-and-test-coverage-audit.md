@@ -1053,7 +1053,7 @@ for requested-window and year-to-date aggregation behavior.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #309` | Open. Valid strategic follow-on. Downstream migration onto `GET /portfolios/{portfolio_id}/transactions` is now blocked or narrowed by the lack of explicit reporting-currency-restated transaction amount semantics in the public ledger contract. | Keep open until lotus-core either closes the parity gap, publishes an alternative strategic summary seam, or explicitly governs these deprecated summary routes as long-lived compatibility surface. |
+| `lotus-core #309` | Closed on April 16, 2026. The strategic transaction-ledger contract now supports optional `reporting_currency` restatement and publishes explicit reporting-currency transaction amount fields required for downstream income/activity summary derivation. | Keep closed unless fresh evidence shows the strategic ledger still cannot replace the deprecated summary compatibility routes for valid downstream reporting use cases. |
 | `lotus-gateway #122` | Open. Valid downstream migration work. Gateway still calls the deprecated income/activity summary routes directly and should move UI-facing summary flows onto the strategic `GET /portfolios/{portfolio_id}/transactions` contract. | Keep open until gateway no longer calls either deprecated summary route. |
 | `lotus-report #39` | Open. Valid downstream migration work. Report still builds income/activity sections from the deprecated compatibility routes and should derive them from the strategic transaction-ledger contract instead. | Keep open until report no longer calls either deprecated summary route. |
 
@@ -1224,8 +1224,14 @@ The route is strong and domain-correct for operational ledger inspection:
 1. it publishes canonical ledger rows with date-window, holdings drill-down, FX, and linked-event
    filter support;
 2. explicit sort and pagination controls make the ledger stable for UI and operational use;
-3. the route stays row-oriented and does not collapse into summary reporting or performance logic;
-4. OpenAPI descriptions now make the advanced filter surface more explicit for downstream consumers.
+3. it now supports optional `reporting_currency` restatement on summary-relevant monetary fields so
+   downstream reporting surfaces can migrate off deprecated income/activity summary routes without
+   reimplementing upstream FX logic;
+4. the route stays row-oriented and does not collapse into summary reporting or performance logic;
+5. invalid reporting-currency restatement now fails as a truthful `400` instead of being miscast as
+   a missing-portfolio `404`;
+6. OpenAPI descriptions now make the advanced filter surface and reporting-currency behavior more
+   explicit for downstream consumers.
 
 ### Swagger / OpenAPI Assessment
 
@@ -1233,8 +1239,10 @@ For this endpoint, Swagger now makes the following explicit:
 
 1. this is the strategic `TransactionLedgerWindow` operational read for one portfolio;
 2. holdings, instrument, and FX/event filters are part of the governed contract;
-3. explicit sorting remains part of the route semantics;
-4. 404 examples and transaction field descriptions remain clear and specific.
+3. optional `reporting_currency` restatement is available for downstream reporting or aggregation
+   workflows that still need row-level truth;
+4. explicit sorting remains part of the route semantics;
+5. `400` and `404` examples and transaction field descriptions remain clear and specific.
 
 OpenAPI proof exists in `tests/integration/services/query_service/test_main_app.py`, including the
 advanced filter descriptions and strategic route wording.
@@ -1243,8 +1251,10 @@ advanced filter descriptions and strategic route wording.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `GET /portfolios/{portfolio_id}/transactions` in this pass. |
+| `lotus-core #309` | Closed on April 16, 2026. The route now exposes optional reporting-currency-restated monetary fields plus truthful `400` handling for unsupported FX conversion requests. | Keep closed unless a fresh parity gap is evidenced after downstream migration work starts consuming the new contract surface. |
 | `lotus-gateway #120` advanced transaction-ledger filter posture | Open. Still valid as downstream adoption work. Gateway currently exposes only a subset of the upstream filter and sorting surface even though lotus-core already supports richer FX/event drill-down filters. | Keep open until gateway makes and documents an explicit product decision on the full transaction-ledger filter surface, and implements whichever strategically useful options should be exposed. |
+| `lotus-gateway #122` deprecated income/activity summary migration | Open. Still valid. The upstream reporting-currency blocker is now closed, so gateway can move its UI-facing income/activity summary flows onto `GET /portfolios/{portfolio_id}/transactions` without preserving deprecated route dependence. | Keep open until gateway removes both deprecated summary calls and proves summary parity from the strategic ledger route. |
+| `lotus-report #39` deprecated income/activity summary migration | Open. Still valid. The upstream reporting-currency blocker is now closed, so report can derive income/activity sections from strategic transaction-ledger rows instead of the deprecated summary compatibility routes. | Keep open until report removes both deprecated summary calls and proves report-section parity from the strategic ledger route. |
 
 ## Certified Endpoint Slice: BUY / SELL Investigative State Reads
 

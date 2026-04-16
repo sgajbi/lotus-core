@@ -192,6 +192,62 @@ class TransactionRecord(BaseModel):
         description="Net-interest amount when provided for reconciliation.",
         examples=[108.2],
     )
+    gross_transaction_amount_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Gross transaction amount restated into the requested reporting currency when "
+            "`reporting_currency` is supplied on the route."
+        ),
+        examples=[171.25],
+    )
+    gross_cost_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Gross cost restated into the requested reporting currency when "
+            "`reporting_currency` is supplied on the route."
+        ),
+        examples=[171.25],
+    )
+    trade_fee_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Trade fee restated into the requested reporting currency when "
+            "`reporting_currency` is supplied on the route."
+        ),
+        examples=[3.42],
+    )
+    net_cost_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Net cost restated into the requested reporting currency when "
+            "`reporting_currency` is supplied on the route."
+        ),
+        examples=[-512.8],
+    )
+    withholding_tax_amount_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Withholding tax restated into the requested reporting currency when "
+            "`reporting_currency` is supplied on the route."
+        ),
+        examples=[13.68],
+    )
+    other_interest_deductions_amount_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Other interest deductions restated into the requested reporting currency when "
+            "`reporting_currency` is supplied on the route."
+        ),
+        examples=[1.37],
+    )
+    net_interest_amount_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Net interest amount restated into the requested reporting currency when "
+            "`reporting_currency` is supplied on the route."
+        ),
+        examples=[153.84],
+    )
     component_type: Optional[str] = Field(
         None,
         description="Canonical FX component type when transaction_type is an FX business type.",
@@ -444,6 +500,14 @@ class PaginatedTransactionResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="The ID of the portfolio.")
+    reporting_currency: Optional[str] = Field(
+        None,
+        description=(
+            "Resolved reporting currency for optional restated transaction amounts. "
+            "Omitted when the route is used in raw ledger mode without reporting conversion."
+        ),
+        examples=["SGD"],
+    )
     total: int = Field(..., description="The total number of transactions matching the query.")
     skip: int = Field(..., description="The number of records skipped (offset).")
     limit: int = Field(..., description="The maximum number of records returned.")
