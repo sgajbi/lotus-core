@@ -576,7 +576,7 @@ For this endpoint, Swagger now makes the following explicit:
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-advise #93` canonical core advisory simulation execution contract review | Opened in this pass. `lotus-advise` is the active direct consumer and already has dedicated client/test coverage, but the downstream adoption trail should explicitly track the certified contract-version, request-hash, idempotency, and problem-details semantics for this route. | Keep open in `lotus-advise` until downstream docs/tests are rechecked against the latest certified core contract. |
+| `lotus-advise #93` canonical core advisory simulation execution contract review | Closed on April 17, 2026. Current advise client/tests already cover the certified route, contract-version header, request hash, idempotency key, correlation id, response header validation, lineage/allocation-lens contract-version validation, and 412/422-style problem-details handling. | Keep closed unless a future lotus-core advisory simulation contract version or problem-details shape changes. |
 
 ## Certified Endpoint Slice: Classification Taxonomy
 
