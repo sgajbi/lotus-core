@@ -708,7 +708,32 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         ),
         "http://query.dev/portfolios/P1/transactions?limit=300&include_projected=true": (
             200,
-            {"total": 30, "transactions": []},
+            {
+                "total": 30,
+                "transactions": [
+                    {
+                        "transaction_id": "TXN-DIV-1",
+                        "transaction_date": "2026-03-03T09:00:00Z",
+                        "transaction_type": "DIVIDEND",
+                        "withholding_tax_amount": "5.00",
+                    },
+                    {
+                        "transaction_id": "TXN-INT-1",
+                        "transaction_date": "2026-03-11T09:00:00Z",
+                        "transaction_type": "INTEREST",
+                    },
+                    {
+                        "transaction_id": "TXN-DEP-1",
+                        "transaction_date": "2026-03-05T09:00:00Z",
+                        "transaction_type": "DEPOSIT",
+                    },
+                    {
+                        "transaction_id": "TXN-FEE-1",
+                        "transaction_date": "2026-03-12T09:00:00Z",
+                        "transaction_type": "FEE",
+                    },
+                ],
+            },
         ),
         "http://query.dev/reporting/asset-allocation/query": (
             200,
@@ -720,14 +745,6 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         ): (
             200,
             {"cash_accounts": [{"id": "USD"}, {"id": "EUR"}]},
-        ),
-        "http://query.dev/reporting/income-summary/query": (
-            200,
-            {"portfolios": [{"income_types": [{"type": "DIV"}, {"type": "INT"}]}]},
-        ),
-        "http://query.dev/reporting/activity-summary/query": (
-            200,
-            {"portfolios": [{"buckets": [{"bucket": "TRADE"}, {"bucket": "INCOME"}]}]},
         ),
         "http://cp.dev/integration/portfolios/P1/benchmark-assignment": (
             200,
@@ -784,4 +801,8 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     )
 
     assert verification["transactions"] == 30
+    assert verification["income_types"] == 2
+    assert verification["activity_buckets"] == 3
     assert any("include_projected=true" in url for url in requested_urls)
+    assert all("income-summary/query" not in url for url in requested_urls)
+    assert all("activity-summary/query" not in url for url in requested_urls)

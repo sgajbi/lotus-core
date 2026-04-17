@@ -1,17 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from portfolio_common.db import get_async_db_session
-from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import (
-    ActivitySummaryQueryRequest,
-    ActivitySummaryResponse,
     AssetAllocationQueryRequest,
     AssetAllocationResponse,
     AssetsUnderManagementQueryRequest,
     AssetsUnderManagementResponse,
-    IncomeSummaryQueryRequest,
-    IncomeSummaryResponse,
     PortfolioSummaryQueryRequest,
     PortfolioSummaryResponse,
 )
@@ -103,50 +98,3 @@ async def query_portfolio_summary(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
-@router.post(
-    "/income-summary/query",
-    response_model=IncomeSummaryResponse,
-    summary="Query Income Summary",
-    description=(
-        "Returns income totals for the requested reporting window and year-to-date, with values "
-        "in portfolio currency and reporting currency. Income is grouped by canonical Lotus "
-        "income transaction types such as dividend, interest, and cash-in-lieu. This route is a "
-        "pre-live convenience shape for the RFC-0083 TransactionLedgerWindow source-data product. "
-        "New consumers should bind to the named source-data product contract when it is available."
-    ),
-    deprecated=True,
-    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
-)
-async def query_income_summary(
-    request: IncomeSummaryQueryRequest,
-    service: ReportingService = Depends(get_reporting_service),
-):
-    try:
-        return await service.get_income_summary(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-
-
-@router.post(
-    "/activity-summary/query",
-    response_model=ActivitySummaryResponse,
-    summary="Query Activity Summary",
-    description=(
-        "Returns portfolio-level flow buckets for the requested reporting window and year-to-date. "
-        "The summary is intentionally scoped to portfolio flows: inflows, outflows, fees, and "
-        "taxes, with values translated to portfolio currency and reporting currency. This route "
-        "is a pre-live convenience shape for the RFC-0083 TransactionLedgerWindow source-data "
-        "product. "
-        "New consumers should bind to the named source-data product contract when it is available."
-    ),
-    deprecated=True,
-    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
-)
-async def query_activity_summary(
-    request: ActivitySummaryQueryRequest,
-    service: ReportingService = Depends(get_reporting_service),
-):
-    try:
-        return await service.get_activity_summary(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

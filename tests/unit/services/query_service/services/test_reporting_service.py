@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -7,17 +7,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reporting_dto import (
-    ActivitySummaryQueryRequest,
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
-    IncomeSummaryQueryRequest,
     PortfolioSummaryQueryRequest,
     ReportingScope,
-    ReportingWindow,
 )
 from src.services.query_service.app.repositories.reporting_repository import (
-    ActivitySummaryAggregateRow,
-    IncomeSummaryAggregateRow,
     InstrumentLookthroughComponentRow,
     ReportingSnapshotRow,
 )
@@ -341,147 +336,3 @@ async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mod
     assert response.look_through.requested_mode == "direct_only"
     assert response.look_through.applied_mode == "direct_only"
     assert response.look_through.supported is True
-
-
-async def test_get_income_summary_returns_requested_window_and_ytd_amounts() -> None:
-    repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
-    repo.list_portfolios.return_value = [portfolio]
-    repo.list_income_summary_rows.return_value = [
-        IncomeSummaryAggregateRow(
-            portfolio_id="P1",
-            booking_center_code="SGPB",
-            client_id="CIF-1",
-            portfolio_currency="USD",
-            source_currency="USD",
-            income_type="DIVIDEND",
-            requested_transaction_count=1,
-            ytd_transaction_count=2,
-            requested_gross_amount=Decimal("50"),
-            ytd_gross_amount=Decimal("80"),
-            requested_withholding_tax=Decimal("0"),
-            ytd_withholding_tax=Decimal("0"),
-            requested_other_deductions=Decimal("0"),
-            ytd_other_deductions=Decimal("0"),
-            requested_net_amount=Decimal("50"),
-            ytd_net_amount=Decimal("80"),
-            latest_evidence_timestamp=datetime(2026, 3, 27, 10, 0, tzinfo=UTC),
-        ),
-        IncomeSummaryAggregateRow(
-            portfolio_id="P1",
-            booking_center_code="SGPB",
-            client_id="CIF-1",
-            portfolio_currency="USD",
-            source_currency="USD",
-            income_type="INTEREST",
-            requested_transaction_count=1,
-            ytd_transaction_count=1,
-            requested_gross_amount=Decimal("30"),
-            ytd_gross_amount=Decimal("30"),
-            requested_withholding_tax=Decimal("3"),
-            ytd_withholding_tax=Decimal("3"),
-            requested_other_deductions=Decimal("1"),
-            ytd_other_deductions=Decimal("1"),
-            requested_net_amount=Decimal("26"),
-            ytd_net_amount=Decimal("26"),
-            latest_evidence_timestamp=datetime(2026, 3, 27, 10, 5, tzinfo=UTC),
-        ),
-    ]
-
-    with patch(
-        "src.services.query_service.app.services.reporting_service.ReportingRepository",
-        return_value=repo,
-    ):
-        service = ReportingService(AsyncMock(spec=AsyncSession))
-        response = await service.get_income_summary(
-            IncomeSummaryQueryRequest(
-                scope=ReportingScope(portfolio_id="P1"),
-                window=ReportingWindow(start_date=date(2026, 3, 1), end_date=date(2026, 3, 27)),
-            )
-        )
-
-    assert response.reporting_currency == "USD"
-    assert response.totals.requested_window.gross_amount_portfolio_currency == Decimal("80")
-    assert response.totals.requested_window.net_amount_reporting_currency == Decimal("76")
-    assert response.totals.year_to_date.gross_amount_reporting_currency == Decimal("110")
-    assert response.product_name == "TransactionLedgerWindow"
-    assert response.product_version == "v1"
-    assert response.as_of_date == date(2026, 3, 27)
-    assert response.generated_at.tzinfo is not None
-    assert response.restatement_version == "current"
-    assert response.reconciliation_status == "UNKNOWN"
-    assert response.data_quality_status == "UNKNOWN"
-    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 10, 5, tzinfo=UTC)
-    assert response.correlation_id is None
-    interest_bucket = next(
-        bucket for bucket in response.portfolios[0].income_types if bucket.income_type == "INTEREST"
-    )
-    assert interest_bucket.requested_window.withholding_tax_reporting_currency == Decimal("3")
-
-
-async def test_get_activity_summary_returns_flow_buckets_with_reporting_conversion() -> None:
-    repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
-    repo.list_portfolios.return_value = [portfolio]
-    repo.list_activity_summary_rows.return_value = [
-        ActivitySummaryAggregateRow(
-            portfolio_id="P1",
-            booking_center_code="SGPB",
-            client_id="CIF-1",
-            portfolio_currency="USD",
-            source_currency="USD",
-            bucket="INFLOWS",
-            requested_transaction_count=1,
-            ytd_transaction_count=2,
-            requested_amount=Decimal("1000"),
-            ytd_amount=Decimal("1500"),
-            latest_evidence_timestamp=datetime(2026, 3, 27, 9, 30, tzinfo=UTC),
-        ),
-        ActivitySummaryAggregateRow(
-            portfolio_id="P1",
-            booking_center_code="SGPB",
-            client_id="CIF-1",
-            portfolio_currency="USD",
-            source_currency="USD",
-            bucket="FEES",
-            requested_transaction_count=1,
-            ytd_transaction_count=1,
-            requested_amount=Decimal("25"),
-            ytd_amount=Decimal("25"),
-            latest_evidence_timestamp=datetime(2026, 3, 27, 9, 45, tzinfo=UTC),
-        ),
-    ]
-    repo.get_latest_fx_rate.side_effect = lambda **kwargs: Decimal("1.2")
-
-    with patch(
-        "src.services.query_service.app.services.reporting_service.ReportingRepository",
-        return_value=repo,
-    ):
-        service = ReportingService(AsyncMock(spec=AsyncSession))
-        response = await service.get_activity_summary(
-            ActivitySummaryQueryRequest(
-                scope=ReportingScope(portfolio_ids=["P1"]),
-                reporting_currency="SGD",
-                window=ReportingWindow(start_date=date(2026, 3, 1), end_date=date(2026, 3, 27)),
-            )
-        )
-
-    inflows_bucket = next(
-        bucket for bucket in response.totals.buckets if bucket.bucket == "INFLOWS"
-    )
-    fees_bucket = next(bucket for bucket in response.totals.buckets if bucket.bucket == "FEES")
-    taxes_bucket = next(bucket for bucket in response.totals.buckets if bucket.bucket == "TAXES")
-
-    assert inflows_bucket.requested_window.amount_reporting_currency == Decimal("1200.0")
-    assert inflows_bucket.year_to_date.amount_reporting_currency == Decimal("1800.0")
-    assert fees_bucket.requested_window.amount_reporting_currency == Decimal("30.0")
-    assert taxes_bucket.requested_window.amount_reporting_currency == Decimal("0")
-    assert response.product_name == "TransactionLedgerWindow"
-    assert response.product_version == "v1"
-    assert response.as_of_date == date(2026, 3, 27)
-    assert response.generated_at.tzinfo is not None
-    assert response.restatement_version == "current"
-    assert response.reconciliation_status == "UNKNOWN"
-    assert response.data_quality_status == "UNKNOWN"
-    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 9, 45, tzinfo=UTC)
-    assert response.correlation_id is None

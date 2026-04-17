@@ -19,9 +19,7 @@ from src.services.query_service.app.dtos.operations_dto import (
 )
 from src.services.query_service.app.dtos.position_dto import PortfolioPositionsResponse
 from src.services.query_service.app.dtos.reporting_dto import (
-    ActivitySummaryResponse,
     CashBalancesResponse,
-    IncomeSummaryResponse,
 )
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
@@ -43,8 +41,6 @@ from src.services.query_service.app.dtos.transaction_dto import PaginatedTransac
         (PortfolioPositionsResponse, "HoldingsAsOf"),
         (CashBalancesResponse, "HoldingsAsOf"),
         (PaginatedTransactionResponse, "TransactionLedgerWindow"),
-        (IncomeSummaryResponse, "TransactionLedgerWindow"),
-        (ActivitySummaryResponse, "TransactionLedgerWindow"),
     ],
 )
 def test_query_service_product_responses_declare_product_identity_defaults(

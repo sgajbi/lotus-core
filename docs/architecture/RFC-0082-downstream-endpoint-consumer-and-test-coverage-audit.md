@@ -971,74 +971,64 @@ route-purpose wording, parameter descriptions, and cash-account response example
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Adjacent only. Current gateway truth is aligned to `GET /portfolios/{portfolio_id}/cash-balances`, not `GET /portfolios/{portfolio_id}/cash-accounts`. | Keep closed unless fresh route-level evidence shows deprecated cash-balance-route reintroduction. |
 | `lotus-manage #32` review latest lotus-core support and source-data contract hardening for operator adoption | Open and still valid, but broader than this route. It tracks operator-side review of current lotus-core support/source-data contracts rather than a defect in `GET /portfolios/{portfolio_id}/cash-accounts` specifically. | Keep open as downstream review work; do not treat it as a cash-account-master route bug. |
 
-## Certified Endpoint Slice: Income And Activity Operational Reads
+## Certified Endpoint Slice: Income And Activity Compatibility Route Retirement
 
-This certification pass covers:
+This certification pass closes the remaining retirement work for:
 
 1. `POST /reporting/income-summary/query`
 2. `POST /reporting/activity-summary/query`
 
 ### Route Contract Decision
 
-These remain deprecated compatibility routes in the `TransactionLedgerWindow` family, but they are
-no longer the strategic downstream integration seam. The strategic source-data route for new
-or migrating consumers is `GET /portfolios/{portfolio_id}/transactions`.
+Both deprecated compatibility routes are now retired from the active lotus-core contract surface.
+The strategic source-data route for downstream summary derivation is
+`GET /portfolios/{portfolio_id}/transactions`.
 
-The boundary is explicit:
+The decision is now explicit:
 
-1. these compatibility routes still publish source-owned requested-window and year-to-date summary
-   outputs;
-2. downstream consumers should prefer the strategic `TransactionLedgerWindow` route over these
-   compatibility shapes when they can derive report/UI summaries from the ledger contract;
-3. the convenience routes remain preferable to mining income or activity aggregates from
-   `core-snapshot` while migration is incomplete;
-4. keep performance, risk, and narrative report composition outside these contracts.
+1. gateway migration is complete via issue `#122`;
+2. local `lotus-report` migration exists in commit `bd866ef`, deriving both summaries from the
+   strategic transaction ledger;
+3. no active direct internal consumer was evidenced in current local repo truth;
+4. the last internal lotus-core dependency, `tools/front_office_portfolio_seed.py`, now derives
+   readiness summary signals from the strategic transaction ledger instead of calling the retired
+   routes.
 
 ### Downstream Consumer Reality
 
-| Route | Active downstream consumers verified | Integration posture |
+| Former route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `POST /reporting/income-summary/query` | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated compatibility route only. Gateway issue `#122` is closed, and local `lotus-report` commit `bd866ef` now derives the same summary from strategic `GET /portfolios/{portfolio_id}/transactions` instead of calling the deprecated route. |
-| `POST /reporting/activity-summary/query` | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated compatibility route only. Gateway issue `#122` is closed, and local `lotus-report` commit `bd866ef` now derives the same summary from strategic `GET /portfolios/{portfolio_id}/transactions` instead of calling the deprecated route. |
+| `POST /reporting/income-summary/query` | None evidenced as still active | Retired. Strategic replacement is `GET /portfolios/{portfolio_id}/transactions`. |
+| `POST /reporting/activity-summary/query` | None evidenced as still active | Retired. Strategic replacement is `GET /portfolios/{portfolio_id}/transactions`. |
 
 No active direct `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was evidenced against
-these endpoint shapes in this pass.
+these shapes in this pass.
 
 ### Upstream Integration Assessment
 
-These routes are strong and domain-correct for operational summary needs:
+The upstream contract posture is stronger after retirement:
 
-1. they publish source-owned requested-window and year-to-date income/flow summaries rather than
-   forcing downstream consumers to re-aggregate transaction rows;
-2. they keep reporting-currency restatement and canonical transaction-type or bucket semantics
-   upstream-owned;
-3. they let downstream consumers consume summary outputs without coupling to the broader
-   `core-snapshot` state bundle;
-4. they remain intentionally separate from raw ledger exploration and from performance or advisory
-   interpretation layers.
-
-The key posture change in this pass is no longer about correctness of the compatibility outputs. It
-is endpoint-retirement readiness: current local downstream repo truth no longer shows an internal
-consumer that still needs these routes for implementation.
+1. lotus-core now exposes one strategic transaction-ledger route instead of parallel ledger and
+   compatibility summary shapes;
+2. internal front-office seed verification keeps the readiness signal by deriving canonical income
+   and flow-bucket presence from transaction-ledger rows;
+3. dead summary-specific repository and service aggregation paths are removed, reducing maintenance
+   surface and eliminating stale OpenAPI surface area.
 
 ### Swagger / OpenAPI Assessment
 
-For these endpoints, Swagger already makes the following explicit:
+The retired routes are removed from active Swagger and contract-family inventory. The strategic
+transaction-ledger route remains the documented `TransactionLedgerWindow` contract for downstream
+reporting, audit, and UI summary derivation.
 
-1. income summary is grouped by canonical Lotus income transaction types for the requested window
-   and year-to-date;
-2. activity summary is grouped into canonical portfolio-flow buckets for the requested window and
-   year-to-date;
-3. both routes are deprecated compatibility shapes mapped to the `TransactionLedgerWindow`
-   source-data product;
-4. the route purposes are self-explanatory for downstream consumers deciding between summary and raw
-   transaction use cases.
+### Validation Evidence
 
-Focused HTTP-level dependency proof exists in
-`tests/integration/services/query_service/test_reporting_router.py` for both routes.
+Focused retirement proof:
 
-Service-level proof exists in `tests/unit/services/query_service/services/test_reporting_service.py`
-for requested-window and year-to-date aggregation behavior.
+1. `python -m pytest tests\\unit\\tools\\test_front_office_portfolio_seed.py -q`
+2. `python -m pytest tests\\integration\\services\\query_service\\test_reporting_router.py tests\\integration\\services\\query_service\\test_main_app.py tests\\unit\\services\\query_service\\services\\test_reporting_service.py tests\\unit\\services\\query_service\\dtos\\test_reporting_dto.py tests\\unit\\services\\query_service\\dtos\\test_source_data_product_identity.py tests\\unit\\services\\query_service\\repositories\\test_reporting_repository.py tests\\unit\\tools\\test_front_office_portfolio_seed.py tests\\unit\\libs\\portfolio-common\\test_source_data_products.py -q`
+3. `python scripts\\openapi_quality_gate.py`
+4. `python scripts\\route_contract_family_guard.py`
 
 ### Issue Disposition For These Endpoints
 

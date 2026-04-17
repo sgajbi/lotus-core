@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
@@ -15,10 +15,10 @@ from portfolio_common.database_models import (
     Portfolio,
     Transaction,
 )
-from sqlalchemy import String, and_, case, func, literal, or_, select, union_all
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .date_filters import start_of_day, start_of_next_day
+from .date_filters import start_of_next_day
 
 
 @dataclass(frozen=True)
@@ -26,42 +26,6 @@ class ReportingSnapshotRow:
     portfolio: Portfolio
     snapshot: DailyPositionSnapshot
     instrument: Instrument | None
-
-
-@dataclass(frozen=True)
-class IncomeSummaryAggregateRow:
-    portfolio_id: str
-    booking_center_code: str
-    client_id: str
-    portfolio_currency: str
-    source_currency: str
-    income_type: str
-    requested_transaction_count: int
-    ytd_transaction_count: int
-    requested_gross_amount: Decimal
-    ytd_gross_amount: Decimal
-    requested_withholding_tax: Decimal
-    ytd_withholding_tax: Decimal
-    requested_other_deductions: Decimal
-    ytd_other_deductions: Decimal
-    requested_net_amount: Decimal
-    ytd_net_amount: Decimal
-    latest_evidence_timestamp: datetime | None = None
-
-
-@dataclass(frozen=True)
-class ActivitySummaryAggregateRow:
-    portfolio_id: str
-    booking_center_code: str
-    client_id: str
-    portfolio_currency: str
-    source_currency: str
-    bucket: str
-    requested_transaction_count: int
-    ytd_transaction_count: int
-    requested_amount: Decimal
-    ytd_amount: Decimal
-    latest_evidence_timestamp: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -285,210 +249,3 @@ class ReportingRepository:
                 component_instrument,
             ) in rows
         ]
-
-    async def list_income_summary_rows(
-        self,
-        *,
-        portfolio_ids: list[str],
-        start_date: date,
-        end_date: date,
-        income_types: list[str],
-    ) -> list[IncomeSummaryAggregateRow]:
-        requested_start = start_of_day(start_date)
-        ytd_start = start_of_day(date(end_date.year, 1, 1))
-        end_exclusive = start_of_next_day(end_date)
-        requested_window_filter = and_(
-            Transaction.transaction_date >= requested_start,
-            Transaction.transaction_date < end_exclusive,
-        )
-
-        absolute_gross = func.abs(Transaction.gross_transaction_amount)
-        withholding_tax = func.abs(func.coalesce(Transaction.withholding_tax_amount, 0))
-        other_deductions = func.abs(func.coalesce(Transaction.other_interest_deductions_amount, 0))
-        direct_net_amount = case(
-            (
-                and_(
-                    Transaction.transaction_type == "INTEREST",
-                    Transaction.net_interest_amount.is_not(None),
-                ),
-                func.abs(Transaction.net_interest_amount),
-            ),
-            else_=(
-                absolute_gross
-                - withholding_tax
-                - other_deductions
-                - func.abs(func.coalesce(Transaction.trade_fee, 0))
-            ),
-        )
-
-        stmt = (
-            select(
-                Portfolio.portfolio_id.label("portfolio_id"),
-                Portfolio.booking_center_code.label("booking_center_code"),
-                Portfolio.client_id.label("client_id"),
-                Portfolio.base_currency.label("portfolio_currency"),
-                Transaction.currency.label("source_currency"),
-                Transaction.transaction_type.label("income_type"),
-                func.sum(case((requested_window_filter, 1), else_=0)).label(
-                    "requested_transaction_count"
-                ),
-                func.count(Transaction.id).label("ytd_transaction_count"),
-                func.sum(case((requested_window_filter, absolute_gross), else_=0)).label(
-                    "requested_gross_amount"
-                ),
-                func.sum(absolute_gross).label("ytd_gross_amount"),
-                func.sum(case((requested_window_filter, withholding_tax), else_=0)).label(
-                    "requested_withholding_tax"
-                ),
-                func.sum(withholding_tax).label("ytd_withholding_tax"),
-                func.sum(case((requested_window_filter, other_deductions), else_=0)).label(
-                    "requested_other_deductions"
-                ),
-                func.sum(other_deductions).label("ytd_other_deductions"),
-                func.sum(case((requested_window_filter, direct_net_amount), else_=0)).label(
-                    "requested_net_amount"
-                ),
-                func.sum(direct_net_amount).label("ytd_net_amount"),
-                func.max(Transaction.updated_at).label("latest_evidence_timestamp"),
-            )
-            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
-            .where(
-                Transaction.portfolio_id.in_(portfolio_ids),
-                Transaction.transaction_date >= ytd_start,
-                Transaction.transaction_date < end_exclusive,
-                Transaction.transaction_type.in_(income_types),
-            )
-            .group_by(
-                Portfolio.portfolio_id,
-                Portfolio.booking_center_code,
-                Portfolio.client_id,
-                Portfolio.base_currency,
-                Transaction.currency,
-                Transaction.transaction_type,
-            )
-            .order_by(Portfolio.portfolio_id.asc(), Transaction.transaction_type.asc())
-        )
-
-        rows = (await self.db.execute(stmt)).mappings().all()
-        return [IncomeSummaryAggregateRow(**row) for row in rows]
-
-    async def list_activity_summary_rows(
-        self,
-        *,
-        portfolio_ids: list[str],
-        start_date: date,
-        end_date: date,
-    ) -> list[ActivitySummaryAggregateRow]:
-        requested_start = start_of_day(start_date)
-        ytd_start = start_of_day(date(end_date.year, 1, 1))
-        end_exclusive = start_of_next_day(end_date)
-        requested_window_filter = and_(
-            Transaction.transaction_date >= requested_start,
-            Transaction.transaction_date < end_exclusive,
-        )
-
-        base_activity_amount = func.abs(
-            case(
-                (
-                    Transaction.transaction_type == "FEE",
-                    Transaction.gross_transaction_amount + func.coalesce(Transaction.trade_fee, 0),
-                ),
-                else_=Transaction.gross_transaction_amount,
-            )
-        )
-
-        bucket_expr = case(
-            (Transaction.transaction_type.in_(["DEPOSIT", "TRANSFER_IN"]), literal("INFLOWS")),
-            (Transaction.transaction_type.in_(["WITHDRAWAL", "TRANSFER_OUT"]), literal("OUTFLOWS")),
-            (Transaction.transaction_type == "FEE", literal("FEES")),
-            (Transaction.transaction_type == "TAX", literal("TAXES")),
-            else_=literal(None),
-        ).cast(String)
-
-        activity_rows = (
-            select(
-                Portfolio.portfolio_id.label("portfolio_id"),
-                Portfolio.booking_center_code.label("booking_center_code"),
-                Portfolio.client_id.label("client_id"),
-                Portfolio.base_currency.label("portfolio_currency"),
-                Transaction.currency.label("source_currency"),
-                bucket_expr.label("bucket"),
-                case((requested_window_filter, 1), else_=0).label("requested_transaction_count"),
-                literal(1).label("ytd_transaction_count"),
-                case((requested_window_filter, base_activity_amount), else_=0).label(
-                    "requested_amount"
-                ),
-                base_activity_amount.label("ytd_amount"),
-                Transaction.updated_at.label("latest_evidence_timestamp"),
-            )
-            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
-            .where(
-                Transaction.portfolio_id.in_(portfolio_ids),
-                Transaction.transaction_date >= ytd_start,
-                Transaction.transaction_date < end_exclusive,
-                bucket_expr.is_not(None),
-            )
-        )
-
-        withholding_tax_rows = (
-            select(
-                Portfolio.portfolio_id.label("portfolio_id"),
-                Portfolio.booking_center_code.label("booking_center_code"),
-                Portfolio.client_id.label("client_id"),
-                Portfolio.base_currency.label("portfolio_currency"),
-                Transaction.currency.label("source_currency"),
-                literal("TAXES").label("bucket"),
-                case((requested_window_filter, 1), else_=0).label("requested_transaction_count"),
-                literal(1).label("ytd_transaction_count"),
-                case(
-                    (
-                        requested_window_filter,
-                        func.abs(func.coalesce(Transaction.withholding_tax_amount, 0)),
-                    ),
-                    else_=0,
-                ).label("requested_amount"),
-                func.abs(func.coalesce(Transaction.withholding_tax_amount, 0)).label("ytd_amount"),
-                Transaction.updated_at.label("latest_evidence_timestamp"),
-            )
-            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
-            .where(
-                Transaction.portfolio_id.in_(portfolio_ids),
-                Transaction.transaction_date >= ytd_start,
-                Transaction.transaction_date < end_exclusive,
-                Transaction.withholding_tax_amount.is_not(None),
-                Transaction.withholding_tax_amount != 0,
-            )
-        )
-
-        activity_union = union_all(activity_rows, withholding_tax_rows).subquery()
-        stmt = (
-            select(
-                activity_union.c.portfolio_id,
-                activity_union.c.booking_center_code,
-                activity_union.c.client_id,
-                activity_union.c.portfolio_currency,
-                activity_union.c.source_currency,
-                activity_union.c.bucket,
-                func.sum(activity_union.c.requested_transaction_count).label(
-                    "requested_transaction_count"
-                ),
-                func.sum(activity_union.c.ytd_transaction_count).label("ytd_transaction_count"),
-                func.sum(activity_union.c.requested_amount).label("requested_amount"),
-                func.sum(activity_union.c.ytd_amount).label("ytd_amount"),
-                func.max(activity_union.c.latest_evidence_timestamp).label(
-                    "latest_evidence_timestamp"
-                ),
-            )
-            .group_by(
-                activity_union.c.portfolio_id,
-                activity_union.c.booking_center_code,
-                activity_union.c.client_id,
-                activity_union.c.portfolio_currency,
-                activity_union.c.source_currency,
-                activity_union.c.bucket,
-            )
-            .order_by(activity_union.c.portfolio_id.asc(), activity_union.c.bucket.asc())
-        )
-
-        rows = (await self.db.execute(stmt)).mappings().all()
-        return [ActivitySummaryAggregateRow(**row) for row in rows]

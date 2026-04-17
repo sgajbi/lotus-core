@@ -47,7 +47,7 @@ evidence reference rather than omitting the concept.
 | --- | --- | --- | --- | --- |
 | `PortfolioStateSnapshot` | Snapshot and simulation | `query_control_plane_service` | gateway, advise, manage, risk | `/integration/portfolios/{portfolio_id}/core-snapshot` |
 | `HoldingsAsOf` | Operational read | `query_service` | gateway, risk, report, manage, advise | `/portfolios/{portfolio_id}/positions`, `/portfolios/{portfolio_id}/cash-balances` |
-| `TransactionLedgerWindow` | Operational read | `query_service` | gateway, report, manage, risk | `/portfolios/{portfolio_id}/transactions`, `/reporting/activity-summary/query`, `/reporting/income-summary/query` |
+| `TransactionLedgerWindow` | Operational read | `query_service` | gateway, report, manage, risk | `/portfolios/{portfolio_id}/transactions` |
 | `PositionTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/position-timeseries` |
 | `PortfolioTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` |
 | `PortfolioAnalyticsReference` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/reference` |
@@ -78,8 +78,6 @@ These route families are useful today but should not become the long-term produc
 | Convenience shape | Target product |
 | --- | --- |
 | `/portfolios/{portfolio_id}/cash-balances` | `HoldingsAsOf` |
-| `/reporting/activity-summary/query` | `TransactionLedgerWindow` |
-| `/reporting/income-summary/query` | `TransactionLedgerWindow` |
 
 Pre-live cleanup should prefer replacing these with named source-data product contracts instead of
 creating aliases. If a route must remain for an existing product surface, it must declare the target
@@ -186,18 +184,16 @@ market/reference response envelopes:
 1. `PortfolioPositionsResponse`,
 2. `CashBalancesResponse`,
 3. `PaginatedTransactionResponse`,
-4. `IncomeSummaryResponse`,
-5. `ActivitySummaryResponse`,
-6. `CoreSnapshotResponse`,
-7. `PortfolioAnalyticsTimeseriesResponse`,
-8. `PositionAnalyticsTimeseriesResponse`,
-9. `PortfolioAnalyticsReferenceResponse`,
-10. `BenchmarkAssignmentResponse`,
-11. `BenchmarkCompositionWindowResponse`,
-12. `BenchmarkMarketSeriesResponse`,
-13. `IndexPriceSeriesResponse`,
-14. `IndexReturnSeriesResponse`,
-15. `RiskFreeSeriesResponse`,
+4. `CoreSnapshotResponse`,
+5. `PortfolioAnalyticsTimeseriesResponse`,
+6. `PositionAnalyticsTimeseriesResponse`,
+7. `PortfolioAnalyticsReferenceResponse`,
+8. `BenchmarkAssignmentResponse`,
+9. `BenchmarkCompositionWindowResponse`,
+10. `BenchmarkMarketSeriesResponse`,
+11. `IndexPriceSeriesResponse`,
+12. `IndexReturnSeriesResponse`,
+13. `RiskFreeSeriesResponse`,
 16. `CoverageResponse`,
 17. `ClassificationTaxonomyResponse`.
 

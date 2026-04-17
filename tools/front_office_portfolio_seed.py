@@ -79,6 +79,58 @@ def _build_front_office_expectation(
 
 FRONT_OFFICE_EXPECTATION = _build_front_office_expectation(FRONT_OFFICE_SEED_CONTRACT)
 
+INCOME_SUMMARY_TRANSACTION_TYPES = frozenset({"DIVIDEND", "INTEREST", "CASH_IN_LIEU"})
+ACTIVITY_SUMMARY_BUCKET_BY_TRANSACTION_TYPE = {
+    "DEPOSIT": "INFLOWS",
+    "TRANSFER_IN": "INFLOWS",
+    "WITHDRAWAL": "OUTFLOWS",
+    "TRANSFER_OUT": "OUTFLOWS",
+    "FEE": "FEES",
+    "TAX": "TAXES",
+}
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    return datetime.fromisoformat(normalized)
+
+
+def _derive_reporting_summary_signals(
+    *,
+    transactions: list[dict[str, Any]],
+    start_date: str,
+    end_date: str,
+) -> tuple[list[str], list[str]]:
+    requested_start = date.fromisoformat(start_date)
+    requested_end = date.fromisoformat(end_date)
+    income_types: set[str] = set()
+    activity_buckets: set[str] = set()
+
+    for transaction in transactions:
+        transaction_timestamp = _parse_iso_datetime(transaction.get("transaction_date"))
+        if transaction_timestamp is None:
+            continue
+        transaction_date = transaction_timestamp.date()
+        if transaction_date < requested_start or transaction_date > requested_end:
+            continue
+
+        transaction_type = str(transaction.get("transaction_type", "")).upper()
+        if transaction_type in INCOME_SUMMARY_TRANSACTION_TYPES:
+            income_types.add(transaction_type)
+
+        bucket = ACTIVITY_SUMMARY_BUCKET_BY_TRANSACTION_TYPE.get(transaction_type)
+        if bucket:
+            activity_buckets.add(bucket)
+
+        withholding_tax_amount = transaction.get("withholding_tax_amount")
+        if withholding_tax_amount not in (None, "", 0, "0", "0.0", "0.00", "0E-10"):
+            if Decimal(str(withholding_tax_amount)) != 0:
+                activity_buckets.add("TAXES")
+
+    return sorted(income_types), sorted(activity_buckets)
+
 
 def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     """
@@ -1604,24 +1656,6 @@ def _verify_front_office_portfolio(
                 f"{query_base_url}/portfolios/{expected.portfolio_id}/cash-balances"
                 f"?as_of_date={as_of_date}&reporting_currency=USD",
             )
-            _, income_payload = _request_json(
-                "POST",
-                f"{query_base_url}/reporting/income-summary/query",
-                payload={
-                    "scope": {"portfolio_id": expected.portfolio_id},
-                    "window": {"start_date": "2026-02-27", "end_date": end_date},
-                    "reporting_currency": "USD",
-                },
-            )
-            _, activity_payload = _request_json(
-                "POST",
-                f"{query_base_url}/reporting/activity-summary/query",
-                payload={
-                    "scope": {"portfolio_id": expected.portfolio_id},
-                    "window": {"start_date": "2026-02-27", "end_date": end_date},
-                    "reporting_currency": "USD",
-                },
-            )
             _, benchmark_assignment = _request_json(
                 "POST",
                 f"{query_control_plane_base_url}/integration/portfolios/{expected.portfolio_id}/benchmark-assignment",
@@ -1655,10 +1689,14 @@ def _verify_front_office_portfolio(
             and row["valuation"].get("market_value") is not None
         ]
         cash_accounts = cash_payload.get("cash_accounts") or []
-        income_rows = ((income_payload.get("portfolios") or [{}])[0]).get("income_types") or []
-        activity_rows = ((activity_payload.get("portfolios") or [{}])[0]).get("buckets") or []
         allocation_views = allocation_payload.get("views") or []
         total_transactions = int(transactions_payload.get("total", 0))
+        transaction_rows = transactions_payload.get("transactions") or []
+        income_rows, activity_rows = _derive_reporting_summary_signals(
+            transactions=transaction_rows,
+            start_date="2026-02-27",
+            end_date=end_date,
+        )
         projected_cashflow_points = cashflow_projection.get("points") or []
         has_non_zero_projection = any(
             str(point.get("net_cashflow")) not in {"0", "0.0", "0.00", "0.0000", "0E-10"}

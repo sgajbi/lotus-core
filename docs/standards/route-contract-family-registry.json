@@ -143,10 +143,8 @@
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage",
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage",
         "GET /prices",
-        "POST /reporting/activity-summary/query",
         "POST /reporting/asset-allocation/query",
         "POST /reporting/assets-under-management/query",
-        "POST /reporting/income-summary/query",
         "POST /reporting/portfolio-summary/query"
       ]
     }

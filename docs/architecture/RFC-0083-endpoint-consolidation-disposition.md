@@ -19,15 +19,16 @@ move is:
 3. keep the route family registry stable,
 4. require consumer migration evidence before removal.
 
-## Deprecated Convenience Routes
+## Retired Convenience Routes
 
-| Route | Current family | Target product | Disposition |
+| Route | Former family | Strategic replacement | Disposition |
 | --- | --- | --- | --- |
-| `POST /reporting/income-summary/query` | Operational Read | `TransactionLedgerWindow` | Deprecated in OpenAPI; current internal downstream scans show no active direct consumer, but keep handler until merged or external consumer truth allows retirement |
-| `POST /reporting/activity-summary/query` | Operational Read | `TransactionLedgerWindow` | Deprecated in OpenAPI; current internal downstream scans show no active direct consumer, but keep handler until merged or external consumer truth allows retirement |
+| `POST /reporting/income-summary/query` | Operational Read | `GET /portfolios/{portfolio_id}/transactions` | Retired after downstream migration evidence and internal seed-tool migration to strategic ledger verification |
+| `POST /reporting/activity-summary/query` | Operational Read | `GET /portfolios/{portfolio_id}/transactions` | Retired after downstream migration evidence and internal seed-tool migration to strategic ledger verification |
 
-These routes remain operational reads while present. They must not absorb report composition,
-performance interpretation, or risk interpretation.
+These routes are removed from the active contract surface. Income and activity summaries should now be
+derived from the strategic transaction-ledger product by downstream consumers that still need those
+aggregations.
 
 ## Kept Watchlist Routes
 

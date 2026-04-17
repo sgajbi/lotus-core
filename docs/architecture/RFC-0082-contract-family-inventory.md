@@ -129,8 +129,6 @@ These endpoints are currently classified as operational read contracts because t
 | `POST /reporting/assets-under-management/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Source-data query, not report composition. |
 | `POST /reporting/asset-allocation/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Must remain core-held allocation source truth. |
 | `POST /reporting/portfolio-summary/query` | Operational Read | `lotus-report`, gateway | Correct, watch | Avoid absorbing analytics narrative. |
-| `POST /reporting/income-summary/query` | Operational Read | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated convenience shape | Income source-data summary retained as a migration bridge. Target product is `TransactionLedgerWindow`; remove/keep decision still depends on merged or external consumer confirmation. |
-| `POST /reporting/activity-summary/query` | Operational Read | No active direct internal downstream consumer evidenced in current local repo truth | Deprecated convenience shape | Transaction/activity source-data summary retained as a migration bridge. Target product is `TransactionLedgerWindow`; remove/keep decision still depends on merged or external consumer confirmation. |
 
 ### `query_control_plane_service`: Analytics Input Contracts
 
