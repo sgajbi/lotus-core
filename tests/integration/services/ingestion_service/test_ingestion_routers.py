@@ -826,6 +826,22 @@ async def event_replay_test_client(ingestion_test_harness):
         yield client
 
 
+def _single_transaction_payload(transaction_id: str = "TX_SINGLE_001") -> dict[str, object]:
+    return {
+        "transaction_id": transaction_id,
+        "portfolio_id": "P1",
+        "instrument_id": "I1",
+        "security_id": "S1",
+        "transaction_date": "2025-08-12T10:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": 1,
+        "price": 1,
+        "gross_transaction_amount": 1,
+        "trade_currency": "USD",
+        "currency": "USD",
+    }
+
+
 async def test_ingest_portfolios_endpoint(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -1013,6 +1029,102 @@ async def test_ingest_portfolios_marks_job_failed_when_publish_fails(
     )
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failed_record_keys"] == ["P1", "P2"]
+
+
+async def test_ingest_single_transaction_endpoint(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_ACK_001"),
+        headers={"X-Idempotency-Key": "single-transaction-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Transaction accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "single-transaction-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    assert "job_id" not in body
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+
+    mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "transactions.raw.received"
+    assert publish_kwargs["key"] == "P1"
+    assert publish_kwargs["value"]["transaction_id"] == "TX_SINGLE_ACK_001"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"single-transaction-idem-001")
+
+
+async def test_ingest_single_transaction_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_BLOCKED_001"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_single_transaction_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        transactions_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_RATE_LIMIT_001"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/transaction blocked after 1 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_single_transaction_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_PUBLISH_FAIL_001"),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Failed to publish transaction 'TX_SINGLE_PUBLISH_FAIL_001'.",
+        "failed_record_keys": ["TX_SINGLE_PUBLISH_FAIL_001"],
+    }
 
 
 async def test_ingest_transactions_endpoint(

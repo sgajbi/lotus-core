@@ -174,3 +174,110 @@ Result:
 | `lotus-core` | No open issue found for `POST /ingest/portfolios` in this pass. | No GitHub action required. |
 | Downstream repos | No open downstream issue found for portfolio write-ingress misuse. | No downstream action required. |
 
+## Certified Endpoint Slice: Single Transaction Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/transaction`
+
+### Route Contract Decision
+
+This is the canonical low-volume single-record write-ingress endpoint for one transaction ledger
+record.
+
+The boundary is explicit:
+
+1. use it for operational corrections, support-driven single-record onboarding, or other controlled
+   low-volume transaction submissions;
+2. use `POST /ingest/transactions` for standard batch ingestion and idempotency replay through
+   ingestion job metadata;
+3. do not use it as a read endpoint or as a downstream source-data product;
+4. treat acknowledgement as asynchronous Kafka publish acceptance, not persistence completion;
+5. treat `X-Idempotency-Key` as publish lineage on this route, not as job replay semantics.
+
+### Consumer And Integration Reality
+
+This endpoint is upstream-facing rather than downstream-facing. No direct `lotus-gateway`,
+`lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage` product
+consumer should call it for front-office reads.
+
+Repository scan evidence on April 17, 2026 found no live downstream product usage of
+`/ingest/transaction`. A `lotus-risk` developer-guide reference points to the separate batch route
+`/ingest/transactions`; it is not this endpoint.
+
+### Upstream Integration Assessment
+
+The route now follows the same dependency-injection pattern as neighboring ingestion routes for
+operating-mode control, which keeps endpoint tests deterministic and avoids direct service lookup
+inside the handler.
+
+The route uses the correct single-record ingestion architecture:
+
+1. it validates the `Transaction` schema before accepting the record;
+2. it enforces ingestion operating mode before publishing;
+3. it enforces write-rate protection with `record_count=1`;
+4. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
+5. it publishes to `transactions.raw.received` using `portfolio_id` as the partition key;
+6. it reports publish failures as HTTP `500` with `INGESTION_PUBLISH_FAILED` and the failed
+   transaction id.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice after tightening the route description:
+
+1. route purpose says when to use the endpoint and that it is asynchronous single-record write
+   ingress;
+2. the description no longer overclaims idempotency replay semantics;
+3. transaction attributes include descriptions and examples through the shared `Transaction`
+   schema;
+4. ACK fields include descriptions and examples for message, entity type, accepted count,
+   correlation/request/trace identifiers, and idempotency key;
+5. `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for the single transaction route rather than relying on the batch
+transaction route as proxy evidence.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_single_transaction_endpoint`
+2. `test_ingest_single_transaction_returns_503_when_mode_blocks_writes`
+3. `test_ingest_single_transaction_returns_429_when_rate_limited`
+4. `test_ingest_single_transaction_returns_failed_record_keys_when_publish_fails`
+5. `test_openapi_describes_remaining_ingestion_operational_responses`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_single_transaction_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_single_transaction_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_single_transaction_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_single_transaction_returns_failed_record_keys_when_publish_fails tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses -q
+```
+
+Result:
+
+```text
+5 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\transactions.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\transactions.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+3 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/transaction` in this pass. | No GitHub action required. |
+| Downstream repos | No open downstream issue found for single transaction write-ingress misuse. | No downstream action required. |

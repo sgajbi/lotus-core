@@ -177,6 +177,8 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         ]
         == "INGESTION_PUBLISH_FAILED"
     )
+    assert "propagate any idempotency key as publish lineage" in single_transaction["description"]
+    assert "replay" not in single_transaction["description"].lower()
     assert (
         batch_transactions["responses"]["429"]["content"]["application/json"]["example"]["detail"][
             "code"

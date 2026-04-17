@@ -56,9 +56,7 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = {
     responses={
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the single-transaction request.",
-            "content": {
-                "application/json": {"example": TRANSACTION_RATE_LIMIT_EXCEEDED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": TRANSACTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "description": "Transaction publish failed after validation.",
@@ -73,8 +71,8 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = {
     summary="Ingest a single transaction",
     description=(
         "What: Accept one canonical transaction record for ledger ingestion.\n"
-        "How: Validate contract, enforce idempotency/mode controls, then "
-        "publish asynchronously to Kafka.\n"
+        "How: Validate contract, enforce mode and rate controls, propagate any "
+        "idempotency key as publish lineage, then publish asynchronously to Kafka.\n"
         "When: Use for low-volume operational corrections or single-record onboarding."
     ),
 )
@@ -82,9 +80,9 @@ async def ingest_transaction(
     transaction: Transaction,
     request: Request,
     ingestion_service: IngestionService = Depends(get_ingestion_service),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     idempotency_key = resolve_idempotency_key(request)
-    ingestion_job_service = get_ingestion_job_service()
     try:
         await ingestion_job_service.assert_ingestion_writable()
     except PermissionError as exc:
@@ -138,9 +136,7 @@ async def ingest_transaction(
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the transaction batch request.",
             "content": {
-                "application/json": {
-                    "example": TRANSACTION_BATCH_RATE_LIMIT_EXCEEDED_EXAMPLE
-                }
+                "application/json": {"example": TRANSACTION_BATCH_RATE_LIMIT_EXCEEDED_EXAMPLE}
             },
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
@@ -243,4 +239,3 @@ async def ingest_transactions(
         accepted_count=num_transactions,
         idempotency_key=idempotency_key,
     )
-
