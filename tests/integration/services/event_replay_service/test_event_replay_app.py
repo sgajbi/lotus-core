@@ -424,7 +424,20 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert consumer_dlq_events_example["events"][1]["consumer_group"] == "valuation-service-group"
     assert "TimeoutError" in consumer_dlq_events_example["events"][1]["error_reason"]
 
+    replay_dlq_event_id_parameter = next(
+        param for param in replay_dlq["parameters"] if param["name"] == "event_id"
+    )
+    replay_dlq_examples = replay_dlq["requestBody"]["content"]["application/json"]["examples"]
+    replay_dlq_example = replay_dlq["responses"]["200"]["content"]["application/json"]["example"]
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
+    assert replay_dlq["summary"] == "Replay ingestion payload for correlated consumer DLQ event"
+    assert "recover rejected events safely" in replay_dlq["description"]
+    assert replay_dlq_event_id_parameter["description"] == "Consumer dead-letter event identifier."
+    assert replay_dlq_examples["dry_run"]["value"]["dry_run"] is True
+    assert replay_dlq_example["replay_status"] == "replayed"
+    assert replay_dlq_example["message"] == (
+        "Replayed ingestion job from correlated consumer DLQ event."
+    )
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
 
@@ -448,6 +461,7 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     stalled_job = schema["IngestionStalledJobResponse"]
     consumer_dlq_event = schema["ConsumerDlqEventResponse"]
     consumer_dlq_event_list = schema["ConsumerDlqEventListResponse"]
+    consumer_dlq_replay = schema["ConsumerDlqReplayResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -484,6 +498,12 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert consumer_dlq_event_list["properties"]["events"]["description"] == (
         "Consumer dead-letter events for operational triage."
+    )
+    assert consumer_dlq_replay["properties"]["replay_status"]["description"] == (
+        "Replay execution result."
+    )
+    assert consumer_dlq_replay["properties"]["replay_fingerprint"]["description"] == (
+        "Deterministic fingerprint for this replay mapping and payload."
     )
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."

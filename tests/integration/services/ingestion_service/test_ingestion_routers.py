@@ -429,20 +429,33 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             return events[:limit]
 
         async def get_consumer_dlq_event(self, event_id: str):
-            if event_id != "cdlq_test_001":
-                return None
-            return SimpleNamespace(
-                event_id=event_id,
-                original_topic="transactions.raw.received",
-                consumer_group="persistence-service-group",
-                dlq_topic="dlq.persistence_service",
-                original_key="TXN-2026-000145",
-                error_reason_code="VALIDATION_ERROR",
-                error_reason="ValidationError: portfolio_id is required",
-                correlation_id="ING:test-correlation-id",
-                payload_excerpt='{"transaction_id":"TXN-2026-000145"}',
-                observed_at=datetime.now(UTC),
-            )
+            if event_id == "cdlq_test_001":
+                return SimpleNamespace(
+                    event_id=event_id,
+                    original_topic="transactions.raw.received",
+                    consumer_group="persistence-service-group",
+                    dlq_topic="dlq.persistence_service",
+                    original_key="TXN-2026-000145",
+                    error_reason_code="VALIDATION_ERROR",
+                    error_reason="ValidationError: portfolio_id is required",
+                    correlation_id="ING:test-correlation-id",
+                    payload_excerpt='{"transaction_id":"TXN-2026-000145"}',
+                    observed_at=datetime(2026, 3, 6, 9, 11, 5, 812000, tzinfo=UTC),
+                )
+            if event_id == "cdlq_test_no_corr":
+                return SimpleNamespace(
+                    event_id=event_id,
+                    original_topic="transactions.raw.received",
+                    consumer_group="persistence-service-group",
+                    dlq_topic="dlq.persistence_service",
+                    original_key="TXN-2026-000199",
+                    error_reason_code="MISSING_CORRELATION",
+                    error_reason="Correlation id missing from failed message envelope",
+                    correlation_id=None,
+                    payload_excerpt='{"transaction_id":"TXN-2026-000199"}',
+                    observed_at=datetime(2026, 3, 6, 9, 20, 0, tzinfo=UTC),
+                )
+            return None
 
         async def get_consumer_lag(
             self,
@@ -4751,9 +4764,47 @@ async def test_replay_consumer_dlq_event_endpoint(
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["replay_status"] in {"dry_run", "not_replayable", "replayed"}
-    assert body.get("replay_audit_id")
-    assert body.get("replay_fingerprint")
+    assert body["event_id"] == "cdlq_test_001"
+    assert body["correlation_id"] == "ING:test-correlation-id"
+    assert body["job_id"]
+    assert body["replay_status"] == "dry_run"
+    assert body["replay_audit_id"]
+    assert body["replay_fingerprint"]
+    assert body["message"] == "Dry-run successful. Correlated ingestion job is replayable."
+
+
+async def test_replay_consumer_dlq_event_reports_not_replayable_without_correlation(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_no_corr/replay",
+        json={"dry_run": True},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "event_id": "cdlq_test_no_corr",
+        "correlation_id": None,
+        "job_id": None,
+        "replay_status": "not_replayable",
+        "replay_audit_id": body["replay_audit_id"],
+        "replay_fingerprint": body["replay_fingerprint"],
+        "message": "DLQ event has no correlation id and cannot be mapped to ingestion payload.",
+    }
+
+
+async def test_replay_consumer_dlq_event_returns_not_found_for_missing_event(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_missing_001/replay",
+        json={"dry_run": False},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND",
+        "message": "Consumer DLQ event 'cdlq_missing_001' was not found.",
+    }
 
 
 async def test_replay_consumer_dlq_event_blocks_duplicate_replay(

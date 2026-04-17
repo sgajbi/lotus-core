@@ -352,6 +352,105 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Consumer DLQ Replay Operations
+
+### Endpoint Inventory
+
+1. `POST /ingestion/dlq/consumer-events/{event_id}/replay`
+
+### Route Contract Decision
+
+This is the governed recovery endpoint for replaying a durable ingestion payload correlated to a
+consumer dead-letter event.
+
+Use it to:
+
+1. dry-run replayability before mutating state;
+2. recover rejected consumer events after downstream defects or dependency failures are fixed;
+3. produce deterministic replay audit records and fingerprints;
+4. block duplicates when an equivalent replay already succeeded;
+5. distinguish `dry_run`, `replayed`, `not_replayable`, and duplicate-blocked outcomes.
+
+Do not use it as a generic message republisher. It is governed by DLQ correlation, durable payload
+availability, and operations-mode controls.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct
+   `/ingestion/dlq/consumer-events/{event_id}/replay` consumer in the local scan;
+2. the route remains an operator/support recovery action rather than a front-office integration;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route follows the correct recovery chain:
+
+1. it resolves the consumer DLQ event by `event_id`;
+2. it handles missing-event `404` with canonical error code
+   `INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND`;
+3. it records `not_replayable` audit rows when the DLQ event cannot be mapped because correlation
+   id is missing;
+4. it supports `dry_run` validation without republishing;
+5. it records replay audits and deterministic fingerprints for every attempt;
+6. it blocks duplicate replay publishes once an equivalent deterministic replay has already
+   succeeded;
+7. it surfaces post-publish bookkeeping failure explicitly instead of silently treating publish as
+   success.
+
+This is the right banking-grade control shape for replay recovery. No behavioral router refactor was
+required in this certification pass.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate and now pinned by focused assertions:
+
+1. the summary and description explain when to use replay and when not to;
+2. the `event_id` path parameter has a concrete description and example;
+3. the request body publishes `replay_now` and `dry_run` examples;
+4. the `200` response example documents replayed output fields, including fingerprint and audit id;
+5. the `404` response example documents the missing-event error contract;
+6. `ConsumerDlqReplayRequest` and `ConsumerDlqReplayResponse` describe dry-run and replay-status
+   semantics field by field.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/dlq/consumer-events/{event_id}/replay`, `ConsumerDlqReplayRequest`, or `ConsumerDlqReplayResponse` in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for success, dry-run, not-replayable, duplicate-blocked,
+bookkeeping-failure, and missing-event branches, plus OpenAPI quality.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_replay_consumer_dlq_event_endpoint`
+2. `test_replay_consumer_dlq_event_reports_not_replayable_without_correlation`
+3. `test_replay_consumer_dlq_event_returns_not_found_for_missing_event`
+4. `test_replay_consumer_dlq_event_blocks_duplicate_replay`
+5. `test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publish`
+6. `test_openapi_describes_event_replay_operational_parameters`
+7. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_replay_consumer_dlq_event_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_replay_consumer_dlq_event_reports_not_replayable_without_correlation tests\integration\services\ingestion_service\test_ingestion_routers.py::test_replay_consumer_dlq_event_returns_not_found_for_missing_event tests\integration\services\ingestion_service\test_ingestion_routers.py::test_replay_consumer_dlq_event_blocks_duplicate_replay tests\integration\services\ingestion_service\test_ingestion_routers.py::test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publish tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+7 passed
+```
+
 ## Certified Endpoint Slice: Consumer DLQ Event Operations
 
 ### Endpoint Inventory
