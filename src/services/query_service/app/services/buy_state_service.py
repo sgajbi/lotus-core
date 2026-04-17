@@ -35,7 +35,10 @@ class BuyStateService:
     ) -> AccruedIncomeOffsetsResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
-        offsets = await self.repo.get_accrued_offsets(portfolio_id=portfolio_id, security_id=security_id)
+        offsets = await self.repo.get_accrued_offsets(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+        )
         if not offsets:
             raise LookupError(
                 f"BUY state not found for portfolio {portfolio_id} and security {security_id}"
