@@ -400,19 +400,37 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             lookback_minutes: int = 60,
             limit: int = 100,
         ):
+            groups = [
+                {
+                    "consumer_group": "persistence-service-group",
+                    "original_topic": "transactions.raw.received",
+                    "dlq_events": 21,
+                    "last_observed_at": datetime.now(UTC),
+                    "lag_severity": "high",
+                },
+                {
+                    "consumer_group": "valuation-service-group",
+                    "original_topic": "market-prices.raw.received",
+                    "dlq_events": 8,
+                    "last_observed_at": datetime.now(UTC),
+                    "lag_severity": "medium",
+                },
+                {
+                    "consumer_group": "reference-service-group",
+                    "original_topic": "reference-data.raw.received",
+                    "dlq_events": 3,
+                    "last_observed_at": datetime.now(UTC),
+                    "lag_severity": "low",
+                },
+            ][:limit]
+            backlog_jobs = sum(
+                1 for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            )
             return {
                 "lookback_minutes": lookback_minutes,
-                "backlog_jobs": 1,
-                "total_groups": 1,
-                "groups": [
-                    {
-                        "consumer_group": "persistence-service-group",
-                        "original_topic": "transactions.raw.received",
-                        "dlq_events": 3,
-                        "last_observed_at": datetime.now(UTC),
-                        "lag_severity": "low",
-                    }
-                ][:limit],
+                "backlog_jobs": backlog_jobs,
+                "total_groups": len(groups),
+                "groups": groups,
             }
 
         async def get_job_record_status(self, job_id: str):
@@ -3997,12 +4015,56 @@ async def test_ingestion_consumer_dlq_events_endpoint(event_replay_test_client: 
     assert "total" in body
 
 
-async def test_ingestion_consumer_lag_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/consumer-lag")
+async def test_ingestion_consumer_lag_endpoint_filters_and_reports_groups(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/consumer-lag",
+        params={"lookback_minutes": 15, "limit": 2},
+    )
+
     assert response.status_code == 200
     body = response.json()
-    assert "groups" in body
-    assert "backlog_jobs" in body
+    assert body["lookback_minutes"] == 15
+    assert body["backlog_jobs"] == 2
+    assert body["total_groups"] == 2
+    assert body["groups"] == [
+        {
+            "consumer_group": "persistence-service-group",
+            "original_topic": "transactions.raw.received",
+            "dlq_events": 21,
+            "last_observed_at": body["groups"][0]["last_observed_at"],
+            "lag_severity": "high",
+        },
+        {
+            "consumer_group": "valuation-service-group",
+            "original_topic": "market-prices.raw.received",
+            "dlq_events": 8,
+            "last_observed_at": body["groups"][1]["last_observed_at"],
+            "lag_severity": "medium",
+        },
+    ]
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/consumer-lag",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_error_budget_endpoint(event_replay_test_client: httpx.AsyncClient):

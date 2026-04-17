@@ -118,6 +118,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
     health_summary = schema["paths"]["/ingestion/health/summary"]["get"]
     health_lag = schema["paths"]["/ingestion/health/lag"]["get"]
+    consumer_lag = schema["paths"]["/ingestion/health/consumer-lag"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -248,6 +249,28 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert "quick backlog signal during ingestion incidents" in health_lag["description"]
     assert health_lag_example == health_example
 
+    consumer_lag_params = {param["name"]: param for param in consumer_lag["parameters"]}
+    consumer_lag_example = consumer_lag["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert consumer_lag["summary"] == "Get consumer lag diagnostics"
+    assert (
+        "triage downstream consumer lag before replaying ingestion jobs"
+        in consumer_lag["description"]
+    )
+    assert consumer_lag_params["lookback_minutes"]["description"] == (
+        "Lookback window, in minutes, used to aggregate consumer lag diagnostics."
+    )
+    assert consumer_lag_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert consumer_lag_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert consumer_lag_params["limit"]["description"] == (
+        "Maximum number of consumer-group/topic lag rows to return."
+    )
+    assert consumer_lag_params["limit"]["schema"]["minimum"] == 1
+    assert consumer_lag_params["limit"]["schema"]["maximum"] == 500
+    assert consumer_lag_example["groups"][0]["lag_severity"] == "high"
+    assert consumer_lag_example["groups"][1]["lag_severity"] == "medium"
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -263,6 +286,8 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     replay_request = schema["ConsumerDlqReplayRequest"]
     replay_audit_list = schema["IngestionReplayAuditListResponse"]
     idempotency = schema["IngestionIdempotencyDiagnosticsResponse"]
+    consumer_lag = schema["IngestionConsumerLagResponse"]
+    consumer_lag_group = schema["IngestionConsumerLagGroupResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -285,6 +310,17 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."
     )
+    assert consumer_lag["properties"]["groups"]["description"] == (
+        "Consumer lag group diagnostics sorted by highest pressure first."
+    )
+    assert consumer_lag_group["properties"]["dlq_events"]["description"] == (
+        "Number of DLQ events for this consumer/topic in lookback window."
+    )
+    assert consumer_lag_group["properties"]["lag_severity"]["enum"] == [
+        "low",
+        "medium",
+        "high",
+    ]
 
 
 async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_client):

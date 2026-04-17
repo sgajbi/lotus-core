@@ -655,6 +655,103 @@ Result:
 2 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Consumer Lag Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/consumer-lag`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for consumer-group/topic lag diagnostics.
+
+Use it to:
+
+1. inspect DLQ-derived consumer lag pressure by consumer group and original topic;
+2. rank lag groups by observed DLQ pressure within a bounded lookback window;
+3. combine consumer lag with current ingestion backlog count before deciding whether replay is
+   operationally safe.
+
+Do not use it as a front-office data contract or as a replacement for detailed DLQ event
+inspection. Operators should drill from this endpoint into `/ingestion/dlq/consumer-events` and
+job-level failure/retry routes when a group shows material pressure.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/consumer-lag` or
+   `IngestionConsumerLagResponse` consumer in `lotus-gateway`, `lotus-risk`,
+   `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. current documented consumers are operational runbooks and monitoring guidance inside
+   `lotus-core`, including calculator scalability and ingestion API gold-standard docs;
+3. no gateway issue is required because this is an operations/support route, not a front-office
+   feature route.
+
+### Upstream Integration Assessment
+
+The route uses the correct operational evidence source:
+
+1. it aggregates `ConsumerDlqEvent` rows by `consumer_group` and `original_topic`;
+2. it applies the requested `lookback_minutes` window;
+3. it caps row count through `limit`;
+4. it derives severity from DLQ pressure (`high` at 20+, `medium` at 5+, otherwise `low`);
+5. it includes current canonical backlog count from `get_health_summary`.
+
+The supported request options are:
+
+1. `lookback_minutes`, bounded from 5 to 1440;
+2. `limit`, bounded from 1 to 500.
+
+The supported output contract is:
+
+1. `lookback_minutes`;
+2. `backlog_jobs`;
+3. `total_groups`;
+4. per-group `consumer_group`, `original_topic`, `dlq_events`, `last_observed_at`, and
+   `lag_severity`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain consumer-lag triage use before replay;
+2. both query parameters include descriptions, examples, and min/max bounds;
+3. the `200` response includes a concrete high/medium severity example;
+4. response and nested group attributes carry descriptions and examples through DTO schemas.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/consumer-lag`, `IngestionConsumerLagResponse`, or consumer-lag diagnostics vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for request options, validation bounds, all top-level fields, and
+nested group severity rows.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_consumer_lag_endpoint_filters_and_reports_groups`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_consumer_lag_endpoint_filters_and_reports_groups tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

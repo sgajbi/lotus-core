@@ -109,6 +109,28 @@ INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE = {
     "oldest_backlog_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
 }
 
+INGESTION_CONSUMER_LAG_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "backlog_jobs": 10,
+    "total_groups": 2,
+    "groups": [
+        {
+            "consumer_group": "persistence-service-group",
+            "original_topic": "transactions.raw.received",
+            "dlq_events": 21,
+            "last_observed_at": "2026-03-06T13:25:42.501Z",
+            "lag_severity": "high",
+        },
+        {
+            "consumer_group": "valuation-service-group",
+            "original_topic": "market-prices.raw.received",
+            "dlq_events": 8,
+            "last_observed_at": "2026-03-06T13:21:18.113Z",
+            "lag_severity": "medium",
+        },
+    ],
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -908,6 +930,12 @@ async def get_ingestion_health_lag(
         "How: Aggregate consumer dead-letter events by consumer group and original topic.\n"
         "When: Use to triage downstream consumer lag before replaying ingestion jobs."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Consumer-group/topic lag diagnostics for the requested lookback.",
+            "content": {"application/json": {"example": INGESTION_CONSUMER_LAG_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_consumer_lag(
     lookback_minutes: int = Query(
