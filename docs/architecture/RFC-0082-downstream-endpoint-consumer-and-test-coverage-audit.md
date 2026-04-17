@@ -1986,7 +1986,7 @@ error path.
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-risk` | Correct. Gateway uses the route for workspace state sourcing, and risk uses it for concentration and rolling-Sharpe currency/valuation context. No active direct `lotus-manage` or `lotus-advise` client was found in this pass. |
+| `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-risk`, `lotus-report` | Gateway and risk are correct direct consumers. `lotus-report` still has direct client code, but only partially aligned: local report commit `9388f30` moved live aggregation off legacy core-snapshot-derived overview/holdings usage and corrected the client request shape, while report read/review flows still carry stale legacy section assumptions tracked in `lotus-report #40`. No active direct `lotus-manage` or `lotus-advise` client was found in this pass. |
 
 `lotus-manage` remains an intended consumer in the source-data catalog, but direct active code use
 was not found in this pass and should not be overstated as live validated. The same is true for
@@ -2017,6 +2017,7 @@ For this endpoint, Swagger now makes the following explicit:
 | --- | --- | --- |
 | `lotus-core #57` portfolio-scoped POST endpoint 404 gap | Closed. The route documents 404 behavior and integration tests assert the not-found response example. | Re-open only if fresh contrary runtime evidence appears. |
 | `lotus-gateway #118` legacy `core-snapshot` envelope assumption in foundation workspace | Closed on April 16, 2026. Verified fixed in gateway commit `6ec3977`. Foundation workspace parsing now consumes the canonical top-level `PortfolioStateSnapshot` envelope, fetches separate identity data only where required, and regression tests fail if legacy nested `portfolio` / `metadata` assumptions return. | Keep closed unless fresh gateway code reintroduces legacy envelope dependence. |
+| `lotus-report #40` legacy core-snapshot section assumptions in reporting read flows | Open and valid. Report still has direct read/review flows that request or parse obsolete `snapshot.overview` / `snapshot.holdings`-style structures even though local report commit `9388f30` already moved the live aggregation route onto strategic summary/allocation seams and corrected the raw core-snapshot client request shape. | Keep open until report read/review flows stop requesting legacy section names and either consume dedicated strategic routes or the current `sections.*` core-snapshot envelope. |
 
 Focused certification evidence on April 16, 2026:
 
@@ -2025,14 +2026,15 @@ Focused certification evidence on April 16, 2026:
 3. `lotus-risk`: `python -m pytest tests\unit\test_lotus_core_client.py tests\unit\test_concentration_engine_characterization.py tests\unit\test_concentration_engine_modes.py tests\integration\test_concentration_lotus_core_characterization.py -q`
 
 No open route-specific GitHub issue remains for `core-snapshot` in `lotus-core`, `lotus-gateway`,
-or `lotus-risk` after closure of `lotus-gateway #118`; keep the family under normal regression
-watch rather than issue-tracker escalation unless fresh route-level drift appears.
+or `lotus-risk` after closure of `lotus-gateway #118`; the remaining tracked downstream drift is
+now `lotus-report #40`, which is scoped to report-side legacy section assumptions rather than a
+lotus-core publication defect.
 
 ## Downstream Consumer Matrix
 
 | Product | Governed route(s) | Intended consumers | Direct integration evidence reviewed | Test-pyramid posture |
 | --- | --- | --- | --- | --- |
-| `PortfolioStateSnapshot` | `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-risk` | Direct active client evidence exists in `lotus-gateway/src/app/clients/lotus_core_query_client.py` and `lotus-risk/src/app/integrations/lotus_core_client.py`. `lotus-manage` currently documents intended adoption but does not yet have an active outbound client. `lotus-advise` currently uses other lotus-core seams more directly than `core-snapshot` itself. | Strong for gateway and risk. `lotus-manage` and `lotus-advise` remain catalog-intended and should not be described as live direct consumers of this route until their product flows bind to it. |
+| `PortfolioStateSnapshot` | `POST /integration/portfolios/{portfolio_id}/core-snapshot` | `lotus-gateway`, `lotus-risk`, catalog-intended `lotus-manage`, `lotus-advise`, `lotus-report` | Direct active client evidence exists in `lotus-gateway/src/app/clients/lotus_core_query_client.py`, `lotus-risk/src/app/integrations/lotus_core_client.py`, and `lotus-report/src/app/clients/pas_client.py`. Current report posture is mixed: local commit `9388f30` moved live aggregation to strategic summary/allocation seams and corrected core-snapshot request keys, but `lotus-report #40` tracks remaining legacy response-shape assumptions in report read/review flows. `lotus-manage` currently documents intended adoption but does not yet have an active outbound client. `lotus-advise` currently uses other lotus-core seams more directly than `core-snapshot` itself. | Strong for gateway and risk. Report remains a real direct consumer with known downstream cleanup still open. `lotus-manage` and `lotus-advise` remain catalog-intended and should not be described as live direct consumers of this route until their product flows bind to it. |
 | `PositionTimeseriesInput` | `POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries` | `lotus-performance`, `lotus-risk` | `lotus-performance` core integration and stateful attribution/contribution services; `lotus-risk/src/app/services/attribution_mode_adapter.py`. | Strong. Core route and schema tests, performance client tests, performance API/e2e mocked journey tests, and risk attribution adapter tests. |
 | `PortfolioTimeseriesInput` | `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` | `lotus-performance` plus catalog-intended portfolio-level analytics consumers such as `lotus-risk` | `lotus-performance` returns/TWR source services and canonical TWR inspection script. Risk remains catalog-intended for portfolio-level analytics input, with current direct evidence stronger for position attribution and risk-free sources than for this route itself. | Strong for performance. Core catalog/OpenAPI tests protect the contract; risk portfolio-timeseries runtime use should be rechecked when risk portfolio-level analytics expands. |
 | `PortfolioAnalyticsReference` | `POST /integration/portfolios/{portfolio_id}/analytics/reference` | `lotus-performance`, `lotus-gateway` | `lotus-performance` core integration service; `lotus-gateway` uses this route as workspace source context. `lotus-risk` remains governed but is not evidenced as a live direct caller in this pass. | Strong for performance and gateway direct usage. Risk should use this only where it needs analytics lifecycle/reference context, not operational holdings. |
