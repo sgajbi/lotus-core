@@ -2,7 +2,7 @@
 
 Status: Draft implementation audit  
 Owner: lotus-core  
-Last reviewed: 2026-04-16  
+Last reviewed: 2026-04-17  
 Scope: query-control-plane source-data products and downstream integration posture
 
 ## Purpose
@@ -23,6 +23,7 @@ Current posture:
 | Consumer metadata | Clear. Every catalog product exposes `x-lotus-source-data-product` and `x-lotus-source-data-security` in OpenAPI. |
 | Swagger readability | Strong for the governed routes covered by RFC-0082/RFC-0083. Endpoint descriptions explain when to use the route, intended consumers, request attributes, response attributes, examples, and error examples. |
 | Test pyramid | Strong at catalog/static guard and core integration-test levels. Direct downstream client tests exist for the active consumers found during review. |
+| Registered-route coverage | Complete for the downstream-facing query and query-control-plane apps in this pass. A route inventory comparison on April 17, 2026 found every non-health/non-metrics registered route represented in this audit. |
 | Platform live proof | Passed on 2026-04-15 for `PB_SG_GLOBAL_BAL_001`; see `docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md`. |
 
 Important boundary reminder:
@@ -755,6 +756,7 @@ rejections instead of swallowing them.
 | `lotus-gateway #116` | Closed on April 16, 2026. Gateway has already adopted the main support/readiness hardening posture, so this broader umbrella issue is no longer the active tracking record for the family. | Keep closed unless a fresh broader support/readiness regression appears. |
 | `lotus-gateway #124` | Closed on April 17, 2026. Gateway commit `d63d8e5` removed unsupported `as_of_date` shaping from `GET /support/portfolios/{portfolio_id}/overview`, stopped varying support-overview cache keys by workspace date, and kept readiness as the route that owns date-scoped validation. | Keep closed unless fresh gateway code reintroduces unsupported support-overview query shaping. |
 | `lotus-manage #32` | Closed on April 17, 2026. Current manage repo truth still has no active outbound lotus-core support/source-data client, and the future-adoption posture is captured in manage's RFC-0082 upstream contract map rather than as an active defect. | Re-open only when a direct manage operator workflow binds to these routes and concrete client/test work is needed. |
+| `lotus-report #37` | Closed on April 17, 2026 as completed review / no current direct adoption. Current report mainline has no direct benchmark, support, lineage, reconciliation, risk-free, classification, or `core-snapshot` client evidence; the only benchmark-related code found is an empty `benchmarkReturns` risk payload placeholder, not a lotus-core benchmark integration. | Re-open or replace only when report adds a direct benchmark/support/lineage workflow and concrete contract-alignment work exists. |
 | `lotus-report #38` | Closed as stale adoption guidance. Report remains a catalog-intended support/evidence consumer, but no active direct client code was found and there is no live report-side workflow to fix. | Re-open or replace only when report adds a direct support/readiness/lineage workflow. |
 
 ## Certified Endpoint Slice: Holdings Operational Read Family
