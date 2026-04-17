@@ -126,6 +126,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     reprocessing_queue = schema["paths"]["/ingestion/health/reprocessing-queue"]["get"]
     capacity = schema["paths"]["/ingestion/health/capacity"]["get"]
     backlog_breakdown = schema["paths"]["/ingestion/health/backlog-breakdown"]["get"]
+    stalled_jobs = schema["paths"]["/ingestion/health/stalled-jobs"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -381,6 +382,24 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert backlog_breakdown_example["groups"][0]["backlog_jobs"] == 6
     assert backlog_breakdown_example["groups"][1]["failure_rate"] == "0.5"
 
+    stalled_jobs_params = {param["name"]: param for param in stalled_jobs["parameters"]}
+    stalled_jobs_example = stalled_jobs["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert stalled_jobs["summary"] == "List stalled ingestion jobs"
+    assert (
+        "identify concrete stuck jobs requiring operator intervention"
+        in stalled_jobs["description"]
+    )
+    assert stalled_jobs_params["threshold_seconds"]["schema"]["minimum"] == 30
+    assert stalled_jobs_params["threshold_seconds"]["schema"]["maximum"] == 86400
+    assert stalled_jobs_params["limit"]["schema"]["minimum"] == 1
+    assert stalled_jobs_params["limit"]["schema"]["maximum"] == 500
+    assert stalled_jobs_example["total"] == 2
+    assert stalled_jobs_example["jobs"][0]["queue_age_seconds"] == 901.0
+    assert stalled_jobs_example["jobs"][1]["status"] == "queued"
+    assert "dependency saturation" in stalled_jobs_example["jobs"][1]["suggested_action"]
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -401,6 +420,8 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     slo_status = schema["IngestionSloStatusResponse"]
     error_budget = schema["IngestionErrorBudgetStatusResponse"]
     operating_band = schema["IngestionOperatingBandResponse"]
+    stalled_jobs = schema["IngestionStalledJobListResponse"]
+    stalled_job = schema["IngestionStalledJobResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -419,6 +440,15 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert replay_audit_list["properties"]["audits"]["description"] == (
         "Replay audit rows matching the requested filters and time window."
+    )
+    assert stalled_jobs["properties"]["jobs"]["description"] == (
+        "Jobs older than threshold in accepted or queued state."
+    )
+    assert stalled_job["properties"]["queue_age_seconds"]["description"] == (
+        "Current age in seconds since submission."
+    )
+    assert stalled_job["properties"]["suggested_action"]["description"] == (
+        "Runbook-oriented suggested action for operations."
     )
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."

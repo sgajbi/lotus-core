@@ -289,6 +289,37 @@ INGESTION_BACKLOG_BREAKDOWN_RESPONSE_EXAMPLE = {
     ],
 }
 
+INGESTION_STALLED_JOB_LIST_RESPONSE_EXAMPLE = {
+    "threshold_seconds": 300,
+    "total": 2,
+    "jobs": [
+        {
+            "job_id": "job_stalled_001",
+            "endpoint": "/ingest/transactions",
+            "entity_type": "transaction",
+            "status": "accepted",
+            "submitted_at": "2026-03-03T04:10:11.000Z",
+            "queue_age_seconds": 901.0,
+            "retry_count": 0,
+            "suggested_action": (
+                "Investigate consumer lag and retry this job once root cause is resolved."
+            ),
+        },
+        {
+            "job_id": "job_stalled_002",
+            "endpoint": "/ingest/portfolio-bundles",
+            "entity_type": "portfolio_bundle",
+            "status": "queued",
+            "submitted_at": "2026-03-03T03:58:02.000Z",
+            "queue_age_seconds": 1632.5,
+            "retry_count": 2,
+            "suggested_action": (
+                "Inspect downstream dependency saturation before forcing replay or pausing intake."
+            ),
+        },
+    ],
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1448,6 +1479,14 @@ async def get_ingestion_backlog_breakdown(
         "How: Filter canonical jobs by age and status, then attach runbook-oriented suggestions.\n"
         "When: Use to identify concrete stuck jobs requiring operator intervention."
     ),
+    responses={
+        200: {
+            "description": "Stalled ingestion jobs older than the requested threshold.",
+            "content": {
+                "application/json": {"example": INGESTION_STALLED_JOB_LIST_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def list_ingestion_stalled_jobs(
     threshold_seconds: int = Query(

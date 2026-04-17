@@ -259,6 +259,99 @@ Result:
 5 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Stalled Job Operations
+
+### Endpoint Inventory
+
+1. `GET /ingestion/health/stalled-jobs`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for enumerating concrete ingestion jobs that
+have remained in `accepted` or `queued` state longer than an operator-defined threshold.
+
+Use it to:
+
+1. identify specific stuck jobs, not just aggregate lag symptoms;
+2. isolate whether pressure sits in accepted versus queued states;
+3. review queue age, retry count, and route/entity context before intervention;
+4. drive runbook action for replay, pause, or downstream dependency investigation;
+5. bound response size for dashboards or support tooling with `limit`.
+
+Do not use it as a portfolio/business-data endpoint or as a substitute for broader health
+summaries. It is for job-level operational intervention.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/health/stalled-jobs`
+   consumer in the local scan;
+2. this route remains primarily for operators, source-ingestion support, QA automation, and
+   platform tooling;
+3. because there is no live downstream consumer, no migration or deprecation issue is required for
+   this slice.
+
+### Upstream Integration Assessment
+
+The route is aligned to the intended ingestion-operations architecture:
+
+1. it delegates to `IngestionJobService.list_stalled_jobs`;
+2. the service returns only accepted/queued jobs older than `threshold_seconds`;
+3. the response preserves operator-relevant context: `job_id`, `endpoint`, `entity_type`,
+   `status`, `submitted_at`, `queue_age_seconds`, `retry_count`, and `suggested_action`;
+4. route-level validation constrains `threshold_seconds` to `30..86400` and `limit` to `1..500`;
+5. this slice required no behavioral refactor, but the Swagger surface was hardened with a concrete
+   multi-row example that shows both `accepted` and `queued` stalled states.
+
+The upstream pattern is appropriate and performant for an operational list route. Further work, if
+needed later, would belong in service-side sorting/triage heuristics rather than the router.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now explicit enough for this endpoint:
+
+1. the summary and description explain when to use the route and what operational problem it solves;
+2. `threshold_seconds` documents type, purpose, bounds, and example;
+3. `limit` documents type, purpose, bounds, and example;
+4. the `200` response now includes a representative two-row example covering both `accepted` and
+   `queued` stalled jobs plus suggested operator actions;
+5. `IngestionStalledJobResponse` and `IngestionStalledJobListResponse` document queue age,
+   threshold, and suggested-action semantics field by field.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/stalled-jobs`, `IngestionStalledJobListResponse`, or `IngestionStalledJobResponse` in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for full stalled-job payloads, parameter bounds, and OpenAPI
+quality.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_stalled_jobs_endpoint_reports_all_stalled_job_fields`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_stalled_jobs_endpoint_reports_all_stalled_job_fields tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Ingestion Job Record Status Operations
 
 This certification pass covers:

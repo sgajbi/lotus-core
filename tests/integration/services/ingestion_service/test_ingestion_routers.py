@@ -357,23 +357,36 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             threshold_seconds: int = 300,
             limit: int = 100,
         ):
+            jobs = [
+                {
+                    "job_id": "job_stalled_001",
+                    "endpoint": "/ingest/transactions",
+                    "entity_type": "transaction",
+                    "status": "accepted",
+                    "submitted_at": datetime(2026, 3, 3, 4, 10, 11, tzinfo=UTC),
+                    "queue_age_seconds": 901.0,
+                    "retry_count": 0,
+                    "suggested_action": (
+                        "Investigate consumer lag and retry this job once root cause is resolved."  # noqa: E501
+                    ),
+                },
+                {
+                    "job_id": "job_stalled_002",
+                    "endpoint": "/ingest/portfolio-bundles",
+                    "entity_type": "portfolio_bundle",
+                    "status": "queued",
+                    "submitted_at": datetime(2026, 3, 3, 3, 58, 2, tzinfo=UTC),
+                    "queue_age_seconds": 1632.5,
+                    "retry_count": 2,
+                    "suggested_action": (
+                        "Inspect downstream dependency saturation before forcing replay or pausing intake."  # noqa: E501
+                    ),
+                },
+            ][:limit]
             return {
                 "threshold_seconds": threshold_seconds,
-                "total": 1,
-                "jobs": [
-                    {
-                        "job_id": "job_stalled_001",
-                        "endpoint": "/ingest/transactions",
-                        "entity_type": "transaction",
-                        "status": "accepted",
-                        "submitted_at": datetime.now(UTC),
-                        "queue_age_seconds": 901.0,
-                        "retry_count": 0,
-                        "suggested_action": (
-                            "Investigate consumer lag and retry this job once root cause is resolved."  # noqa: E501
-                        ),
-                    }
-                ][:limit],
+                "total": len(jobs),
+                "jobs": jobs,
             }
 
         async def list_consumer_dlq_events(
@@ -4077,13 +4090,57 @@ async def test_ingestion_backlog_breakdown(event_replay_test_client: httpx.Async
     assert body["groups"][0]["endpoint"] == "/ingest/transactions"
 
 
-async def test_ingestion_stalled_jobs(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/stalled-jobs")
+async def test_ingestion_stalled_jobs_endpoint_reports_all_stalled_job_fields(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get(
+        "/ingestion/health/stalled-jobs",
+        params={"threshold_seconds": 600, "limit": 2},
+    )
     assert response.status_code == 200
-    body = response.json()
-    assert "jobs" in body
-    assert "threshold_seconds" in body
-    assert body["jobs"][0]["status"] == "accepted"
+    assert response.json() == {
+        "threshold_seconds": 600,
+        "total": 2,
+        "jobs": [
+            {
+                "job_id": "job_stalled_001",
+                "endpoint": "/ingest/transactions",
+                "entity_type": "transaction",
+                "status": "accepted",
+                "submitted_at": "2026-03-03T04:10:11Z",
+                "queue_age_seconds": 901.0,
+                "retry_count": 0,
+                "suggested_action": (
+                    "Investigate consumer lag and retry this job once root cause is resolved."
+                ),
+            },
+            {
+                "job_id": "job_stalled_002",
+                "endpoint": "/ingest/portfolio-bundles",
+                "entity_type": "portfolio_bundle",
+                "status": "queued",
+                "submitted_at": "2026-03-03T03:58:02Z",
+                "queue_age_seconds": 1632.5,
+                "retry_count": 2,
+                "suggested_action": (
+                    "Inspect downstream dependency saturation before forcing replay "
+                    "or pausing intake."
+                ),
+            },
+        ],
+    }
+
+    for invalid_params in (
+        {"threshold_seconds": 29},
+        {"threshold_seconds": 86401},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/health/stalled-jobs",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
 
 
 async def test_ingestion_ops_control_mode_blocks_writes(
