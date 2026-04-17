@@ -183,12 +183,12 @@ coverage.
 
 ### Issue Disposition For This Endpoint
 
-Reviewed open benchmark-assignment-related issues:
+Reviewed benchmark-assignment-related issues:
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `#237` grouped benchmark analytics contract | Valid strategic follow-on. This is broader than assignment resolution and remains open. | Keep open. |
-| `#246` broader benchmark source-contract hardening | Valid broader benchmark-program issue. Not a duplicate of this assignment endpoint slice. | Keep open. |
+| `#237` grouped benchmark analytics contract | Closed on GitHub. This is broader than assignment resolution and should not be treated as an active benchmark-assignment defect in this slice. | Keep closed unless fresh downstream evidence shows attribution consumers again lack a governed benchmark-source path. |
+| `#246` broader benchmark source-contract hardening | Closed on GitHub. The current benchmark-source family now covers window-aware composition, component market-series paging, targeted index catalog metadata, and explicit normalization policy. | Keep closed unless fresh benchmark-calculation evidence exposes a remaining source-contract gap. |
 | `#249` benchmark-assignment ingest optional timestamp mismatch | Already addressed in the ingestion path. The reference-data ingestion service defaults `assignment_recorded_at` when omitted, and integration coverage proves the omitted-field request persists a non-null value. | Closure comment posted with service and integration-test evidence; close as implemented unless fresh contrary evidence appears. |
 
 No downstream migration issue is required from this slice. `lotus-performance` and `lotus-gateway`
@@ -279,8 +279,8 @@ series retrieval.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `#246` broader benchmark source hardening | Still valid as the umbrella benchmark-source program. This slice closes documentation/truth gaps but does not claim the entire benchmark-source roadmap is finished. | Keep open. |
-| `#237` grouped benchmark analytics contract | Still valid, but narrowed. `indices/catalog` now supports optional targeted `index_ids`, so downstream consumers no longer need a full index-catalog scan just to resolve known benchmark component metadata. The remaining gap is the absence of a first-class grouped benchmark analytics input contract. | Keep open as the grouped-contract follow-on, not as a catalog-scan workaround issue. |
+| `#246` broader benchmark source hardening | Closed on GitHub. The source family now has the requested window-aware composition contract, deterministic component market-series paging, request fingerprints, normalization metadata, and targeted index catalog lookup. | Keep closed unless fresh long-window benchmark-calculation evidence exposes a new source-contract gap. |
+| `#237` grouped benchmark analytics contract | Closed on GitHub. Targeted `indices/catalog` plus the governed composition-window and market-series contracts give attribution consumers a reusable benchmark-source path without full catalog scans. Grouped benchmark math remains downstream analytics ownership rather than a lotus-core output obligation. | Keep closed unless a future RFC deliberately moves grouped benchmark analytics input ownership back into lotus-core. |
 
 No new downstream migration issue is required from this slice. The active downstream consumer is
 already using the strategic routes rather than a stale or duplicate benchmark path.
@@ -387,8 +387,8 @@ reference/catalog family.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core #237` grouped benchmark analytics contract | Still valid. Targeted `index_ids` removes the old full-catalog-scan pain, but downstream consumers still compose grouped benchmark analytics from lower-level contracts client-side. | Keep open as the grouped benchmark follow-on, not as a defect in the current reference family. |
-| `lotus-core #246` broader benchmark source hardening | Still valid. This slice confirms the supporting reference contracts are truthful today, but does not claim the full benchmark-source program is complete. | Keep open. |
+| `lotus-core #237` grouped benchmark analytics contract | Closed on GitHub. Targeted `index_ids` removes the old full-catalog-scan pain, and grouped benchmark math remains downstream analytics ownership. | Keep closed unless a future source-contract RFC changes benchmark grouping ownership. |
+| `lotus-core #246` broader benchmark source hardening | Closed on GitHub. The supporting benchmark source/reference contracts are truthful and covered by the current certification evidence. | Keep closed unless fresh benchmark-source evidence shows a regression. |
 | `lotus-performance #125` downstream adoption of latest lotus-core benchmark/reference hardening | Closed on April 16, 2026. Current performance repo truth on `main` includes merge commit `3d48e79` plus follow-up commits `6210e33` and `bf178e3`, and active client/tests still bind to the strategic benchmark, index, analytics-reference, and risk-free routes. | Keep closed unless fresh performance code or runtime evidence drifts from the governed route split. |
 
 No new downstream migration issue is required from this slice. The active consumers reviewed here
