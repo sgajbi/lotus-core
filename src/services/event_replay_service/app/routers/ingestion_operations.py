@@ -229,6 +229,32 @@ INGESTION_REPROCESSING_QUEUE_HEALTH_RESPONSE_EXAMPLE = {
     ],
 }
 
+INGESTION_CAPACITY_STATUS_RESPONSE_EXAMPLE = {
+    "as_of": "2026-03-03T14:55:22.000Z",
+    "lookback_minutes": 60,
+    "assumed_replicas": 2,
+    "total_backlog_records": 300,
+    "total_groups": 1,
+    "groups": [
+        {
+            "endpoint": "/ingest/transactions",
+            "entity_type": "transaction",
+            "total_records": 1200,
+            "processed_records": 900,
+            "backlog_records": 300,
+            "backlog_jobs": 6,
+            "lambda_in_events_per_second": "0.333333",
+            "mu_msg_per_replica_events_per_second": "0.250000",
+            "assumed_replicas": 2,
+            "effective_capacity_events_per_second": "0.500000",
+            "utilization_ratio": "0.666666",
+            "headroom_ratio": "0.333334",
+            "estimated_drain_seconds": 1800.0,
+            "saturation_state": "stable",
+        }
+    ],
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1293,6 +1319,14 @@ async def get_reprocessing_queue_health(
         "lambda_in, mu_msg, rho, headroom, and drain time.\n"
         "When: Use to detect overload, prioritize scaling, and estimate backlog recovery time."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Per endpoint/entity capacity totals and saturation diagnostics.",
+            "content": {
+                "application/json": {"example": INGESTION_CAPACITY_STATUS_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_capacity_status(
     lookback_minutes: int = Query(

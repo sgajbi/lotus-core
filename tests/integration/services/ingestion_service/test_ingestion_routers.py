@@ -4353,22 +4353,49 @@ async def test_ingestion_reprocessing_queue_health_endpoint(
 async def test_ingestion_capacity_status_endpoint(event_replay_test_client: httpx.AsyncClient):
     response = await event_replay_test_client.get(
         "/ingestion/health/capacity",
-        params={"lookback_minutes": 60, "assumed_replicas": 2},
+        params={"lookback_minutes": 60, "limit": 1, "assumed_replicas": 2},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["lookback_minutes"] == 60
-    assert body["assumed_replicas"] == 2
-    assert body["total_backlog_records"] >= 0
-    assert body["total_groups"] >= 1
-    assert body["groups"][0]["endpoint"] == "/ingest/transactions"
-    assert "lambda_in_events_per_second" in body["groups"][0]
-    assert "mu_msg_per_replica_events_per_second" in body["groups"][0]
-    assert body["groups"][0]["saturation_state"] in {
-        "stable",
-        "near_capacity",
-        "over_capacity",
+    assert body == {
+        "as_of": body["as_of"],
+        "lookback_minutes": 60,
+        "assumed_replicas": 2,
+        "total_backlog_records": 300,
+        "total_groups": 1,
+        "groups": [
+            {
+                "endpoint": "/ingest/transactions",
+                "entity_type": "transaction",
+                "total_records": 1200,
+                "processed_records": 900,
+                "backlog_records": 300,
+                "backlog_jobs": 6,
+                "lambda_in_events_per_second": "0.333333",
+                "mu_msg_per_replica_events_per_second": "0.250000",
+                "assumed_replicas": 2,
+                "effective_capacity_events_per_second": "0.500000",
+                "utilization_ratio": "0.666666",
+                "headroom_ratio": "0.333334",
+                "estimated_drain_seconds": 1800.0,
+                "saturation_state": "stable",
+            }
+        ],
     }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"limit": 0},
+        {"limit": 501},
+        {"assumed_replicas": 0},
+        {"assumed_replicas": 501},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/capacity",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_idempotency_diagnostics_endpoint(

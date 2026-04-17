@@ -124,6 +124,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     operating_band = schema["paths"]["/ingestion/health/operating-band"]["get"]
     ops_policy = schema["paths"]["/ingestion/health/policy"]["get"]
     reprocessing_queue = schema["paths"]["/ingestion/health/reprocessing-queue"]["get"]
+    capacity = schema["paths"]["/ingestion/health/capacity"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -351,6 +352,20 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert reprocessing_queue_example["queues"][0]["job_type"] == "RESET_WATERMARKS"
     assert reprocessing_queue_example["queues"][1]["failed_jobs"] == 1
 
+    capacity_params = {param["name"]: param for param in capacity["parameters"]}
+    capacity_example = capacity["responses"]["200"]["content"]["application/json"]["example"]
+    assert capacity["summary"] == "Get ingestion capacity and saturation diagnostics"
+    assert "detect overload, prioritize scaling" in capacity["description"]
+    assert capacity_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert capacity_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert capacity_params["limit"]["schema"]["minimum"] == 1
+    assert capacity_params["limit"]["schema"]["maximum"] == 500
+    assert capacity_params["assumed_replicas"]["schema"]["minimum"] == 1
+    assert capacity_params["assumed_replicas"]["schema"]["maximum"] == 500
+    assert capacity_example["total_backlog_records"] == 300
+    assert capacity_example["groups"][0]["estimated_drain_seconds"] == 1800.0
+    assert capacity_example["groups"][0]["saturation_state"] == "stable"
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -451,6 +466,8 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     ops_policy = schema["IngestionOpsPolicyResponse"]
     queue_health = schema["IngestionReprocessingQueueHealthResponse"]
     queue_item = schema["IngestionReprocessingQueueItemResponse"]
+    capacity = schema["IngestionCapacityStatusResponse"]
+    capacity_group = schema["IngestionCapacityGroupResponse"]
 
     assert set(job_detail["required"]) == {
         "job_id",
@@ -545,6 +562,17 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     assert queue_item["properties"]["oldest_pending_age_seconds"]["description"] == (
         "Age in seconds for the oldest pending job for this type."
     )
+    assert capacity["properties"]["groups"]["description"] == (
+        "Per endpoint/entity capacity diagnostics sorted by highest backlog pressure."
+    )
+    assert capacity_group["properties"]["headroom_ratio"]["description"] == (
+        "Capacity headroom ratio (`1 - rho`). Negative values indicate sustained overload."
+    )
+    assert capacity_group["properties"]["saturation_state"]["enum"] == [
+        "stable",
+        "near_capacity",
+        "over_capacity",
+    ]
 
 
 async def test_openapi_excludes_write_ingress_endpoints(async_test_client):
