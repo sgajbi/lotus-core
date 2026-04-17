@@ -116,6 +116,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     list_failures = schema["paths"]["/ingestion/jobs/{job_id}/failures"]["get"]
     get_records = schema["paths"]["/ingestion/jobs/{job_id}/records"]["get"]
     retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
+    health_summary = schema["paths"]["/ingestion/health/summary"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -229,6 +230,18 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     )
     assert retry_bookkeeping_failed["detail"]["code"] == "INGESTION_RETRY_BOOKKEEPING_FAILED"
 
+    health_example = health_summary["responses"]["200"]["content"]["application/json"]["example"]
+    assert health_summary["summary"] == "Get ingestion operational health summary"
+    assert "fast operational health checks and dashboards" in health_summary["description"]
+    assert health_example == {
+        "total_jobs": 2450,
+        "accepted_jobs": 3,
+        "queued_jobs": 7,
+        "failed_jobs": 2,
+        "backlog_jobs": 10,
+        "oldest_backlog_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    }
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -335,6 +348,21 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     )
     assert job_record_status["properties"]["replayable_record_keys"]["description"] == (
         "Record keys available for deterministic partial replay operations."
+    )
+    assert health_summary["properties"]["total_jobs"]["description"] == (
+        "Total ingestion jobs stored in operational state."
+    )
+    assert health_summary["properties"]["accepted_jobs"]["description"] == (
+        "Total jobs currently in accepted state."
+    )
+    assert health_summary["properties"]["queued_jobs"]["description"] == (
+        "Total jobs currently queued for asynchronous processing."
+    )
+    assert health_summary["properties"]["failed_jobs"]["description"] == (
+        "Total jobs currently marked as failed."
+    )
+    assert health_summary["properties"]["backlog_jobs"]["description"] == (
+        "Operational backlog count (accepted + queued)."
     )
     assert health_summary["properties"]["oldest_backlog_job_id"]["description"] == (
         "Identifier of the oldest non-terminal job contributing to the backlog."

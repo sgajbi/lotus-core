@@ -464,11 +464,104 @@ Result:
 10 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Health Summary Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/summary`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for fast ingestion health checks and
+operations dashboards.
+
+Use it to:
+
+1. read aggregate ingestion job counts by lifecycle state;
+2. compute backlog pressure from the canonical `accepted + queued` definition;
+3. identify the oldest non-terminal job contributing to the backlog;
+4. drive operational summary tiles and alert context before drilling into job-list, failure,
+   backlog-breakdown, stalled-job, or SLO endpoints.
+
+Do not use it for front-office portfolio data, source-data product reads, or detailed incident
+triage. It intentionally publishes a compact summary only.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/summary`, `IngestionHealthSummaryResponse`, or
+   `oldest_backlog_job_id` consumer in `lotus-gateway`, `lotus-risk`, `lotus-performance`,
+   `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. adjacent `backlog_jobs` hits in `lotus-performance` are service-local runtime-status fields,
+   not lotus-core ingestion-health integration;
+3. current documented consumers are operational runbooks and monitoring guidance inside
+   `lotus-core`, including ingestion SLO/alerting and calculator scalability operations docs.
+
+No downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct canonical ingestion-job state source. This pass tightened a contract
+gap: the response model already documented `oldest_backlog_job_id`, but the service summary did not
+populate it. `IngestionJobService.get_health_summary` now selects the oldest `accepted` or `queued`
+job by `submitted_at` and stable row id, while failed jobs are excluded from backlog identity.
+
+The endpoint has no query options and no request body. Its only supported output contract is:
+
+1. `total_jobs`;
+2. `accepted_jobs`;
+3. `queued_jobs`;
+4. `failed_jobs`;
+5. `backlog_jobs`;
+6. `oldest_backlog_job_id`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain the operational dashboard use case;
+2. the `200` response includes a concrete aggregate-health example;
+3. all response attributes carry descriptions, types, and examples through the shared DTO schema;
+4. the `oldest_backlog_job_id` field is explicitly documented as the oldest non-terminal backlog
+   job identifier.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/summary`, `IngestionHealthSummaryResponse`, `oldest_backlog_job_id`, `backlog_jobs`, or ingestion-health-summary vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for all output fields rather than a superficial key check.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_health_summary_reports_backlog_counts_and_oldest_job`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_health_summary_reports_backlog_counts_and_oldest_job tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 Additional focused gates:
 
 ```powershell
-python -m ruff check src\services\ingestion_service\app\routers\transactions.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
-python -m ruff format --check src\services\ingestion_service\app\routers\transactions.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff check src\services\event_replay_service\app\routers\ingestion_operations.py src\services\ingestion_service\app\services\ingestion_job_service.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\event_replay_service\test_event_replay_app.py
+python -m ruff format --check src\services\event_replay_service\app\routers\ingestion_operations.py src\services\ingestion_service\app\services\ingestion_job_service.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\event_replay_service\test_event_replay_app.py
 python scripts\openapi_quality_gate.py
 ```
 
@@ -476,7 +569,7 @@ Results:
 
 ```text
 All checks passed.
-3 files already formatted.
+4 files already formatted.
 OpenAPI quality gate passed for API services.
 ```
 

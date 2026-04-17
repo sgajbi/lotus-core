@@ -259,12 +259,23 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             accepted_jobs = sum(1 for j in self.jobs.values() if j.status == "accepted")
             queued_jobs = sum(1 for j in self.jobs.values() if j.status == "queued")
             failed_jobs = sum(1 for j in self.jobs.values() if j.status == "failed")
+            backlog_jobs = [
+                job for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            ]
+            oldest_backlog_job = min(
+                backlog_jobs,
+                key=lambda job: job.submitted_at,
+                default=None,
+            )
             return {
                 "total_jobs": total_jobs,
                 "accepted_jobs": accepted_jobs,
                 "queued_jobs": queued_jobs,
                 "failed_jobs": failed_jobs,
                 "backlog_jobs": accepted_jobs + queued_jobs,
+                "oldest_backlog_job_id": (
+                    oldest_backlog_job.job_id if oldest_backlog_job is not None else None
+                ),
             }
 
         async def get_slo_status(
@@ -3816,12 +3827,58 @@ async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_m
     ingestion_test_harness["fake_job_service"].mode = "normal"
 
 
-async def test_ingestion_health_summary(event_replay_test_client: httpx.AsyncClient):
+async def test_ingestion_health_summary_reports_backlog_counts_and_oldest_job(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    queued_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_HEALTH_SUMMARY_QUEUED_001"),
+        headers={"X-Idempotency-Key": "health-summary-queued-001"},
+    )
+    assert queued_response.status_code == 202
+    queued_job_id = queued_response.json()["job_id"]
+
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_HEALTH_SUMMARY_FAILED_001"),
+        headers={"X-Idempotency-Key": "health-summary-failed-001"},
+    )
+    assert failed_response.status_code == 500
+    failed_job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    accepted_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_HEALTH_SUMMARY_ACCEPTED_001"),
+        headers={"X-Idempotency-Key": "health-summary-accepted-001"},
+    )
+    assert accepted_response.status_code == 500
+    accepted_job_id = accepted_response.json()["detail"]["job_id"]
+
     response = await event_replay_test_client.get("/ingestion/health/summary")
+
     assert response.status_code == 200
     body = response.json()
-    assert "total_jobs" in body
-    assert "backlog_jobs" in body
+    assert body == {
+        "total_jobs": 3,
+        "accepted_jobs": 1,
+        "queued_jobs": 1,
+        "failed_jobs": 1,
+        "backlog_jobs": 2,
+        "oldest_backlog_job_id": queued_job_id,
+    }
+    assert failed_job_id not in {
+        accepted_job_id,
+        queued_job_id,
+        body["oldest_backlog_job_id"],
+    }
 
 
 async def test_ingestion_slo_status(event_replay_test_client: httpx.AsyncClient):

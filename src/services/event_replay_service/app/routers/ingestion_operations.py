@@ -100,6 +100,15 @@ INGESTION_JOB_RECORD_STATUS_RESPONSE_EXAMPLE = {
     ],
 }
 
+INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE = {
+    "total_jobs": 2450,
+    "accepted_jobs": 3,
+    "queued_jobs": 7,
+    "failed_jobs": 2,
+    "backlog_jobs": 10,
+    "oldest_backlog_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -851,6 +860,12 @@ async def retry_ingestion_job(
         "How: Compute summary from canonical ingestion job state.\n"
         "When: Use for fast operational health checks and dashboards."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current aggregate ingestion job health counters.",
+            "content": {"application/json": {"example": INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_health_summary(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
