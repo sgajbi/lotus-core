@@ -118,7 +118,11 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
     job_id_parameter = next(param for param in get_job["parameters"] if param["name"] == "job_id")
+    assert get_job["summary"] == "Get ingestion job status"
+    assert "track asynchronous ingestion completion or failure" in get_job["description"]
     assert job_id_parameter["description"] == "Ingestion job identifier."
+    job_not_found = get_job["responses"]["404"]["content"]["application/json"]["example"]
+    assert job_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
 
     status_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "status")
     assert status_parameter["description"] == "Optional job status filter."
@@ -166,11 +170,35 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     assert response.status_code == 200
     schema = response.json()["components"]["schemas"]
 
+    job_detail = schema["IngestionJobResponse"]
     job_list = schema["IngestionJobListResponse"]
     health_summary = schema["IngestionHealthSummaryResponse"]
     ops_policy = schema["IngestionOpsPolicyResponse"]
     queue_health = schema["IngestionReprocessingQueueHealthResponse"]
 
+    assert set(job_detail["required"]) == {
+        "job_id",
+        "endpoint",
+        "entity_type",
+        "status",
+        "accepted_count",
+        "correlation_id",
+        "request_id",
+        "trace_id",
+        "submitted_at",
+        "retry_count",
+    }
+    assert job_detail["properties"]["endpoint"]["description"] == (
+        "Ingestion API endpoint that created this job."
+    )
+    assert job_detail["properties"]["accepted_count"]["minimum"] == 0
+    assert job_detail["properties"]["status"]["enum"] == ["accepted", "queued", "failed"]
+    assert job_detail["properties"]["failure_reason"]["description"] == (
+        "Failure reason when status is failed."
+    )
+    assert job_detail["properties"]["last_retried_at"]["description"] == (
+        "Timestamp of the most recent retry attempt."
+    )
     assert job_list["properties"]["jobs"]["description"] == (
         "Ingestion jobs matching the requested filters and pagination window."
     )

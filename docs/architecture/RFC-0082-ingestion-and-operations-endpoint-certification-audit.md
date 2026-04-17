@@ -2660,3 +2660,102 @@ Result:
 ```text
 19 passed
 ```
+
+## Certified Endpoint Slice: Ingestion Job Detail Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/jobs/{job_id}`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane read endpoint for a single asynchronous ingestion job.
+
+Use it to:
+
+1. inspect lifecycle state for a submitted ingestion write job;
+2. tie an ACK `job_id` back to endpoint, entity type, accepted record count, idempotency key, and
+   observability lineage;
+3. distinguish queued and failed outcomes after asynchronous or post-publish processing;
+4. retrieve terminal failure reason, completion timestamp, retry count, and most recent retry time
+   before deciding whether to use failure-history, record-status, or retry routes.
+
+Do not use it as a product-facing portfolio, market-data, reference-data, or front-office query
+route. It intentionally returns ingestion-control metadata only. Use the downstream read-side
+integration routes for business data and use `GET /ingestion/jobs/{job_id}/failures`,
+`GET /ingestion/jobs/{job_id}/records`, and `POST /ingestion/jobs/{job_id}/retry` for deeper
+incident triage and remediation.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/jobs/{job_id}` consumer in the
+   local scan;
+2. the only adjacent downstream match was unrelated `lotus-performance` compute-job documentation
+   and models, not lotus-core ingestion jobs;
+3. this route remains suitable for operators, platform automation, QA, and ingestion source
+   support tooling rather than front-office application integration.
+
+No downstream migration issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct durable ingestion-job control-plane architecture:
+
+1. it is exposed only through the event replay / ingestion operations app;
+2. it is protected by the operations token dependency inherited from the router;
+3. it reads canonical state through `IngestionJobService.get_job(job_id)`;
+4. it returns `404` `INGESTION_JOB_NOT_FOUND` with the missing job identifier in the message when
+   no durable job exists;
+5. it returns the shared `IngestionJobResponse` contract for queued and failed jobs, including
+   endpoint, entity type, accepted count, idempotency key, correlation id, request id, trace id,
+   submitted/completed timestamps, failure reason, retry count, and last retry timestamp;
+6. it does not duplicate job lookup logic inside the router.
+
+No route implementation change was required in this pass.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and is now protected by endpoint-specific OpenAPI assertions:
+
+1. the operation summary and description explain what the route returns and when to use it;
+2. the `job_id` path parameter has a description and example;
+3. the `404` response example carries `INGESTION_JOB_NOT_FOUND`;
+4. the shared `IngestionJobResponse` schema marks required fields explicitly;
+5. lifecycle status is enumerated as `accepted`, `queued`, and `failed`;
+6. all response attributes have descriptions, types, and examples through the Pydantic schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `ingestion/jobs`, `IngestionJobResponse`, or ingestion job status vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for the job-detail output contract and error behavior.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_jobs_status_endpoint`
+2. `test_ingestion_jobs_status_endpoint_returns_failed_job_detail`
+3. `test_ingestion_job_not_found`
+4. `test_openapi_describes_event_replay_operational_parameters`
+5. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_jobs_status_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_jobs_status_endpoint_returns_failed_job_detail tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_not_found tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+5 passed
+```

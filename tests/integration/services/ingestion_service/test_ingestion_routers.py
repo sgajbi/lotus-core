@@ -1328,34 +1328,71 @@ async def test_ingestion_jobs_status_endpoint(
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "T100",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
+    payload = _transaction_batch_payload("TX_JOB_DETAIL_001")
+    headers = {
+        "X-Idempotency-Key": "job-detail-idempotency-001",
+        "X-Correlation-Id": "ING:test-job-detail-correlation",
     }
 
-    ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions", json=payload, headers=headers
+    )
     assert ingest_response.status_code == 202
-    job_id = ingest_response.json()["job_id"]
+    ingest_body = ingest_response.json()
+    job_id = ingest_body["job_id"]
 
     job_response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}")
     assert job_response.status_code == 200
     job_body = job_response.json()
     assert job_body["job_id"] == job_id
-    assert job_body["status"] == "queued"
+    assert job_body["endpoint"] == "/ingest/transactions"
     assert job_body["entity_type"] == "transaction"
+    assert job_body["status"] == "queued"
+    assert job_body["accepted_count"] == 1
+    assert job_body["idempotency_key"] == "job-detail-idempotency-001"
+    assert job_body["correlation_id"] == "ING:test-job-detail-correlation"
+    assert job_body["request_id"]
+    assert job_body["trace_id"]
+    assert job_body["submitted_at"]
+    assert job_body["completed_at"]
+    assert job_body["failure_reason"] is None
+    assert job_body["retry_count"] == 0
+    assert job_body["last_retried_at"] is None
+    assert job_body["accepted_count"] == ingest_body["accepted_count"]
+
+
+async def test_ingestion_jobs_status_endpoint_returns_failed_job_detail(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_DETAIL_FAILED_001"),
+        headers={"X-Idempotency-Key": "job-detail-failed-idempotency-001"},
+    )
+
+    assert failed_response.status_code == 500
+    failed_body = failed_response.json()["detail"]
+    assert failed_body["code"] == "INGESTION_PUBLISH_FAILED"
+    job_id = failed_body["job_id"]
+
+    job_response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}")
+    assert job_response.status_code == 200
+    job_body = job_response.json()
+    assert job_body["job_id"] == job_id
+    assert job_body["endpoint"] == "/ingest/transactions"
+    assert job_body["entity_type"] == "transaction"
+    assert job_body["status"] == "failed"
+    assert job_body["accepted_count"] == 1
+    assert job_body["idempotency_key"] == "job-detail-failed-idempotency-001"
+    assert "TX_JOB_DETAIL_FAILED_001" in job_body["failure_reason"]
+    assert "Remaining unpublished record keys" in job_body["failure_reason"]
+    assert job_body["completed_at"]
+    assert job_body["retry_count"] == 0
+    assert job_body["last_retried_at"] is None
 
 
 async def test_ingestion_jobs_list_endpoint(event_replay_test_client: httpx.AsyncClient):
@@ -1372,6 +1409,7 @@ async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClie
     assert response.status_code == 404
     body = response.json()
     assert body["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+    assert body["detail"]["message"] == "Ingestion job 'job_missing_001' was not found."
 
 
 async def test_ingestion_jobs_idempotency_replays_existing_job(
