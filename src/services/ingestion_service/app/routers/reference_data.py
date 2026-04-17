@@ -46,6 +46,13 @@ REFERENCE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for the requested reference-data endpoint.",
     }
 }
+REFERENCE_PERSIST_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "REFERENCE_DATA_PERSIST_FAILED",
+        "message": "Benchmark assignment persistence failed.",
+        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+    }
+}
 
 
 async def _handle_reference_ingestion(
@@ -104,7 +111,14 @@ async def _handle_reference_ingestion(
             str(exc),
             failure_phase="persist",
         )
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "REFERENCE_DATA_PERSIST_FAILED",
+                "message": str(exc),
+                "job_id": job_result.job.job_id,
+            },
+        ) from exc
 
     try:
         await ingestion_job_service.mark_queued(job_result.job.job_id)
@@ -129,6 +143,10 @@ REFERENCE_INGESTION_RESPONSES = {
     status.HTTP_429_TOO_MANY_REQUESTS: {
         "description": "Write-rate protection blocked the reference-data request.",
         "content": {"application/json": {"example": REFERENCE_RATE_LIMIT_EXCEEDED_EXAMPLE}},
+    },
+    status.HTTP_500_INTERNAL_SERVER_ERROR: {
+        "description": "Reference-data persistence failed after job metadata was recorded.",
+        "content": {"application/json": {"example": REFERENCE_PERSIST_FAILED_EXAMPLE}},
     },
     status.HTTP_503_SERVICE_UNAVAILABLE: {
         "description": "Ingestion operating mode blocked writes.",

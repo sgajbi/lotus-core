@@ -1530,7 +1530,20 @@ async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
-    payload = {
+    payload = _benchmark_assignment_payload()
+
+    response = await async_test_client.post("/ingest/benchmark-assignments", json=payload)
+
+    assert response.status_code == 202
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_assignments"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["assignment_recorded_at"] is not None
+
+
+def _benchmark_assignment_payload() -> dict[str, list[dict[str, object]]]:
+    return {
         "benchmark_assignments": [
             {
                 "portfolio_id": "LIVE_REAL_005607",
@@ -1543,14 +1556,167 @@ async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when
         ]
     }
 
-    response = await async_test_client.post("/ingest/benchmark-assignments", json=payload)
+
+async def test_ingest_benchmark_assignments_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_assignment_payload()
+    payload["benchmark_assignments"][0].update(
+        {
+            "effective_to": "2026-12-31",
+            "assignment_recorded_at": "2026-01-02T08:00:00Z",
+            "assignment_version": 2,
+            "policy_pack_id": "policy_pack_wm_v1",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=payload,
+        headers={"X-Idempotency-Key": "benchmark-assignment-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "benchmark_assignment"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "benchmark-assignment-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
     persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
         "benchmark_assignments"
     ]
     assert len(persisted) == 1
-    assert persisted[0]["assignment_recorded_at"] is not None
+    assignment = persisted[0]
+    assert assignment["portfolio_id"] == "LIVE_REAL_005607"
+    assert assignment["benchmark_id"] == "BMK_US_60_40_005607"
+    assert assignment["effective_from"].isoformat() == "2026-01-01"
+    assert assignment["effective_to"].isoformat() == "2026-12-31"
+    assert assignment["assignment_source"] == "benchmark_policy_engine"
+    assert assignment["assignment_status"] == "active"
+    assert assignment["source_system"] == "lotus-manage"
+    assert assignment["assignment_recorded_at"].isoformat() == "2026-01-02T08:00:00+00:00"
+    assert assignment["assignment_version"] == 2
+    assert assignment["policy_pack_id"] == "policy_pack_wm_v1"
+
+
+async def test_ingest_benchmark_assignments_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_assignment_payload()
+    headers = {"X-Idempotency-Key": "benchmark-assignment-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_assignments"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_benchmark_assignments_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=_benchmark_assignment_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_assignments"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_assignments_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=_benchmark_assignment_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/benchmark-assignments blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_assignments"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_assignments_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("benchmark assignment persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_portfolio_benchmark_assignments",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=_benchmark_assignment_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "benchmark assignment persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "benchmark assignment persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
 
 
 async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(
@@ -4110,23 +4276,24 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
         _raise_persist_failure,
     )
 
-    with pytest.raises(RuntimeError, match="cash account master persist failed"):
-        await async_test_client.post(
-            "/ingest/reference/cash-accounts",
-            json={
-                "cash_accounts": [
-                    {
-                        "cash_account_id": "CASH-ACC-USD-001",
-                        "portfolio_id": "P1",
-                        "security_id": "CASH_USD",
-                        "display_name": "USD Operating Cash",
-                        "account_currency": "USD",
-                        "lifecycle_status": "ACTIVE",
-                    }
-                ]
-            },
-        )
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json={
+            "cash_accounts": [
+                {
+                    "cash_account_id": "CASH-ACC-USD-001",
+                    "portfolio_id": "P1",
+                    "security_id": "CASH_USD",
+                    "display_name": "USD Operating Cash",
+                    "account_currency": "USD",
+                    "lifecycle_status": "ACTIVE",
+                }
+            ]
+        },
+    )
 
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
     failed_jobs = [
         job
         for job in ingestion_test_harness["fake_job_service"].jobs.values()

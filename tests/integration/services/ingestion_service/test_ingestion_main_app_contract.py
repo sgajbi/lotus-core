@@ -291,6 +291,34 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         ]["code"]
         == "INGESTION_MODE_BLOCKS_WRITES"
     )
+    assert (
+        benchmark_assignments["responses"]["500"]["content"]["application/json"]["example"][
+            "detail"
+        ]["code"]
+        == "REFERENCE_DATA_PERSIST_FAILED"
+    )
+
+
+async def test_openapi_describes_benchmark_assignment_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["PortfolioBenchmarkAssignmentIngestionRequest"]
+    record_schema = components["PortfolioBenchmarkAssignmentRecord"]
+
+    assert request_schema["properties"]["benchmark_assignments"]["description"] == (
+        "Portfolio benchmark assignment records to ingest or upsert."
+    )
+    assert record_schema["properties"]["portfolio_id"]["description"] == (
+        "Canonical portfolio identifier."
+    )
+    assert record_schema["properties"]["assignment_recorded_at"]["description"] == (
+        "Optional assignment capture timestamp from the source system; "
+        "defaults to ingestion time when omitted."
+    )
+    assert record_schema["properties"]["assignment_version"]["minimum"] == 1.0
 
 
 async def test_openapi_describes_business_date_shared_schema(async_test_client):

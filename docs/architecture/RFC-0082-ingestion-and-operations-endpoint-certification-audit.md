@@ -1325,3 +1325,132 @@ OpenAPI quality gate passed for API services.
 | `lotus-core#60` | Already closed upload OpenAPI `400` documentation gap; revalidated for commit. | No further core action required. |
 | `lotus-core#61` | Already closed malformed upload resilience defect; revalidated for commit malformed XLSX and invalid CSV encoding. | No further core action required. |
 | `lotus-gateway#126` | Gateway forwards camelCase upload form fields to core instead of canonical snake_case. | Opened for downstream remediation. |
+
+## Certified Endpoint Slice: Portfolio Benchmark Assignment Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/benchmark-assignments`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for effective-dated portfolio-to-benchmark assignment
+records.
+
+The boundary is explicit:
+
+1. use it for benchmark onboarding, assignment updates, and restatement correction cycles;
+2. use it when upstream policy, onboarding, or operator workflows need to establish the benchmark
+   mapping later resolved by analytics consumers;
+3. do not use it as a benchmark read endpoint;
+4. use `POST /integration/portfolios/{portfolio_id}/benchmark-assignment` for downstream
+   effective-assignment resolution;
+5. treat acknowledgement as durable reference-data upsert acceptance, not downstream analytics
+   recomputation;
+6. use `X-Idempotency-Key` for replay-safe assignment submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream benchmark-assignment dependency is read-side and remains separate from this
+endpoint:
+
+1. `lotus-performance` resolves benchmark assignment through the query-control-plane integration
+   route when stateful benchmark-aware analytics omit an explicit benchmark id;
+2. `lotus-risk` consumes benchmark-aware performance/risk paths downstream of the same stateful
+   source-data posture;
+3. `lotus-report`, `lotus-advise`, `lotus-manage`, and `lotus-gateway` had no direct write-ingress
+   consumer for `POST /ingest/benchmark-assignments` in the local scan.
+
+Open downstream adoption umbrella issues such as `lotus-performance#125`, `lotus-risk#93`, and
+`lotus-gateway#116` concern query-control-plane/read contract hardening, not this write-ingress
+route.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `benchmark_assignments` collection through the DTO contract;
+2. it enforces ingestion operating mode before durable upsert;
+3. it enforces write-rate protection using accepted record count;
+4. it creates or replays ingestion jobs with idempotency semantics;
+5. it persists full request payload lineage on the ingestion job;
+6. it upserts assignment rows using portfolio id, benchmark id, effective-from date, and assignment
+   version as the conflict identity;
+7. it updates effective end date, source/status, policy pack, source system, and recorded timestamp
+   on conflict;
+8. it defaults `assignment_recorded_at` to ingestion time when omitted, matching the public DTO
+   description;
+9. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+10. it now returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice after adding the shared reference-data `500` response:
+
+1. route purpose says when to use benchmark assignment ingress and that it is durable upsert;
+2. all assignment attributes have descriptions, types, and examples;
+3. `assignment_recorded_at` explicitly documents the server default when omitted;
+4. `assignment_version` has a minimum of `1` for deterministic tie-break ordering;
+5. ACK fields are covered by the shared batch-ingestion response schema;
+6. `429`, `500`, and `503` operational response examples are present.
+
+Historical issue posture:
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core#249` | Historical defect where omitted `assignment_recorded_at` could fail durable persistence despite the DTO saying it defaults to ingestion time. | Already closed as completed; revalidated in this pass. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for benchmark assignment options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when_omitted`
+2. `test_ingest_benchmark_assignments_returns_ack_and_persists_full_contract`
+3. `test_ingest_benchmark_assignments_replays_duplicate_idempotency_key`
+4. `test_ingest_benchmark_assignments_returns_503_when_mode_blocks_writes`
+5. `test_ingest_benchmark_assignments_returns_429_when_rate_limited`
+6. `test_ingest_benchmark_assignments_marks_job_failed_when_persist_fails`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises`
+9. `test_openapi_describes_remaining_ingestion_operational_responses`
+10. `test_openapi_describes_benchmark_assignment_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when_omitted tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_assignments_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_assignments_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_assignments_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_assignments_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_assignments_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_benchmark_assignment_shared_schema -q
+```
+
+Result:
+
+```text
+20 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\reference_data.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\reference_data.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+3 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core#249` | Already closed optional `assignment_recorded_at` defaulting defect; current route and service default the timestamp and focused tests prove it. | No further core action required. |
+| Downstream repos | No direct downstream write-ingress consumer found for `POST /ingest/benchmark-assignments`; downstream benchmark assignment usage is through the strategic query-control-plane read route. | No downstream issue required. |
