@@ -742,7 +742,8 @@ mode instead of collapsing that route into a generic portfolio-only not-found ex
 
 | Issue | Status in this pass | Action |
 | --- | --- | --- |
-| `lotus-gateway #116` | Still valid downstream adoption issue. Gateway is the active direct consumer of `overview` and `readiness`, and it must keep tests/docs aligned with the current operator-evidence boundary and 400-vs-404 error behavior. | Keep open in gateway until downstream validation closes it. |
+| `lotus-gateway #116` | Closed on April 16, 2026. Gateway has already adopted the main support/readiness hardening posture, so this broader umbrella issue is no longer the active tracking record for the family. | Keep closed unless a fresh broader support/readiness regression appears. |
+| `lotus-gateway #124` | Open and valid. Gateway still models `GET /support/portfolios/{portfolio_id}/overview` as if lotus-core supports `as_of_date`, even though the authoritative lotus-core route accepts only `portfolio_id`, `stale_threshold_minutes`, and `failed_window_hours`. That stale assumption currently leaks into the gateway client signature, workspace cache keying, and unit-test expectations. | Keep open in gateway until the unsupported `as_of_date` shaping and cache/test drift are removed. |
 | `lotus-manage #32` | Still valid future-adoption issue. No active direct client was evidenced in this pass, so manage should treat the issue as adoption guidance rather than proof of live dependency. | Keep open in manage until direct operator workflow binding exists and is tested. |
 | `lotus-report #38` | Closed as stale adoption guidance. Report remains a catalog-intended support/evidence consumer, but no active direct client code was found and there is no live report-side workflow to fix. | Re-open or replace only when report adds a direct support/readiness/lineage workflow. |
 
