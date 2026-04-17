@@ -79,6 +79,9 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     commit_429 = commit["responses"]["429"]["content"]["application/json"]["example"]
     assert commit_429["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
+    commit_500 = commit["responses"]["500"]["content"]["application/json"]["example"]
+    assert commit_500["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+
     commit_503 = commit["responses"]["503"]["content"]["application/json"]["example"]
     assert commit_503["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 

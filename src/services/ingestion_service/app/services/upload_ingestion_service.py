@@ -7,6 +7,11 @@ from io import BytesIO, StringIO
 from typing import Any, Literal
 from zipfile import BadZipFile
 
+from fastapi import Depends, HTTPException, status
+from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
+from pydantic import BaseModel, ValidationError
+
 from ..DTOs.business_date_dto import BusinessDate
 from ..DTOs.fx_rate_dto import FxRate
 from ..DTOs.instrument_dto import Instrument
@@ -20,10 +25,6 @@ from ..DTOs.upload_dto import (
     UploadRowError,
 )
 from ..services.ingestion_service import IngestionService, get_ingestion_service
-from fastapi import Depends, HTTPException, status
-from openpyxl import load_workbook
-from openpyxl.utils.exceptions import InvalidFileException
-from pydantic import BaseModel, ValidationError
 
 MODEL_BY_ENTITY: dict[UploadEntityType, type[BaseModel]] = {
     "portfolios": Portfolio,
@@ -208,7 +209,9 @@ class UploadIngestionService:
             raise HTTPException(
                 status_code=HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
-                    "message": "Upload contains invalid rows. Fix errors or use allowPartial=true.",
+                    "message": (
+                        "Upload contains invalid rows. Fix errors or use allow_partial=true."
+                    ),
                     "errors": [error.model_dump() for error in validation.errors[:50]],
                 },
             )
@@ -260,4 +263,3 @@ def get_upload_ingestion_service(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
 ) -> UploadIngestionService:
     return UploadIngestionService(ingestion_service)
-

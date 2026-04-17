@@ -6,6 +6,7 @@ from ..adapter_mode import require_upload_adapter_enabled
 from ..DTOs.upload_dto import UploadCommitResponse, UploadEntityType, UploadPreviewResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
+from ..services.ingestion_service import IngestionPublishError
 from ..services.upload_ingestion_service import (
     UploadIngestionService,
     get_upload_ingestion_service,
@@ -28,6 +29,16 @@ INGESTION_RATE_LIMIT_EXCEEDED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_RATE_LIMIT_EXCEEDED",
         "message": "Ingestion write rate limit exceeded for /ingest/uploads/commit.",
+    }
+}
+UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": (
+            "Failed to publish transaction 'T2' after 1 earlier record(s) were already "
+            "published. Remaining unpublished record keys: T2."
+        ),
+        "failed_record_keys": ["T2"],
     }
 }
 
@@ -109,6 +120,10 @@ async def preview_upload(
             "description": "Write-rate protection blocked the commit request.",
             "content": {"application/json": {"example": INGESTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Upload commit publish failed after validation succeeded.",
+            "content": {"application/json": {"example": UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE}},
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
             "content": {"application/json": {"example": INGESTION_MODE_BLOCKS_WRITES_EXAMPLE}},
@@ -123,7 +138,7 @@ async def preview_upload(
     description=(
         "What: Commit CSV/XLSX data into canonical ingestion topics.\n"
         "How: Validate rows, enforce mode controls, and publish valid records "
-        "(optionally partial when allowPartial=true).\n"
+        "(optionally partial when allow_partial=true).\n"
         "When: Use after preview passes for adapter-mode bulk ingestion."
     ),
 )
@@ -165,12 +180,22 @@ async def commit_upload(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
         ) from exc
-    response = await upload_service.commit_upload(
-        entity_type=entity_type,
-        filename=file.filename or "upload.csv",
-        content=content,
-        allow_partial=allow_partial,
-    )
+    try:
+        response = await upload_service.commit_upload(
+            entity_type=entity_type,
+            filename=file.filename or "upload.csv",
+            content=content,
+            allow_partial=allow_partial,
+        )
+    except IngestionPublishError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_PUBLISH_FAILED",
+                "message": str(exc),
+                "failed_record_keys": exc.failed_record_keys,
+            },
+        ) from exc
     logger.info(
         "Upload commit completed.",
         extra={

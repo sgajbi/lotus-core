@@ -54,6 +54,7 @@ from src.services.ingestion_service.app.routers import (
 from src.services.ingestion_service.app.routers import (
     transactions as transactions_router,
 )
+from src.services.ingestion_service.app.routers import uploads as uploads_router
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     get_ingestion_job_service,
 )
@@ -2787,9 +2788,23 @@ def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
     return output.getvalue()
 
 
-@pytest.mark.parametrize(
-    ("entity_type", "headers", "row", "expected_key"),
-    [
+UPLOAD_ENTITY_CASES = [
+    {
+        "entity_type": entity_type,
+        "headers": headers,
+        "row": row,
+        "expected_sample_key": expected_sample_key,
+        "expected_topic": expected_topic,
+        "expected_partition_key": expected_partition_key,
+    }
+    for (
+        entity_type,
+        headers,
+        row,
+        expected_sample_key,
+        expected_topic,
+        expected_partition_key,
+    ) in [
         (
             "portfolios",
             [
@@ -2815,12 +2830,16 @@ def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
                 "active",
             ],
             "portfolio_id",
+            "portfolios.raw.received",
+            "P1",
         ),
         (
             "instruments",
             ["security_id", "name", "isin", "currency", "product_type"],
             ["SEC1", "Bond A", "ISIN1", "USD", "bond"],
             "security_id",
+            "instruments.received",
+            "SEC1",
         ),
         (
             "transactions",
@@ -2851,54 +2870,103 @@ def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
                 "USD",
             ],
             "transaction_id",
+            "transactions.raw.received",
+            "P1",
         ),
         (
             "market_prices",
             ["security_id", "price_date", "price", "currency"],
             ["SEC1", "2026-01-02", "100", "USD"],
             "security_id",
+            "market_prices.raw.received",
+            "SEC1",
         ),
         (
             "fx_rates",
             ["from_currency", "to_currency", "rate_date", "rate"],
             ["USD", "SGD", "2026-01-02", "1.35"],
             "from_currency",
+            "fx_rates.raw.received",
+            "USD-SGD-2026-01-02",
         ),
         (
             "business_dates",
             ["business_date", "calendar_code", "market_code", "source_system", "source_batch_id"],
             ["2026-01-02", "GLOBAL", "NYSE", "UPLOAD", "BATCH1"],
             "business_date",
+            "business_dates.raw.received",
+            "GLOBAL|2026-01-02",
         ),
-    ],
-)
+    ]
+]
+
+
+def _upload_csv_content(headers: list[str], row: list[str]) -> bytes:
+    return ("\n".join([",".join(headers), ",".join(row)])).encode("utf-8")
+
+
+@pytest.mark.parametrize("case", UPLOAD_ENTITY_CASES)
 async def test_upload_preview_accepts_all_supported_entity_families(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
-    entity_type: str,
-    headers: list[str],
-    row: list[str],
-    expected_key: str,
+    case: dict[str, object],
 ):
     mock_kafka_producer.publish_message.reset_mock()
-    csv_content = ("\n".join([",".join(headers), ",".join(row)])).encode("utf-8")
+    csv_content = _upload_csv_content(
+        headers=case["headers"],
+        row=case["row"],
+    )
 
     response = await async_test_client.post(
         "/ingest/uploads/preview",
-        files={"file": (f"{entity_type}.csv", csv_content, "text/csv")},
-        data={"entity_type": entity_type, "sample_size": "10"},
+        files={"file": (f"{case['entity_type']}.csv", csv_content, "text/csv")},
+        data={"entity_type": case["entity_type"], "sample_size": "10"},
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["entity_type"] == entity_type
+    assert body["entity_type"] == case["entity_type"]
     assert body["file_format"] == "csv"
     assert body["total_rows"] == 1
     assert body["valid_rows"] == 1
     assert body["invalid_rows"] == 0
-    assert expected_key in body["sample_rows"][0]
+    assert case["expected_sample_key"] in body["sample_rows"][0]
     assert body["errors"] == []
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+@pytest.mark.parametrize("case", UPLOAD_ENTITY_CASES)
+async def test_upload_commit_accepts_all_supported_entity_families(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    case: dict[str, object],
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    csv_content = _upload_csv_content(
+        headers=case["headers"],
+        row=case["row"],
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": (f"{case['entity_type']}.csv", csv_content, "text/csv")},
+        data={"entity_type": case["entity_type"], "allow_partial": "false"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == case["entity_type"]
+    assert body["file_format"] == "csv"
+    assert body["total_rows"] == 1
+    assert body["valid_rows"] == 1
+    assert body["invalid_rows"] == 0
+    assert body["published_rows"] == 1
+    assert body["skipped_rows"] == 0
+    assert body["message"] == "Upload committed and queued for processing."
+    mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == case["expected_topic"]
+    assert publish_kwargs["key"] == case["expected_partition_key"]
 
 
 async def test_upload_preview_transactions_csv(async_test_client: httpx.AsyncClient):
@@ -3034,6 +3102,86 @@ async def test_upload_commit_disabled_by_feature_flag(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+async def test_upload_commit_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", b"transaction_id,portfolio_id\nT1,P1", "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} estimated rows")
+
+    monkeypatch.setattr(
+        uploads_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", b"transaction_id,portfolio_id\nT1,P1", "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/uploads/commit blocked after 1 estimated rows",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_rejects_empty_csv(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", b"transaction_id,portfolio_id\n", "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Upload file contains no data rows."
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_rejects_unsupported_file_format(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.txt", b"transaction_id,portfolio_id\nT1,P1", "text/plain")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported file format. Use .csv or .xlsx."
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_upload_commit_xlsx_rejects_invalid_without_partial(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -3059,7 +3207,39 @@ async def test_upload_commit_xlsx_rejects_invalid_without_partial(
     )
 
     assert response.status_code == 422
+    assert response.json()["detail"]["message"] == (
+        "Upload contains invalid rows. Fix errors or use allow_partial=true."
+    )
+    assert response.json()["detail"]["errors"][0]["row_number"] == 3
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+    csv_content = "\n".join(
+        [
+            "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+            "T1,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            "T2,P1,I1,S1,2026-01-03T10:00:00Z,BUY,10,100,1000,USD,USD",
+        ]
+    ).encode("utf-8")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["T2"]
+    assert "Remaining unpublished record keys: T2" in body["detail"]["message"]
+    assert mock_kafka_producer.publish_message.call_count == 2
 
 
 async def test_upload_preview_rejects_malformed_xlsx(
