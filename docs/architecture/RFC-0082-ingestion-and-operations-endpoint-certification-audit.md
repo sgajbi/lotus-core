@@ -353,6 +353,117 @@ Result:
 6 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Job Retry Operations
+
+This certification pass covers:
+
+1. `POST /ingestion/jobs/{job_id}/retry`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for retrying stored ingestion job payloads
+after root-cause remediation.
+
+Use it to:
+
+1. replay a full stored ingestion payload;
+2. replay a supported subset of record keys for transactions, portfolios, instruments, business
+   dates, and transaction reprocessing requests;
+3. run `dry_run=true` to validate replayability and record an audit row without publishing;
+4. block duplicate successful deterministic replay fingerprints;
+5. record retry audit evidence for successful, duplicate-blocked, dry-run, failed, and
+   bookkeeping-failed replay outcomes.
+
+Do not use it for front-office product reads or ad hoc data mutation. It is an operator remediation
+surface and depends on stored request payload lineage, retry guardrails, and replay audit history.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/jobs/{job_id}/retry` consumer
+   in the local scan;
+2. adjacent downstream `dry_run` references were unrelated runtime-retention workflows, not
+   lotus-core ingestion retry;
+3. this route remains suitable for operations tooling, source-ingestion support, platform
+   automation, and QA.
+
+No downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct durable replay architecture:
+
+1. it reads canonical replay context through `IngestionJobService.get_job_replay_context`;
+2. it returns `404` `INGESTION_JOB_NOT_FOUND` when no durable job exists;
+3. it returns `409` `INGESTION_JOB_RETRY_UNSUPPORTED` when the job lacks stored payload lineage;
+4. it filters partial replay payloads by supported endpoint-specific record keys and rejects
+   unsupported partial scopes with `INGESTION_PARTIAL_RETRY_UNSUPPORTED`;
+5. it enforces retry guardrails through `assert_retry_allowed_for_records`;
+6. it records `dry_run` audit evidence before returning the unchanged job;
+7. it computes deterministic replay fingerprints and blocks duplicate successful replays;
+8. it republishes through canonical ingestion-service publishers;
+9. it marks retry accounting and queued state after successful publish;
+10. it records structured replay audit rows for success, duplicate, publish failure, dry-run, and
+    bookkeeping failure outcomes.
+
+The route implementation was already materially sound. This pass tightened the OpenAPI examples
+and corrected one stale integration-test expectation from exception propagation to structured HTTP
+500 evidence.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and is now protected by endpoint-specific OpenAPI assertions:
+
+1. the operation summary and description explain full/partial replay and remediation use;
+2. the `job_id` path parameter has a description and example;
+3. request examples cover full retry and partial dry-run;
+4. the request schema documents `record_keys` and `dry_run`;
+5. `409` examples now cover unsupported payload, unsupported partial retry, paused-mode retry
+   block, and duplicate replay block;
+6. the `500` example covers retry bookkeeping failure with replay audit id and fingerprint;
+7. the `200` response uses the already certified `IngestionJobResponse` schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/jobs/{job_id}/retry`, `IngestionRetryRequest`, partial retry, or ingestion retry vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for retry request options, replay outcomes, audit evidence, and
+error behavior.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_job_failure_history_and_retry`
+2. `test_ingestion_job_partial_retry_dry_run`
+3. `test_ingestion_job_retry_blocks_duplicate_fingerprint`
+4. `test_ingestion_job_full_retry_returns_complete_job_contract`
+5. `test_ingestion_job_retry_returns_not_found_and_unsupported_payload_errors`
+6. `test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_mode`
+7. `test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish`
+8. `test_openapi_includes_replay_examples`
+9. `test_openapi_describes_event_replay_operational_parameters`
+10. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_failure_history_and_retry tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_partial_retry_dry_run tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_retry_blocks_duplicate_fingerprint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_full_retry_returns_complete_job_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_retry_returns_not_found_and_unsupported_payload_errors tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_mode tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_includes_replay_examples tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+10 passed
+```
+
 Additional focused gates:
 
 ```powershell

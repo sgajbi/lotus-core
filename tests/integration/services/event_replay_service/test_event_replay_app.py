@@ -208,8 +208,26 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
         "examples"
     ]
+    retry_bookkeeping_failed = retry_job["responses"]["500"]["content"]["application/json"][
+        "example"
+    ]
+    retry_body_schema = retry_job["requestBody"]["content"]["application/json"]["schema"]
+    assert retry_job["summary"] == "Retry a failed ingestion job"
+    assert "full or partial payload replay" in retry_job["description"]
+    assert retry_body_schema["$ref"].endswith("/IngestionRetryRequest")
     assert "retry_unsupported" in retry_conflict_examples
+    assert "partial_retry_unsupported" in retry_conflict_examples
+    assert "retry_blocked" in retry_conflict_examples
     assert "duplicate_blocked" in retry_conflict_examples
+    assert (
+        retry_conflict_examples["partial_retry_unsupported"]["value"]["detail"]["code"]
+        == "INGESTION_PARTIAL_RETRY_UNSUPPORTED"
+    )
+    assert (
+        retry_conflict_examples["retry_blocked"]["value"]["detail"]["code"]
+        == "INGESTION_RETRY_BLOCKED"
+    )
+    assert retry_bookkeeping_failed["detail"]["code"] == "INGESTION_RETRY_BOOKKEEPING_FAILED"
 
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
@@ -222,6 +240,7 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
 
     ops_mode = schema["IngestionOpsModeResponse"]
     ops_mode_update = schema["IngestionOpsModeUpdateRequest"]
+    retry_request = schema["IngestionRetryRequest"]
     replay_request = schema["ConsumerDlqReplayRequest"]
     replay_audit_list = schema["IngestionReplayAuditListResponse"]
     idempotency = schema["IngestionIdempotencyDiagnosticsResponse"]
@@ -234,6 +253,12 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert replay_request["properties"]["dry_run"]["description"] == (
         "When true, validate replayability and replay mapping without republishing messages."
+    )
+    assert retry_request["properties"]["record_keys"]["description"] == (
+        "Optional subset of record keys to replay. Empty list replays full stored payload."
+    )
+    assert retry_request["properties"]["dry_run"]["description"] == (
+        "When true, validates retry scope without publishing messages."
     )
     assert replay_audit_list["properties"]["audits"]["description"] == (
         "Replay audit rows matching the requested filters and time window."

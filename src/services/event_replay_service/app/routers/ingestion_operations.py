@@ -173,10 +173,35 @@ INGESTION_JOB_RETRY_UNSUPPORTED_EXAMPLE = {
     }
 }
 
+INGESTION_JOB_PARTIAL_RETRY_UNSUPPORTED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED",
+        "message": "Partial retry is not supported for endpoint '/ingest/market-prices'.",
+    }
+}
+
+INGESTION_JOB_RETRY_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RETRY_BLOCKED",
+        "message": "Retries are blocked while ingestion is paused.",
+    }
+}
+
 INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
         "message": "Retry blocked because an equivalent deterministic replay already succeeded.",
+        "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+    }
+}
+
+INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RETRY_BOOKKEEPING_FAILED",
+        "message": (
+            "Replay publish succeeded but post-publish bookkeeping failed: queue state write failed"
+        ),
+        "replay_audit_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
         "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
     }
 }
@@ -587,11 +612,21 @@ async def get_ingestion_job_records(
                 "application/json": {
                     "examples": {
                         "retry_unsupported": {"value": INGESTION_JOB_RETRY_UNSUPPORTED_EXAMPLE},
+                        "partial_retry_unsupported": {
+                            "value": INGESTION_JOB_PARTIAL_RETRY_UNSUPPORTED_EXAMPLE
+                        },
+                        "retry_blocked": {"value": INGESTION_JOB_RETRY_BLOCKED_EXAMPLE},
                         "duplicate_blocked": {
                             "value": INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE
                         },
                     }
                 }
+            },
+        },
+        500: {
+            "description": "Replay publish succeeded but retry bookkeeping failed.",
+            "content": {
+                "application/json": {"example": INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE}
             },
         },
     },

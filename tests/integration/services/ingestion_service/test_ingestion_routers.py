@@ -3491,8 +3491,10 @@ async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publ
         ]
     }
 
-    with pytest.raises(Exception, match="Failed to publish transaction"):
-        await async_test_client.post("/ingest/transactions", json=payload)
+    failed_response = await async_test_client.post("/ingest/transactions", json=payload)
+
+    assert failed_response.status_code == 500
+    assert failed_response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -3640,6 +3642,20 @@ async def test_ingestion_job_partial_retry_dry_run(
         json={"record_keys": ["TX_PARTIAL_002"], "dry_run": True},
     )
     assert dry_run.status_code == 200
+    body = dry_run.json()
+    assert body["job_id"] == job_id
+    assert body["retry_count"] == 0
+    assert body["status"] == "queued"
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": job_id, "replay_status": "dry_run"},
+    )
+    assert audit_response.status_code == 200
+    audit = audit_response.json()["audits"][0]
+    assert audit["recovery_path"] == "ingestion_job_retry"
+    assert audit["dry_run"] is True
+    assert audit["replay_reason"] == "Dry-run successful. Ingestion job retry is replayable."
 
 
 async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
@@ -3677,6 +3693,127 @@ async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
     )
     assert second.status_code == 409
     assert second.json()["detail"]["code"] == "INGESTION_RETRY_DUPLICATE_BLOCKED"
+
+
+async def test_ingestion_job_full_retry_returns_complete_job_contract(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RETRY_FULL_001"),
+        headers={
+            "X-Idempotency-Key": "job-retry-full-001",
+            "X-Correlation-Id": "ING:test-retry-full-correlation",
+        },
+    )
+    assert ingest_response.status_code == 202
+    job_id = ingest_response.json()["job_id"]
+    mock_kafka_producer.publish_message.reset_mock()
+
+    retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{job_id}/retry")
+
+    assert retry_response.status_code == 200
+    body = retry_response.json()
+    assert body["job_id"] == job_id
+    assert body["endpoint"] == "/ingest/transactions"
+    assert body["entity_type"] == "transaction"
+    assert body["status"] == "queued"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "job-retry-full-001"
+    assert body["correlation_id"] == "ING:test-retry-full-correlation"
+    assert body["request_id"]
+    assert body["trace_id"]
+    assert body["submitted_at"]
+    assert body["completed_at"]
+    assert body["failure_reason"] is None
+    assert body["retry_count"] == 1
+    assert body["last_retried_at"]
+    mock_kafka_producer.publish_message.assert_called_once()
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": job_id, "replay_status": "replayed"},
+    )
+    assert audit_response.status_code == 200
+    audit = audit_response.json()["audits"][0]
+    assert audit["recovery_path"] == "ingestion_job_retry"
+    assert audit["dry_run"] is False
+    assert audit["replay_reason"] == "Ingestion job retry replay succeeded."
+
+
+async def test_ingestion_job_retry_returns_not_found_and_unsupported_payload_errors(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    missing = await event_replay_test_client.post("/ingestion/jobs/job_missing_001/retry")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job_missing_001' was not found.",
+    }
+
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RETRY_NO_PAYLOAD_001"),
+        headers={"X-Idempotency-Key": "job-retry-no-payload-001"},
+    )
+    assert ingest_response.status_code == 202
+    job_id = ingest_response.json()["job_id"]
+    ingestion_test_harness["fake_job_service"].job_payloads.pop(job_id)
+
+    unsupported = await event_replay_test_client.post(f"/ingestion/jobs/{job_id}/retry")
+
+    assert unsupported.status_code == 409
+    assert unsupported.json()["detail"] == {
+        "code": "INGESTION_JOB_RETRY_UNSUPPORTED",
+        "message": (
+            f"Ingestion job '{job_id}' does not have stored request payload and cannot be retried."
+        ),
+    }
+
+
+async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_mode(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    market_price_response = await async_test_client.post(
+        "/ingest/market-prices",
+        json=_market_price_batch_payload("SEC_RETRY_PARTIAL_UNSUPPORTED_001"),
+    )
+    assert market_price_response.status_code == 202
+    market_price_job_id = market_price_response.json()["job_id"]
+
+    partial_unsupported = await event_replay_test_client.post(
+        f"/ingestion/jobs/{market_price_job_id}/retry",
+        json={"record_keys": ["SEC_RETRY_PARTIAL_UNSUPPORTED_001"], "dry_run": True},
+    )
+    assert partial_unsupported.status_code == 409
+    assert partial_unsupported.json()["detail"] == {
+        "code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED",
+        "message": "Partial retry is not supported for endpoint '/ingest/market-prices'.",
+    }
+
+    transaction_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RETRY_PAUSED_001"),
+    )
+    assert transaction_response.status_code == 202
+    transaction_job_id = transaction_response.json()["job_id"]
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    blocked = await event_replay_test_client.post(f"/ingestion/jobs/{transaction_job_id}/retry")
+
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"] == {
+        "code": "INGESTION_RETRY_BLOCKED",
+        "message": "Retries are blocked while ingestion is paused.",
+    }
+    ingestion_test_harness["fake_job_service"].mode = "normal"
 
 
 async def test_ingestion_health_summary(event_replay_test_client: httpx.AsyncClient):
