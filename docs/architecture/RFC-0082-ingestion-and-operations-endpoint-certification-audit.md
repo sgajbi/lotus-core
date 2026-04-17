@@ -1,6 +1,6 @@
 # RFC-0082 / RFC-0083 Ingestion And Operations Endpoint Certification Audit
 
-Status: Draft implementation audit
+Status: Endpoint certification complete on `feat/rfc82-endpoint-certification`
 Owner: lotus-core
 Last reviewed: 2026-04-17
 Scope: write-ingress, event-replay, and financial-reconciliation service endpoints outside the downstream query/query-control-plane source-data audit
@@ -27,7 +27,10 @@ This audit covers the remaining non-health/non-metrics HTTP routes registered by
 2. `event_replay_service`
 3. `financial_reconciliation_service`
 
-## Remaining Endpoint Inventory
+## Endpoint Inventory
+
+All endpoint families listed below are certified in this audit as of April 17, 2026. The inventory
+is retained as the audited scope ledger, not as a remaining-work list.
 
 ### Ingestion Write API
 
