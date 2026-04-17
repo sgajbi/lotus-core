@@ -349,6 +349,28 @@ async def test_openapi_describes_benchmark_definition_shared_schema(async_test_c
     )
 
 
+async def test_openapi_describes_benchmark_composition_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["BenchmarkCompositionIngestionRequest"]
+    record_schema = components["BenchmarkCompositionRecord"]
+
+    assert request_schema["properties"]["benchmark_compositions"]["description"] == (
+        "Benchmark composition records to ingest or upsert."
+    )
+    assert record_schema["properties"]["benchmark_id"]["description"] == ("Benchmark identifier.")
+    assert record_schema["properties"]["index_id"]["description"] == ("Component index identifier.")
+    composition_weight_number = record_schema["properties"]["composition_weight"]["anyOf"][0]
+    assert composition_weight_number["minimum"] == 0.0
+    assert composition_weight_number["maximum"] == 1.0
+    assert record_schema["properties"]["rebalance_event_id"]["description"] == (
+        "Rebalance event identifier."
+    )
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 

@@ -1577,3 +1577,121 @@ OpenAPI quality gate passed for API services.
 | `lotus-core#237` | Open grouped benchmark analytics/read-contract request; not a defect in benchmark definition write ingress. | Track separately under analytics/read contract work. |
 | `lotus-core#306` | Open index-catalog classification issue; not a defect in benchmark definition write ingress. | Track separately under index catalog/classification work. |
 | Downstream repos | No direct downstream write-ingress consumer found for `POST /ingest/benchmark-definitions`; downstream usage is via strategic benchmark read contracts. | No downstream issue required. |
+
+## Certified Endpoint Slice: Benchmark Composition Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/benchmark-compositions`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for effective-dated benchmark composition rows.
+
+The boundary is explicit:
+
+1. use it to establish source-owned benchmark component membership and weights;
+2. use it for benchmark rebalance events, composition history maintenance, and historical backfills;
+3. do not use it as a benchmark composition read endpoint;
+4. use query-control-plane benchmark composition-window, market-series, and exposure-context routes
+   for downstream analytics sourcing;
+5. treat acknowledgement as durable reference-data upsert acceptance, not downstream benchmark
+   performance recomputation;
+6. use `X-Idempotency-Key` for replay-safe composition submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream benchmark-composition dependency is read-side and remains separate from this
+endpoint:
+
+1. `lotus-performance` sources benchmark composition windows from lotus-core for calculated
+   stateful benchmark, benchmark exposure context, and benchmark-aware performance workflows;
+2. `lotus-risk` consumes the derived performance-aligned benchmark exposure context while
+   documenting lotus-core as the benchmark-composition system of record;
+3. `lotus-report`, `lotus-advise`, `lotus-manage`, `lotus-workbench`, and `lotus-gateway` had no
+   direct write-ingress consumer for `POST /ingest/benchmark-compositions` in the local scan.
+
+Open downstream adoption umbrella issues such as `lotus-performance#125` and `lotus-risk#93`
+concern query-control-plane/read contract alignment, not this write-ingress route.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `benchmark_compositions` collection through the DTO contract;
+2. it enforces ingestion operating mode before durable upsert;
+3. it enforces write-rate protection using accepted record count;
+4. it creates or replays ingestion jobs with idempotency semantics;
+5. it persists full request payload lineage on the ingestion job;
+6. it constrains `composition_weight` to the inclusive unit interval `[0, 1]`;
+7. it upserts rows using benchmark id, component index id, and composition-effective-from date as
+   the conflict identity;
+8. it updates effective end date, component weight, rebalance event id, source lineage, and quality
+   status on conflict;
+9. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+10. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice:
+
+1. route purpose says when to use benchmark composition ingress and that it is durable upsert;
+2. all composition attributes have descriptions, types, and examples;
+3. `composition_weight` documents and enforces a numeric range from `0` to `1`;
+4. `rebalance_event_id`, source lineage, and quality status are modeled explicitly;
+5. ACK fields are covered by the shared batch-ingestion response schema;
+6. `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for benchmark composition options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_benchmark_compositions_returns_ack_and_persists_full_contract`
+2. `test_ingest_benchmark_compositions_replays_duplicate_idempotency_key`
+3. `test_ingest_benchmark_compositions_rejects_weight_outside_unit_interval`
+4. `test_ingest_benchmark_compositions_returns_503_when_mode_blocks_writes`
+5. `test_ingest_benchmark_compositions_returns_429_when_rate_limited`
+6. `test_ingest_benchmark_compositions_marks_job_failed_when_persist_fails`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_benchmark_composition_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_compositions_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_compositions_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_compositions_rejects_weight_outside_unit_interval tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_compositions_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_compositions_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_compositions_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_benchmark_composition_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+2 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/benchmark-compositions` in this pass. | No GitHub action required. |
+| Downstream repos | No direct downstream write-ingress consumer found for `POST /ingest/benchmark-compositions`; downstream usage is via strategic benchmark composition-window/exposure read contracts. | No downstream issue required. |

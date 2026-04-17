@@ -699,6 +699,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted: dict[str, list[dict]] = {
                 "benchmark_assignments": [],
                 "benchmark_definitions": [],
+                "benchmark_compositions": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -717,7 +718,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted["benchmark_definitions"].extend(records)
 
         async def upsert_benchmark_compositions(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["benchmark_compositions"].extend(records)
 
         async def upsert_indices(self, records: list[dict[str, object]]) -> None:
             return None
@@ -1906,6 +1907,199 @@ async def test_ingest_benchmark_definitions_marks_job_failed_when_persist_fails(
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
     assert failed_job.failure_reason == "benchmark definition persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _benchmark_composition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "benchmark_compositions": [
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "index_id": "IDX_MSCI_WORLD_TR",
+                "composition_effective_from": "2026-01-01",
+                "composition_weight": "0.6000000000",
+            }
+        ]
+    }
+
+
+async def test_ingest_benchmark_compositions_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_composition_payload()
+    payload["benchmark_compositions"][0].update(
+        {
+            "composition_effective_to": "2026-03-31",
+            "rebalance_event_id": "rebalance_2026q1",
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "cmp_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=payload,
+        headers={"X-Idempotency-Key": "benchmark-composition-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "benchmark_composition"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "benchmark-composition-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_compositions"
+    ]
+    assert len(persisted) == 1
+    composition = persisted[0]
+    assert composition["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert composition["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert composition["composition_effective_from"].isoformat() == "2026-01-01"
+    assert composition["composition_effective_to"].isoformat() == "2026-03-31"
+    assert composition["composition_weight"] == Decimal("0.6000000000")
+    assert composition["rebalance_event_id"] == "rebalance_2026q1"
+    assert composition["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert composition["source_vendor"] == "MSCI"
+    assert composition["source_record_id"] == "cmp_v20260102"
+    assert composition["quality_status"] == "accepted"
+
+
+async def test_ingest_benchmark_compositions_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_composition_payload()
+    headers = {"X-Idempotency-Key": "benchmark-composition-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_compositions"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_benchmark_compositions_rejects_weight_outside_unit_interval(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_composition_payload()
+    payload["benchmark_compositions"][0]["composition_weight"] = "1.5000000000"
+
+    response = await async_test_client.post("/ingest/benchmark-compositions", json=payload)
+
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_compositions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_compositions_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=_benchmark_composition_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_compositions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_compositions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=_benchmark_composition_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/benchmark-compositions blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_compositions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_compositions_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("benchmark composition persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_benchmark_compositions",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=_benchmark_composition_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "benchmark composition persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "benchmark composition persist failed"
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
