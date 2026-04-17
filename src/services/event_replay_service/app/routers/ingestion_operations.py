@@ -143,6 +143,24 @@ INGESTION_SLO_STATUS_RESPONSE_EXAMPLE = {
     "breach_backlog_age": False,
 }
 
+INGESTION_ERROR_BUDGET_STATUS_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "previous_lookback_minutes": 60,
+    "total_jobs": 320,
+    "failed_jobs": 7,
+    "failure_rate": "0.021875",
+    "remaining_error_budget": "0.008125",
+    "backlog_jobs": 12,
+    "previous_backlog_jobs": 9,
+    "backlog_growth": 3,
+    "replay_backlog_pressure_ratio": "0.0024",
+    "dlq_events_in_window": 4,
+    "dlq_budget_events_per_window": 10,
+    "dlq_pressure_ratio": "0.4000",
+    "breach_failure_rate": False,
+    "breach_backlog_growth": False,
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1040,6 +1058,14 @@ async def get_ingestion_slo_status(
         "How: Compare failure/backlog metrics across current and previous lookback windows.\n"
         "When: Use for SRE-style burn-rate alerts and release-go/no-go operational checks."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current ingestion error-budget and backlog-growth status.",
+            "content": {
+                "application/json": {"example": INGESTION_ERROR_BUDGET_STATUS_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_error_budget_status(
     lookback_minutes: int = Query(

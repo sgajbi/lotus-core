@@ -856,6 +856,118 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Error-Budget Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/error-budget`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for SRE-style ingestion error-budget and
+backlog-growth evaluation.
+
+Use it to:
+
+1. evaluate current failure-rate burn against the configured threshold;
+2. compare current backlog with the previous lookback window;
+3. track replay-backlog pressure against replay guardrail capacity;
+4. track DLQ pressure against the configured DLQ event budget;
+5. support release go/no-go checks, replay safety checks, and operational burn-rate alerts.
+
+Do not use it as a front-office data contract or as a detailed root-cause route. Operators should
+drill into SLO, consumer-lag, DLQ, job-list, failure-history, and retry routes when this endpoint
+flags a breach.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/error-budget` or
+   `IngestionErrorBudgetStatusResponse` consumer in `lotus-gateway`, `lotus-risk`,
+   `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. current documented consumers are operational runbooks and monitoring guidance inside
+   `lotus-core`, including calculator scalability and ingestion API gold-standard docs;
+3. no gateway issue is required because this is an operations/support route, not a front-office
+   feature route.
+
+### Upstream Integration Assessment
+
+The route uses the correct operational evidence source:
+
+1. it evaluates ingestion jobs in the requested current and previous lookback windows;
+2. it derives `failure_rate` from failed jobs divided by current-window total jobs;
+3. it computes `remaining_error_budget` as `max(0, threshold - failure_rate)`;
+4. it computes backlog growth as current non-terminal backlog minus previous-window backlog;
+5. it computes replay pressure from current backlog against replay guardrail capacity;
+6. it computes DLQ pressure from current-window consumer DLQ event count against configured DLQ
+   budget.
+
+The supported request options are:
+
+1. `lookback_minutes`, bounded from 5 to 1440;
+2. `failure_rate_threshold`, bounded from 0 to 1;
+3. `backlog_growth_threshold`, bounded from 0 to 10000.
+
+The supported output contract is:
+
+1. `lookback_minutes`;
+2. `previous_lookback_minutes`;
+3. `total_jobs`;
+4. `failed_jobs`;
+5. `failure_rate`;
+6. `remaining_error_budget`;
+7. `backlog_jobs`;
+8. `previous_backlog_jobs`;
+9. `backlog_growth`;
+10. `replay_backlog_pressure_ratio`;
+11. `dlq_events_in_window`;
+12. `dlq_budget_events_per_window`;
+13. `dlq_pressure_ratio`;
+14. `breach_failure_rate`;
+15. `breach_backlog_growth`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain burn-rate and release go/no-go use;
+2. all query parameters include descriptions, examples, and min/max bounds;
+3. the `200` response includes a concrete error-budget example;
+4. response attributes carry descriptions and examples through the DTO schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/error-budget`, `IngestionErrorBudgetStatusResponse`, or remaining-error-budget vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage`; local workbench scan also found no direct consumer. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for all request options, validation bounds, budget math,
+backlog-growth breach semantics, DLQ pressure, and all output fields.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_error_budget_endpoint_evaluates_burn_rate_and_backlog_growth`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_error_budget_endpoint_evaluates_burn_rate_and_backlog_growth tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

@@ -516,22 +516,36 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             failure_rate_threshold: Decimal = Decimal("0.03"),
             backlog_growth_threshold: int = 5,
         ):
+            total_jobs = len(self.jobs)
+            failed_jobs = sum(1 for job in self.jobs.values() if job.status == "failed")
+            failure_rate = (
+                Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
+            )
+            remaining_error_budget = max(Decimal("0"), failure_rate_threshold - failure_rate)
+            backlog_jobs = sum(
+                1 for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            )
+            previous_backlog_jobs = 0
+            backlog_growth = backlog_jobs - previous_backlog_jobs
+            dlq_events_in_window = 4 if total_jobs else 0
+            dlq_budget_events_per_window = 10
             return {
                 "lookback_minutes": lookback_minutes,
                 "previous_lookback_minutes": lookback_minutes,
-                "total_jobs": len(self.jobs),
-                "failed_jobs": 0,
-                "failure_rate": Decimal("0"),
-                "remaining_error_budget": failure_rate_threshold,
-                "backlog_jobs": 1,
-                "previous_backlog_jobs": 1,
-                "backlog_growth": 0,
-                "replay_backlog_pressure_ratio": Decimal("0.0002"),
-                "dlq_events_in_window": 0,
-                "dlq_budget_events_per_window": 10,
-                "dlq_pressure_ratio": Decimal("0"),
-                "breach_failure_rate": False,
-                "breach_backlog_growth": False,
+                "total_jobs": total_jobs,
+                "failed_jobs": failed_jobs,
+                "failure_rate": failure_rate,
+                "remaining_error_budget": remaining_error_budget,
+                "backlog_jobs": backlog_jobs,
+                "previous_backlog_jobs": previous_backlog_jobs,
+                "backlog_growth": backlog_growth,
+                "replay_backlog_pressure_ratio": Decimal(backlog_jobs) / Decimal("5000"),
+                "dlq_events_in_window": dlq_events_in_window,
+                "dlq_budget_events_per_window": dlq_budget_events_per_window,
+                "dlq_pressure_ratio": Decimal(dlq_events_in_window)
+                / Decimal(dlq_budget_events_per_window),
+                "breach_failure_rate": failure_rate > failure_rate_threshold,
+                "breach_backlog_growth": backlog_growth > backlog_growth_threshold,
             }
 
         async def get_operating_band(
@@ -4119,16 +4133,59 @@ async def test_ingestion_consumer_lag_endpoint_filters_and_reports_groups(
         assert invalid.status_code == 422
 
 
-async def test_ingestion_error_budget_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/error-budget")
+async def test_ingestion_error_budget_endpoint_evaluates_burn_rate_and_backlog_growth(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/error-budget",
+        params={
+            "lookback_minutes": 30,
+            "failure_rate_threshold": "0.20",
+            "backlog_growth_threshold": 1,
+        },
+    )
+
     assert response.status_code == 200
-    body = response.json()
-    assert "failure_rate" in body
-    assert "remaining_error_budget" in body
-    assert "replay_backlog_pressure_ratio" in body
-    assert "dlq_events_in_window" in body
-    assert "dlq_budget_events_per_window" in body
-    assert "dlq_pressure_ratio" in body
+    assert response.json() == {
+        "lookback_minutes": 30,
+        "previous_lookback_minutes": 30,
+        "total_jobs": 3,
+        "failed_jobs": 1,
+        "failure_rate": "0.3333333333333333333333333333",
+        "remaining_error_budget": "0",
+        "backlog_jobs": 2,
+        "previous_backlog_jobs": 0,
+        "backlog_growth": 2,
+        "replay_backlog_pressure_ratio": "0.0004",
+        "dlq_events_in_window": 4,
+        "dlq_budget_events_per_window": 10,
+        "dlq_pressure_ratio": "0.4",
+        "breach_failure_rate": True,
+        "breach_backlog_growth": True,
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"failure_rate_threshold": "-0.01"},
+        {"failure_rate_threshold": "1.01"},
+        {"backlog_growth_threshold": -1},
+        {"backlog_growth_threshold": 10001},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/error-budget",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_operating_band_endpoint(event_replay_test_client: httpx.AsyncClient):

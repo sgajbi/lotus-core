@@ -120,6 +120,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     health_lag = schema["paths"]["/ingestion/health/lag"]["get"]
     consumer_lag = schema["paths"]["/ingestion/health/consumer-lag"]["get"]
     slo_status = schema["paths"]["/ingestion/health/slo"]["get"]
+    error_budget = schema["paths"]["/ingestion/health/error-budget"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -295,6 +296,21 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert slo_example["failure_rate"] == "0.0125"
     assert slo_example["breach_failure_rate"] is False
 
+    error_budget_params = {param["name"]: param for param in error_budget["parameters"]}
+    error_budget_example = error_budget["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert error_budget["summary"] == "Get ingestion error-budget and backlog-growth status"
+    assert "burn-rate alerts and release-go/no-go" in error_budget["description"]
+    assert error_budget_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert error_budget_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert _schema_bound(error_budget_params["failure_rate_threshold"]["schema"], "minimum") == 0
+    assert _schema_bound(error_budget_params["failure_rate_threshold"]["schema"], "maximum") == 1
+    assert error_budget_params["backlog_growth_threshold"]["schema"]["minimum"] == 0
+    assert error_budget_params["backlog_growth_threshold"]["schema"]["maximum"] == 10000
+    assert error_budget_example["remaining_error_budget"] == "0.008125"
+    assert error_budget_example["dlq_pressure_ratio"] == "0.4000"
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -313,6 +329,7 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     consumer_lag = schema["IngestionConsumerLagResponse"]
     consumer_lag_group = schema["IngestionConsumerLagGroupResponse"]
     slo_status = schema["IngestionSloStatusResponse"]
+    error_budget = schema["IngestionErrorBudgetStatusResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -354,6 +371,16 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert slo_status["properties"]["breach_backlog_age"]["description"] == (
         "Whether backlog age exceeds configured threshold."
+    )
+    assert error_budget["properties"]["remaining_error_budget"]["description"] == (
+        "Remaining budget to threshold (max(0, threshold - failure_rate))."
+    )
+    assert error_budget["properties"]["replay_backlog_pressure_ratio"]["description"] == (
+        "Backlog saturation ratio against replay guardrail capacity "
+        "(backlog_jobs / replay_max_backlog_jobs)."
+    )
+    assert error_budget["properties"]["dlq_pressure_ratio"]["description"] == (
+        "DLQ pressure ratio against budget (dlq_events_in_window / dlq_budget_events_per_window)."
     )
 
 
