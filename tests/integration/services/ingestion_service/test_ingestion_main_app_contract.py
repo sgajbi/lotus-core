@@ -203,6 +203,14 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
     assert (
+        instruments["responses"]["500"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        instruments["responses"]["503"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_MODE_BLOCKS_WRITES"
+    )
+    assert (
         market_prices["responses"]["429"]["content"]["application/json"]["example"]["detail"][
             "code"
         ]

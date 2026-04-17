@@ -847,6 +847,22 @@ def _transaction_batch_payload(*transaction_ids: str) -> dict[str, list[dict[str
     return {"transactions": [_single_transaction_payload(transaction_id) for transaction_id in ids]}
 
 
+def _instrument_batch_payload(*security_ids: str) -> dict[str, list[dict[str, object]]]:
+    ids = security_ids or ("SEC_INST_001",)
+    return {
+        "instruments": [
+            {
+                "security_id": security_id,
+                "name": f"Instrument {security_id}",
+                "isin": f"ISIN{security_id[-6:]}",
+                "currency": "USD",
+                "product_type": "bond",
+            }
+            for security_id in ids
+        ]
+    }
+
+
 async def test_ingest_portfolios_endpoint(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -2054,22 +2070,121 @@ async def test_ingest_instruments_endpoint(
 ):
     """Tests the POST /ingest/instruments endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "instruments": [
-            {
-                "security_id": "S1",
-                "name": "N1",
-                "isin": "I1",
-                "currency": "USD",
-                "product_type": "E",
-            }
-        ]
-    }
+    payload = _instrument_batch_payload("SEC_INST_ACK_001")
 
-    response = await async_test_client.post("/ingest/instruments", json=payload)
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=payload,
+        headers={"X-Idempotency-Key": "instrument-batch-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Instruments accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "instrument"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["idempotency_key"] == "instrument-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "instruments.received"
+    assert publish_kwargs["key"] == "SEC_INST_ACK_001"
+    assert publish_kwargs["value"]["security_id"] == "SEC_INST_ACK_001"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"instrument-batch-idem-001")
+
+
+async def test_ingest_instruments_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _instrument_batch_payload("SEC_INST_IDEM_001")
+    headers = {"X-Idempotency-Key": "instrument-replay-001"}
+
+    first = await async_test_client.post("/ingest/instruments", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/instruments", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "instrument-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_instruments_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_INST_BLOCKED_001"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_instruments_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        instruments_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_INST_RATE_001", "SEC_INST_RATE_002"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/instruments blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_instruments_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_INST_FAIL_001", "SEC_INST_FAIL_002"),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["SEC_INST_FAIL_001", "SEC_INST_FAIL_002"]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "SEC_INST_FAIL_001",
+        "SEC_INST_FAIL_002",
+    ]
 
 
 async def test_ingest_market_prices_endpoint(

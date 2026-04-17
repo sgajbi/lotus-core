@@ -389,3 +389,109 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core` | No open issue found for `POST /ingest/transactions` in this pass. | No GitHub action required. |
 | Downstream repos | No open downstream issue found for transaction batch write-ingress misuse. | No downstream action required. |
+
+## Certified Endpoint Slice: Instrument Master Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/instruments`
+
+### Route Contract Decision
+
+This is the canonical write-ingress endpoint for instrument and security master records.
+
+The boundary is explicit:
+
+1. use it for upstream security master onboarding and reference-data corrections;
+2. do not use it as a read endpoint or downstream source-data product;
+3. treat acknowledgement as asynchronous job acceptance and Kafka publish queueing, not
+   persistence completion;
+4. use ingestion job and event-replay endpoints for operational follow-up, retry, and failure
+   evidence;
+5. use `X-Idempotency-Key` for replay-safe upstream batch submission.
+
+### Consumer And Integration Reality
+
+This endpoint is upstream-facing rather than downstream-facing. No direct `lotus-gateway`,
+`lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage` product
+consumer should call it for front-office reads.
+
+Repository scan evidence on April 17, 2026 found one documentation reference in
+`lotus-risk/docs/migrations/from-lotus-core/05_Developer_Guide.md` pointing to
+`/ingest/instruments` as a developer migration example. No live product consumer code was found.
+
+### Upstream Integration Assessment
+
+The route uses the correct instrument ingestion architecture:
+
+1. it validates the `InstrumentIngestionRequest` schema before accepting records;
+2. it enforces non-empty instrument batches through `min_length=1`;
+3. it enforces ingestion operating mode before queueing work;
+4. it enforces write-rate protection using the submitted batch size;
+5. it creates or replays ingestion jobs with idempotency semantics;
+6. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
+7. it publishes each record to `instruments.received` using `security_id` as the partition key;
+8. it records publish failures with failed security ids for operational diagnosis and retry;
+9. it marks accepted jobs queued only after publish succeeds, with explicit post-publish
+   bookkeeping failure handling.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice after adding a structured `500` publish-failure response:
+
+1. route purpose says when to use the endpoint and that it is asynchronous security-master write
+   ingress;
+2. instrument attributes include descriptions and examples, including issuer, classification, and
+   FX-contract fields;
+3. the request batch field is described and constrained with `min_length=1`;
+4. ACK fields include descriptions and examples for message, entity type, accepted count, job id,
+   correlation/request/trace identifiers, and idempotency key;
+5. `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for instrument write ingress rather than only a generic happy path.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_instruments_endpoint`
+2. `test_ingest_instruments_replays_duplicate_idempotency_key`
+3. `test_ingest_instruments_returns_503_when_mode_blocks_writes`
+4. `test_ingest_instruments_returns_429_when_rate_limited`
+5. `test_ingest_instruments_returns_failed_record_keys_when_publish_fails`
+6. `test_openapi_describes_remaining_ingestion_operational_responses`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instruments_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instruments_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instruments_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instruments_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instruments_returns_failed_record_keys_when_publish_fails tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses -q
+```
+
+Result:
+
+```text
+6 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\instruments.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\instruments.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+3 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/instruments` in this pass. | No GitHub action required. |
+| Downstream repos | No open downstream issue found for instrument write-ingress misuse. | No downstream action required. |
