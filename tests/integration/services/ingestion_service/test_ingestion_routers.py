@@ -700,6 +700,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "benchmark_assignments": [],
                 "benchmark_definitions": [],
                 "benchmark_compositions": [],
+                "indices": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -721,7 +722,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted["benchmark_compositions"].extend(records)
 
         async def upsert_indices(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["indices"].extend(records)
 
         async def upsert_index_price_series(self, records: list[dict[str, object]]) -> None:
             return None
@@ -2100,6 +2101,173 @@ async def test_ingest_benchmark_compositions_marks_job_failed_when_persist_fails
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
     assert failed_job.failure_reason == "benchmark composition persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _index_definition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "indices": [
+            {
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "index_name": "Global Equity Total Return",
+                "index_currency": "USD",
+                "index_type": "equity_index",
+                "index_status": "active",
+                "effective_from": "2026-01-01",
+            }
+        ]
+    }
+
+
+async def test_ingest_indices_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_definition_payload()
+    payload["indices"][0].update(
+        {
+            "index_provider": "MSCI",
+            "index_market": "global_developed",
+            "classification_set_id": "wm_global_taxonomy_v1",
+            "classification_labels": {
+                "asset_class": "equity",
+                "sector": "broad_market_equity",
+                "region": "global",
+            },
+            "effective_to": "2026-12-31",
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "idx_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/indices",
+        json=payload,
+        headers={"X-Idempotency-Key": "index-definition-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "index_definition"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "index-definition-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["indices"]
+    assert len(persisted) == 1
+    index = persisted[0]
+    assert index["index_id"] == "IDX_GLOBAL_EQUITY_TR"
+    assert index["index_name"] == "Global Equity Total Return"
+    assert index["index_currency"] == "USD"
+    assert index["index_type"] == "equity_index"
+    assert index["index_status"] == "active"
+    assert index["index_provider"] == "MSCI"
+    assert index["index_market"] == "global_developed"
+    assert index["classification_set_id"] == "wm_global_taxonomy_v1"
+    assert index["classification_labels"] == {
+        "asset_class": "equity",
+        "sector": "broad_market_equity",
+        "region": "global",
+    }
+    assert index["effective_from"].isoformat() == "2026-01-01"
+    assert index["effective_to"].isoformat() == "2026-12-31"
+    assert index["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert index["source_vendor"] == "MSCI"
+    assert index["source_record_id"] == "idx_v20260102"
+    assert index["quality_status"] == "accepted"
+
+
+async def test_ingest_indices_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_definition_payload()
+    headers = {"X-Idempotency-Key": "index-definition-replay-001"}
+
+    first = await async_test_client.post("/ingest/indices", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/indices", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert len(ingestion_test_harness["fake_reference_data_service"].persisted["indices"]) == 1
+
+
+async def test_ingest_indices_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post("/ingest/indices", json=_index_definition_payload())
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["indices"] == []
+
+
+async def test_ingest_indices_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post("/ingest/indices", json=_index_definition_payload())
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/indices blocked after 1 records",
+    }
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["indices"] == []
+
+
+async def test_ingest_indices_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("index definition persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_indices",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post("/ingest/indices", json=_index_definition_payload())
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "index definition persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "index definition persist failed"
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200

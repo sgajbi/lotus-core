@@ -371,6 +371,26 @@ async def test_openapi_describes_benchmark_composition_shared_schema(async_test_
     )
 
 
+async def test_openapi_describes_index_definition_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["IndexDefinitionIngestionRequest"]
+    record_schema = components["IndexDefinitionRecord"]
+
+    assert request_schema["properties"]["indices"]["description"] == (
+        "Index definition records to ingest or upsert."
+    )
+    assert record_schema["properties"]["index_id"]["description"] == ("Canonical index identifier.")
+    assert record_schema["properties"]["index_currency"]["description"] == "Index currency."
+    assert record_schema["properties"]["classification_labels"]["description"] == (
+        "Canonical classification labels for attribution."
+    )
+    assert record_schema["properties"]["index_market"]["examples"] == ["global_developed"]
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
