@@ -842,6 +842,11 @@ def _single_transaction_payload(transaction_id: str = "TX_SINGLE_001") -> dict[s
     }
 
 
+def _transaction_batch_payload(*transaction_ids: str) -> dict[str, list[dict[str, object]]]:
+    ids = transaction_ids or ("TX_BATCH_001",)
+    return {"transactions": [_single_transaction_payload(transaction_id) for transaction_id in ids]}
+
+
 async def test_ingest_portfolios_endpoint(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -1132,32 +1137,30 @@ async def test_ingest_transactions_endpoint(
 ):
     """Tests the POST /ingest/transactions endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "T1",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
+    payload = _transaction_batch_payload("TX_BATCH_ACK_001")
 
-    response = await async_test_client.post("/ingest/transactions", json=payload)
+    response = await async_test_client.post(
+        "/ingest/transactions",
+        json=payload,
+        headers={"X-Idempotency-Key": "transaction-batch-idem-001"},
+    )
 
     assert response.status_code == 202
     body = response.json()
+    assert body["message"] == "Transactions accepted for asynchronous ingestion processing."
     assert body["entity_type"] == "transaction"
     assert body["accepted_count"] == 1
-    assert "job_id" in body
+    assert body["job_id"]
+    assert body["idempotency_key"] == "transaction-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "transactions.raw.received"
+    assert publish_kwargs["key"] == "P1"
+    assert publish_kwargs["value"]["transaction_id"] == "TX_BATCH_ACK_001"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"transaction-batch-idem-001")
 
 
 async def test_ingest_transactions_endpoint_accepts_empty_batch(
@@ -1229,24 +1232,10 @@ async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClie
 
 async def test_ingestion_jobs_idempotency_replays_existing_job(
     async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_IDEMPOTENT_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _transaction_batch_payload("TX_IDEMPOTENT_001")
     headers = {"X-Idempotency-Key": "idem-batch-001"}
 
     first = await async_test_client.post("/ingest/transactions", json=payload, headers=headers)
@@ -1255,6 +1244,38 @@ async def test_ingestion_jobs_idempotency_replays_existing_job(
     assert first.status_code == 202
     assert second.status_code == 202
     assert first.json()["job_id"] == second.json()["job_id"]
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["idempotency_key"] == "idem-batch-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_transactions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        transactions_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_BATCH_RATE_LIMIT_001", "TX_BATCH_RATE_LIMIT_002"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/transactions blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_ingestion_job_failure_history_and_retry(
@@ -1263,26 +1284,12 @@ async def test_ingestion_job_failure_history_and_retry(
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_FAIL_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
+    payload = _transaction_batch_payload("TX_FAIL_001")
 
-    with pytest.raises(Exception, match="Failed to publish transaction"):
-        await async_test_client.post("/ingest/transactions", json=payload)
+    failed_response = await async_test_client.post("/ingest/transactions", json=payload)
+    assert failed_response.status_code == 500
+    assert failed_response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert failed_response.json()["detail"]["failed_record_keys"] == ["TX_FAIL_001"]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -1296,6 +1303,7 @@ async def test_ingestion_job_failure_history_and_retry(
     )
     assert failure_history.status_code == 200
     assert failure_history.json()["total"] >= 1
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["TX_FAIL_001"]
 
     mock_kafka_producer.publish_message.side_effect = None
     retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{failed_job_id}/retry")

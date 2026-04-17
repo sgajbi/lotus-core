@@ -139,6 +139,10 @@ async def ingest_transaction(
                 "application/json": {"example": TRANSACTION_BATCH_RATE_LIMIT_EXCEEDED_EXAMPLE}
             },
         },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Transaction batch publish failed after job metadata was recorded.",
+            "content": {"application/json": {"example": TRANSACTION_PUBLISH_FAILED_EXAMPLE}},
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
             "content": {"application/json": {"example": TRANSACTION_MODE_BLOCKED_EXAMPLE}},
@@ -217,7 +221,15 @@ async def ingest_transactions(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_PUBLISH_FAILED",
+                "message": str(exc),
+                "failed_record_keys": exc.failed_record_keys,
+                "job_id": job_result.job.job_id,
+            },
+        ) from exc
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise

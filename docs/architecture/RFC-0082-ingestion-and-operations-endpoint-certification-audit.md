@@ -281,3 +281,111 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core` | No open issue found for `POST /ingest/transaction` in this pass. | No GitHub action required. |
 | Downstream repos | No open downstream issue found for single transaction write-ingress misuse. | No downstream action required. |
+
+## Certified Endpoint Slice: Transaction Batch Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/transactions`
+
+### Route Contract Decision
+
+This is the canonical API-driven batch write-ingress endpoint for transaction ledger records.
+
+The boundary is explicit:
+
+1. use it for standard upstream transaction batch submission;
+2. use it when callers need ingestion job metadata, idempotency replay, retry, and failure-history
+   support;
+3. use `POST /ingest/transaction` only for controlled low-volume single-record corrections;
+4. do not use it as a read endpoint or downstream source-data product;
+5. treat acknowledgement as asynchronous job acceptance and Kafka publish queueing, not
+   persistence completion.
+
+### Consumer And Integration Reality
+
+This endpoint is upstream-facing rather than downstream-facing. No direct `lotus-gateway`,
+`lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage` product
+consumer should call it for front-office reads.
+
+Repository scan evidence on April 17, 2026 found one documentation reference in
+`lotus-risk/docs/migrations/from-lotus-core/05_Developer_Guide.md` pointing to
+`/ingest/transactions` as a developer migration example. No live product consumer code was found.
+
+### Upstream Integration Assessment
+
+The route uses the correct batch ingestion architecture:
+
+1. it validates the `TransactionIngestionRequest` schema before accepting records;
+2. it deliberately allows an empty transaction list as a no-op batch for workflow consistency;
+3. it enforces ingestion operating mode before queueing work;
+4. it enforces write-rate protection using the submitted batch size;
+5. it creates or replays ingestion jobs with idempotency semantics;
+6. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
+7. it publishes each record to `transactions.raw.received` using `portfolio_id` as the partition
+   key;
+8. it records publish failures with failed transaction ids for operational diagnosis and retry;
+9. it marks accepted jobs queued only after publish succeeds, with explicit post-publish
+   bookkeeping failure handling.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice after adding a structured `500` publish-failure response:
+
+1. route purpose says when to use the endpoint and that it is asynchronous batch write ingress;
+2. request attributes and transaction fields include descriptions and examples;
+3. the empty-list no-op behavior is described on the request field;
+4. ACK fields include descriptions and examples for message, entity type, accepted count, job id,
+   correlation/request/trace identifiers, and idempotency key;
+5. `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now stronger for batch-specific behavior and no longer relies only on generic ingestion
+job tests.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_transactions_endpoint`
+2. `test_ingest_transactions_endpoint_accepts_empty_batch`
+3. `test_ingestion_jobs_idempotency_replays_existing_job`
+4. `test_ingest_transactions_returns_429_when_rate_limited`
+5. `test_ingestion_job_failure_history_and_retry`
+6. `test_ingest_transactions_reports_bookkeeping_failure_after_publish`
+7. `test_ingestion_ops_control_mode_blocks_writes`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_transactions_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_transactions_endpoint_accepts_empty_batch tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_jobs_idempotency_replays_existing_job tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_transactions_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_failure_history_and_retry tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_transactions_reports_bookkeeping_failure_after_publish tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_ops_control_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses -q
+```
+
+Result:
+
+```text
+8 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\transactions.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\transactions.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+3 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/transactions` in this pass. | No GitHub action required. |
+| Downstream repos | No open downstream issue found for transaction batch write-ingress misuse. | No downstream action required. |
