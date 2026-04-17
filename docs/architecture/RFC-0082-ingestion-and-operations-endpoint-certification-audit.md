@@ -257,6 +257,96 @@ Result:
 4 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Operations Control Endpoints
+
+### Endpoint Inventory
+
+1. `GET /ingestion/ops/control`
+2. `PUT /ingestion/ops/control`
+
+### Route Contract Decision
+
+These are the governed control-plane routes for current ingestion mode and replay-window policy.
+
+Use them to:
+
+1. inspect whether ingestion is in `normal`, `paused`, or `drain` mode;
+2. inspect the currently configured replay window and last updater;
+3. apply planned maintenance or controlled drain transitions;
+4. gate write-ingress and replay operations under explicit operator control;
+5. maintain an auditable actor/timestamp trail for ops-mode changes.
+
+Do not use these routes for business data or per-job recovery. They are global operational control
+surfaces.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling these routes directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/ops/control` consumer in the
+   local scan;
+2. these routes remain operator/support/automation controls rather than downstream product APIs;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The routes align to the intended control architecture:
+
+1. the GET route returns current `mode`, `replay_window_start`, `replay_window_end`, `updated_by`,
+   and `updated_at`;
+2. the PUT route persists mode transitions through `IngestionJobService.update_ops_mode`;
+3. the PUT route rejects inverted replay windows with canonical
+   `INGESTION_INVALID_REPLAY_WINDOW`;
+4. the wider ingestion stack enforces mode state by blocking new writes while paused or draining;
+5. no behavioral router refactor was required, but endpoint-specific tests and Swagger assertions
+   now pin the replay-window and actor semantics more tightly.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now adequate for these endpoints:
+
+1. the GET route explains inspection use before maintenance or replay work;
+2. the PUT route explains when to update ops mode and why replay windows matter;
+3. the GET `200` example includes replay-window and actor fields;
+4. the PUT request body publishes a concrete `pause_with_window` example;
+5. `IngestionOpsModeResponse` and `IngestionOpsModeUpdateRequest` document mode, actor, and replay
+   window fields clearly.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/ops/control`, `IngestionOpsModeResponse`, or `IngestionOpsModeUpdateRequest` in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for full GET/PUT payloads, invalid replay-window behavior,
+write-blocking behavior, and OpenAPI quality.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_ops_control_routes_return_mode_window_and_actor_fields`
+2. `test_ingestion_ops_control_rejects_invalid_replay_window`
+3. `test_ingestion_ops_control_mode_blocks_writes`
+4. `test_openapi_describes_event_replay_operational_parameters`
+5. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_ops_control_routes_return_mode_window_and_actor_fields tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_ops_control_rejects_invalid_replay_window tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_ops_control_mode_blocks_writes tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+5 passed
+```
+
 ### Issue Disposition For This Endpoint
 
 | Issue | Assessment | Disposition |

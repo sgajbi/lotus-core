@@ -4173,6 +4173,56 @@ async def test_ingestion_stalled_jobs_endpoint_reports_all_stalled_job_fields(
         assert invalid_response.status_code == 422
 
 
+async def test_ingestion_ops_control_routes_return_mode_window_and_actor_fields(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    initial_response = await event_replay_test_client.get("/ingestion/ops/control")
+    assert initial_response.status_code == 200
+    initial_body = initial_response.json()
+    assert initial_body["mode"] == "normal"
+    assert initial_body["replay_window_start"] is None
+    assert initial_body["replay_window_end"] is None
+    assert initial_body["updated_by"] == "test"
+    assert initial_body["updated_at"]
+
+    update_response = await event_replay_test_client.put(
+        "/ingestion/ops/control",
+        json={
+            "mode": "drain",
+            "replay_window_start": "2026-03-06T00:00:00Z",
+            "replay_window_end": "2026-03-06T06:00:00Z",
+            "updated_by": "ops_automation",
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "mode": "drain",
+        "replay_window_start": "2026-03-06T00:00:00Z",
+        "replay_window_end": "2026-03-06T06:00:00Z",
+        "updated_by": "ops_automation",
+        "updated_at": update_response.json()["updated_at"],
+    }
+
+
+async def test_ingestion_ops_control_rejects_invalid_replay_window(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.put(
+        "/ingestion/ops/control",
+        json={
+            "mode": "paused",
+            "replay_window_start": "2026-03-06T06:00:00Z",
+            "replay_window_end": "2026-03-06T00:00:00Z",
+            "updated_by": "ops_automation",
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "INGESTION_INVALID_REPLAY_WINDOW",
+        "message": "replay_window_start must be before replay_window_end.",
+    }
+
+
 async def test_ingestion_ops_control_mode_blocks_writes(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,

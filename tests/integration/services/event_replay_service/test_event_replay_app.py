@@ -131,6 +131,8 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     replay_audits = schema["paths"]["/ingestion/audit/replays"]["get"]
     replay_audit = schema["paths"]["/ingestion/audit/replays/{replay_id}"]["get"]
+    ops_control_get = schema["paths"]["/ingestion/ops/control"]["get"]
+    ops_control_put = schema["paths"]["/ingestion/ops/control"]["put"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
     job_id_parameter = next(param for param in get_job["parameters"] if param["name"] == "job_id")
@@ -474,6 +476,24 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert replay_audit_id_parameter["description"] == "Replay audit identifier."
     assert replay_audit_not_found["detail"]["code"] == "INGESTION_REPLAY_AUDIT_NOT_FOUND"
 
+    ops_control_get_example = ops_control_get["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    ops_control_put_examples = ops_control_put["requestBody"]["content"]["application/json"][
+        "examples"
+    ]
+    assert ops_control_get["summary"] == "Get ingestion operations control mode"
+    assert "before maintenance, pause/drain actions" in ops_control_get["description"]
+    assert ops_control_get_example["mode"] == "paused"
+    assert ops_control_get_example["updated_by"] == "ops_automation"
+    assert "pause_with_window" in ops_control_put_examples
+    assert ops_control_put_examples["pause_with_window"]["value"]["mode"] == "paused"
+    assert ops_control_put["summary"] == "Update ingestion operations control mode"
+    assert (
+        "planned maintenance, controlled drain, or replay governance actions"
+        in ops_control_put["description"]
+    )
+
 
 async def test_openapi_describes_event_replay_shared_schema_depth(async_test_client):
     response = await async_test_client.get("/openapi.json")
@@ -543,6 +563,12 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     assert replay_audit["properties"]["replay_status"]["description"] == "Replay outcome status."
     assert replay_audit["properties"]["requested_by"]["description"] == (
         "Ops principal who initiated replay."
+    )
+    assert ops_mode["properties"]["updated_by"]["description"] == (
+        "Principal or automation actor who last changed ops mode."
+    )
+    assert ops_mode_update["properties"]["replay_window_end"]["description"] == (
+        "Optional replay window end for retry operations."
     )
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."
