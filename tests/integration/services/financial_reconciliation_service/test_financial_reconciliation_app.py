@@ -107,20 +107,42 @@ async def test_openapi_includes_reconciliation_examples(async_test_client: httpx
     assert response.status_code == 200
     schema = response.json()
 
-    post_operation = schema["paths"]["/reconciliation/runs/transaction-cashflow"]["post"]
-    request_examples = post_operation["requestBody"]["content"]["application/json"]["examples"]
-    response_example = post_operation["responses"]["200"]["content"]["application/json"]["example"]
+    transaction_cashflow = schema["paths"]["/reconciliation/runs/transaction-cashflow"]["post"]
+    position_valuation = schema["paths"]["/reconciliation/runs/position-valuation"]["post"]
+    timeseries_integrity = schema["paths"]["/reconciliation/runs/timeseries-integrity"]["post"]
+    list_runs = schema["paths"]["/reconciliation/runs"]["get"]
+    get_run = schema["paths"]["/reconciliation/runs/{run_id}"]["get"]
+    list_findings = schema["paths"]["/reconciliation/runs/{run_id}/findings"]["get"]
+
+    request_examples = transaction_cashflow["requestBody"]["content"]["application/json"][
+        "examples"
+    ]
+    response_example = transaction_cashflow["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
 
     assert "portfolio_day_scope" in request_examples
     assert request_examples["portfolio_day_scope"]["value"]["portfolio_id"] == "PORT-OPS-001"
     assert response_example["run_id"] == "FRR-20260306-0001"
+    assert transaction_cashflow["summary"] == "Run transaction-to-cashflow completeness controls"
+    assert "silent ledger-to-cashflow drift" in transaction_cashflow["description"]
+    assert position_valuation["summary"] == "Run position-to-valuation consistency controls"
+    assert "calculator-internal assumptions" in position_valuation["description"]
+    assert timeseries_integrity["summary"] == "Run portfolio timeseries integrity controls"
+    assert "portfolio analytics as authoritative" in timeseries_integrity["description"]
+    assert list_runs["summary"] == "List reconciliation control runs"
+    assert "control evidence review" in list_runs["description"]
+    assert get_run["summary"] == "Get one reconciliation control run"
+    assert "linking to findings" in get_run["description"]
 
-    finding_example = (
-        schema["paths"]["/reconciliation/runs/{run_id}/findings"]["get"]["responses"]["200"][
-            "content"
-        ]["application/json"]["example"]
-    )
+    finding_example = list_findings["responses"]["200"]["content"]["application/json"]["example"]
     assert finding_example["findings"][0]["finding_type"] == "missing_cashflow"
+    assert list_findings["summary"] == "List findings for one reconciliation control run"
+    assert "blocking control evidence" in list_findings["description"]
+    assert (
+        list_findings["responses"]["404"]["content"]["application/json"]["example"]["detail"]
+        == "Reconciliation run 'FRR-20260306-0001' was not found."
+    )
 
 
 async def test_openapi_describes_reconciliation_schema_fields(async_test_client: httpx.AsyncClient):
@@ -192,6 +214,10 @@ async def test_transaction_cashflow_run_persists_missing_cashflow_finding(
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["reconciliation_type"] == "transaction_cashflow"
+    assert payload["portfolio_id"] == "PORT-R1"
+    assert payload["business_date"] == "2026-03-08"
+    assert payload["requested_by"] == "qa"
     assert payload["summary"]["finding_count"] == 1
     assert payload["summary"]["passed"] is False
 
@@ -236,7 +262,18 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["reconciliation_type"] == "position_valuation"
+    assert payload["portfolio_id"] == "PORT-R2"
     assert payload["summary"]["finding_count"] == 2
+
+    findings_response = await async_test_client.get(
+        f"/reconciliation/runs/{payload['run_id']}/findings"
+    )
+    assert findings_response.status_code == 200
+    assert {finding["finding_type"] for finding in findings_response.json()["findings"]} == {
+        "market_value_local_mismatch",
+        "unrealized_gain_loss_local_mismatch",
+    }
 
 
 async def test_timeseries_integrity_run_detects_aggregate_and_completeness_drift(
@@ -316,3 +353,88 @@ async def test_timeseries_integrity_run_detects_aggregate_and_completeness_drift
         "position_timeseries_completeness_gap",
         "portfolio_timeseries_aggregate_mismatch",
     }
+
+
+async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_404(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+):
+    await _seed_portfolio(async_db_session, "PORT-R4A")
+    await _seed_portfolio(async_db_session, "PORT-R4B")
+
+    async_db_session.add(
+        CashflowRule(
+            transaction_type="RECON_BUY_R4",
+            classification="EXTERNAL",
+            timing="SETTLEMENT",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    )
+    async_db_session.add(
+        Transaction(
+            transaction_id="TXN-R4A",
+            portfolio_id="PORT-R4A",
+            instrument_id="INST-1",
+            security_id="SEC-R4A",
+            transaction_type="RECON_BUY_R4",
+            quantity=Decimal("10"),
+            price=Decimal("11"),
+            gross_transaction_amount=Decimal("110"),
+            trade_currency="USD",
+            currency="USD",
+            transaction_date=datetime(2026, 3, 8, tzinfo=timezone.utc),
+            settlement_date=datetime(2026, 3, 10, tzinfo=timezone.utc),
+        )
+    )
+    async_db_session.add(
+        DailyPositionSnapshot(
+            portfolio_id="PORT-R4B",
+            security_id="SEC-R4B",
+            date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("10"),
+            cost_basis=Decimal("90"),
+            cost_basis_local=Decimal("90"),
+            market_price=Decimal("11"),
+            market_value=Decimal("100"),
+            market_value_local=Decimal("100"),
+            unrealized_gain_loss=Decimal("5"),
+            unrealized_gain_loss_local=Decimal("5"),
+            valuation_status="VALUED",
+        )
+    )
+    await async_db_session.commit()
+
+    cashflow_run = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"portfolio_id": "PORT-R4A", "business_date": "2026-03-08", "requested_by": "qa"},
+    )
+    assert cashflow_run.status_code == 200
+
+    valuation_run = await async_test_client.post(
+        "/reconciliation/runs/position-valuation",
+        json={"portfolio_id": "PORT-R4B", "business_date": "2026-03-08"},
+    )
+    assert valuation_run.status_code == 200
+
+    list_response = await async_test_client.get(
+        "/reconciliation/runs",
+        params={
+            "reconciliation_type": "position_valuation",
+            "portfolio_id": "PORT-R4B",
+            "limit": 1,
+        },
+    )
+    assert list_response.status_code == 200
+    body = list_response.json()
+    assert body["total"] == 1
+    assert body["runs"][0]["run_id"] == valuation_run.json()["run_id"]
+    assert body["runs"][0]["reconciliation_type"] == "position_valuation"
+    assert body["runs"][0]["portfolio_id"] == "PORT-R4B"
+
+    missing_findings = await async_test_client.get("/reconciliation/runs/FRR-MISSING/findings")
+    assert missing_findings.status_code == 404
+    assert missing_findings.json() == {"detail": "Reconciliation run 'FRR-MISSING' was not found."}

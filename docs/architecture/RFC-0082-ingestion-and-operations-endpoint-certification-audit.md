@@ -434,6 +434,185 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Financial Reconciliation Run Creation Endpoints
+
+### Endpoint Inventory
+
+1. `POST /reconciliation/runs/transaction-cashflow`
+2. `POST /reconciliation/runs/position-valuation`
+3. `POST /reconciliation/runs/timeseries-integrity`
+
+### Route Contract Decision
+
+These are the governed mutation routes for launching independent financial-control runs in
+`lotus-core`.
+
+Use them to:
+
+1. execute transaction-to-cashflow completeness controls;
+2. execute position-to-valuation arithmetic consistency controls;
+3. execute timeseries integrity and aggregate-completeness controls;
+4. persist durable control-run evidence with actor, correlation, tolerance, and summary metadata;
+5. drive support and control-plane workflows before downstream consumers rely on the data.
+
+Do not use these routes as front-office analytics queries. They are control execution surfaces.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling these routes directly in the current local scan.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct
+   `/reconciliation/runs/transaction-cashflow`, `/position-valuation`, or
+   `/timeseries-integrity` consumer in the local scan;
+2. the routes remain operator/support/control-plane actions rather than user-facing downstream APIs;
+3. no downstream migration issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The routes are aligned to the intended independent-control architecture:
+
+1. each route delegates to the dedicated reconciliation service method for its control family;
+2. each route persists durable run metadata and structured summary output;
+3. control inputs support scoped execution by portfolio, business date, epoch, actor, and
+   tolerance;
+4. focused proof now covers full output posture for cashflow, valuation, and timeseries controls,
+   not just status code or finding counts;
+5. no behavioral refactor was required in the execution flow during this certification pass.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for these endpoints:
+
+1. each mutation route now has explicit what/how/why descriptions that explain when to use the
+   control;
+2. request examples cover portfolio-scoped and estate-wide control execution;
+3. response examples publish durable run metadata and summary semantics;
+4. `X-Correlation-Id` is documented as a propagated control-plane identifier.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for the reconciliation run creation endpoints in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for all three reconciliation run families and their control
+outputs.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_openapi_includes_reconciliation_examples`
+2. `test_transaction_cashflow_run_persists_missing_cashflow_finding`
+3. `test_position_valuation_run_detects_inconsistent_snapshot_math`
+4. `test_timeseries_integrity_run_detects_aggregate_and_completeness_drift`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_openapi_includes_reconciliation_examples tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_transaction_cashflow_run_persists_missing_cashflow_finding tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_position_valuation_run_detects_inconsistent_snapshot_math tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_timeseries_integrity_run_detects_aggregate_and_completeness_drift -q
+```
+
+Result:
+
+```text
+4 passed
+```
+
+## Certified Endpoint Slice: Financial Reconciliation Run Read Endpoints
+
+### Endpoint Inventory
+
+1. `GET /reconciliation/runs`
+2. `GET /reconciliation/runs/{run_id}`
+3. `GET /reconciliation/runs/{run_id}/findings`
+
+### Route Contract Decision
+
+These are the governed evidence read routes for durable reconciliation control history and findings.
+
+Use them to:
+
+1. list persisted runs by reconciliation type and portfolio scope;
+2. inspect one specific run by `run_id`;
+3. retrieve durable findings for a run;
+4. support control evidence review, scheduler verification, and operational triage;
+5. distinguish absent runs from runs with zero findings.
+
+Do not use these routes as substitute analytics endpoints. They are operator/control evidence
+surfaces.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling these routes directly in the current local scan.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct reconciliation-run read consumer in the
+   local scan;
+2. these routes remain support/control-plane evidence APIs;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The routes align to the intended evidence pattern:
+
+1. `GET /reconciliation/runs` applies durable run-history filters with bounded `limit`;
+2. `GET /reconciliation/runs/{run_id}` returns canonical `404` when the run is absent;
+3. `GET /reconciliation/runs/{run_id}/findings` now also returns canonical `404` for a missing run
+   instead of silently returning an empty list;
+4. focused proof covers list filtering, run detail lookup, and missing-run handling alongside
+   finding retrieval;
+5. this slice materially improved operator correctness by removing the missing-run ambiguity from
+   the findings route.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now adequate for these endpoints:
+
+1. the list, detail, and findings routes now include explicit what/how/why descriptions;
+2. the findings route now publishes a `404` example consistent with the run detail route;
+3. list and detail examples remain truthful to the persisted reconciliation contract;
+4. field-level DTO descriptions already cover run and finding semantics adequately.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for the reconciliation run read endpoints in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for run-list filtering, detail reads, findings reads, and
+missing-run behavior.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_openapi_includes_reconciliation_examples`
+2. `test_openapi_describes_reconciliation_schema_fields`
+3. `test_reconciliation_run_list_filters_and_findings_missing_run_returns_404`
+4. `test_transaction_cashflow_run_persists_missing_cashflow_finding`
+5. `test_position_valuation_run_detects_inconsistent_snapshot_math`
+6. `test_timeseries_integrity_run_detects_aggregate_and_completeness_drift`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_openapi_includes_reconciliation_examples tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_openapi_describes_reconciliation_schema_fields tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_reconciliation_run_list_filters_and_findings_missing_run_returns_404 tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_transaction_cashflow_run_persists_missing_cashflow_finding tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_position_valuation_run_detects_inconsistent_snapshot_math tests\integration\services\financial_reconciliation_service\test_financial_reconciliation_app.py::test_timeseries_integrity_run_detects_aggregate_and_completeness_drift -q
+```
+
+Result:
+
+```text
+6 passed
+```
+
 ### Issue Disposition For This Endpoint
 
 | Issue | Assessment | Disposition |
