@@ -743,8 +743,8 @@ mode instead of collapsing that route into a generic portfolio-only not-found ex
 | Issue | Status in this pass | Action |
 | --- | --- | --- |
 | `lotus-gateway #116` | Closed on April 16, 2026. Gateway has already adopted the main support/readiness hardening posture, so this broader umbrella issue is no longer the active tracking record for the family. | Keep closed unless a fresh broader support/readiness regression appears. |
-| `lotus-gateway #124` | Open and valid. Gateway still models `GET /support/portfolios/{portfolio_id}/overview` as if lotus-core supports `as_of_date`, even though the authoritative lotus-core route accepts only `portfolio_id`, `stale_threshold_minutes`, and `failed_window_hours`. That stale assumption currently leaks into the gateway client signature, workspace cache keying, and unit-test expectations. | Keep open in gateway until the unsupported `as_of_date` shaping and cache/test drift are removed. |
-| `lotus-manage #32` | Still valid future-adoption issue. No active direct client was evidenced in this pass, so manage should treat the issue as adoption guidance rather than proof of live dependency. | Keep open in manage until direct operator workflow binding exists and is tested. |
+| `lotus-gateway #124` | Closed on April 17, 2026. Gateway commit `d63d8e5` removed unsupported `as_of_date` shaping from `GET /support/portfolios/{portfolio_id}/overview`, stopped varying support-overview cache keys by workspace date, and kept readiness as the route that owns date-scoped validation. | Keep closed unless fresh gateway code reintroduces unsupported support-overview query shaping. |
+| `lotus-manage #32` | Closed on April 17, 2026. Current manage repo truth still has no active outbound lotus-core support/source-data client, and the future-adoption posture is captured in manage's RFC-0082 upstream contract map rather than as an active defect. | Re-open only when a direct manage operator workflow binds to these routes and concrete client/test work is needed. |
 | `lotus-report #38` | Closed as stale adoption guidance. Report remains a catalog-intended support/evidence consumer, but no active direct client code was found and there is no live report-side workflow to fix. | Re-open or replace only when report adds a direct support/readiness/lineage workflow. |
 
 ## Certified Endpoint Slice: Holdings Operational Read Family
@@ -970,7 +970,7 @@ route-purpose wording, parameter descriptions, and cash-account response example
 | --- | --- | --- |
 | `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Closed. It was never a defect in `GET /portfolios/{portfolio_id}/cash-accounts` itself. This route remains intentionally metadata-only. | Keep closed against the strategic cash-balance route unless a fresh gap appears. |
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Adjacent only. Current gateway truth is aligned to `GET /portfolios/{portfolio_id}/cash-balances`, not `GET /portfolios/{portfolio_id}/cash-accounts`. | Keep closed unless fresh route-level evidence shows deprecated cash-balance-route reintroduction. |
-| `lotus-manage #32` review latest lotus-core support and source-data contract hardening for operator adoption | Open and still valid, but broader than this route. It tracks operator-side review of current lotus-core support/source-data contracts rather than a defect in `GET /portfolios/{portfolio_id}/cash-accounts` specifically. | Keep open as downstream review work; do not treat it as a cash-account-master route bug. |
+| `lotus-manage #32` review latest lotus-core support and source-data contract hardening for operator adoption | Closed on April 17, 2026. It was broader future-adoption guidance rather than a cash-account-master defect, and current manage repo truth still has no active outbound lotus-core client for this family. | Keep closed unless a future manage workflow directly adopts lotus-core support/source-data routes and needs repo-local implementation work. |
 
 ## Certified Endpoint Slice: Income And Activity Compatibility Route Retirement
 
@@ -1029,7 +1029,8 @@ Focused retirement proof:
 1. `python -m pytest tests\\unit\\tools\\test_front_office_portfolio_seed.py -q`
 2. `python -m pytest tests\\integration\\services\\query_service\\test_reporting_router.py tests\\integration\\services\\query_service\\test_main_app.py tests\\unit\\services\\query_service\\services\\test_reporting_service.py tests\\unit\\services\\query_service\\dtos\\test_reporting_dto.py tests\\unit\\services\\query_service\\dtos\\test_source_data_product_identity.py tests\\unit\\services\\query_service\\repositories\\test_reporting_repository.py tests\\unit\\tools\\test_front_office_portfolio_seed.py tests\\unit\\libs\\portfolio-common\\test_source_data_products.py -q`
 3. `python scripts\\openapi_quality_gate.py`
-4. `python scripts\\route_contract_family_guard.py`
+4. `python scripts\\api_vocabulary_inventory.py --validate-only`
+5. `python scripts\\route_contract_family_guard.py`
 
 ### Issue Disposition For These Endpoints
 
@@ -1038,7 +1039,7 @@ Focused retirement proof:
 | `lotus-core #309` | Closed on April 16, 2026. The strategic transaction-ledger contract now supports optional `reporting_currency` restatement and publishes explicit reporting-currency transaction amount fields required for downstream income/activity summary derivation. | Keep closed unless fresh evidence shows the strategic ledger still cannot replace the deprecated summary compatibility routes for valid downstream reporting use cases. |
 | `lotus-gateway #122` | Closed on 2026-04-16. Current gateway repo truth derives both UI-facing summaries from strategic `GET /portfolios/{portfolio_id}/transactions`. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated summary-route calls. |
 | `lotus-report #39` | Open, but local implementation work is now done in commit `bd866ef`. Current local report repo truth derives both summary sections from strategic `GET /portfolios/{portfolio_id}/transactions`; the issue remains open pending merge/push posture. | Keep open until merged downstream truth is reflected remotely. |
-| `lotus-core #311` retire deprecated income/activity summary compatibility routes | Open. Current local downstream scans suggest both deprecated routes may now be orphaned internally, but retirement should stay deliberate until any non-repo dependency is ruled out. | Track explicit keep-or-remove decision for the deprecated compatibility handlers. |
+| `lotus-core #311` retire deprecated income/activity summary compatibility routes | Closed on April 17, 2026. The deprecated handlers, dead DTOs/service/repository paths, source-data catalog/registry/vocabulary references, and stale tests/docs were removed after downstream retirement checks. | Keep closed unless fresh evidence shows a real external dependency still needs the retired compatibility routes. |
 
 ## Certified Endpoint Slice: Assets Under Management Operational Read
 
@@ -1837,7 +1838,7 @@ The HTTP dependency lane now proves both:
 | Repository issue | Status | Certification read |
 | --- | --- | --- |
 | `lotus-core` | No open issue | The source route is already contract-tight in this pass. No lotus-core behavior or documentation defect remains open against `GET /integration/policy/effective`. |
-| `lotus-gateway #116` | Open | Still valid as downstream adoption work. Gateway is the active direct consumer and should keep aligning to the canonical snake_case query contract, default `lotus-gateway/default` resolution semantics, and the route's policy-diagnostics-only purpose. |
+| `lotus-gateway #116` | Closed on April 16, 2026 | Gateway completed the broader adoption review for the latest lotus-core route hardening. Keep closed unless a fresh gateway-facing policy-route regression appears. |
 
 ## Certified Endpoint Slice: Integration Capabilities
 
@@ -1892,9 +1893,9 @@ defaults.
 | --- | --- | --- |
 | `lotus-core` | No open issue | The source route is already contract-tight in this pass. No lotus-core behavior or documentation defect remains open against `GET /integration/capabilities`. |
 | `lotus-gateway #117` | Closed on April 16, 2026 | Verified fixed in gateway commit `b45d3af`. `src/app/clients/lotus_core_query_client.py` now sends canonical snake_case `consumer_system` / `tenant_id`, and gateway unit coverage locks the non-default consumer and tenant path. |
-| `lotus-gateway #73` | Open | Still valid, but it is a gateway aggregation-latency issue rather than a lotus-core publication defect. |
-| `lotus-gateway #116` | Open | Remains the broader gateway adoption umbrella for recently hardened lotus-core control-plane routes, including capability and policy semantics. |
-| `lotus-gateway #109` | Open | Adjacent downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. |
+| `lotus-gateway #73` | Closed | Gateway aggregation latency was a downstream performance issue rather than a lotus-core publication defect, and the remote issue is now closed. |
+| `lotus-gateway #116` | Closed on April 16, 2026 | Gateway completed the broader adoption review for recently hardened lotus-core control-plane routes. |
+| `lotus-gateway #109` | Closed on April 16, 2026 | Adjacent downstream parameter-conformance issue for lotus-performance capabilities, not a lotus-core route defect. Keep closed unless gateway reintroduces camelCase capabilities params for lotus-performance. |
 
 The same certification lane now also protects the adjacent instrument-enrichment contract family
 with recursive OpenAPI schema-family guards, so nested enrichment fields do not regress silently
