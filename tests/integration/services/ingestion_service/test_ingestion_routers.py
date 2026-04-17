@@ -1489,6 +1489,78 @@ async def test_ingestion_jobs_list_endpoint_filters_and_paginates(
     assert invalid_status.status_code == 422
 
 
+async def test_ingestion_job_failures_endpoint_returns_full_failure_rows(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"),
+        headers={"X-Idempotency-Key": "job-failure-row-001"},
+    )
+
+    assert failed_response.status_code == 500
+    job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    response = await event_replay_test_client.get(
+        f"/ingestion/jobs/{job_id}/failures",
+        params={"limit": 1},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    failure = body["failures"][0]
+    assert failure["failure_id"]
+    assert failure["job_id"] == job_id
+    assert failure["failure_phase"] == "publish"
+    assert "TX_FAILURE_ROW_001" in failure["failure_reason"]
+    assert failure["failed_record_keys"] == ["TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"]
+    assert failure["failed_at"]
+
+
+async def test_ingestion_job_failures_endpoint_returns_empty_history_for_clean_job(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    queued_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_FAILURE_EMPTY_001"),
+        headers={"X-Idempotency-Key": "job-failure-empty-001"},
+    )
+    assert queued_response.status_code == 202
+
+    response = await event_replay_test_client.get(
+        f"/ingestion/jobs/{queued_response.json()['job_id']}/failures"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"failures": [], "total": 0}
+
+
+async def test_ingestion_job_failures_endpoint_validates_job_and_limit(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    missing = await event_replay_test_client.get("/ingestion/jobs/job_missing_001/failures")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job_missing_001' was not found.",
+    }
+
+    invalid_limit = await event_replay_test_client.get(
+        "/ingestion/jobs/job_missing_001/failures",
+        params={"limit": 0},
+    )
+    assert invalid_limit.status_code == 422
+
+
 async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClient):
     response = await event_replay_test_client.get("/ingestion/jobs/job_missing_001")
     assert response.status_code == 404

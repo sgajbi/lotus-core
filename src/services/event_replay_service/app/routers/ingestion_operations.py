@@ -74,6 +74,20 @@ INGESTION_JOB_RESPONSE_EXAMPLE = {
     "last_retried_at": "2026-03-06T13:24:10.512Z",
 }
 
+INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE = {
+    "failures": [
+        {
+            "failure_id": "fail_01J5S27P16BSKQ3R2P2HK67GQZ",
+            "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+            "failure_phase": "publish",
+            "failure_reason": "Kafka publish timeout for topic transactions.raw.received.",
+            "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+            "failed_at": "2026-03-06T13:23:09.021Z",
+        }
+    ],
+    "total": 1,
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -450,6 +464,18 @@ async def list_ingestion_jobs(
         "How: Read ingestion job failure history with most-recent-first ordering.\n"
         "When: Use during incident triage to identify failure phases and impacted record keys."
     ),
+    responses={
+        200: {
+            "description": "Failure events for the requested ingestion job.",
+            "content": {
+                "application/json": {"example": INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE}
+            },
+        },
+        404: {
+            "description": "Ingestion job not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
+    },
 )
 async def list_ingestion_job_failures(
     job_id: str = Path(

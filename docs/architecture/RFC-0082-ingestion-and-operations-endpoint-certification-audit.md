@@ -2855,3 +2855,100 @@ Result:
 ```text
 3 passed
 ```
+
+## Certified Endpoint Slice: Ingestion Job Failure History Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/jobs/{job_id}/failures`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for failure events captured against a specific
+ingestion job.
+
+Use it to:
+
+1. identify the pipeline phase where an ingestion job failed;
+2. retrieve the domain failure reason and failed record keys;
+3. distinguish publish, retry, persistence, and bookkeeping failures during incident triage;
+4. support partial replay planning before using `GET /ingestion/jobs/{job_id}/records` or
+   `POST /ingestion/jobs/{job_id}/retry`;
+5. page the most recent failure observations with bounded `limit`.
+
+Do not use it as a business-data read route or as a substitute for record-level replayability. It
+returns failure-event history only.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/jobs/{job_id}/failures`
+   consumer in the local scan;
+2. adjacent documentation references ingestion job failures as operations evidence, but no
+   front-office app integration currently depends on this route;
+3. this route remains suitable for operators, platform automation, QA, and source-ingestion
+   support tooling.
+
+No downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct durable ingestion-job failure architecture:
+
+1. it first verifies the parent job through `IngestionJobService.get_job`;
+2. it returns `404` `INGESTION_JOB_NOT_FOUND` when the parent job does not exist;
+3. it reads failure events through `IngestionJobService.list_failures`;
+4. the durable service orders failures by most recent `failed_at` and applies bounded `limit`;
+5. it returns full `failure_id`, `job_id`, `failure_phase`, `failure_reason`, `failed_record_keys`,
+   and `failed_at` fields;
+6. it returns an empty list with `total=0` for valid jobs without captured failures.
+
+No behavioral route refactor was required. The Swagger surface was tightened with explicit success
+and not-found examples.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and is now protected by endpoint-specific OpenAPI assertions:
+
+1. the operation summary and description explain failure-history ordering and incident-triage use;
+2. the `job_id` path parameter has a description and example;
+3. the `limit` query parameter publishes `1..500` bounds;
+4. the `200` response example includes a representative publish failure row and failed keys;
+5. the `404` response example carries `INGESTION_JOB_NOT_FOUND`;
+6. `IngestionJobFailureResponse` and `IngestionJobFailureListResponse` document each failure row
+   and returned count.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/jobs/{job_id}/failures`, `IngestionJobFailureListResponse`, or ingestion failure-history vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for the failure-history output contract and error behavior.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_job_failures_endpoint_returns_full_failure_rows`
+2. `test_ingestion_job_failures_endpoint_returns_empty_history_for_clean_job`
+3. `test_ingestion_job_failures_endpoint_validates_job_and_limit`
+4. `test_openapi_describes_event_replay_operational_parameters`
+5. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_failures_endpoint_returns_full_failure_rows tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_failures_endpoint_returns_empty_history_for_clean_job tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_failures_endpoint_validates_job_and_limit tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+5 passed
+```

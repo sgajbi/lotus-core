@@ -113,6 +113,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     schema = response.json()
 
     get_job = schema["paths"]["/ingestion/jobs/{job_id}"]["get"]
+    list_failures = schema["paths"]["/ingestion/jobs/{job_id}/failures"]["get"]
     retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
@@ -163,6 +164,26 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert limit_parameter["schema"]["minimum"] == 1
     assert limit_parameter["schema"]["maximum"] == 500
 
+    failure_job_id_parameter = next(
+        param for param in list_failures["parameters"] if param["name"] == "job_id"
+    )
+    failure_limit_parameter = next(
+        param for param in list_failures["parameters"] if param["name"] == "limit"
+    )
+    failure_example = list_failures["responses"]["200"]["content"]["application/json"]["example"]
+    failure_not_found = list_failures["responses"]["404"]["content"]["application/json"]["example"]
+    assert list_failures["summary"] == "List ingestion job failures"
+    assert "failure history with most-recent-first ordering" in list_failures["description"]
+    assert failure_job_id_parameter["description"] == "Ingestion job identifier."
+    assert failure_limit_parameter["schema"]["minimum"] == 1
+    assert failure_limit_parameter["schema"]["maximum"] == 500
+    assert failure_example["failures"][0]["failure_phase"] == "publish"
+    assert failure_example["failures"][0]["failed_record_keys"] == [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+    ]
+    assert failure_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+
     retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
         "examples"
     ]
@@ -207,6 +228,8 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     schema = response.json()["components"]["schemas"]
 
     job_detail = schema["IngestionJobResponse"]
+    job_failure = schema["IngestionJobFailureResponse"]
+    job_failure_list = schema["IngestionJobFailureListResponse"]
     job_list = schema["IngestionJobListResponse"]
     health_summary = schema["IngestionHealthSummaryResponse"]
     ops_policy = schema["IngestionOpsPolicyResponse"]
@@ -243,6 +266,19 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     )
     assert job_list["properties"]["next_cursor"]["description"] == (
         "Opaque cursor to fetch the next page of jobs, based on descending ingestion job order."
+    )
+    assert job_failure["properties"]["failure_phase"]["description"] == (
+        "Pipeline phase where the job failure occurred."
+    )
+    assert job_failure["properties"]["failed_record_keys"]["description"] == (
+        "Record keys that failed during publish/retry processing, including batch records "
+        "left unpublished after a mid-batch publish failure."
+    )
+    assert job_failure_list["properties"]["failures"]["description"] == (
+        "Failure events captured for the requested ingestion job."
+    )
+    assert job_failure_list["properties"]["total"]["description"] == (
+        "Number of failure events returned in this response."
     )
     assert health_summary["properties"]["oldest_backlog_job_id"]["description"] == (
         "Identifier of the oldest non-terminal job contributing to the backlog."
