@@ -35,10 +35,8 @@ class BusinessDateIngestionRequest(BaseModel):
     business_dates: list[BusinessDate] = Field(
         ...,
         description=(
-            "Business dates to register for downstream valuation "
-            "and timeseries scheduling."
+            "Business dates to register for downstream valuation and timeseries scheduling."
         ),
-        min_length=1,
         examples=[
             [
                 {

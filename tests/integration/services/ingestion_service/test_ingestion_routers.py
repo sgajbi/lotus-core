@@ -739,8 +739,16 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         ) -> None:
             return None
 
+    class FakeBusinessCalendarRepository:
+        def __init__(self):
+            self.latest_business_dates = {}
+
+        async def get_latest_business_date(self, calendar_code: str):
+            return self.latest_business_dates.get(calendar_code)
+
     fake_job_service = FakeIngestionJobService()
     fake_reference_data_service = FakeReferenceDataIngestionService()
+    fake_business_calendar_repository = FakeBusinessCalendarRepository()
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -761,6 +769,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[business_dates_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
+    app.dependency_overrides[business_dates_router.get_business_calendar_repository] = lambda: (
+        fake_business_calendar_repository
+    )
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
@@ -780,6 +791,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     yield {
         "fake_job_service": fake_job_service,
         "fake_reference_data_service": fake_reference_data_service,
+        "fake_business_calendar_repository": fake_business_calendar_repository,
     }
 
     for target_app in target_apps:
@@ -791,6 +803,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(market_prices_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(fx_rates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(business_dates_router.get_ingestion_job_service, None)
+    app.dependency_overrides.pop(
+        business_dates_router.get_business_calendar_repository,
+        None,
+    )
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)
@@ -889,6 +905,22 @@ def _fx_rate_batch_payload(*pairs: tuple[str, str]) -> dict[str, list[dict[str, 
                 "rate": "1.3500000000",
             }
             for from_currency, to_currency in requested_pairs
+        ]
+    }
+
+
+def _business_date_batch_payload(*business_dates: str) -> dict[str, list[dict[str, object]]]:
+    dates = business_dates or ("2025-01-01",)
+    return {
+        "business_dates": [
+            {
+                "business_date": business_date,
+                "calendar_code": "GLOBAL",
+                "market_code": "XSWX",
+                "source_system": "lotus-manage",
+                "source_batch_id": "business-dates-certification",
+            }
+            for business_date in dates
         ]
     }
 
@@ -3010,6 +3042,169 @@ async def test_business_date_ingestion_rejects_future_dates(
     assert response.status_code == 422
     body = response.json()
     assert body["detail"]["code"] == "BUSINESS_DATE_FUTURE_POLICY_VIOLATION"
+
+
+async def test_ingest_business_dates_endpoint(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-02"),
+        headers={"X-Idempotency-Key": "business-date-batch-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Business dates accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "business_date"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["idempotency_key"] == "business-date-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "business_dates.raw.received"
+    assert publish_kwargs["key"] == "GLOBAL|2025-01-02"
+    assert publish_kwargs["value"]["business_date"].isoformat() == "2025-01-02"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"business-date-batch-idem-001")
+
+
+async def test_ingest_business_dates_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _business_date_batch_payload("2025-01-03")
+    headers = {"X-Idempotency-Key": "business-date-replay-001"}
+
+    first = await async_test_client.post("/ingest/business-dates", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/business-dates", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "business-date-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_business_dates_rejects_empty_payload_with_canonical_error(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json={"business_dates": []},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "BUSINESS_DATE_PAYLOAD_EMPTY",
+        "message": "At least one business_date record is required.",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-04"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        business_dates_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-05", "2025-01-06"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/business-dates blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_rejects_monotonic_regression(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    monkeypatch.setattr(business_dates_router, "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", True)
+    ingestion_test_harness["fake_business_calendar_repository"].latest_business_dates["GLOBAL"] = (
+        datetime(2025, 1, 10).date()
+    )
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-09"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "BUSINESS_DATE_MONOTONIC_POLICY_VIOLATION"
+    assert "latest persisted '2025-01-10'" in response.json()["detail"]["message"]
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-07", "2025-01-08"),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == [
+        "GLOBAL|2025-01-07",
+        "GLOBAL|2025-01-08",
+    ]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "GLOBAL|2025-01-07",
+        "GLOBAL|2025-01-08",
+    ]
 
 
 async def test_transaction_ingestion_allows_future_dated_trade(

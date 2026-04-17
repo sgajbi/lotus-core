@@ -713,3 +713,117 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core` | No open issue found for `POST /ingest/fx-rates` in this pass. | No GitHub action required. |
 | Downstream repos | No open downstream issue found for FX-rate write-ingress misuse. | No downstream action required. |
+
+## Certified Endpoint Slice: Business Date Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/business-dates`
+
+### Route Contract Decision
+
+This is the canonical write-ingress endpoint for business-calendar dates that govern valuation,
+timeseries, processing, and operational scheduling.
+
+The boundary is explicit:
+
+1. use it for calendar setup, holiday updates, and date-correction operations;
+2. do not use it as a read endpoint or downstream source-data product;
+3. treat acknowledgement as asynchronous job acceptance and Kafka publish queueing, not
+   persistence completion;
+4. use ingestion job and event-replay endpoints for operational follow-up, retry, and failure
+   evidence;
+5. use `X-Idempotency-Key` for replay-safe upstream batch submission.
+
+### Consumer And Integration Reality
+
+This endpoint is upstream-facing rather than downstream-facing. No direct `lotus-gateway`,
+`lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage` product
+consumer should call it for front-office reads.
+
+Repository scan evidence on April 17, 2026 found one documentation reference in
+`lotus-risk/docs/migrations/from-lotus-core/05_Developer_Guide.md` pointing to
+`/ingest/business-dates` as a developer migration example. No live product consumer code was found.
+
+### Upstream Integration Assessment
+
+The route uses the correct business-calendar ingestion architecture:
+
+1. it validates the `BusinessDateIngestionRequest` schema before accepting records;
+2. it returns the documented canonical `BUSINESS_DATE_PAYLOAD_EMPTY` error for empty lists;
+3. it blocks dates beyond `BUSINESS_DATE_MAX_FUTURE_DAYS`;
+4. it supports optional monotonic-advance enforcement per calendar code;
+5. it enforces ingestion operating mode before queueing work;
+6. it enforces write-rate protection using the submitted batch size;
+7. it creates or replays ingestion jobs with idempotency semantics;
+8. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
+9. it publishes each record to `business_dates.raw.received` using
+   `{calendar_code}|{business_date}` as the partition key;
+10. it records publish failures with failed calendar/date keys for operational diagnosis and retry;
+11. it marks accepted jobs queued only after publish succeeds, with explicit post-publish
+    bookkeeping failure handling.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice after adding a structured `500` publish-failure response and
+aligning empty-list behavior with the advertised canonical error:
+
+1. route purpose says when to use the endpoint and that it is asynchronous calendar write ingress;
+2. business-date attributes include descriptions and examples for date, calendar code, market code,
+   source system, and source batch id;
+3. the request batch field is described with realistic lineage examples;
+4. ACK fields include descriptions and examples for message, entity type, accepted count, job id,
+   correlation/request/trace identifiers, and idempotency key;
+5. `422`, `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for business-date write ingress and policy validation.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_business_dates_endpoint`
+2. `test_ingest_business_dates_replays_duplicate_idempotency_key`
+3. `test_ingest_business_dates_rejects_empty_payload_with_canonical_error`
+4. `test_ingest_business_dates_returns_503_when_mode_blocks_writes`
+5. `test_ingest_business_dates_returns_429_when_rate_limited`
+6. `test_business_date_ingestion_rejects_future_dates`
+7. `test_ingest_business_dates_rejects_monotonic_regression`
+8. `test_ingest_business_dates_returns_failed_record_keys_when_publish_fails`
+9. `test_openapi_describes_remaining_ingestion_operational_responses`
+10. `test_openapi_describes_business_date_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_business_dates_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_business_dates_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_business_dates_rejects_empty_payload_with_canonical_error tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_business_dates_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_business_dates_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_business_date_ingestion_rejects_future_dates tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_business_dates_rejects_monotonic_regression tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_business_dates_returns_failed_record_keys_when_publish_fails tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_business_date_shared_schema -q
+```
+
+Result:
+
+```text
+10 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\business_dates.py src\services\ingestion_service\app\DTOs\business_date_dto.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\business_dates.py src\services\ingestion_service\app\DTOs\business_date_dto.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+4 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/business-dates` in this pass. | No GitHub action required. |
+| Downstream repos | No open downstream issue found for business-date write-ingress misuse. | No downstream action required. |

@@ -244,6 +244,24 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
     business_date_422 = business_dates["responses"]["422"]["content"]["application/json"]["example"]
     assert business_date_422["detail"]["code"] == "BUSINESS_DATE_PAYLOAD_EMPTY"
     assert (
+        business_dates["responses"]["429"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
+    assert (
+        business_dates["responses"]["500"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        business_dates["responses"]["503"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_MODE_BLOCKS_WRITES"
+    )
+    assert (
         benchmark_assignments["responses"]["503"]["content"]["application/json"]["example"][
             "detail"
         ]["code"]
