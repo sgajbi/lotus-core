@@ -999,7 +999,8 @@ The decision is now explicit:
 
 1. gateway migration is complete via issue `#122`;
 2. local `lotus-report` migration exists in commit `bd866ef`, deriving both summaries from the
-   strategic transaction ledger;
+   strategic transaction ledger, and follow-on commit `0254c71` removed the stale report
+   `core-snapshot` client seam;
 3. no active direct internal consumer was evidenced in current local repo truth;
 4. the last internal lotus-core dependency, `tools/front_office_portfolio_seed.py`, now derives
    readiness summary signals from the strategic transaction ledger instead of calling the retired
@@ -1048,7 +1049,7 @@ Focused retirement proof:
 | --- | --- | --- |
 | `lotus-core #309` | Closed on April 16, 2026. The strategic transaction-ledger contract now supports optional `reporting_currency` restatement and publishes explicit reporting-currency transaction amount fields required for downstream income/activity summary derivation. | Keep closed unless fresh evidence shows the strategic ledger still cannot replace the deprecated summary compatibility routes for valid downstream reporting use cases. |
 | `lotus-gateway #122` | Closed on 2026-04-16. Current gateway repo truth derives both UI-facing summaries from strategic `GET /portfolios/{portfolio_id}/transactions`. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated summary-route calls. |
-| `lotus-report #39` | Open, but local implementation work is now done in commit `bd866ef`. Current local report repo truth derives both summary sections from strategic `GET /portfolios/{portfolio_id}/transactions`; the issue remains open pending merge/push posture. | Keep open until merged downstream truth is reflected remotely. |
+| `lotus-report #39` | Open, but local implementation work is now done in commits `bd866ef` and `0254c71`. Current local report repo truth derives both summary sections from strategic `GET /portfolios/{portfolio_id}/transactions`, removed the stale `core-snapshot` client seam, and passed the focused `61 passed` report validation slice on April 17, 2026. The issue has a fresh evidence comment and remains open pending merge/push posture. | Keep open until merged downstream truth is reflected remotely. |
 | `lotus-core #311` retire deprecated income/activity summary compatibility routes | Closed on April 17, 2026. The deprecated handlers, dead DTOs/service/repository paths, source-data catalog/registry/vocabulary references, and stale tests/docs were removed after downstream retirement checks. | Keep closed unless fresh evidence shows a real external dependency still needs the retired compatibility routes. |
 
 ## Certified Endpoint Slice: Assets Under Management Operational Read
@@ -1208,7 +1209,7 @@ The boundary is explicit:
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `GET /portfolios/{portfolio_id}/transactions` | `lotus-gateway`, `lotus-report` (local implementation truth) | Correct. Gateway now exposes the strategic ledger route with the advanced instrument, FX/event, paging, and explicit sorting controls documented and regression-covered. Local `lotus-report` commit `bd866ef` also derives income/activity sections from this strategic ledger route instead of the deprecated summary compatibility routes; that report posture remains local-only until merge/push. |
+| `GET /portfolios/{portfolio_id}/transactions` | `lotus-gateway`, `lotus-report` (local implementation truth) | Correct. Gateway now exposes the strategic ledger route with the advanced instrument, FX/event, paging, and explicit sorting controls documented and regression-covered. Local `lotus-report` commit `bd866ef` derives income/activity sections from this strategic ledger route instead of the deprecated summary compatibility routes, and local commit `0254c71` removes the old `core-snapshot` read path from report review composition; that report posture remains local-only until merge/push. |
 
 No active direct `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was evidenced against
 this route in this pass.
@@ -1250,7 +1251,7 @@ advanced filter descriptions and strategic route wording.
 | `lotus-core #309` | Closed on April 16, 2026. The route now exposes optional reporting-currency-restated monetary fields plus truthful `400` handling for unsupported FX conversion requests. | Keep closed unless a fresh parity gap is evidenced after downstream migration work starts consuming the new contract surface. |
 | `lotus-gateway #120` advanced transaction-ledger filter posture | Closed on 2026-04-16. Current gateway repo truth exposes the strategic ledger's instrument, FX/event, and explicit sorting controls on `/api/v1/portfolio/portfolios/{portfolio_id}/transactions`, and gateway contract/integration tests now pin that surface. | Keep closed unless fresh gateway code or OpenAPI evidence shows the advanced ledger controls were narrowed again. |
 | `lotus-gateway #122` deprecated income/activity summary migration | Closed on 2026-04-16. Current gateway repo truth derives both UI-facing summaries from strategic `GET /portfolios/{portfolio_id}/transactions`. | Keep closed unless fresh gateway evidence shows deprecated summary-route calls were reintroduced. |
-| `lotus-report #39` deprecated income/activity summary migration | Open, but local implementation work is now done in commit `bd866ef`. Current local report repo truth derives both summary sections from strategic `GET /portfolios/{portfolio_id}/transactions`; the issue remains open pending merge/push posture. | Keep open until merged downstream truth is reflected remotely. |
+| `lotus-report #39` deprecated income/activity summary migration | Open, but local implementation work is now done in commits `bd866ef` and `0254c71`. Current local report repo truth derives both summary sections from strategic `GET /portfolios/{portfolio_id}/transactions`, has no local `src` or `tests` references to the retired income/activity summary routes, and passed the focused `61 passed` report validation slice on April 17, 2026. The issue remains open pending merge/push posture. | Keep open until merged downstream truth is reflected remotely. |
 
 ## Certified Endpoint Slice: BUY / SELL Investigative State Reads
 
