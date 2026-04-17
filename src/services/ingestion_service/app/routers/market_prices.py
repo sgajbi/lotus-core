@@ -35,6 +35,14 @@ MARKET_PRICE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for /ingest/market-prices.",
     }
 }
+MARKET_PRICE_PUBLISH_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Failed to publish market price 'SEC_AAPL'.",
+        "failed_record_keys": ["SEC_AAPL"],
+        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+    }
+}
 
 
 @router.post(
@@ -44,11 +52,11 @@ MARKET_PRICE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
     responses={
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the market-price request.",
-            "content": {
-                "application/json": {
-                    "example": MARKET_PRICE_RATE_LIMIT_EXCEEDED_EXAMPLE
-                }
-            },
+            "content": {"application/json": {"example": MARKET_PRICE_RATE_LIMIT_EXCEEDED_EXAMPLE}},
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Market-price publish failed after job metadata was recorded.",
+            "content": {"application/json": {"example": MARKET_PRICE_PUBLISH_FAILED_EXAMPLE}},
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
@@ -124,7 +132,15 @@ async def ingest_market_prices(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_PUBLISH_FAILED",
+                "message": str(exc),
+                "failed_record_keys": exc.failed_record_keys,
+                "job_id": job_result.job.job_id,
+            },
+        ) from exc
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise
@@ -146,4 +162,3 @@ async def ingest_market_prices(
         accepted_count=num_prices,
         idempotency_key=idempotency_key,
     )
-
