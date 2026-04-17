@@ -88,6 +88,18 @@ INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE = {
     "total": 1,
 }
 
+INGESTION_JOB_RECORD_STATUS_RESPONSE_EXAMPLE = {
+    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    "entity_type": "transaction",
+    "accepted_count": 3,
+    "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+    "replayable_record_keys": [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+        "TXN-2026-000147",
+    ],
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -515,6 +527,18 @@ async def list_ingestion_job_failures(
         "How: Derive replayable keys from stored payload and merge with failure history.\n"
         "When: Use before partial retry operations or to build precise remediation batches."
     ),
+    responses={
+        200: {
+            "description": "Record-level replayability and failed keys for the ingestion job.",
+            "content": {
+                "application/json": {"example": INGESTION_JOB_RECORD_STATUS_RESPONSE_EXAMPLE}
+            },
+        },
+        404: {
+            "description": "Ingestion job not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
+    },
 )
 async def get_ingestion_job_records(
     job_id: str = Path(

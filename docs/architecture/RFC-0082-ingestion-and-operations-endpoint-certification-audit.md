@@ -259,6 +259,100 @@ Result:
 5 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Job Record Status Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/jobs/{job_id}/records`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for record-level ingestion replayability and
+failed-key evidence for a specific job.
+
+Use it to:
+
+1. inspect the accepted record count for the original ingestion job;
+2. retrieve failed record keys accumulated across publish and retry lifecycle events;
+3. derive deterministic replayable record keys from the stored request payload;
+4. plan precise partial retry batches before calling `POST /ingestion/jobs/{job_id}/retry`;
+5. verify whether a job has enough stored payload lineage for record-level remediation.
+
+Do not use it as a business-data read route. It exposes remediation keys, not portfolio,
+instrument, market-data, reference-data, performance, or reporting facts.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/jobs/{job_id}/records`
+   consumer in the local scan;
+2. the route remains suitable for operators, ingestion support tooling, QA, and automation;
+3. no downstream migration or deprecation issue is required.
+
+### Upstream Integration Assessment
+
+The route uses the correct durable ingestion-job replayability architecture:
+
+1. it reads canonical state through `IngestionJobService.get_job_record_status`;
+2. it returns `404` `INGESTION_JOB_NOT_FOUND` when no durable job exists;
+3. it merges failed keys from `ingestion_job_failures`;
+4. it derives replayable keys from the stored request payload for transactions, portfolios,
+   instruments, and business dates;
+5. it returns empty failed-key arrays for valid jobs without failures;
+6. it returns the shared `IngestionJobRecordStatusResponse` contract with job id, entity type,
+   accepted count, failed keys, and replayable keys.
+
+The test harness was tightened in this pass to derive keys from stored payload and failure history
+instead of returning fixed placeholder values, which keeps future endpoint tests aligned with the
+runtime service behavior.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and is now protected by endpoint-specific OpenAPI assertions:
+
+1. the operation summary and description explain record-level replayability and partial-retry use;
+2. the `job_id` path parameter has a description and example;
+3. the `200` response example includes accepted count, failed keys, and replayable keys;
+4. the `404` response example carries `INGESTION_JOB_NOT_FOUND`;
+5. `IngestionJobRecordStatusResponse` documents accepted count, failed keys, and replayable keys;
+6. output names match the shared ingestion operations vocabulary.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/jobs/{job_id}/records`, `IngestionJobRecordStatusResponse`, replayable record keys, or record-status vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for supported replayability key extraction and error behavior.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_job_record_status_endpoint_returns_transaction_replayability`
+2. `test_ingestion_job_record_status_endpoint_merges_failure_keys`
+3. `test_ingestion_job_record_status_endpoint_returns_supported_source_keys`
+4. `test_ingestion_job_record_status_endpoint_validates_missing_job`
+5. `test_openapi_describes_event_replay_operational_parameters`
+6. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_record_status_endpoint_returns_transaction_replayability tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_record_status_endpoint_merges_failure_keys tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_record_status_endpoint_returns_supported_source_keys tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_job_record_status_endpoint_validates_missing_job tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+6 passed
+```
+
 Additional focused gates:
 
 ```powershell

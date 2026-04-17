@@ -408,12 +408,46 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             job = self.jobs.get(job_id)
             if not job:
                 return None
+            payload = self.job_payloads.get(job_id, {})
+            replayable_keys: list[str] = []
+            if job.endpoint == "/ingest/transactions":
+                replayable_keys = [
+                    str(row["transaction_id"])
+                    for row in payload.get("transactions", [])
+                    if row.get("transaction_id")
+                ]
+            elif job.endpoint == "/ingest/portfolios":
+                replayable_keys = [
+                    str(row["portfolio_id"])
+                    for row in payload.get("portfolios", [])
+                    if row.get("portfolio_id")
+                ]
+            elif job.endpoint == "/ingest/instruments":
+                replayable_keys = [
+                    str(row["security_id"])
+                    for row in payload.get("instruments", [])
+                    if row.get("security_id")
+                ]
+            elif job.endpoint == "/ingest/business-dates":
+                replayable_keys = [
+                    str(row["business_date"])
+                    for row in payload.get("business_dates", [])
+                    if row.get("business_date")
+                ]
+            failed_keys = sorted(
+                {
+                    key
+                    for failure in self.failures.get(job_id, [])
+                    for key in failure.get("failed_record_keys", [])
+                    if isinstance(key, str)
+                }
+            )
             return {
                 "job_id": job_id,
                 "entity_type": job.entity_type,
                 "accepted_count": job.accepted_count,
-                "failed_record_keys": ["TXN-2026-000145"],
-                "replayable_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+                "failed_record_keys": failed_keys,
+                "replayable_record_keys": replayable_keys,
             }
 
         async def get_idempotency_diagnostics(
@@ -3817,35 +3851,121 @@ async def test_ingestion_idempotency_diagnostics_endpoint(
     assert "collisions" in body
 
 
-async def test_ingestion_job_records_endpoint(
+async def test_ingestion_job_record_status_endpoint_returns_transaction_replayability(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_RECORD_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
+    mock_kafka_producer.publish_message.reset_mock()
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RECORD_001", "TX_RECORD_002"),
+        headers={"X-Idempotency-Key": "job-record-status-001"},
+    )
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
+
     response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": job_id,
+        "entity_type": "transaction",
+        "accepted_count": 2,
+        "failed_record_keys": [],
+        "replayable_record_keys": ["TX_RECORD_001", "TX_RECORD_002"],
+    }
+
+
+async def test_ingestion_job_record_status_endpoint_merges_failure_keys(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"),
+        headers={"X-Idempotency-Key": "job-record-status-failed-001"},
+    )
+    assert failed_response.status_code == 500
+    job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
+
     assert response.status_code == 200
     body = response.json()
     assert body["job_id"] == job_id
-    assert "replayable_record_keys" in body
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 2
+    assert body["failed_record_keys"] == ["TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"]
+    assert body["replayable_record_keys"] == ["TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"]
+
+
+async def test_ingestion_job_record_status_endpoint_returns_supported_source_keys(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    portfolio_payload = {
+        "portfolios": [
+            {
+                "portfolio_id": "P_RECORD_001",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "client-record",
+                "status": "active",
+                "risk_exposure": "balanced",
+                "investment_time_horizon": "long",
+                "portfolio_type": "discretionary",
+                "booking_center_code": "SG",
+            }
+        ]
+    }
+    cases = [
+        ("/ingest/portfolios", portfolio_payload, "portfolio", ["P_RECORD_001"]),
+        (
+            "/ingest/instruments",
+            _instrument_batch_payload("SEC_RECORD_001"),
+            "instrument",
+            ["SEC_RECORD_001"],
+        ),
+        (
+            "/ingest/business-dates",
+            _business_date_batch_payload("2025-01-10"),
+            "business_date",
+            ["2025-01-10"],
+        ),
+    ]
+
+    for endpoint, payload, entity_type, expected_keys in cases:
+        ingest_response = await async_test_client.post(endpoint, json=payload)
+        assert ingest_response.status_code == 202
+        job_id = ingest_response.json()["job_id"]
+
+        response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["job_id"] == job_id
+        assert body["entity_type"] == entity_type
+        assert body["accepted_count"] == 1
+        assert body["failed_record_keys"] == []
+        assert body["replayable_record_keys"] == expected_keys
+
+
+async def test_ingestion_job_record_status_endpoint_validates_missing_job(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get("/ingestion/jobs/job_missing_001/records")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job_missing_001' was not found.",
+    }
 
 
 async def test_replay_consumer_dlq_event_endpoint(

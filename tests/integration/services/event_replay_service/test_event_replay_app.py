@@ -114,6 +114,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
 
     get_job = schema["paths"]["/ingestion/jobs/{job_id}"]["get"]
     list_failures = schema["paths"]["/ingestion/jobs/{job_id}/failures"]["get"]
+    get_records = schema["paths"]["/ingestion/jobs/{job_id}/records"]["get"]
     retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
@@ -184,6 +185,26 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     ]
     assert failure_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
 
+    record_job_id_parameter = next(
+        param for param in get_records["parameters"] if param["name"] == "job_id"
+    )
+    record_example = get_records["responses"]["200"]["content"]["application/json"]["example"]
+    record_not_found = get_records["responses"]["404"]["content"]["application/json"]["example"]
+    assert get_records["summary"] == "Get ingestion job record-level status"
+    assert "Derive replayable keys from stored payload" in get_records["description"]
+    assert record_job_id_parameter["description"] == "Ingestion job identifier."
+    assert record_example["accepted_count"] == 3
+    assert record_example["failed_record_keys"] == [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+    ]
+    assert record_example["replayable_record_keys"] == [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+        "TXN-2026-000147",
+    ]
+    assert record_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+
     retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
         "examples"
     ]
@@ -231,6 +252,7 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     job_failure = schema["IngestionJobFailureResponse"]
     job_failure_list = schema["IngestionJobFailureListResponse"]
     job_list = schema["IngestionJobListResponse"]
+    job_record_status = schema["IngestionJobRecordStatusResponse"]
     health_summary = schema["IngestionHealthSummaryResponse"]
     ops_policy = schema["IngestionOpsPolicyResponse"]
     queue_health = schema["IngestionReprocessingQueueHealthResponse"]
@@ -279,6 +301,15 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     )
     assert job_failure_list["properties"]["total"]["description"] == (
         "Number of failure events returned in this response."
+    )
+    assert job_record_status["properties"]["accepted_count"]["description"] == (
+        "Number of records accepted by the original ingestion request."
+    )
+    assert job_record_status["properties"]["failed_record_keys"]["description"] == (
+        "Record keys failed across publish/retry lifecycle."
+    )
+    assert job_record_status["properties"]["replayable_record_keys"]["description"] == (
+        "Record keys available for deterministic partial replay operations."
     )
     assert health_summary["properties"]["oldest_backlog_job_id"]["description"] == (
         "Identifier of the oldest non-terminal job contributing to the backlog."
