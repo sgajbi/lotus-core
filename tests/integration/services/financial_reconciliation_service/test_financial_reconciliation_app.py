@@ -139,10 +139,11 @@ async def test_openapi_includes_reconciliation_examples(async_test_client: httpx
     assert finding_example["findings"][0]["finding_type"] == "missing_cashflow"
     assert list_findings["summary"] == "List findings for one reconciliation control run"
     assert "blocking control evidence" in list_findings["description"]
-    assert (
-        list_findings["responses"]["404"]["content"]["application/json"]["example"]["detail"]
-        == "Reconciliation run 'FRR-20260306-0001' was not found."
-    )
+    findings_not_found = list_findings["responses"]["404"]["content"]["application/json"]["example"]
+    assert findings_not_found["detail"] == {
+        "code": "RECONCILIATION_RUN_NOT_FOUND",
+        "message": "Reconciliation run 'FRR-20260306-0001' was not found.",
+    }
 
 
 async def test_openapi_describes_reconciliation_schema_fields(async_test_client: httpx.AsyncClient):
@@ -169,7 +170,10 @@ async def test_openapi_describes_reconciliation_schema_fields(async_test_client:
 
     get_run_operation = schema["paths"]["/reconciliation/runs/{run_id}"]["get"]
     assert get_run_operation["responses"]["404"]["content"]["application/json"]["example"] == {
-        "detail": "Reconciliation run 'FRR-20260306-0001' was not found."
+        "detail": {
+            "code": "RECONCILIATION_RUN_NOT_FOUND",
+            "message": "Reconciliation run 'FRR-20260306-0001' was not found.",
+        }
     }
 
 
@@ -437,4 +441,9 @@ async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_
 
     missing_findings = await async_test_client.get("/reconciliation/runs/FRR-MISSING/findings")
     assert missing_findings.status_code == 404
-    assert missing_findings.json() == {"detail": "Reconciliation run 'FRR-MISSING' was not found."}
+    assert missing_findings.json() == {
+        "detail": {
+            "code": "RECONCILIATION_RUN_NOT_FOUND",
+            "message": "Reconciliation run 'FRR-MISSING' was not found.",
+        }
+    }

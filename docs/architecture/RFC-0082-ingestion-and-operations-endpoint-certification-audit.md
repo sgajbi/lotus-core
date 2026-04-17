@@ -566,9 +566,10 @@ Current posture:
 The routes align to the intended evidence pattern:
 
 1. `GET /reconciliation/runs` applies durable run-history filters with bounded `limit`;
-2. `GET /reconciliation/runs/{run_id}` returns canonical `404` when the run is absent;
-3. `GET /reconciliation/runs/{run_id}/findings` now also returns canonical `404` for a missing run
-   instead of silently returning an empty list;
+2. `GET /reconciliation/runs/{run_id}` returns canonical `404`
+   `RECONCILIATION_RUN_NOT_FOUND` when the run is absent;
+3. `GET /reconciliation/runs/{run_id}/findings` now also returns canonical `404`
+   `RECONCILIATION_RUN_NOT_FOUND` for a missing run instead of silently returning an empty list;
 4. focused proof covers list filtering, run detail lookup, and missing-run handling alongside
    finding retrieval;
 5. this slice materially improved operator correctness by removing the missing-run ambiguity from
@@ -579,7 +580,7 @@ The routes align to the intended evidence pattern:
 Swagger is now adequate for these endpoints:
 
 1. the list, detail, and findings routes now include explicit what/how/why descriptions;
-2. the findings route now publishes a `404` example consistent with the run detail route;
+2. the findings route now publishes a structured `404` example consistent with the run detail route;
 3. list and detail examples remain truthful to the persisted reconciliation contract;
 4. field-level DTO descriptions already cover run and finding semantics adequately.
 

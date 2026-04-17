@@ -15,7 +15,12 @@ from ..services import ReconciliationService
 
 router = APIRouter(tags=["financial-reconciliation"])
 
-NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Reconciliation run 'FRR-20260306-0001' was not found."}
+NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": {
+        "code": "RECONCILIATION_RUN_NOT_FOUND",
+        "message": "Reconciliation run 'FRR-20260306-0001' was not found.",
+    }
+}
 
 RECONCILIATION_RUN_REQUEST_EXAMPLES = {
     "portfolio_day_scope": {
@@ -84,6 +89,16 @@ RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE = {
     ],
     "total": 1,
 }
+
+
+def _reconciliation_run_not_found(run_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={
+            "code": "RECONCILIATION_RUN_NOT_FOUND",
+            "message": f"Reconciliation run '{run_id}' was not found.",
+        },
+    )
 
 
 def _service(db_session: AsyncSession) -> ReconciliationService:
@@ -278,10 +293,7 @@ async def get_reconciliation_run(
     repository = ReconciliationRepository(db_session)
     run = await repository.get_run(run_id)
     if run is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Reconciliation run '{run_id}' was not found.",
-        )
+        raise _reconciliation_run_not_found(run_id)
     return run
 
 
@@ -317,9 +329,6 @@ async def list_reconciliation_findings(
     repository = ReconciliationRepository(db_session)
     run = await repository.get_run(run_id)
     if run is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Reconciliation run '{run_id}' was not found.",
-        )
+        raise _reconciliation_run_not_found(run_id)
     findings = await repository.list_findings(run_id)
     return ReconciliationFindingListResponse(findings=findings, total=len(findings))
