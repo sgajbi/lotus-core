@@ -275,6 +275,126 @@ All checks passed.
 OpenAPI quality gate passed for API services.
 ```
 
+## Certified Endpoint Slice: Cash Account Master Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/reference/cash-accounts`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for portfolio-linked cash account master records.
+
+The boundary is explicit:
+
+1. use it to publish source-owned cash account identity, cash instrument linkage, account currency,
+   lifecycle status, lifecycle dates, role, and source lineage;
+2. use it during portfolio onboarding, cash account opening/closure, and cash account metadata
+   corrections;
+3. do not use it as a read endpoint for cash balances or cash account inventory;
+4. use `GET /portfolios/{portfolio_id}/cash-accounts` for portfolio-scoped cash account metadata
+   reads;
+5. use `GET /portfolios/{portfolio_id}/cash-balances` for cash balances;
+6. treat acknowledgement as durable reference-data upsert acceptance, not cash-balance
+   recalculation;
+7. use `X-Idempotency-Key` for replay-safe source batch submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream posture remains intentionally split:
+
+1. `GET /portfolios/{portfolio_id}/cash-accounts` is the strategic metadata read route;
+2. `GET /portfolios/{portfolio_id}/cash-balances` is the strategic balance read route;
+3. current local `lotus-gateway` references are cash-balance/portfolio contract fields, not direct
+   calls to this write-ingress route;
+4. no direct write-ingress consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`,
+   `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `cash_accounts` collection through the DTO contract;
+2. it carries governed identity through `cash_account_id`, `portfolio_id`, `security_id`, and
+   `account_currency`;
+3. it preserves account role, lifecycle status, open/close dates, source system, and source record
+   id;
+4. it enforces ingestion operating mode before durable upsert;
+5. it enforces write-rate protection using accepted record count;
+6. it creates or replays ingestion jobs with idempotency semantics;
+7. it persists full request payload lineage on the ingestion job;
+8. it upserts rows using `cash_account_id` as the conflict identity;
+9. it updates portfolio linkage, cash instrument linkage, display name, currency, role, lifecycle,
+   and source lineage on conflict;
+10. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+11. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice:
+
+1. route purpose says when to use cash account master ingestion;
+2. all cash account master attributes have descriptions, types, and examples;
+3. account role, lifecycle status, open/close dates, source system, and source record id are modeled
+   explicitly;
+4. ACK fields are covered by the shared batch-ingestion response schema;
+5. `429`, `500`, and `503` operational response examples are present.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `cash-accounts`, `CashAccountMaster`, or cash account master vocabulary in this pass. | No core issue update required. |
+| `lotus-core#308` | Historical cash-account/balance gap was already closed and remains adjacent only. `GET /portfolios/{portfolio_id}/cash-accounts` is metadata-only; balances belong to `GET /portfolios/{portfolio_id}/cash-balances`. | Keep closed unless fresh route-level evidence appears. |
+| Downstream repos | No direct downstream write-ingress consumer found. No stale downstream write route or duplicate endpoint usage found for this family. | No new downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for cash account master options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_cash_account_masters_returns_ack_and_persists_full_contract`
+2. `test_ingest_cash_account_masters_rejects_empty_batch`
+3. `test_reference_data_ingestion_replays_duplicate_idempotency_key`
+4. `test_reference_data_ingestion_returns_503_when_mode_blocks_writes`
+5. `test_reference_data_ingestion_returns_429_when_rate_limited`
+6. `test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_cash_account_master_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_cash_account_masters_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_cash_account_masters_rejects_empty_batch tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_cash_account_master_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+2 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
 ## Certified Endpoint Slice: Classification Taxonomy Write Ingress
 
 This certification pass covers:

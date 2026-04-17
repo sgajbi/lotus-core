@@ -528,6 +528,39 @@ async def test_openapi_describes_classification_taxonomy_shared_schema(async_tes
     )
 
 
+async def test_openapi_describes_cash_account_master_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/reference/cash-accounts"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["CashAccountMasterIngestionRequest"]
+    record_schema = components["CashAccountMasterRecord"]
+
+    assert "cash-account lifecycle maintenance" in path["description"]
+    assert request_schema["properties"]["cash_accounts"]["description"] == (
+        "Cash-account master records to ingest or upsert."
+    )
+    assert record_schema["properties"]["cash_account_id"]["description"] == (
+        "Canonical Lotus cash account identifier."
+    )
+    assert record_schema["properties"]["portfolio_id"]["description"] == (
+        "Owning portfolio identifier."
+    )
+    assert record_schema["properties"]["security_id"]["description"] == (
+        "Linked cash instrument/security identifier."
+    )
+    assert record_schema["properties"]["account_currency"]["description"] == (
+        "Native cash account currency."
+    )
+    assert record_schema["properties"]["account_role"]["examples"] == ["OPERATING_CASH"]
+    assert record_schema["properties"]["lifecycle_status"]["examples"] == ["ACTIVE"]
+    assert record_schema["properties"]["opened_on"]["examples"] == ["2026-01-01"]
+    assert record_schema["properties"]["closed_on"]["examples"] == ["2026-12-31"]
+    assert record_schema["properties"]["source_system"]["examples"] == ["lotus-manage"]
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 

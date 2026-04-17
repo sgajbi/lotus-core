@@ -706,6 +706,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "benchmark_return_series": [],
                 "risk_free_series": [],
                 "classification_taxonomy": [],
+                "cash_accounts": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -745,7 +746,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted["classification_taxonomy"].extend(records)
 
         async def upsert_cash_account_masters(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["cash_accounts"].extend(records)
 
         async def upsert_instrument_lookthrough_components(
             self, records: list[dict[str, object]]
@@ -4236,11 +4237,8 @@ async def test_ingest_fx_rates_returns_failed_record_keys_when_publish_fails(
     ]
 
 
-async def test_ingest_cash_account_masters_endpoint(
-    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
-):
-    mock_kafka_producer.publish_message.reset_mock()
-    payload = {
+def _cash_account_master_payload() -> dict[str, list[dict[str, object]]]:
+    return {
         "cash_accounts": [
             {
                 "cash_account_id": "CASH-ACC-USD-001",
@@ -4253,10 +4251,68 @@ async def test_ingest_cash_account_masters_endpoint(
         ]
     }
 
-    response = await async_test_client.post("/ingest/reference/cash-accounts", json=payload)
+
+async def test_ingest_cash_account_masters_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _cash_account_master_payload()
+    payload["cash_accounts"][0].update(
+        {
+            "account_role": "OPERATING_CASH",
+            "opened_on": "2026-01-01",
+            "closed_on": "2026-12-31",
+            "source_system": "lotus-manage",
+            "source_record_id": "cash-account-001",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json=payload,
+        headers={"X-Idempotency-Key": "cash-account-master-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "cash_account_master"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "cash-account-master-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_not_called()
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"]
+    assert len(persisted) == 1
+    cash_account = persisted[0]
+    assert cash_account["cash_account_id"] == "CASH-ACC-USD-001"
+    assert cash_account["portfolio_id"] == "P1"
+    assert cash_account["security_id"] == "CASH_USD"
+    assert cash_account["display_name"] == "USD Operating Cash"
+    assert cash_account["account_currency"] == "USD"
+    assert cash_account["account_role"] == "OPERATING_CASH"
+    assert cash_account["lifecycle_status"] == "ACTIVE"
+    assert cash_account["opened_on"].isoformat() == "2026-01-01"
+    assert cash_account["closed_on"].isoformat() == "2026-12-31"
+    assert cash_account["source_system"] == "lotus-manage"
+    assert cash_account["source_record_id"] == "cash-account-001"
+
+
+async def test_ingest_cash_account_masters_rejects_empty_batch(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json={"cash_accounts": []},
+    )
+
+    assert response.status_code == 422
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"] == []
 
 
 async def test_ingest_instrument_lookthrough_components_endpoint(
@@ -5685,19 +5741,9 @@ async def test_reference_data_ingestion_endpoints_return_canonical_ack_contract(
 
 async def test_reference_data_ingestion_replays_duplicate_idempotency_key(
     async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
 ):
-    payload = {
-        "cash_accounts": [
-            {
-                "cash_account_id": "CASH-ACC-USD-001",
-                "portfolio_id": "P1",
-                "security_id": "CASH_USD",
-                "display_name": "USD Operating Cash",
-                "account_currency": "USD",
-                "lifecycle_status": "ACTIVE",
-            }
-        ]
-    }
+    payload = _cash_account_master_payload()
 
     first = await async_test_client.post(
         "/ingest/reference/cash-accounts",
@@ -5715,6 +5761,8 @@ async def test_reference_data_ingestion_replays_duplicate_idempotency_key(
     second_body = second.json()
     assert second_body["message"] == "Duplicate ingestion request accepted via idempotency replay."
     assert second_body["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"]
+    assert len(persisted) == 1
 
 
 async def test_reference_data_ingestion_returns_503_when_mode_blocks_writes(
@@ -5726,26 +5774,17 @@ async def test_reference_data_ingestion_returns_503_when_mode_blocks_writes(
 
     response = await async_test_client.post(
         "/ingest/reference/cash-accounts",
-        json={
-            "cash_accounts": [
-                {
-                    "cash_account_id": "CASH-ACC-USD-001",
-                    "portfolio_id": "P1",
-                    "security_id": "CASH_USD",
-                    "display_name": "USD Operating Cash",
-                    "account_currency": "USD",
-                    "lifecycle_status": "ACTIVE",
-                }
-            ]
-        },
+        json=_cash_account_master_payload(),
     )
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"] == []
 
 
 async def test_reference_data_ingestion_returns_429_when_rate_limited(
     async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
     monkeypatch,
 ):
     def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
@@ -5759,26 +5798,17 @@ async def test_reference_data_ingestion_returns_429_when_rate_limited(
 
     response = await async_test_client.post(
         "/ingest/reference/cash-accounts",
-        json={
-            "cash_accounts": [
-                {
-                    "cash_account_id": "CASH-ACC-USD-001",
-                    "portfolio_id": "P1",
-                    "security_id": "CASH_USD",
-                    "display_name": "USD Operating Cash",
-                    "account_currency": "USD",
-                    "lifecycle_status": "ACTIVE",
-                }
-            ]
-        },
+        json=_cash_account_master_payload(),
     )
 
     assert response.status_code == 429
     assert response.json()["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"] == []
 
 
 async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
     async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
     ingestion_test_harness,
     monkeypatch,
 ):
@@ -5794,22 +5824,12 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
 
     response = await async_test_client.post(
         "/ingest/reference/cash-accounts",
-        json={
-            "cash_accounts": [
-                {
-                    "cash_account_id": "CASH-ACC-USD-001",
-                    "portfolio_id": "P1",
-                    "security_id": "CASH_USD",
-                    "display_name": "USD Operating Cash",
-                    "account_currency": "USD",
-                    "lifecycle_status": "ACTIVE",
-                }
-            ]
-        },
+        json=_cash_account_master_payload(),
     )
 
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    job_id = response.json()["detail"]["job_id"]
     failed_jobs = [
         job
         for job in ingestion_test_harness["fake_job_service"].jobs.values()
@@ -5817,3 +5837,7 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
     ]
     assert len(failed_jobs) == 1
     assert failed_jobs[0].failure_reason == "cash account master persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
