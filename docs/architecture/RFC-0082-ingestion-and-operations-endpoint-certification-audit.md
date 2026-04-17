@@ -275,6 +275,127 @@ All checks passed.
 OpenAPI quality gate passed for API services.
 ```
 
+## Certified Endpoint Slice: Classification Taxonomy Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/reference/classification-taxonomy`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for source-owned classification taxonomy labels used by
+analytics, advisory, benchmark, attribution, and supportability workflows.
+
+The boundary is explicit:
+
+1. use it to publish governed taxonomy dimensions and labels by classification set, scope,
+   dimension, value, and effective start date;
+2. use it when platform taxonomy labels are introduced, corrected, retired, or re-effective-dated;
+3. do not use it as a read endpoint for downstream advisory or analytics workflows;
+4. use `POST /integration/reference/classification-taxonomy` for downstream taxonomy reads;
+5. treat acknowledgement as durable reference-data upsert acceptance, not downstream cache
+   invalidation or advisory shelf recomputation;
+6. use `X-Idempotency-Key` for replay-safe source batch submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream usage is read-side:
+
+1. `lotus-advise` calls `POST /integration/reference/classification-taxonomy` during stateful
+   context resolution to reduce local advisory label drift and keep fallback labels visible as
+   supportability signals;
+2. `lotus-advise#94` is already closed after adoption of that read-side route;
+3. `lotus-risk` and `lotus-performance` remain catalog-intended consumers for taxonomy/reference
+   alignment, but this pass did not find a direct product call to the taxonomy read route from
+   those repos;
+4. `lotus-gateway`, `lotus-report`, `lotus-manage`, and `lotus-workbench` had no direct
+   write-ingress consumer for `POST /ingest/reference/classification-taxonomy`.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `classification_taxonomy` collection through the DTO contract;
+2. it carries governed source dimensions through `classification_set_id`, `taxonomy_scope`,
+   `dimension_name`, and `dimension_value`;
+3. it preserves effective windows, source lineage, and quality status;
+4. it enforces ingestion operating mode before durable upsert;
+5. it enforces write-rate protection using accepted record count;
+6. it creates or replays ingestion jobs with idempotency semantics;
+7. it persists full request payload lineage on the ingestion job;
+8. it upserts rows using `classification_set_id`, `taxonomy_scope`, `dimension_name`,
+   `dimension_value`, and `effective_from` as the conflict identity;
+9. it updates dimension description, effective end date, source lineage, and quality status on
+   conflict;
+10. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+11. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice:
+
+1. route purpose says when to use classification taxonomy ingress;
+2. all taxonomy attributes have descriptions, types, and examples;
+3. effective dates, dimension description, source timestamp, vendor, record id, and quality status
+   are modeled explicitly;
+4. ACK fields are covered by the shared batch-ingestion response schema;
+5. `429`, `500`, and `503` operational response examples are present.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `classification-taxonomy`, `ClassificationTaxonomy`, or classification taxonomy vocabulary in this pass. | No core issue update required. |
+| `lotus-advise#94` | Already closed after advise adopted `POST /integration/reference/classification-taxonomy` for governed instrument taxonomy during stateful context resolution. | Keep closed; current local code still evidences canonical read-side usage. |
+| Downstream repos | No direct downstream write-ingress consumer found. `lotus-advise` correctly uses the strategic read-side taxonomy route. | No new downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for classification taxonomy options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_classification_taxonomy_returns_ack_and_persists_full_contract`
+2. `test_ingest_classification_taxonomy_replays_duplicate_idempotency_key`
+3. `test_ingest_classification_taxonomy_rejects_empty_batch`
+4. `test_ingest_classification_taxonomy_returns_503_when_mode_blocks_writes`
+5. `test_ingest_classification_taxonomy_returns_429_when_rate_limited`
+6. `test_ingest_classification_taxonomy_marks_job_failed_when_persist_fails`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_classification_taxonomy_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_classification_taxonomy_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_classification_taxonomy_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_classification_taxonomy_rejects_empty_batch tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_classification_taxonomy_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_classification_taxonomy_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_classification_taxonomy_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_classification_taxonomy_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+2 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
 ## Certified Endpoint Slice: Risk-Free Series Write Ingress
 
 This certification pass covers:

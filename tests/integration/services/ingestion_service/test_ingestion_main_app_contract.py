@@ -498,6 +498,36 @@ async def test_openapi_describes_risk_free_series_shared_schema(async_test_clien
     )
 
 
+async def test_openapi_describes_classification_taxonomy_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/reference/classification-taxonomy"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["ClassificationTaxonomyIngestionRequest"]
+    record_schema = components["ClassificationTaxonomyRecord"]
+
+    assert "platform taxonomy labels are introduced or updated" in path["description"]
+    assert request_schema["properties"]["classification_taxonomy"]["description"] == (
+        "Classification taxonomy records to ingest or upsert."
+    )
+    assert record_schema["properties"]["classification_set_id"]["description"] == (
+        "Classification set identifier."
+    )
+    assert record_schema["properties"]["taxonomy_scope"]["description"] == "Taxonomy scope."
+    assert record_schema["properties"]["dimension_name"]["description"] == "Dimension name."
+    assert record_schema["properties"]["dimension_value"]["description"] == "Dimension value."
+    assert record_schema["properties"]["dimension_description"]["examples"] == [
+        "Technology sector classification"
+    ]
+    assert record_schema["properties"]["effective_from"]["examples"] == ["2025-01-01"]
+    assert record_schema["properties"]["effective_to"]["examples"] == ["2026-12-31"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the taxonomy record."
+    )
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 

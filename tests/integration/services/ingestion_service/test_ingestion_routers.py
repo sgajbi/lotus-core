@@ -705,6 +705,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "index_return_series": [],
                 "benchmark_return_series": [],
                 "risk_free_series": [],
+                "classification_taxonomy": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -741,7 +742,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted["risk_free_series"].extend(records)
 
         async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["classification_taxonomy"].extend(records)
 
         async def upsert_cash_account_masters(self, records: list[dict[str, object]]) -> None:
             return None
@@ -3033,6 +3034,201 @@ async def test_ingest_risk_free_series_marks_job_failed_when_persist_fails(
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
     assert failed_job.failure_reason == "risk-free series persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _classification_taxonomy_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "classification_taxonomy": [
+            {
+                "classification_set_id": "wm_global_taxonomy_v1",
+                "taxonomy_scope": "instrument",
+                "dimension_name": "asset_class",
+                "dimension_value": "equity",
+                "effective_from": "2026-01-01",
+            }
+        ]
+    }
+
+
+async def test_ingest_classification_taxonomy_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _classification_taxonomy_payload()
+    payload["classification_taxonomy"][0].update(
+        {
+            "dimension_description": "Listed equity instrument taxonomy label",
+            "effective_to": "2026-12-31",
+            "source_timestamp": "2026-01-31T23:00:00Z",
+            "source_vendor": "LOTUS_TAXONOMY",
+            "source_record_id": "tax_20260131",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=payload,
+        headers={"X-Idempotency-Key": "classification-taxonomy-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "classification_taxonomy"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "classification-taxonomy-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "classification_taxonomy"
+    ]
+    assert len(persisted) == 1
+    taxonomy = persisted[0]
+    assert taxonomy["classification_set_id"] == "wm_global_taxonomy_v1"
+    assert taxonomy["taxonomy_scope"] == "instrument"
+    assert taxonomy["dimension_name"] == "asset_class"
+    assert taxonomy["dimension_value"] == "equity"
+    assert taxonomy["dimension_description"] == "Listed equity instrument taxonomy label"
+    assert taxonomy["effective_from"].isoformat() == "2026-01-01"
+    assert taxonomy["effective_to"].isoformat() == "2026-12-31"
+    assert taxonomy["source_timestamp"].isoformat() == "2026-01-31T23:00:00+00:00"
+    assert taxonomy["source_vendor"] == "LOTUS_TAXONOMY"
+    assert taxonomy["source_record_id"] == "tax_20260131"
+    assert taxonomy["quality_status"] == "accepted"
+
+
+async def test_ingest_classification_taxonomy_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _classification_taxonomy_payload()
+    headers = {"X-Idempotency-Key": "classification-taxonomy-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "classification_taxonomy"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_classification_taxonomy_rejects_empty_batch(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json={"classification_taxonomy": []},
+    )
+
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["classification_taxonomy"]
+        == []
+    )
+
+
+async def test_ingest_classification_taxonomy_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=_classification_taxonomy_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["classification_taxonomy"]
+        == []
+    )
+
+
+async def test_ingest_classification_taxonomy_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=_classification_taxonomy_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/reference/classification-taxonomy blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["classification_taxonomy"]
+        == []
+    )
+
+
+async def test_ingest_classification_taxonomy_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("classification taxonomy persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_classification_taxonomy",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=_classification_taxonomy_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "classification taxonomy persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "classification taxonomy persist failed"
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
