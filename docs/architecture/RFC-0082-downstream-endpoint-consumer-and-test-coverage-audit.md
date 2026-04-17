@@ -738,6 +738,16 @@ canonical default stale-threshold and failed-window parameters, and readiness al
 The reconciliation-findings OpenAPI example now also reflects the more precise missing-run failure
 mode instead of collapsing that route into a generic portfolio-only not-found example.
 
+Fresh downstream validation on April 17, 2026 rechecked the active gateway path:
+
+1. `lotus-gateway`: `python -m pytest tests\unit\test_upstream_clients.py::test_lotus_core_query_client_support_routes_use_control_plane_contract tests\unit\test_portfolio_service.py::test_portfolio_readiness_returns_compact_indicators tests\unit\test_portfolio_service.py::test_portfolio_service_reuses_support_overview_cache_across_workspace_as_of_dates tests\unit\test_portfolio_service.py::test_portfolio_readiness_surfaces_upstream_client_errors tests\unit\test_portfolio_service.py::test_portfolio_workspace_preserves_support_overview_partial_failure -q`
+2. `lotus-gateway`: `python -m ruff check src\app\clients\lotus_core_query_client.py src\app\services\portfolio_service.py tests\unit\test_upstream_clients.py tests\unit\test_portfolio_service.py`
+
+That evidence confirms gateway calls `overview` on the control-plane contract without unsupported
+date shaping, calls `readiness` with the canonical optional `as_of_date` query parameter, preserves
+support-overview partial failures in workspace composition, and surfaces upstream readiness
+rejections instead of swallowing them.
+
 ### Issue Disposition For This Endpoint Family
 
 | Issue | Status in this pass | Action |
