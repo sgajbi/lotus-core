@@ -3827,12 +3827,11 @@ async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_m
     ingestion_test_harness["fake_job_service"].mode = "normal"
 
 
-async def test_ingestion_health_summary_reports_backlog_counts_and_oldest_job(
+async def _seed_ingestion_health_jobs(
     async_test_client: httpx.AsyncClient,
-    event_replay_test_client: httpx.AsyncClient,
     ingestion_test_harness,
     mock_kafka_producer: MagicMock,
-):
+) -> dict[str, str]:
     mock_kafka_producer.publish_message.reset_mock()
 
     queued_response = await async_test_client.post(
@@ -3862,6 +3861,25 @@ async def test_ingestion_health_summary_reports_backlog_counts_and_oldest_job(
     assert accepted_response.status_code == 500
     accepted_job_id = accepted_response.json()["detail"]["job_id"]
 
+    return {
+        "accepted_job_id": accepted_job_id,
+        "failed_job_id": failed_job_id,
+        "queued_job_id": queued_job_id,
+    }
+
+
+async def test_ingestion_health_summary_reports_backlog_counts_and_oldest_job(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    job_ids = await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
     response = await event_replay_test_client.get("/ingestion/health/summary")
 
     assert response.status_code == 200
@@ -3872,12 +3890,37 @@ async def test_ingestion_health_summary_reports_backlog_counts_and_oldest_job(
         "queued_jobs": 1,
         "failed_jobs": 1,
         "backlog_jobs": 2,
-        "oldest_backlog_job_id": queued_job_id,
+        "oldest_backlog_job_id": job_ids["queued_job_id"],
     }
-    assert failed_job_id not in {
-        accepted_job_id,
-        queued_job_id,
+    assert job_ids["failed_job_id"] not in {
+        job_ids["accepted_job_id"],
+        job_ids["queued_job_id"],
         body["oldest_backlog_job_id"],
+    }
+
+
+async def test_ingestion_health_lag_reuses_canonical_backlog_summary(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    job_ids = await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get("/ingestion/health/lag")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_jobs": 3,
+        "accepted_jobs": 1,
+        "queued_jobs": 1,
+        "failed_jobs": 1,
+        "backlog_jobs": 2,
+        "oldest_backlog_job_id": job_ids["queued_job_id"],
     }
 
 

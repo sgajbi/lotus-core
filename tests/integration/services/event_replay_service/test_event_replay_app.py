@@ -117,6 +117,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     get_records = schema["paths"]["/ingestion/jobs/{job_id}/records"]["get"]
     retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
     health_summary = schema["paths"]["/ingestion/health/summary"]["get"]
+    health_lag = schema["paths"]["/ingestion/health/lag"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -241,6 +242,11 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
         "backlog_jobs": 10,
         "oldest_backlog_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
     }
+
+    health_lag_example = health_lag["responses"]["200"]["content"]["application/json"]["example"]
+    assert health_lag["summary"] == "Get ingestion backlog indicators"
+    assert "quick backlog signal during ingestion incidents" in health_lag["description"]
+    assert health_lag_example == health_example
 
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"

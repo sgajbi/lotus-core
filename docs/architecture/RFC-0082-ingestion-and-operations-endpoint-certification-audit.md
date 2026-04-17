@@ -573,6 +573,88 @@ All checks passed.
 OpenAPI quality gate passed for API services.
 ```
 
+## Certified Endpoint Slice: Ingestion Health Lag Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/lag`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for a compact backlog-lag signal during
+ingestion incidents.
+
+Use it to:
+
+1. read the same canonical backlog counters used by health summary;
+2. present a fast lag/backlog tile to operators;
+3. identify the oldest accepted or queued job before drilling into richer backlog, stalled-job, or
+   SLO endpoints.
+
+Do not use it as a separate source of truth from `GET /ingestion/health/summary`. The current
+implementation intentionally delegates to the same canonical summary state so summary and lag
+counters cannot drift.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/lag` consumer in `lotus-gateway`, `lotus-risk`,
+   `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. current documented consumers are operational runbooks and monitoring guidance inside
+   `lotus-core`, including ingestion SLO/alerting guidance;
+3. because this is an operations route and not a front-office data contract, no gateway adoption
+   issue is required.
+
+### Upstream Integration Assessment
+
+The route correctly reuses `IngestionJobService.get_health_summary`. This avoids duplicate backlog
+math and keeps `total_jobs`, lifecycle counts, `backlog_jobs`, and `oldest_backlog_job_id` aligned
+with the certified health-summary route.
+
+The endpoint has no query options and no request body. Its supported output contract is identical
+to `IngestionHealthSummaryResponse`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain backlog-indicator use;
+2. the `200` response includes the shared aggregate-health example;
+3. response attributes are described by the already certified `IngestionHealthSummaryResponse`
+   schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/lag`, ingestion lag, or backlog-indicator vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific and proves the route returns the same canonical backlog summary
+contract as health summary.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_health_lag_reuses_canonical_backlog_summary`
+2. `test_openapi_describes_event_replay_operational_parameters`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_health_lag_reuses_canonical_backlog_summary tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters -q
+```
+
+Result:
+
+```text
+2 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

@@ -884,6 +884,12 @@ async def get_ingestion_health_summary(
         "How: Reuse canonical health summary state for lag visibility.\n"
         "When: Use when operations need a quick backlog signal during ingestion incidents."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current backlog-oriented ingestion health counters.",
+            "content": {"application/json": {"example": INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_health_lag(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
