@@ -255,6 +255,40 @@ INGESTION_CAPACITY_STATUS_RESPONSE_EXAMPLE = {
     ],
 }
 
+INGESTION_BACKLOG_BREAKDOWN_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 1440,
+    "total_backlog_jobs": 8,
+    "largest_group_backlog_jobs": 6,
+    "largest_group_backlog_share": "0.75",
+    "top_3_backlog_share": "1.0",
+    "groups": [
+        {
+            "endpoint": "/ingest/transactions",
+            "entity_type": "transaction",
+            "total_jobs": 10,
+            "accepted_jobs": 2,
+            "queued_jobs": 4,
+            "failed_jobs": 4,
+            "backlog_jobs": 6,
+            "oldest_backlog_submitted_at": "2026-03-03T04:10:11.000Z",
+            "oldest_backlog_age_seconds": 127.5,
+            "failure_rate": "0.4",
+        },
+        {
+            "endpoint": "/ingest/instruments",
+            "entity_type": "instrument",
+            "total_jobs": 4,
+            "accepted_jobs": 1,
+            "queued_jobs": 1,
+            "failed_jobs": 2,
+            "backlog_jobs": 2,
+            "oldest_backlog_submitted_at": "2026-03-03T04:11:03.000Z",
+            "oldest_backlog_age_seconds": 75.0,
+            "failure_rate": "0.5",
+        },
+    ],
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1371,6 +1405,14 @@ async def get_ingestion_capacity_status(
         "with oldest backlog age.\n"
         "When: Use to isolate the highest-impact ingestion pipeline segment during incidents."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Grouped backlog pressure and concentration diagnostics.",
+            "content": {
+                "application/json": {"example": INGESTION_BACKLOG_BREAKDOWN_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_backlog_breakdown(
     lookback_minutes: int = Query(

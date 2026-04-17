@@ -1355,6 +1355,101 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Backlog Breakdown Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/backlog-breakdown`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for grouped backlog pressure and concentration
+diagnostics by endpoint and entity type.
+
+Use it to:
+
+1. identify which ingestion pipeline segment owns the largest backlog;
+2. inspect group-level backlog jobs, failure rate, and oldest backlog age;
+3. evaluate concentration risk through largest-group and top-3 backlog shares during incidents.
+
+Do not use it as a front-office data contract or as a replacement for job-level diagnostics.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/backlog-breakdown` or
+   `IngestionBacklogBreakdownResponse` consumer in `lotus-gateway`, `lotus-risk`,
+   `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. current consumers are expected to be operations tooling, runbooks, and platform automation;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct grouped ingestion-job state source:
+
+1. it groups canonical ingestion jobs by endpoint and entity type;
+2. it derives accepted, queued, failed, and total job counts;
+3. it derives backlog count, oldest backlog timestamp/age, and group failure rate;
+4. it computes largest-group and top-3 backlog concentration shares.
+
+The supported request options are:
+
+1. `lookback_minutes`, bounded from 5 to 10080;
+2. `limit`, bounded from 1 to 500.
+
+The supported output contract is:
+
+1. `lookback_minutes`;
+2. `total_backlog_jobs`;
+3. `largest_group_backlog_jobs`;
+4. `largest_group_backlog_share`;
+5. `top_3_backlog_share`;
+6. per-group `endpoint`, `entity_type`, `total_jobs`, `accepted_jobs`, `queued_jobs`,
+   `failed_jobs`, `backlog_jobs`, `oldest_backlog_submitted_at`, `oldest_backlog_age_seconds`,
+   and `failure_rate`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain group isolation during incidents;
+2. both query parameters include descriptions, examples, and min/max bounds;
+3. the `200` response includes a concrete multi-group backlog example;
+4. response and group attributes carry descriptions, types, and examples through the DTO schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/backlog-breakdown`, `IngestionBacklogBreakdownResponse`, `largest_group_backlog_share`, or `top_3_backlog_share` in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for request options, validation bounds, all concentration-share
+fields, and grouped backlog/failure outputs.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_backlog_breakdown_endpoint_reports_group_concentration`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_backlog_breakdown_endpoint_reports_group_concentration tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

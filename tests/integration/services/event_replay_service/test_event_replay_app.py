@@ -125,6 +125,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     ops_policy = schema["paths"]["/ingestion/health/policy"]["get"]
     reprocessing_queue = schema["paths"]["/ingestion/health/reprocessing-queue"]["get"]
     capacity = schema["paths"]["/ingestion/health/capacity"]["get"]
+    backlog_breakdown = schema["paths"]["/ingestion/health/backlog-breakdown"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -366,6 +367,20 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert capacity_example["groups"][0]["estimated_drain_seconds"] == 1800.0
     assert capacity_example["groups"][0]["saturation_state"] == "stable"
 
+    backlog_breakdown_params = {param["name"]: param for param in backlog_breakdown["parameters"]}
+    backlog_breakdown_example = backlog_breakdown["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert backlog_breakdown["summary"] == "Get ingestion backlog breakdown by endpoint and entity"
+    assert "highest-impact ingestion pipeline segment" in backlog_breakdown["description"]
+    assert backlog_breakdown_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert backlog_breakdown_params["lookback_minutes"]["schema"]["maximum"] == 10080
+    assert backlog_breakdown_params["limit"]["schema"]["minimum"] == 1
+    assert backlog_breakdown_params["limit"]["schema"]["maximum"] == 500
+    assert backlog_breakdown_example["largest_group_backlog_share"] == "0.75"
+    assert backlog_breakdown_example["groups"][0]["backlog_jobs"] == 6
+    assert backlog_breakdown_example["groups"][1]["failure_rate"] == "0.5"
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -468,6 +483,8 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     queue_item = schema["IngestionReprocessingQueueItemResponse"]
     capacity = schema["IngestionCapacityStatusResponse"]
     capacity_group = schema["IngestionCapacityGroupResponse"]
+    backlog_breakdown = schema["IngestionBacklogBreakdownResponse"]
+    backlog_breakdown_item = schema["IngestionBacklogBreakdownItemResponse"]
 
     assert set(job_detail["required"]) == {
         "job_id",
@@ -573,6 +590,12 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
         "near_capacity",
         "over_capacity",
     ]
+    assert backlog_breakdown["properties"]["top_3_backlog_share"]["description"] == (
+        "Backlog concentration share of the top 3 groups by backlog_jobs."
+    )
+    assert backlog_breakdown_item["properties"]["oldest_backlog_age_seconds"]["description"] == (
+        "Age in seconds of oldest non-terminal job in this group."
+    )
 
 
 async def test_openapi_excludes_write_ingress_endpoints(async_test_client):

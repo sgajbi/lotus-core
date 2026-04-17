@@ -316,26 +316,39 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             lookback_minutes: int = 1440,
             limit: int = 200,
         ):
+            groups = [
+                {
+                    "endpoint": "/ingest/transactions",
+                    "entity_type": "transaction",
+                    "total_jobs": 10,
+                    "accepted_jobs": 2,
+                    "queued_jobs": 4,
+                    "failed_jobs": 4,
+                    "backlog_jobs": 6,
+                    "oldest_backlog_submitted_at": datetime.now(UTC),
+                    "oldest_backlog_age_seconds": 127.5,
+                    "failure_rate": Decimal("0.4"),
+                },
+                {
+                    "endpoint": "/ingest/instruments",
+                    "entity_type": "instrument",
+                    "total_jobs": 4,
+                    "accepted_jobs": 1,
+                    "queued_jobs": 1,
+                    "failed_jobs": 2,
+                    "backlog_jobs": 2,
+                    "oldest_backlog_submitted_at": datetime.now(UTC),
+                    "oldest_backlog_age_seconds": 75.0,
+                    "failure_rate": Decimal("0.5"),
+                },
+            ][:limit]
             return {
                 "lookback_minutes": lookback_minutes,
-                "total_backlog_jobs": 1,
-                "largest_group_backlog_jobs": 1,
-                "largest_group_backlog_share": Decimal("1"),
-                "top_3_backlog_share": Decimal("1"),
-                "groups": [
-                    {
-                        "endpoint": "/ingest/transactions",
-                        "entity_type": "transaction",
-                        "total_jobs": 3,
-                        "accepted_jobs": 1,
-                        "queued_jobs": 0,
-                        "failed_jobs": 2,
-                        "backlog_jobs": 1,
-                        "oldest_backlog_submitted_at": datetime.now(UTC),
-                        "oldest_backlog_age_seconds": 12.0,
-                        "failure_rate": Decimal("0.6667"),
-                    }
-                ][:limit],
+                "total_backlog_jobs": sum(item["backlog_jobs"] for item in groups),
+                "largest_group_backlog_jobs": groups[0]["backlog_jobs"] if groups else 0,
+                "largest_group_backlog_share": Decimal("0.75") if groups else Decimal("0"),
+                "top_3_backlog_share": Decimal("1") if groups else Decimal("0"),
+                "groups": groups,
             }
 
         async def list_stalled_jobs(
@@ -4393,6 +4406,63 @@ async def test_ingestion_capacity_status_endpoint(event_replay_test_client: http
     ):
         invalid = await event_replay_test_client.get(
             "/ingestion/health/capacity",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
+
+
+async def test_ingestion_backlog_breakdown_endpoint_reports_group_concentration(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get(
+        "/ingestion/health/backlog-breakdown",
+        params={"lookback_minutes": 1440, "limit": 2},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "lookback_minutes": 1440,
+        "total_backlog_jobs": 8,
+        "largest_group_backlog_jobs": 6,
+        "largest_group_backlog_share": "0.75",
+        "top_3_backlog_share": "1",
+        "groups": [
+            {
+                "endpoint": "/ingest/transactions",
+                "entity_type": "transaction",
+                "total_jobs": 10,
+                "accepted_jobs": 2,
+                "queued_jobs": 4,
+                "failed_jobs": 4,
+                "backlog_jobs": 6,
+                "oldest_backlog_submitted_at": body["groups"][0]["oldest_backlog_submitted_at"],
+                "oldest_backlog_age_seconds": 127.5,
+                "failure_rate": "0.4",
+            },
+            {
+                "endpoint": "/ingest/instruments",
+                "entity_type": "instrument",
+                "total_jobs": 4,
+                "accepted_jobs": 1,
+                "queued_jobs": 1,
+                "failed_jobs": 2,
+                "backlog_jobs": 2,
+                "oldest_backlog_submitted_at": body["groups"][1]["oldest_backlog_submitted_at"],
+                "oldest_backlog_age_seconds": 75.0,
+                "failure_rate": "0.5",
+            },
+        ],
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 10081},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/backlog-breakdown",
             params=invalid_params,
         )
         assert invalid.status_code == 422
