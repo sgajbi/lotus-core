@@ -131,6 +131,18 @@ INGESTION_CONSUMER_LAG_RESPONSE_EXAMPLE = {
     ],
 }
 
+INGESTION_SLO_STATUS_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "total_jobs": 320,
+    "failed_jobs": 4,
+    "failure_rate": "0.0125",
+    "p95_queue_latency_seconds": 1.42,
+    "backlog_age_seconds": 74.0,
+    "breach_failure_rate": False,
+    "breach_queue_latency": False,
+    "breach_backlog_age": False,
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -971,6 +983,12 @@ async def get_ingestion_consumer_lag(
         "How: Compute lookback-window metrics and compare against caller thresholds.\n"
         "When: Use for alert evaluation, on-call triage, and operational readiness checks."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current ingestion SLO status for the requested thresholds.",
+            "content": {"application/json": {"example": INGESTION_SLO_STATUS_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_slo_status(
     lookback_minutes: int = Query(

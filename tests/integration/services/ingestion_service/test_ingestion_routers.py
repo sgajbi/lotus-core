@@ -291,16 +291,23 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             failure_rate = (
                 Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
             )
+            backlog_jobs = [
+                job for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            ]
+            backlog_age_seconds = 12.0 if backlog_jobs else 0.0
+            p95_queue_latency_seconds = 0.2
             return {
                 "lookback_minutes": lookback_minutes,
                 "total_jobs": total_jobs,
                 "failed_jobs": failed_jobs,
                 "failure_rate": failure_rate,
-                "p95_queue_latency_seconds": 0.2,
-                "backlog_age_seconds": 0.0,
+                "p95_queue_latency_seconds": p95_queue_latency_seconds,
+                "backlog_age_seconds": backlog_age_seconds,
                 "breach_failure_rate": failure_rate > failure_rate_threshold,
-                "breach_queue_latency": False,
-                "breach_backlog_age": False,
+                "breach_queue_latency": (
+                    p95_queue_latency_seconds > queue_latency_threshold_seconds
+                ),
+                "breach_backlog_age": backlog_age_seconds > backlog_age_threshold_seconds,
             }
 
         async def get_backlog_breakdown(
@@ -3942,12 +3949,57 @@ async def test_ingestion_health_lag_reuses_canonical_backlog_summary(
     }
 
 
-async def test_ingestion_slo_status(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/slo")
+async def test_ingestion_slo_status_evaluates_threshold_options(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/slo",
+        params={
+            "lookback_minutes": 30,
+            "failure_rate_threshold": "0.20",
+            "queue_latency_threshold_seconds": 0.1,
+            "backlog_age_threshold_seconds": 1,
+        },
+    )
+
     assert response.status_code == 200
     body = response.json()
-    assert "failure_rate" in body
-    assert "p95_queue_latency_seconds" in body
+    assert body == {
+        "lookback_minutes": 30,
+        "total_jobs": 3,
+        "failed_jobs": 1,
+        "failure_rate": "0.3333333333333333333333333333",
+        "p95_queue_latency_seconds": 0.2,
+        "backlog_age_seconds": 12.0,
+        "breach_failure_rate": True,
+        "breach_queue_latency": True,
+        "breach_backlog_age": True,
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"failure_rate_threshold": "-0.01"},
+        {"failure_rate_threshold": "1.01"},
+        {"queue_latency_threshold_seconds": 0},
+        {"queue_latency_threshold_seconds": 601},
+        {"backlog_age_threshold_seconds": 0},
+        {"backlog_age_threshold_seconds": 86401},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/slo",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_backlog_breakdown(event_replay_test_client: httpx.AsyncClient):

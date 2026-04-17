@@ -752,6 +752,110 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Ingestion SLO Status Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/slo`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for ingestion SLO evaluation.
+
+Use it to:
+
+1. evaluate failure-rate, p95 queue-latency, and oldest-backlog-age signals;
+2. override SLO thresholds for incident diagnosis or alert calibration;
+3. determine whether a replay or source-ingestion surge is breaching operational guardrails.
+
+Do not use it as a front-office data contract or as the detailed root-cause surface. Operators
+should drill into job list, failures, consumer lag, backlog breakdown, or DLQ events after a breach
+flag is raised.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/slo` or `IngestionSloStatusResponse` consumer in
+   `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, or `lotus-workbench`;
+2. current documented consumers are operational runbooks and monitoring guidance inside
+   `lotus-core`;
+3. no gateway issue is required because this is an operations/support route, not a front-office
+   feature route.
+
+### Upstream Integration Assessment
+
+The route uses the correct operational evidence source:
+
+1. it evaluates ingestion jobs in the requested lookback window;
+2. it derives `failure_rate` from failed jobs divided by total jobs;
+3. it computes p95 queue latency from submission-to-completion timestamps, with a fallback for
+   environments that do not support database percentile functions;
+4. it derives backlog age from the oldest accepted or queued job;
+5. it compares all three signals against caller-supplied thresholds and returns explicit breach
+   booleans.
+
+The supported request options are:
+
+1. `lookback_minutes`, bounded from 5 to 1440;
+2. `failure_rate_threshold`, bounded from 0 to 1;
+3. `queue_latency_threshold_seconds`, bounded from 0.1 to 600;
+4. `backlog_age_threshold_seconds`, bounded from 1 to 86400.
+
+The supported output contract is:
+
+1. `lookback_minutes`;
+2. `total_jobs`;
+3. `failed_jobs`;
+4. `failure_rate`;
+5. `p95_queue_latency_seconds`;
+6. `backlog_age_seconds`;
+7. `breach_failure_rate`;
+8. `breach_queue_latency`;
+9. `breach_backlog_age`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain alert/on-call readiness use;
+2. all query parameters include descriptions, examples, and min/max bounds;
+3. the `200` response includes a concrete SLO example;
+4. response attributes carry descriptions and examples through the DTO schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/slo`, `IngestionSloStatusResponse`, or ingestion SLO vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for all request options, validation bounds, threshold breach
+semantics, and all output fields.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_slo_status_evaluates_threshold_options`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_slo_status_evaluates_threshold_options tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

@@ -119,6 +119,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     health_summary = schema["paths"]["/ingestion/health/summary"]["get"]
     health_lag = schema["paths"]["/ingestion/health/lag"]["get"]
     consumer_lag = schema["paths"]["/ingestion/health/consumer-lag"]["get"]
+    slo_status = schema["paths"]["/ingestion/health/slo"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -137,6 +138,14 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
             if values:
                 return values
         return []
+
+    def _schema_bound(parameter_schema: dict, bound: str):
+        if bound in parameter_schema:
+            return parameter_schema[bound]
+        for candidate in parameter_schema.get("anyOf", []):
+            if bound in candidate:
+                return candidate[bound]
+        raise AssertionError(f"Schema bound {bound} not found in {parameter_schema}")
 
     status_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "status")
     assert status_parameter["description"] == "Optional job status filter."
@@ -271,6 +280,21 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert consumer_lag_example["groups"][0]["lag_severity"] == "high"
     assert consumer_lag_example["groups"][1]["lag_severity"] == "medium"
 
+    slo_params = {param["name"]: param for param in slo_status["parameters"]}
+    slo_example = slo_status["responses"]["200"]["content"]["application/json"]["example"]
+    assert slo_status["summary"] == "Evaluate ingestion SLO status"
+    assert "alert evaluation, on-call triage" in slo_status["description"]
+    assert slo_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert slo_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert _schema_bound(slo_params["failure_rate_threshold"]["schema"], "minimum") == 0
+    assert _schema_bound(slo_params["failure_rate_threshold"]["schema"], "maximum") == 1
+    assert slo_params["queue_latency_threshold_seconds"]["schema"]["minimum"] == 0.1
+    assert slo_params["queue_latency_threshold_seconds"]["schema"]["maximum"] == 600
+    assert slo_params["backlog_age_threshold_seconds"]["schema"]["minimum"] == 1
+    assert slo_params["backlog_age_threshold_seconds"]["schema"]["maximum"] == 86400
+    assert slo_example["failure_rate"] == "0.0125"
+    assert slo_example["breach_failure_rate"] is False
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -288,6 +312,7 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     idempotency = schema["IngestionIdempotencyDiagnosticsResponse"]
     consumer_lag = schema["IngestionConsumerLagResponse"]
     consumer_lag_group = schema["IngestionConsumerLagGroupResponse"]
+    slo_status = schema["IngestionSloStatusResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -321,6 +346,15 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
         "medium",
         "high",
     ]
+    assert slo_status["properties"]["failure_rate"]["description"] == (
+        "Failed jobs divided by total jobs in the lookback window."
+    )
+    assert slo_status["properties"]["p95_queue_latency_seconds"]["description"] == (
+        "95th percentile latency from job submission to queue completion."
+    )
+    assert slo_status["properties"]["breach_backlog_age"]["description"] == (
+        "Whether backlog age exceeds configured threshold."
+    )
 
 
 async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_client):
