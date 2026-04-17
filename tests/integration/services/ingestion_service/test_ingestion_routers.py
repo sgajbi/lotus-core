@@ -4903,7 +4903,7 @@ async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publi
     assert second.json()["replay_status"] == "duplicate_blocked"
 
 
-async def test_ingestion_replay_audit_list_and_get(
+async def test_ingestion_replay_audit_list_and_get_filters_full_rows(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
 ):
@@ -4934,19 +4934,62 @@ async def test_ingestion_replay_audit_list_and_get(
         json={"dry_run": True},
     )
     assert replay_response.status_code == 200
-    replay_id = replay_response.json()["replay_audit_id"]
+    replay_body = replay_response.json()
+    replay_id = replay_body["replay_audit_id"]
+    replay_fingerprint = replay_body["replay_fingerprint"]
 
     list_response = await event_replay_test_client.get(
         "/ingestion/audit/replays",
-        params={"recovery_path": "consumer_dlq_replay"},
+        params={
+            "limit": 1,
+            "recovery_path": "consumer_dlq_replay",
+            "replay_status": "dry_run",
+            "replay_fingerprint": replay_fingerprint,
+        },
     )
     assert list_response.status_code == 200
-    audits = list_response.json()["audits"]
-    assert any(item["replay_id"] == replay_id for item in audits)
+    assert list_response.json() == {
+        "audits": [
+            {
+                "replay_id": replay_id,
+                "recovery_path": "consumer_dlq_replay",
+                "event_id": "cdlq_test_001",
+                "replay_fingerprint": replay_fingerprint,
+                "correlation_id": "ING:test-correlation-id",
+                "job_id": replay_body["job_id"],
+                "endpoint": "/ingest/transactions",
+                "replay_status": "dry_run",
+                "dry_run": True,
+                "replay_reason": "Dry-run successful. Correlated ingestion job is replayable.",
+                "requested_by": "ops-token",
+                "requested_at": list_response.json()["audits"][0]["requested_at"],
+                "completed_at": list_response.json()["audits"][0]["completed_at"],
+            }
+        ],
+        "total": 1,
+    }
 
     get_response = await event_replay_test_client.get(f"/ingestion/audit/replays/{replay_id}")
     assert get_response.status_code == 200
-    assert get_response.json()["replay_id"] == replay_id
+    assert get_response.json() == list_response.json()["audits"][0]
+
+    for invalid_params in ({"limit": 0}, {"limit": 501}):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/audit/replays",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
+
+
+async def test_ingestion_replay_audit_detail_returns_not_found_for_missing_row(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get("/ingestion/audit/replays/replay_missing_001")
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_REPLAY_AUDIT_NOT_FOUND",
+        "message": "Replay audit 'replay_missing_001' was not found.",
+    }
 
 
 def _build_hs256_jwt(secret: str, payload: dict) -> str:

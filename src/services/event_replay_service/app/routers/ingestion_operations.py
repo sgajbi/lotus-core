@@ -398,6 +398,30 @@ INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE = {
     "completed_at": "2026-03-06T10:12:02.039Z",
 }
 
+INGESTION_REPLAY_AUDIT_LIST_RESPONSE_EXAMPLE = {
+    "audits": [
+        INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE,
+        {
+            "replay_id": "replay_01J5WK2V8GE7K9VK2R6TFY4KQZ",
+            "recovery_path": "consumer_dlq_replay",
+            "event_id": "cdlq_01J5VK612V7N8J1RP4PD7NCQ44",
+            "replay_fingerprint": (
+                "8d9d2ddf66ef6a5c5f0fbd7654a7de0b7f7982393e0d3b599d4fa32e84793d09"
+            ),
+            "correlation_id": "ING:e59dd219-3902-4f38-8f8d-7c6cb1456672",
+            "job_id": "job_01J5S0M3BVX8M5A4SK13Q20D8D",
+            "endpoint": "/ingest/portfolio-bundles",
+            "replay_status": "dry_run",
+            "dry_run": True,
+            "replay_reason": "Dry-run successful. Correlated ingestion job is replayable.",
+            "requested_by": "ops-token",
+            "requested_at": "2026-03-06T10:20:11.019Z",
+            "completed_at": "2026-03-06T10:20:11.442Z",
+        },
+    ],
+    "total": 2,
+}
+
 INGESTION_OPS_MODE_EXAMPLE = {
     "mode": "paused",
     "replay_window_start": "2026-03-06T00:00:00Z",
@@ -460,6 +484,13 @@ INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE = {
     "detail": {
         "code": "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND",
         "message": ("Consumer DLQ event 'cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6' was not found."),
+    }
+}
+
+INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_REPLAY_AUDIT_NOT_FOUND",
+        "message": "Replay audit 'replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P' was not found.",
     }
 }
 
@@ -1898,9 +1929,7 @@ async def replay_consumer_dlq_event(
         200: {
             "description": "Replay audit rows matching the requested filters.",
             "content": {
-                "application/json": {
-                    "example": {"audits": [INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE], "total": 1}
-                }
+                "application/json": {"example": INGESTION_REPLAY_AUDIT_LIST_RESPONSE_EXAMPLE}
             },
         }
     },
@@ -1960,7 +1989,11 @@ async def list_ingestion_replay_audits(
         200: {
             "description": "One replay audit row.",
             "content": {"application/json": {"example": INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "Replay audit row was not found.",
+            "content": {"application/json": {"example": INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE}},
+        },
     },
 )
 async def get_ingestion_replay_audit(

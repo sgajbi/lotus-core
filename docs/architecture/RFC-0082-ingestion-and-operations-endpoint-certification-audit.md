@@ -167,6 +167,96 @@ Result:
 7 passed
 ```
 
+## Certified Endpoint Slice: Replay Audit Read Operations
+
+### Endpoint Inventory
+
+1. `GET /ingestion/audit/replays`
+2. `GET /ingestion/audit/replays/{replay_id}`
+
+### Route Contract Decision
+
+These are the governed replay-forensics read routes for durable ingestion recovery activity.
+
+Use them to:
+
+1. list replay audit history across recovery paths;
+2. filter replay evidence by path, replay status, deterministic fingerprint, and job id;
+3. inspect one specific replay action by `replay_id`;
+4. review replay governance fields such as `requested_by`, `requested_at`, `completed_at`,
+   `dry_run`, and `replay_reason`;
+5. support incident timelines and duplicate-replay investigations.
+
+Do not use these routes as substitute recovery actions. They are evidence surfaces, not mutation
+routes.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling these routes directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/audit/replays` or
+   `/ingestion/audit/replays/{replay_id}` consumer in the local scan;
+2. the routes remain operator/support/QA evidence endpoints;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The routes align to the intended replay-governance architecture:
+
+1. the list route delegates to `IngestionJobService.list_replay_audits` with bounded `limit` and
+   optional filters for `recovery_path`, `replay_status`, `replay_fingerprint`, and `job_id`;
+2. the detail route delegates to `IngestionJobService.get_replay_audit`;
+3. the detail route returns canonical `404` `INGESTION_REPLAY_AUDIT_NOT_FOUND` for absent rows;
+4. both routes return the full durable replay-audit contract, including outcome status, dry-run
+   flag, replay reason, actor, and timestamps;
+5. no behavioral refactor was required, but Swagger and focused tests were tightened so the routes
+   are self-explanatory and regression-resistant.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now adequate for these endpoints:
+
+1. the list route explains replay-governance and incident-forensics use;
+2. the list route documents every filter and publishes `limit` bounds `1..500`;
+3. the list `200` example now shows multiple replay rows with distinct statuses;
+4. the detail route documents `replay_id` explicitly and now publishes a `404` example;
+5. `IngestionReplayAuditResponse` and `IngestionReplayAuditListResponse` document audit row and
+   list semantics field by field.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/audit/replays`, `/ingestion/audit/replays/{replay_id}`, or replay-audit DTO vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for filter semantics, full replay-audit rows, not-found
+behavior, bounds validation, and OpenAPI quality.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_replay_audit_list_and_get_filters_full_rows`
+2. `test_ingestion_replay_audit_detail_returns_not_found_for_missing_row`
+3. `test_openapi_describes_event_replay_operational_parameters`
+4. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_replay_audit_list_and_get_filters_full_rows tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_replay_audit_detail_returns_not_found_for_missing_row tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+4 passed
+```
+
 ### Issue Disposition For This Endpoint
 
 | Issue | Assessment | Disposition |

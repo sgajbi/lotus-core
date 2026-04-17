@@ -129,6 +129,8 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     stalled_jobs = schema["paths"]["/ingestion/health/stalled-jobs"]["get"]
     consumer_dlq_events = schema["paths"]["/ingestion/dlq/consumer-events"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
+    replay_audits = schema["paths"]["/ingestion/audit/replays"]["get"]
+    replay_audit = schema["paths"]["/ingestion/audit/replays/{replay_id}"]["get"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
     job_id_parameter = next(param for param in get_job["parameters"] if param["name"] == "job_id")
@@ -440,6 +442,38 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     )
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
+    replay_audits_params = {param["name"]: param for param in replay_audits["parameters"]}
+    replay_audits_example = replay_audits["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert replay_audits["summary"] == "List ingestion replay audit records"
+    assert "incident forensics and replay governance review" in replay_audits["description"]
+    assert replay_audits_params["limit"]["schema"]["minimum"] == 1
+    assert replay_audits_params["limit"]["schema"]["maximum"] == 500
+    assert replay_audits_params["recovery_path"]["description"] == "Optional recovery-path filter."
+    assert replay_audits_params["replay_status"]["description"] == "Optional replay-status filter."
+    assert (
+        replay_audits_params["replay_fingerprint"]["description"]
+        == "Optional deterministic replay fingerprint filter."
+    )
+    assert replay_audits_example["total"] == 2
+    assert replay_audits_example["audits"][1]["replay_status"] == "dry_run"
+    assert replay_audits_example["audits"][1]["dry_run"] is True
+
+    replay_audit_id_parameter = next(
+        param for param in replay_audit["parameters"] if param["name"] == "replay_id"
+    )
+    replay_audit_not_found = replay_audit["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert replay_audit["summary"] == "Get one ingestion replay audit record"
+    assert (
+        "inspect a specific replay action referenced in incident timelines"
+        in replay_audit["description"]
+    )
+    assert replay_audit_id_parameter["description"] == "Replay audit identifier."
+    assert replay_audit_not_found["detail"]["code"] == "INGESTION_REPLAY_AUDIT_NOT_FOUND"
+
 
 async def test_openapi_describes_event_replay_shared_schema_depth(async_test_client):
     response = await async_test_client.get("/openapi.json")
@@ -462,6 +496,7 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     consumer_dlq_event = schema["ConsumerDlqEventResponse"]
     consumer_dlq_event_list = schema["ConsumerDlqEventListResponse"]
     consumer_dlq_replay = schema["ConsumerDlqReplayResponse"]
+    replay_audit = schema["IngestionReplayAuditResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -504,6 +539,10 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert consumer_dlq_replay["properties"]["replay_fingerprint"]["description"] == (
         "Deterministic fingerprint for this replay mapping and payload."
+    )
+    assert replay_audit["properties"]["replay_status"]["description"] == "Replay outcome status."
+    assert replay_audit["properties"]["requested_by"]["description"] == (
+        "Ops principal who initiated replay."
     )
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."
