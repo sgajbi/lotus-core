@@ -850,7 +850,169 @@ async def test_ingest_portfolios_endpoint(
     response = await async_test_client.post("/ingest/portfolios", json=payload)
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Portfolios accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "portfolio"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_portfolios_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = {
+        "portfolios": [
+            {
+                "portfolio_id": "P1",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "active",
+                "risk_exposure": "balanced",
+                "investment_time_horizon": "long_term",
+                "portfolio_type": "discretionary",
+                "booking_center_code": "SG_BOOKING",
+            }
+        ]
+    }
+    headers = {"X-Idempotency-Key": "portfolio-master-replay-001"}
+
+    first = await async_test_client.post("/ingest/portfolios", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/portfolios", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "portfolio-master-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_portfolios_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/portfolios",
+        json={
+            "portfolios": [
+                {
+                    "portfolio_id": "P1",
+                    "base_currency": "USD",
+                    "open_date": "2025-01-01",
+                    "client_id": "c",
+                    "status": "active",
+                    "risk_exposure": "balanced",
+                    "investment_time_horizon": "long_term",
+                    "portfolio_type": "discretionary",
+                    "booking_center_code": "SG_BOOKING",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolios_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        portfolios_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/portfolios",
+        json={
+            "portfolios": [
+                {
+                    "portfolio_id": "P1",
+                    "base_currency": "USD",
+                    "open_date": "2025-01-01",
+                    "client_id": "c",
+                    "status": "active",
+                    "risk_exposure": "balanced",
+                    "investment_time_horizon": "long_term",
+                    "portfolio_type": "discretionary",
+                    "booking_center_code": "SG_BOOKING",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolios_marks_job_failed_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    payload = {
+        "portfolios": [
+            {
+                "portfolio_id": "P1",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "active",
+                "risk_exposure": "balanced",
+                "investment_time_horizon": "long_term",
+                "portfolio_type": "discretionary",
+                "booking_center_code": "SG_BOOKING",
+            },
+            {
+                "portfolio_id": "P2",
+                "base_currency": "EUR",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "active",
+                "risk_exposure": "conservative",
+                "investment_time_horizon": "medium_term",
+                "portfolio_type": "advisory",
+                "booking_center_code": "EU_BOOKING",
+            },
+        ]
+    }
+
+    with pytest.raises(Exception, match="Failed to publish portfolio"):
+        await async_test_client.post("/ingest/portfolios", json=payload)
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed", "entity_type": "portfolio"},
+    )
+    assert jobs_response.status_code == 200
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    failure_history = await event_replay_test_client.get(
+        f"/ingestion/jobs/{failed_job_id}/failures"
+    )
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["P1", "P2"]
 
 
 async def test_ingest_transactions_endpoint(
