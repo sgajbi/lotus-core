@@ -275,6 +275,131 @@ All checks passed.
 OpenAPI quality gate passed for API services.
 ```
 
+## Certified Endpoint Slice: Benchmark Return Series Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/benchmark-return-series`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for source-owned raw benchmark return observations
+when an upstream vendor publishes benchmark returns directly.
+
+The boundary is explicit:
+
+1. use it for vendor-provided daily or periodic benchmark return loads and corrections;
+2. use it to maintain raw benchmark return observations by `series_id`, `benchmark_id`, and
+   `series_date`;
+3. do not use it as the default benchmark calculation engine output;
+4. use `POST /integration/benchmarks/{benchmark_id}/return-series` for downstream vendor-series
+   reads when an explicit override or evidence path needs raw benchmark returns;
+5. prefer the strategic calculated benchmark path from benchmark definitions, compositions, index
+   prices, and FX when downstream workflows need default benchmark math;
+6. treat acknowledgement as durable reference-data upsert acceptance, not downstream calculation
+   completion;
+7. use `X-Idempotency-Key` for replay-safe source batch submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream usage is read-side and explicit:
+
+1. `lotus-performance` calls `POST /integration/benchmarks/{benchmark_id}/return-series` through
+   `app/services/core_integration_service.py` and chunks/snapshots that upstream evidence through
+   `app/services/stateful_input_service.py`;
+2. `lotus-performance` uses vendor benchmark return series as an explicit override/source mode, not
+   the default benchmark-math path where lower-level benchmark composition and market data are
+   available;
+3. `lotus-risk` consumes benchmark returns through lotus-performance, not directly from this
+   lotus-core write-ingress route;
+4. `lotus-gateway`, `lotus-report`, `lotus-advise`, `lotus-manage`, and `lotus-workbench` had no
+   direct write-ingress consumer for `POST /ingest/benchmark-return-series`.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `benchmark_return_series` collection through the DTO contract;
+2. it accepts negative benchmark return observations, which are valid for drawdowns and active-risk
+   windows;
+3. it enforces ingestion operating mode before durable upsert;
+4. it enforces write-rate protection using accepted record count;
+5. it creates or replays ingestion jobs with idempotency semantics;
+6. it persists full request payload lineage on the ingestion job;
+7. it upserts rows using `series_id`, `benchmark_id`, and `series_date` as the conflict identity;
+8. it updates return value, period, convention, currency, source lineage, and quality status on
+   conflict;
+9. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+10. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now aligned with the actual contract:
+
+1. route purpose says when to use vendor-provided raw benchmark return series;
+2. route text says the endpoint validates the canonical record contract instead of overstating a
+   closed convention taxonomy;
+3. all benchmark return series attributes have descriptions, types, and examples;
+4. return period, return convention, source timestamp, vendor, record id, quality status, and
+   currency are modeled explicitly;
+5. ACK fields are covered by the shared batch-ingestion response schema;
+6. `429`, `500`, and `503` operational response examples are present.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `benchmark-return-series`, `BenchmarkReturnSeries`, or benchmark return vocabulary in this pass. | No core issue update required. |
+| `lotus-performance#83` | Valid broad stateful-sourcing architecture issue. It references benchmark return-series as one upstream family, but it is not a defect in this core write-ingress route. | Keep open in `lotus-performance`; no core write-route fix required. |
+| Downstream repos | No direct downstream write-ingress consumer found. `lotus-performance` correctly uses the strategic read-side benchmark return-series route only for explicit vendor-series sourcing. | No new downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for benchmark return series options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_benchmark_return_series_returns_ack_and_persists_full_contract`
+2. `test_ingest_benchmark_return_series_replays_duplicate_idempotency_key`
+3. `test_ingest_benchmark_return_series_rejects_empty_batch`
+4. `test_ingest_benchmark_return_series_returns_503_when_mode_blocks_writes`
+5. `test_ingest_benchmark_return_series_returns_429_when_rate_limited`
+6. `test_ingest_benchmark_return_series_marks_job_failed_when_persist_fails`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_benchmark_return_series_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_return_series_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_return_series_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_return_series_rejects_empty_batch tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_return_series_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_return_series_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_return_series_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_benchmark_return_series_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\reference_data.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\reference_data.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+3 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
 ## Certified Endpoint Slice: Index Return Series Write Ingress
 
 This certification pass covers:

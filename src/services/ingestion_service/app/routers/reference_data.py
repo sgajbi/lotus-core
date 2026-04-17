@@ -369,7 +369,7 @@ async def ingest_index_return_series(
     summary="Ingest benchmark return series",
     description=(
         "What: Accept raw vendor-provided benchmark return series records.\n"
-        "How: Validate return conventions and upsert deterministic time-series rows.\n"
+        "How: Validate the canonical record contract and upsert deterministic time-series rows.\n"
         "When: Use when benchmark return series is provided by upstream vendor."
     ),
 )

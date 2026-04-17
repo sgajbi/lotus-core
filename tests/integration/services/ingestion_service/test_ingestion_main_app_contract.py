@@ -441,6 +441,34 @@ async def test_openapi_describes_index_return_series_shared_schema(async_test_cl
     )
 
 
+async def test_openapi_describes_benchmark_return_series_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/benchmark-return-series"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["BenchmarkReturnSeriesIngestionRequest"]
+    record_schema = components["BenchmarkReturnSeriesRecord"]
+
+    assert "Validate the canonical record contract" in path["description"]
+    assert request_schema["properties"]["benchmark_return_series"]["description"] == (
+        "Benchmark return series records to ingest or upsert."
+    )
+    assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
+    assert record_schema["properties"]["benchmark_id"]["description"] == ("Benchmark identifier.")
+    assert record_schema["properties"]["series_date"]["description"] == "Series date."
+    assert record_schema["properties"]["benchmark_return"]["description"] == (
+        "Benchmark return value."
+    )
+    assert record_schema["properties"]["return_period"]["examples"] == ["1d"]
+    assert record_schema["properties"]["return_convention"]["examples"] == ["total_return_index"]
+    assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the benchmark return series record."
+    )
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
