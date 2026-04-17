@@ -127,6 +127,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     capacity = schema["paths"]["/ingestion/health/capacity"]["get"]
     backlog_breakdown = schema["paths"]["/ingestion/health/backlog-breakdown"]["get"]
     stalled_jobs = schema["paths"]["/ingestion/health/stalled-jobs"]["get"]
+    consumer_dlq_events = schema["paths"]["/ingestion/dlq/consumer-events"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -400,6 +401,29 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert stalled_jobs_example["jobs"][1]["status"] == "queued"
     assert "dependency saturation" in stalled_jobs_example["jobs"][1]["suggested_action"]
 
+    consumer_dlq_events_params = {
+        param["name"]: param for param in consumer_dlq_events["parameters"]
+    }
+    consumer_dlq_events_example = consumer_dlq_events["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert consumer_dlq_events["summary"] == "List consumer dead-letter events"
+    assert "consumer-side validation/processing failures" in consumer_dlq_events["description"]
+    assert consumer_dlq_events_params["limit"]["schema"]["minimum"] == 1
+    assert consumer_dlq_events_params["limit"]["schema"]["maximum"] == 500
+    assert (
+        consumer_dlq_events_params["original_topic"]["description"]
+        == "Optional original Kafka topic filter."
+    )
+    assert (
+        consumer_dlq_events_params["consumer_group"]["description"]
+        == "Optional consumer-group filter."
+    )
+    assert consumer_dlq_events_example["total"] == 2
+    assert consumer_dlq_events_example["events"][0]["error_reason_code"] == "VALIDATION_ERROR"
+    assert consumer_dlq_events_example["events"][1]["consumer_group"] == "valuation-service-group"
+    assert "TimeoutError" in consumer_dlq_events_example["events"][1]["error_reason"]
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -422,6 +446,8 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     operating_band = schema["IngestionOperatingBandResponse"]
     stalled_jobs = schema["IngestionStalledJobListResponse"]
     stalled_job = schema["IngestionStalledJobResponse"]
+    consumer_dlq_event = schema["ConsumerDlqEventResponse"]
+    consumer_dlq_event_list = schema["ConsumerDlqEventListResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -449,6 +475,15 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert stalled_job["properties"]["suggested_action"]["description"] == (
         "Runbook-oriented suggested action for operations."
+    )
+    assert consumer_dlq_event["properties"]["error_reason_code"]["description"] == (
+        "Canonical DLQ reason code for routing, replay policy, and incident analytics."
+    )
+    assert consumer_dlq_event["properties"]["payload_excerpt"]["description"] == (
+        "Truncated payload excerpt for operational triage."
+    )
+    assert consumer_dlq_event_list["properties"]["events"]["description"] == (
+        "Consumer dead-letter events for operational triage."
     )
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."

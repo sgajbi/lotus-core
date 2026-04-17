@@ -320,6 +320,36 @@ INGESTION_STALLED_JOB_LIST_RESPONSE_EXAMPLE = {
     ],
 }
 
+CONSUMER_DLQ_EVENT_LIST_RESPONSE_EXAMPLE = {
+    "events": [
+        {
+            "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+            "original_topic": "transactions.raw.received",
+            "consumer_group": "persistence-service-group",
+            "dlq_topic": "dlq.persistence_service",
+            "original_key": "TXN-2026-000145",
+            "error_reason_code": "VALIDATION_ERROR",
+            "error_reason": "ValidationError: portfolio_id is required",
+            "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+            "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
+            "observed_at": "2026-03-06T09:11:05.812Z",
+        },
+        {
+            "event_id": "cdlq_01J5VK612V7N8J1RP4PD7NCQ44",
+            "original_topic": "portfolio-bundles.raw.received",
+            "consumer_group": "valuation-service-group",
+            "dlq_topic": "dlq.valuation_service",
+            "original_key": "BUNDLE-2026-000014",
+            "error_reason_code": "DEPENDENCY_TIMEOUT",
+            "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
+            "correlation_id": "ING:e59dd219-3902-4f38-8f8d-7c6cb1456672",
+            "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
+            "observed_at": "2026-03-06T09:15:42.114Z",
+        },
+    ],
+    "total": 2,
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1525,27 +1555,7 @@ async def list_ingestion_stalled_jobs(
     responses={
         200: {
             "description": "Consumer DLQ events matching the requested filters.",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "events": [
-                            {
-                                "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
-                                "original_topic": "transactions.raw.received",
-                                "consumer_group": "persistence-service-group",
-                                "dlq_topic": "dlq.persistence_service",
-                                "original_key": "TXN-2026-000145",
-                                "error_reason_code": "VALIDATION_ERROR",
-                                "error_reason": "ValidationError: portfolio_id is required",
-                                "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
-                                "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
-                                "observed_at": "2026-03-06T09:11:05.812Z",
-                            }
-                        ],
-                        "total": 1,
-                    }
-                }
-            },
+            "content": {"application/json": {"example": CONSUMER_DLQ_EVENT_LIST_RESPONSE_EXAMPLE}},
         }
     },
 )

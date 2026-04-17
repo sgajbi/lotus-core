@@ -352,6 +352,97 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Consumer DLQ Event Operations
+
+### Endpoint Inventory
+
+1. `GET /ingestion/dlq/consumer-events`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for listing persisted consumer dead-letter
+events emitted by downstream ingestion consumers.
+
+Use it to:
+
+1. inspect concrete consumer failures without direct database access;
+2. filter DLQ evidence by original topic and consumer group;
+3. review error code, error message, payload excerpt, and observation timestamp together;
+4. support replay triage before deciding whether to use
+   `POST /ingestion/dlq/consumer-events/{event_id}/replay`;
+5. cap operational result size with `limit`.
+
+Do not use it for portfolio-facing reads or as a replacement for aggregated consumer-lag signals.
+This route is the event-level drill-down.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/dlq/consumer-events`
+   consumer in the local scan;
+2. the endpoint remains appropriate for platform operations, QA, and support workflows;
+3. no downstream migration or strategic-endpoint issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route is aligned to the intended DLQ diagnostics pattern:
+
+1. it delegates filtering to `IngestionJobService.list_consumer_dlq_events`;
+2. it supports bounded `limit` plus optional `original_topic` and `consumer_group` filters;
+3. it returns operator-relevant fields for each event: `event_id`, source topic, consumer group,
+   DLQ topic, original key, reason code, reason text, correlation id, payload excerpt, and
+   `observed_at`;
+4. it wraps the filtered rows in `ConsumerDlqEventListResponse` and publishes `total` as the
+   returned row count;
+5. no behavioral refactor was required, but the OpenAPI example was expanded to a multi-row,
+   multi-consumer response so the route is self-explanatory in Swagger.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now adequate for this slice:
+
+1. the summary and description explain that the route is for consumer-side failure investigation;
+2. `limit` publishes `1..500` bounds and purpose;
+3. `original_topic` and `consumer_group` document filter semantics with examples;
+4. the `200` response example now covers two distinct DLQ events with different topics, consumer
+   groups, reason codes, and payload excerpts;
+5. `ConsumerDlqEventResponse` and `ConsumerDlqEventListResponse` document error-code and
+   payload-excerpt semantics field by field.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/dlq/consumer-events`, `ConsumerDlqEventResponse`, or `ConsumerDlqEventListResponse` in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for filter semantics, full event rows, bounds validation, and
+OpenAPI quality.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_consumer_dlq_events_endpoint_filters_and_returns_full_rows`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_consumer_dlq_events_endpoint_filters_and_returns_full_rows tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Ingestion Job Record Status Operations
 
 This certification pass covers:

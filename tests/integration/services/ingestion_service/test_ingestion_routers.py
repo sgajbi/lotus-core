@@ -396,20 +396,37 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             original_topic: str | None = None,
             consumer_group: str | None = None,
         ) -> list[dict]:
-            return [
+            events = [
                 {
                     "event_id": "cdlq_test_001",
-                    "original_topic": original_topic or "transactions.raw.received",
-                    "consumer_group": consumer_group or "persistence-service-group",
+                    "original_topic": "transactions.raw.received",
+                    "consumer_group": "persistence-service-group",
                     "dlq_topic": "dlq.persistence_service",
                     "original_key": "TXN-2026-000145",
                     "error_reason_code": "VALIDATION_ERROR",
                     "error_reason": "ValidationError: portfolio_id is required",
                     "correlation_id": "ING:test-correlation-id",
-                    "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
-                    "observed_at": datetime.now(UTC),
-                }
-            ][:limit]
+                    "payload_excerpt": '{"transaction_id":"TXN-2026-000145","portfolio_id":null}',
+                    "observed_at": datetime(2026, 3, 6, 9, 11, 5, 812000, tzinfo=UTC),
+                },
+                {
+                    "event_id": "cdlq_test_002",
+                    "original_topic": "portfolio-bundles.raw.received",
+                    "consumer_group": "valuation-service-group",
+                    "dlq_topic": "dlq.valuation_service",
+                    "original_key": "BUNDLE-2026-000014",
+                    "error_reason_code": "DEPENDENCY_TIMEOUT",
+                    "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
+                    "correlation_id": "ING:test-correlation-bundle",
+                    "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
+                    "observed_at": datetime(2026, 3, 6, 9, 15, 42, 114000, tzinfo=UTC),
+                },
+            ]
+            if original_topic is not None:
+                events = [event for event in events if event["original_topic"] == original_topic]
+            if consumer_group is not None:
+                events = [event for event in events if event["consumer_group"] == consumer_group]
+            return events[:limit]
 
         async def get_consumer_dlq_event(self, event_id: str):
             if event_id != "cdlq_test_001":
@@ -4180,12 +4197,62 @@ async def test_ingestion_ops_control_mode_blocks_writes(
     assert restore_response.status_code == 200
 
 
-async def test_ingestion_consumer_dlq_events_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/dlq/consumer-events")
+async def test_ingestion_consumer_dlq_events_endpoint_filters_and_returns_full_rows(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get(
+        "/ingestion/dlq/consumer-events",
+        params={
+            "limit": 1,
+            "original_topic": "transactions.raw.received",
+            "consumer_group": "persistence-service-group",
+        },
+    )
     assert response.status_code == 200
-    body = response.json()
-    assert "events" in body
-    assert "total" in body
+    assert response.json() == {
+        "events": [
+            {
+                "event_id": "cdlq_test_001",
+                "original_topic": "transactions.raw.received",
+                "consumer_group": "persistence-service-group",
+                "dlq_topic": "dlq.persistence_service",
+                "original_key": "TXN-2026-000145",
+                "error_reason_code": "VALIDATION_ERROR",
+                "error_reason": "ValidationError: portfolio_id is required",
+                "correlation_id": "ING:test-correlation-id",
+                "payload_excerpt": '{"transaction_id":"TXN-2026-000145","portfolio_id":null}',
+                "observed_at": "2026-03-06T09:11:05.812000Z",
+            }
+        ],
+        "total": 1,
+    }
+
+    unfiltered_response = await event_replay_test_client.get(
+        "/ingestion/dlq/consumer-events",
+        params={"limit": 2},
+    )
+    assert unfiltered_response.status_code == 200
+    unfiltered_body = unfiltered_response.json()
+    assert unfiltered_body["total"] == 2
+    assert unfiltered_body["events"][1] == {
+        "event_id": "cdlq_test_002",
+        "original_topic": "portfolio-bundles.raw.received",
+        "consumer_group": "valuation-service-group",
+        "dlq_topic": "dlq.valuation_service",
+        "original_key": "BUNDLE-2026-000014",
+        "error_reason_code": "DEPENDENCY_TIMEOUT",
+        "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
+        "correlation_id": "ING:test-correlation-bundle",
+        "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
+        "observed_at": "2026-03-06T09:15:42.114000Z",
+    }
+
+    for invalid_params in ({"limit": 0}, {"limit": 501}):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/dlq/consumer-events",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
 
 
 async def test_ingestion_consumer_lag_endpoint_filters_and_reports_groups(
