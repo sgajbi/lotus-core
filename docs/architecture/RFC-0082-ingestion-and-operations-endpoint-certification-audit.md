@@ -1062,3 +1062,131 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core` | No open issue found for `POST /ingest/portfolio-bundle` in this pass. | No GitHub action required. |
 | `lotus-gateway#125` | Gateway does not propagate `X-Idempotency-Key` to core for `POST /api/v1/intake/portfolio-bundle`. | Opened for downstream remediation. |
+
+## Certified Endpoint Slice: Upload Preview Adapter Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/uploads/preview`
+
+### Route Contract Decision
+
+This is the governed adapter-mode preview endpoint for CSV/XLSX onboarding files.
+
+The boundary is explicit:
+
+1. use it before upload commit to validate file shape and row-level schema quality;
+2. use it for UI/manual/file adapter workflows, not primary source-system integration feeds;
+3. do not publish, queue, or persist business records from preview;
+4. treat `sample_size` as a UI sampling control only; it must not change validation totals;
+5. use canonical snake_case multipart form fields: `entity_type`, `file`, and `sample_size`;
+6. use `POST /ingest/uploads/commit` only after preview diagnostics are acceptable.
+
+### Consumer And Integration Reality
+
+This endpoint is consumed by `lotus-gateway` through `POST /api/v1/intake/uploads/preview`, which
+intends to forward to core `POST /ingest/uploads/preview`.
+
+Gateway integration currently has a real upstream contract drift:
+
+1. gateway accepts public form fields `entityType` and `sampleSize`;
+2. gateway forwards `entityType` and `sampleSize` to lotus-core;
+3. lotus-core's canonical multipart contract is `entity_type` and `sample_size`;
+4. the same gateway client helper also forwards `allowPartial` to core commit, while core commit
+   expects `allow_partial`.
+
+Issue created:
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `sgajbi/lotus-gateway#126` | Valid downstream contract gap: gateway upload preview/commit must normalize upstream multipart fields to lotus-core snake_case. | Opened during this pass for gateway follow-up. |
+
+No live `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage`
+product consumer code was found for direct calls to this core route.
+
+### Upstream Integration Assessment
+
+The route uses the correct preview-only adapter architecture:
+
+1. it is protected by the bulk-upload adapter feature flag;
+2. it accepts only the governed upload entity families: portfolios, instruments, transactions,
+   market prices, FX rates, and business dates;
+3. it detects CSV versus XLSX from the uploaded filename;
+4. it normalizes headers through DTO field-name and alias indexes before validation;
+5. it applies entity-specific Pydantic validation to every row;
+6. it returns total, valid, and invalid row counts independently from sampling;
+7. it returns normalized valid sample rows and row-level errors limited by `sample_size`;
+8. it maps unsupported formats, malformed XLSX content, and invalid CSV encoding to stable `400`
+   client errors;
+9. it does not call Kafka or ingestion-job services, which is correct for preview-only validation.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice:
+
+1. route purpose says this is validation without publishing;
+2. request-body fields describe `entity_type`, `file`, and `sample_size`;
+3. `sample_size` has explicit bounds and example;
+4. response attributes describe entity type, file format, row counts, normalized samples, and
+   row-level errors;
+5. `400`, `410`, and `422` response codes are documented.
+
+Historical OpenAPI/resilience issues for this endpoint are already addressed in current core truth:
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core#60` | Historical upload `400` OpenAPI gap. Current OpenAPI includes `400` for preview and commit. | Closed as completed before this pass; revalidated. |
+| `lotus-core#61` | Historical malformed XLSX/CSV `500` resilience defect. Current preview tests return `400` for malformed XLSX and bad-encoding CSV. | Closed as completed before this pass; revalidated. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for preview options, all supported entity families, and bad-input
+contracts.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_upload_preview_accepts_all_supported_entity_families`
+2. `test_upload_preview_transactions_csv`
+3. `test_upload_preview_limits_sample_rows_and_errors`
+4. `test_upload_preview_disabled_by_feature_flag`
+5. `test_upload_preview_rejects_unsupported_file_format`
+6. `test_upload_preview_rejects_malformed_xlsx`
+7. `test_upload_preview_rejects_bad_encoding_csv`
+8. `test_openapi_declares_upload_400_contracts`
+9. `test_openapi_describes_upload_parameters_and_shared_schemas`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_upload_preview_accepts_all_supported_entity_families tests\integration\services\ingestion_service\test_ingestion_routers.py::test_upload_preview_transactions_csv tests\integration\services\ingestion_service\test_ingestion_routers.py::test_upload_preview_limits_sample_rows_and_errors tests\integration\services\ingestion_service\test_ingestion_routers.py::test_upload_preview_disabled_by_feature_flag tests\integration\services\ingestion_service\test_ingestion_routers.py::test_upload_preview_rejects_unsupported_file_format tests\integration\services\ingestion_service\test_ingestion_routers.py::test_upload_preview_rejects_malformed_xlsx tests\integration\services\ingestion_service\test_ingestion_routers.py::test_upload_preview_rejects_bad_encoding_csv tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_declares_upload_400_contracts tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_upload_parameters_and_shared_schemas -q
+```
+
+Result:
+
+```text
+14 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+2 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core#60` | Already closed upload OpenAPI `400` documentation gap; revalidated for preview. | No further core action required. |
+| `lotus-core#61` | Already closed malformed upload resilience defect; revalidated for preview malformed XLSX and invalid CSV encoding. | No further core action required. |
+| `lotus-gateway#126` | Gateway forwards camelCase upload form fields to core instead of canonical snake_case. | Opened for downstream remediation. |

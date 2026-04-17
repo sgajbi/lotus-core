@@ -66,8 +66,14 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     assert preview_body["properties"]["sample_size"]["description"] == (
         "Maximum number of valid normalized sample rows to include in the preview."
     )
+    assert preview_body["properties"]["file"]["description"] == (
+        "CSV or XLSX file containing rows for the selected upload entity family."
+    )
     assert commit_body["properties"]["allow_partial"]["description"] == (
         "Allow valid rows to publish even when some rows fail validation."
+    )
+    assert commit_body["properties"]["file"]["description"] == (
+        "CSV or XLSX file containing rows to validate and commit."
     )
 
     commit_429 = commit["responses"]["429"]["content"]["application/json"]["example"]

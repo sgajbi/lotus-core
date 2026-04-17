@@ -61,7 +61,11 @@ async def preview_upload(
         description="Entity family expected in the uploaded file.",
         examples=["portfolios"],
     ),
-    file: UploadFile = File(...),
+    file: UploadFile = File(
+        ...,
+        description="CSV or XLSX file containing rows for the selected upload entity family.",
+        examples=["transactions.csv"],
+    ),
     sample_size: int = Form(
         20,
         ge=1,
@@ -103,15 +107,11 @@ async def preview_upload(
         },
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the commit request.",
-            "content": {
-                "application/json": {"example": INGESTION_RATE_LIMIT_EXCEEDED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": INGESTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
-            "content": {
-                "application/json": {"example": INGESTION_MODE_BLOCKS_WRITES_EXAMPLE}
-            },
+            "content": {"application/json": {"example": INGESTION_MODE_BLOCKS_WRITES_EXAMPLE}},
         },
         status.HTTP_410_GONE: {
             "description": "Bulk upload adapter mode disabled for this environment.",
@@ -133,7 +133,11 @@ async def commit_upload(
         description="Entity family expected in the uploaded file.",
         examples=["transactions"],
     ),
-    file: UploadFile = File(...),
+    file: UploadFile = File(
+        ...,
+        description="CSV or XLSX file containing rows to validate and commit.",
+        examples=["transactions.csv"],
+    ),
     allow_partial: bool = Form(
         False,
         description="Allow valid rows to publish even when some rows fail validation.",

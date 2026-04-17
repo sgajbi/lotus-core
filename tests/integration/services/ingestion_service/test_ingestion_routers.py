@@ -2787,6 +2787,120 @@ def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
     return output.getvalue()
 
 
+@pytest.mark.parametrize(
+    ("entity_type", "headers", "row", "expected_key"),
+    [
+        (
+            "portfolios",
+            [
+                "portfolio_id",
+                "base_currency",
+                "open_date",
+                "risk_exposure",
+                "investment_time_horizon",
+                "portfolio_type",
+                "booking_center_code",
+                "client_id",
+                "status",
+            ],
+            [
+                "P1",
+                "USD",
+                "2025-01-01",
+                "balanced",
+                "long_term",
+                "discretionary",
+                "SG",
+                "C1",
+                "active",
+            ],
+            "portfolio_id",
+        ),
+        (
+            "instruments",
+            ["security_id", "name", "isin", "currency", "product_type"],
+            ["SEC1", "Bond A", "ISIN1", "USD", "bond"],
+            "security_id",
+        ),
+        (
+            "transactions",
+            [
+                "transaction_id",
+                "portfolio_id",
+                "instrument_id",
+                "security_id",
+                "transaction_date",
+                "transaction_type",
+                "quantity",
+                "price",
+                "gross_transaction_amount",
+                "trade_currency",
+                "currency",
+            ],
+            [
+                "T1",
+                "P1",
+                "I1",
+                "SEC1",
+                "2026-01-02T10:00:00Z",
+                "BUY",
+                "10",
+                "100",
+                "1000",
+                "USD",
+                "USD",
+            ],
+            "transaction_id",
+        ),
+        (
+            "market_prices",
+            ["security_id", "price_date", "price", "currency"],
+            ["SEC1", "2026-01-02", "100", "USD"],
+            "security_id",
+        ),
+        (
+            "fx_rates",
+            ["from_currency", "to_currency", "rate_date", "rate"],
+            ["USD", "SGD", "2026-01-02", "1.35"],
+            "from_currency",
+        ),
+        (
+            "business_dates",
+            ["business_date", "calendar_code", "market_code", "source_system", "source_batch_id"],
+            ["2026-01-02", "GLOBAL", "NYSE", "UPLOAD", "BATCH1"],
+            "business_date",
+        ),
+    ],
+)
+async def test_upload_preview_accepts_all_supported_entity_families(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    entity_type: str,
+    headers: list[str],
+    row: list[str],
+    expected_key: str,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    csv_content = ("\n".join([",".join(headers), ",".join(row)])).encode("utf-8")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": (f"{entity_type}.csv", csv_content, "text/csv")},
+        data={"entity_type": entity_type, "sample_size": "10"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["entity_type"] == entity_type
+    assert body["file_format"] == "csv"
+    assert body["total_rows"] == 1
+    assert body["valid_rows"] == 1
+    assert body["invalid_rows"] == 0
+    assert expected_key in body["sample_rows"][0]
+    assert body["errors"] == []
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_upload_preview_transactions_csv(async_test_client: httpx.AsyncClient):
     csv_content = "\n".join(
         [
@@ -2810,6 +2924,37 @@ async def test_upload_preview_transactions_csv(async_test_client: httpx.AsyncCli
     assert body["invalid_rows"] == 1
 
 
+async def test_upload_preview_limits_sample_rows_and_errors(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    csv_content = "\n".join(
+        [
+            "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+            "T1,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            "T2,P1,I1,S1,INVALID_DATE,BUY,10,100,1000,USD,USD",
+            "T3,P1,I1,S1,2026-01-02T10:00:00Z,BUY,not-a-number,100,1000,USD,USD",
+        ]
+    ).encode("utf-8")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "sample_size": "1"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_rows"] == 3
+    assert body["valid_rows"] == 1
+    assert body["invalid_rows"] == 2
+    assert [row["transaction_id"] for row in body["sample_rows"]] == ["T1"]
+    assert len(body["errors"]) == 1
+    assert body["errors"][0]["row_number"] == 3
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_upload_preview_disabled_by_feature_flag(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock, monkeypatch
 ):
@@ -2826,6 +2971,23 @@ async def test_upload_preview_disabled_by_feature_flag(
     body = response.json()
     assert body["detail"]["code"] == "LOTUS_CORE_ADAPTER_MODE_DISABLED"
     assert body["detail"]["capability"] == "lotus_core.ingestion.bulk_upload_adapter"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_preview_rejects_unsupported_file_format(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": ("transactions.txt", b"transaction_id,portfolio_id\nT1,P1", "text/plain")},
+        data={"entity_type": "transactions", "sample_size": "10"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported file format. Use .csv or .xlsx."
     mock_kafka_producer.publish_message.assert_not_called()
 
 
