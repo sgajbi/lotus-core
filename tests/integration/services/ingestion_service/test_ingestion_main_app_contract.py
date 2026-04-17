@@ -469,6 +469,35 @@ async def test_openapi_describes_benchmark_return_series_shared_schema(async_tes
     )
 
 
+async def test_openapi_describes_risk_free_series_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["RiskFreeSeriesIngestionRequest"]
+    record_schema = components["RiskFreeSeriesRecord"]
+
+    assert request_schema["properties"]["risk_free_series"]["description"] == (
+        "Risk-free series records to ingest or upsert."
+    )
+    assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
+    assert record_schema["properties"]["risk_free_curve_id"]["description"] == (
+        "Risk-free curve identifier."
+    )
+    assert record_schema["properties"]["value"]["description"] == "Risk-free value."
+    assert record_schema["properties"]["value_convention"]["enum"] == [
+        "annualized_rate",
+        "period_return",
+    ]
+    assert record_schema["properties"]["day_count_convention"]["examples"] == ["act_360"]
+    assert record_schema["properties"]["compounding_convention"]["examples"] == ["simple"]
+    assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the risk-free curve series record."
+    )
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 

@@ -704,6 +704,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "index_price_series": [],
                 "index_return_series": [],
                 "benchmark_return_series": [],
+                "risk_free_series": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -737,7 +738,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted["benchmark_return_series"].extend(records)
 
         async def upsert_risk_free_series(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["risk_free_series"].extend(records)
 
         async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
             return None
@@ -2848,6 +2849,190 @@ async def test_ingest_benchmark_return_series_marks_job_failed_when_persist_fail
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
     assert failed_job.failure_reason == "benchmark return series persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _risk_free_series_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "risk_free_series": [
+            {
+                "series_id": "rf_usd_sofr_3m",
+                "risk_free_curve_id": "USD_SOFR_3M",
+                "series_date": "2026-01-02",
+                "value": "0.0350000000",
+                "value_convention": "annualized_rate",
+                "series_currency": "USD",
+            }
+        ]
+    }
+
+
+async def test_ingest_risk_free_series_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _risk_free_series_payload()
+    payload["risk_free_series"][0].update(
+        {
+            "day_count_convention": "act_360",
+            "compounding_convention": "simple",
+            "source_timestamp": "2026-01-02T06:00:00Z",
+            "source_vendor": "BLOOMBERG",
+            "source_record_id": "rf_20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=payload,
+        headers={"X-Idempotency-Key": "risk-free-series-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "risk_free_series"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "risk-free-series-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"]
+    assert len(persisted) == 1
+    series = persisted[0]
+    assert series["series_id"] == "rf_usd_sofr_3m"
+    assert series["risk_free_curve_id"] == "USD_SOFR_3M"
+    assert series["series_date"].isoformat() == "2026-01-02"
+    assert series["value"] == Decimal("0.0350000000")
+    assert series["value_convention"] == "annualized_rate"
+    assert series["day_count_convention"] == "act_360"
+    assert series["compounding_convention"] == "simple"
+    assert series["series_currency"] == "USD"
+    assert series["source_timestamp"].isoformat() == "2026-01-02T06:00:00+00:00"
+    assert series["source_vendor"] == "BLOOMBERG"
+    assert series["source_record_id"] == "rf_20260102"
+    assert series["quality_status"] == "accepted"
+
+
+async def test_ingest_risk_free_series_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _risk_free_series_payload()
+    headers = {"X-Idempotency-Key": "risk-free-series-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"]
+    assert len(persisted) == 1
+
+
+async def test_ingest_risk_free_series_rejects_unknown_value_convention(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _risk_free_series_payload()
+    payload["risk_free_series"][0]["value_convention"] = "spot_rate"
+
+    response = await async_test_client.post("/ingest/risk-free-series", json=payload)
+
+    assert response.status_code == 422
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"] == []
+
+
+async def test_ingest_risk_free_series_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=_risk_free_series_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"] == []
+
+
+async def test_ingest_risk_free_series_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=_risk_free_series_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/risk-free-series blocked after 1 records",
+    }
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"] == []
+
+
+async def test_ingest_risk_free_series_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("risk-free series persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_risk_free_series",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=_risk_free_series_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "risk-free series persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "risk-free series persist failed"
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
