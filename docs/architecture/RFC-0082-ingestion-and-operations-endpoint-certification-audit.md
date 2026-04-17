@@ -1569,6 +1569,22 @@ All checks passed.
 OpenAPI quality gate passed for API services.
 ```
 
+Additional focused gates:
+
+```powershell
+python -m ruff check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+2 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
 ### Issue Disposition For This Endpoint
 
 | Issue | Assessment | Disposition |
@@ -1816,3 +1832,104 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core#306` | Already closed sector-label issue; current index-ingress contract preserves governed sector labels for canonical benchmark indices. | No further core action required. |
 | Downstream repos | No direct downstream write-ingress consumer found for `POST /ingest/indices`; downstream usage is via strategic index catalog/exposure read contracts. | No downstream issue required. |
+
+## Certified Endpoint Slice: Index Price Series Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/index-price-series`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for source-owned raw index price observations.
+
+The boundary is explicit:
+
+1. use it for daily market-close loads, corrected observations, and historical index price
+   backfills;
+2. use it to maintain raw price levels by `series_id`, `index_id`, and `series_date`;
+3. do not use it as a benchmark performance result endpoint;
+4. use `POST /integration/indices/{index_id}/price-series` for downstream raw price-series reads;
+5. treat acknowledgement as durable reference-data upsert acceptance, not benchmark calculation
+   completion;
+6. use `X-Idempotency-Key` for replay-safe source batch submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream index-price dependency is read-side:
+
+1. `lotus-performance` calls `POST /integration/indices/{index_id}/price-series` through
+   `app/services/core_integration_service.py` and chunks/snapshots that upstream evidence through
+   `app/services/stateful_input_service.py`;
+2. `lotus-performance` uses those raw observations for stateful benchmark, TWR, attribution, and
+   execution evidence paths;
+3. `lotus-risk` depends on benchmark exposure outputs downstream of performance, but this pass did
+   not find direct raw index-price-series calls from risk;
+4. `lotus-gateway`, `lotus-report`, `lotus-advise`, `lotus-manage`, and `lotus-workbench` had no
+   direct write-ingress consumer for `POST /ingest/index-price-series` in the local scan.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `index_price_series` collection through the DTO contract;
+2. it rejects non-positive `index_price` values before any job persistence or upsert;
+3. it enforces ingestion operating mode before durable upsert;
+4. it enforces write-rate protection using accepted record count;
+5. it creates or replays ingestion jobs with idempotency semantics;
+6. it persists full request payload lineage on the ingestion job;
+7. it upserts rows using `series_id`, `index_id`, and `series_date` as the conflict identity;
+8. it updates price, currency, value convention, source lineage, and quality status on conflict;
+9. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+10. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice:
+
+1. route purpose says when to use index price series ingress for daily close and historical
+   backfill processing;
+2. all index price series attributes have descriptions, types, and examples;
+3. `index_price` is documented with a positive numeric constraint;
+4. source timestamp, vendor, record id, quality status, currency, and value convention are modeled
+   explicitly;
+5. ACK fields are covered by the shared batch-ingestion response schema;
+6. `429`, `500`, and `503` operational response examples are present.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `index-price-series`, `IndexPriceSeries`, or index price vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream write-ingress consumer found. `lotus-performance` correctly consumes the strategic read-side `POST /integration/indices/{index_id}/price-series` route. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for index price series options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_index_price_series_returns_ack_and_persists_full_contract`
+2. `test_ingest_index_price_series_replays_duplicate_idempotency_key`
+3. `test_ingest_index_price_series_rejects_non_positive_price`
+4. `test_ingest_index_price_series_returns_503_when_mode_blocks_writes`
+5. `test_ingest_index_price_series_returns_429_when_rate_limited`
+6. `test_ingest_index_price_series_marks_job_failed_when_persist_fails`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_index_price_series_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_price_series_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_price_series_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_price_series_rejects_non_positive_price tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_price_series_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_price_series_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_price_series_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_index_price_series_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```

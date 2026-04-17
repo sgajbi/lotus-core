@@ -391,6 +391,30 @@ async def test_openapi_describes_index_definition_shared_schema(async_test_clien
     assert record_schema["properties"]["index_market"]["examples"] == ["global_developed"]
 
 
+async def test_openapi_describes_index_price_series_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["IndexPriceSeriesIngestionRequest"]
+    record_schema = components["IndexPriceSeriesRecord"]
+
+    assert request_schema["properties"]["index_price_series"]["description"] == (
+        "Index price series records to ingest or upsert."
+    )
+    assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
+    assert record_schema["properties"]["index_id"]["description"] == "Index identifier."
+    assert record_schema["properties"]["series_date"]["description"] == "Series date."
+    index_price_number = record_schema["properties"]["index_price"]["anyOf"][0]
+    assert index_price_number["exclusiveMinimum"] == 0.0
+    assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
+    assert record_schema["properties"]["value_convention"]["examples"] == ["close_price"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the index price series record."
+    )
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
