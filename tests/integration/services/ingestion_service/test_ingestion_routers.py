@@ -548,21 +548,31 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             lookback_minutes: int = 1440,
             limit: int = 200,
         ):
+            keys = [
+                {
+                    "idempotency_key": "integration-ingestion-idempotency-001",
+                    "usage_count": 3,
+                    "endpoint_count": 2,
+                    "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
+                    "first_seen_at": datetime(2026, 3, 6, 7, 10, 11, 211000, tzinfo=UTC),
+                    "last_seen_at": datetime(2026, 3, 6, 7, 15, 1, 127000, tzinfo=UTC),
+                    "collision_detected": True,
+                },
+                {
+                    "idempotency_key": "integration-ingestion-idempotency-002",
+                    "usage_count": 2,
+                    "endpoint_count": 1,
+                    "endpoints": ["/ingest/transactions"],
+                    "first_seen_at": datetime(2026, 3, 6, 8, 1, 3, tzinfo=UTC),
+                    "last_seen_at": datetime(2026, 3, 6, 8, 5, 17, tzinfo=UTC),
+                    "collision_detected": False,
+                },
+            ][:limit]
             return {
                 "lookback_minutes": lookback_minutes,
-                "total_keys": 1,
-                "collisions": 0,
-                "keys": [
-                    {
-                        "idempotency_key": "integration-ingestion-idempotency-001",
-                        "usage_count": 2,
-                        "endpoint_count": 1,
-                        "endpoints": ["/ingest/transactions"],
-                        "first_seen_at": datetime.now(UTC),
-                        "last_seen_at": datetime.now(UTC),
-                        "collision_detected": False,
-                    }
-                ][:limit],
+                "total_keys": len(keys),
+                "collisions": sum(1 for item in keys if item["collision_detected"]),
+                "keys": keys,
             }
 
         async def get_error_budget_status(
@@ -4658,11 +4668,48 @@ async def test_ingestion_backlog_breakdown_endpoint_reports_group_concentration(
 async def test_ingestion_idempotency_diagnostics_endpoint(
     event_replay_test_client: httpx.AsyncClient,
 ):
-    response = await event_replay_test_client.get("/ingestion/idempotency/diagnostics")
+    response = await event_replay_test_client.get(
+        "/ingestion/idempotency/diagnostics",
+        params={"lookback_minutes": 1440, "limit": 2},
+    )
     assert response.status_code == 200
-    body = response.json()
-    assert "keys" in body
-    assert "collisions" in body
+    assert response.json() == {
+        "lookback_minutes": 1440,
+        "total_keys": 2,
+        "collisions": 1,
+        "keys": [
+            {
+                "idempotency_key": "integration-ingestion-idempotency-001",
+                "usage_count": 3,
+                "endpoint_count": 2,
+                "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
+                "first_seen_at": "2026-03-06T07:10:11.211000Z",
+                "last_seen_at": "2026-03-06T07:15:01.127000Z",
+                "collision_detected": True,
+            },
+            {
+                "idempotency_key": "integration-ingestion-idempotency-002",
+                "usage_count": 2,
+                "endpoint_count": 1,
+                "endpoints": ["/ingest/transactions"],
+                "first_seen_at": "2026-03-06T08:01:03Z",
+                "last_seen_at": "2026-03-06T08:05:17Z",
+                "collision_detected": False,
+            },
+        ],
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 10081},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/idempotency/diagnostics",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
 
 
 async def test_ingestion_job_record_status_endpoint_returns_transaction_replayability(

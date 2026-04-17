@@ -347,6 +347,93 @@ Result:
 5 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Idempotency Diagnostics
+
+### Endpoint Inventory
+
+1. `GET /ingestion/idempotency/diagnostics`
+
+### Route Contract Decision
+
+This is the governed operator diagnostics route for ingestion idempotency-key reuse and collision
+analysis.
+
+Use it to:
+
+1. inspect idempotency-key reuse frequency;
+2. detect keys reused across multiple endpoints;
+3. review first-seen and last-seen timestamps for suspect integration behavior;
+4. identify replay-ambiguity risk before it becomes an operational recovery incident;
+5. bound result size with `limit` across a caller-selected lookback window.
+
+Do not use it as a business-data endpoint. It is a platform integration-discipline diagnostics
+surface.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct
+   `/ingestion/idempotency/diagnostics` consumer in the local scan;
+2. the route remains primarily for operators, support, QA, and client-integration governance;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route is aligned to the intended diagnostics pattern:
+
+1. it delegates to `IngestionJobService.get_idempotency_diagnostics`;
+2. it supports bounded `lookback_minutes` `5..10080` and `limit` `1..500`;
+3. it returns both aggregate counts (`total_keys`, `collisions`) and key-level detail;
+4. each key row includes usage count, endpoint count, endpoint list, first/last seen timestamps,
+   and collision flag;
+5. no behavioral router refactor was required, but Swagger and focused tests were tightened so the
+   collision semantics and full payload are explicit.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now adequate for this slice:
+
+1. the summary and description explain anti-pattern detection and replay-ambiguity risk;
+2. `lookback_minutes` and `limit` publish bounds, type, purpose, and examples;
+3. the `200` response example now includes both a colliding and non-colliding idempotency key;
+4. `IngestionIdempotencyDiagnosticItemResponse` and
+   `IngestionIdempotencyDiagnosticsResponse` document collisions and key-list semantics field by
+   field.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/idempotency/diagnostics`, `IngestionIdempotencyDiagnosticsResponse`, or `collision_detected` in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for aggregate counts, full key rows, collision semantics, bounds
+validation, and OpenAPI quality.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_idempotency_diagnostics_endpoint`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_idempotency_diagnostics_endpoint tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ### Issue Disposition For This Endpoint
 
 | Issue | Assessment | Disposition |

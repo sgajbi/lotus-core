@@ -430,6 +430,32 @@ INGESTION_OPS_MODE_EXAMPLE = {
     "updated_at": "2026-03-06T02:15:07.234Z",
 }
 
+INGESTION_IDEMPOTENCY_DIAGNOSTICS_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 1440,
+    "total_keys": 2,
+    "collisions": 1,
+    "keys": [
+        {
+            "idempotency_key": "integration-ingestion-idempotency-001",
+            "usage_count": 3,
+            "endpoint_count": 2,
+            "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
+            "first_seen_at": "2026-03-06T07:10:11.211Z",
+            "last_seen_at": "2026-03-06T07:15:01.127Z",
+            "collision_detected": True,
+        },
+        {
+            "idempotency_key": "integration-ingestion-idempotency-002",
+            "usage_count": 2,
+            "endpoint_count": 1,
+            "endpoints": ["/ingest/transactions"],
+            "first_seen_at": "2026-03-06T08:01:03.000Z",
+            "last_seen_at": "2026-03-06T08:05:17.000Z",
+            "collision_detected": False,
+        },
+    ],
+}
+
 INGESTION_JOB_NOT_FOUND_EXAMPLE = {
     "detail": {
         "code": "INGESTION_JOB_NOT_FOUND",
@@ -2104,6 +2130,14 @@ async def update_ingestion_ops_control(
         "How: Aggregate ingestion jobs by idempotency key and detect multi-endpoint collisions.\n"
         "When: Use to detect client integration anti-patterns before they create replay ambiguity."
     ),
+    responses={
+        200: {
+            "description": "Idempotency-key diagnostics for the requested lookback window.",
+            "content": {
+                "application/json": {"example": INGESTION_IDEMPOTENCY_DIAGNOSTICS_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_idempotency_diagnostics(
     lookback_minutes: int = Query(

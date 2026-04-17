@@ -133,6 +133,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     replay_audit = schema["paths"]["/ingestion/audit/replays/{replay_id}"]["get"]
     ops_control_get = schema["paths"]["/ingestion/ops/control"]["get"]
     ops_control_put = schema["paths"]["/ingestion/ops/control"]["put"]
+    idempotency_diagnostics = schema["paths"]["/ingestion/idempotency/diagnostics"]["get"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
     job_id_parameter = next(param for param in get_job["parameters"] if param["name"] == "job_id")
@@ -494,6 +495,23 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
         in ops_control_put["description"]
     )
 
+    idempotency_params = {param["name"]: param for param in idempotency_diagnostics["parameters"]}
+    idempotency_example = idempotency_diagnostics["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert idempotency_diagnostics["summary"] == "Get idempotency key diagnostics"
+    assert (
+        "detect client integration anti-patterns before they create replay ambiguity"
+        in idempotency_diagnostics["description"]
+    )
+    assert idempotency_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert idempotency_params["lookback_minutes"]["schema"]["maximum"] == 10080
+    assert idempotency_params["limit"]["schema"]["minimum"] == 1
+    assert idempotency_params["limit"]["schema"]["maximum"] == 500
+    assert idempotency_example["collisions"] == 1
+    assert idempotency_example["keys"][0]["collision_detected"] is True
+    assert idempotency_example["keys"][0]["endpoint_count"] == 2
+
 
 async def test_openapi_describes_event_replay_shared_schema_depth(async_test_client):
     response = await async_test_client.get("/openapi.json")
@@ -563,6 +581,18 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     assert replay_audit["properties"]["replay_status"]["description"] == "Replay outcome status."
     assert replay_audit["properties"]["requested_by"]["description"] == (
         "Ops principal who initiated replay."
+    )
+    assert ops_mode["properties"]["updated_by"]["description"] == (
+        "Principal or automation actor who last changed ops mode."
+    )
+    assert ops_mode_update["properties"]["replay_window_end"]["description"] == (
+        "Optional replay window end for retry operations."
+    )
+    assert idempotency["properties"]["keys"]["description"] == (
+        "Key-level idempotency diagnostics sorted by highest usage count."
+    )
+    assert idempotency["properties"]["collisions"]["description"] == (
+        "Number of keys reused across multiple endpoints."
     )
     assert ops_mode["properties"]["updated_by"]["description"] == (
         "Principal or automation actor who last changed ops mode."
