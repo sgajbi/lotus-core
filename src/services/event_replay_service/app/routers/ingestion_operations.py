@@ -204,6 +204,31 @@ INGESTION_OPS_POLICY_RESPONSE_EXAMPLE = {
     "replay_dry_run_supported": True,
 }
 
+INGESTION_REPROCESSING_QUEUE_HEALTH_RESPONSE_EXAMPLE = {
+    "as_of": "2026-03-03T04:12:20.000Z",
+    "total_pending_jobs": 5,
+    "total_processing_jobs": 2,
+    "total_failed_jobs": 1,
+    "queues": [
+        {
+            "job_type": "RESET_WATERMARKS",
+            "pending_jobs": 4,
+            "processing_jobs": 1,
+            "failed_jobs": 0,
+            "oldest_pending_created_at": "2026-03-03T04:10:11.000Z",
+            "oldest_pending_age_seconds": 127.5,
+        },
+        {
+            "job_type": "RECALCULATE_POSITIONS",
+            "pending_jobs": 1,
+            "processing_jobs": 1,
+            "failed_jobs": 1,
+            "oldest_pending_created_at": "2026-03-03T04:11:03.000Z",
+            "oldest_pending_age_seconds": 75.0,
+        },
+    ],
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1238,6 +1263,16 @@ async def get_ingestion_operating_policy(
         "How: Aggregate durable reprocessing job states and compute oldest pending age signal.\n"
         "When: Use for operations triage and replay worker scaling decisions."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Reprocessing queue health totals and per-job-type rows.",
+            "content": {
+                "application/json": {
+                    "example": INGESTION_REPROCESSING_QUEUE_HEALTH_RESPONSE_EXAMPLE
+                }
+            },
+        }
+    },
 )
 async def get_reprocessing_queue_health(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),

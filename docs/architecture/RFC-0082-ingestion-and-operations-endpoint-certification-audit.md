@@ -1164,6 +1164,96 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Reprocessing Queue Health Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/reprocessing-queue`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for durable reprocessing queue health by job
+type.
+
+Use it to:
+
+1. inspect pending, processing, and failed reprocessing jobs across job types;
+2. identify the oldest pending job and age signal for each type;
+3. support operations triage and replay-worker scaling decisions.
+
+Do not use it as a front-office data contract or as a replacement for individual reprocessing job
+inspection.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/reprocessing-queue` or
+   `IngestionReprocessingQueueHealthResponse` consumer in `lotus-gateway`, `lotus-risk`,
+   `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. current consumers are expected to be operations tooling, runbooks, and platform automation;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct durable queue state source:
+
+1. it aggregates `ReprocessingJob` rows by `job_type`;
+2. it separately counts `PENDING`, `PROCESSING`, and `FAILED` states;
+3. it computes `oldest_pending_created_at` and `oldest_pending_age_seconds` per job type;
+4. it sorts queue rows by highest pending and processing pressure.
+
+The endpoint has no query options and no request body.
+
+The supported output contract is:
+
+1. `as_of`;
+2. `total_pending_jobs`;
+3. `total_processing_jobs`;
+4. `total_failed_jobs`;
+5. per-queue `job_type`, `pending_jobs`, `processing_jobs`, `failed_jobs`,
+   `oldest_pending_created_at`, and `oldest_pending_age_seconds`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain operations triage and worker-scaling use;
+2. the `200` response includes a concrete multi-queue example;
+3. response and queue-row attributes carry descriptions, types, and examples through the DTO
+   schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/reprocessing-queue`, `IngestionReprocessingQueueHealthResponse`, or reprocessing-queue vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for queue totals and all returned per-job-type row fields.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_reprocessing_queue_health_endpoint`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_reprocessing_queue_health_endpoint tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

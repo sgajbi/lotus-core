@@ -633,9 +633,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             now = datetime.now(UTC)
             return {
                 "as_of": now,
-                "total_pending_jobs": 4,
-                "total_processing_jobs": 1,
-                "total_failed_jobs": 0,
+                "total_pending_jobs": 5,
+                "total_processing_jobs": 2,
+                "total_failed_jobs": 1,
                 "queues": [
                     {
                         "job_type": "RESET_WATERMARKS",
@@ -644,7 +644,15 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                         "failed_jobs": 0,
                         "oldest_pending_created_at": now,
                         "oldest_pending_age_seconds": 12.5,
-                    }
+                    },
+                    {
+                        "job_type": "RECALCULATE_POSITIONS",
+                        "pending_jobs": 1,
+                        "processing_jobs": 1,
+                        "failed_jobs": 1,
+                        "oldest_pending_created_at": now,
+                        "oldest_pending_age_seconds": 4.0,
+                    },
                 ],
             }
 
@@ -4315,12 +4323,31 @@ async def test_ingestion_reprocessing_queue_health_endpoint(
     event_replay_test_client: httpx.AsyncClient,
 ):
     response = await event_replay_test_client.get("/ingestion/health/reprocessing-queue")
+
     assert response.status_code == 200
     body = response.json()
     assert "as_of" in body
-    assert body["total_pending_jobs"] >= 0
-    assert body["queues"][0]["job_type"] == "RESET_WATERMARKS"
-    assert "oldest_pending_age_seconds" in body["queues"][0]
+    assert body["total_pending_jobs"] == 5
+    assert body["total_processing_jobs"] == 2
+    assert body["total_failed_jobs"] == 1
+    assert body["queues"] == [
+        {
+            "job_type": "RESET_WATERMARKS",
+            "pending_jobs": 4,
+            "processing_jobs": 1,
+            "failed_jobs": 0,
+            "oldest_pending_created_at": body["queues"][0]["oldest_pending_created_at"],
+            "oldest_pending_age_seconds": 12.5,
+        },
+        {
+            "job_type": "RECALCULATE_POSITIONS",
+            "pending_jobs": 1,
+            "processing_jobs": 1,
+            "failed_jobs": 1,
+            "oldest_pending_created_at": body["queues"][1]["oldest_pending_created_at"],
+            "oldest_pending_age_seconds": 4.0,
+        },
+    ]
 
 
 async def test_ingestion_capacity_status_endpoint(event_replay_test_client: httpx.AsyncClient):

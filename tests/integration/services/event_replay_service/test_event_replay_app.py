@@ -123,6 +123,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     error_budget = schema["paths"]["/ingestion/health/error-budget"]["get"]
     operating_band = schema["paths"]["/ingestion/health/operating-band"]["get"]
     ops_policy = schema["paths"]["/ingestion/health/policy"]["get"]
+    reprocessing_queue = schema["paths"]["/ingestion/health/reprocessing-queue"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -341,6 +342,15 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert ops_policy_example["calculator_peak_lag_age_seconds"]["timeseries"] == 120
     assert ops_policy_example["replay_dry_run_supported"] is True
 
+    reprocessing_queue_example = reprocessing_queue["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert reprocessing_queue["summary"] == "Get reprocessing queue health by job type"
+    assert "replay worker scaling decisions" in reprocessing_queue["description"]
+    assert reprocessing_queue_example["total_pending_jobs"] == 5
+    assert reprocessing_queue_example["queues"][0]["job_type"] == "RESET_WATERMARKS"
+    assert reprocessing_queue_example["queues"][1]["failed_jobs"] == 1
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -440,6 +450,7 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     health_summary = schema["IngestionHealthSummaryResponse"]
     ops_policy = schema["IngestionOpsPolicyResponse"]
     queue_health = schema["IngestionReprocessingQueueHealthResponse"]
+    queue_item = schema["IngestionReprocessingQueueItemResponse"]
 
     assert set(job_detail["required"]) == {
         "job_id",
@@ -530,6 +541,9 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     )
     assert queue_health["properties"]["queues"]["description"] == (
         "Per-job-type queue health rows sorted by highest pending pressure."
+    )
+    assert queue_item["properties"]["oldest_pending_age_seconds"]["description"] == (
+        "Age in seconds for the oldest pending job for this type."
     )
 
 
