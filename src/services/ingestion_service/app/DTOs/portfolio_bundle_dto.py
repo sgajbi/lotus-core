@@ -27,17 +27,25 @@ class PortfolioBundleIngestionRequest(BaseModel):
     business_dates: List[BusinessDate] = Field(
         default_factory=list,
         description="Canonical business-date records included in the bundle.",
-        examples=[[{"businessDate": "2026-01-02"}]],
+        examples=[[{"business_date": "2026-01-02", "calendar_code": "GLOBAL"}]],
     )
     portfolios: List[Portfolio] = Field(
         default_factory=list,
         description="Canonical portfolio onboarding records included in the bundle.",
-        examples=[[{"portfolioId": "PORT_001", "baseCurrency": "USD"}]],
+        examples=[
+            [
+                {
+                    "portfolio_id": "PORT_001",
+                    "base_currency": "USD",
+                    "open_date": "2024-01-01",
+                }
+            ]
+        ],
     )
     instruments: List[Instrument] = Field(
         default_factory=list,
         description="Canonical instrument master records included in the bundle.",
-        examples=[[{"securityId": "SEC_AAPL", "productType": "Equity"}]],
+        examples=[[{"security_id": "SEC_AAPL", "product_type": "equity"}]],
     )
     transactions: List[Transaction] = Field(
         default_factory=list,
@@ -47,12 +55,12 @@ class PortfolioBundleIngestionRequest(BaseModel):
     market_prices: List[MarketPrice] = Field(
         default_factory=list,
         description="Canonical market-price records included in the bundle.",
-        examples=[[{"securityId": "SEC_AAPL", "priceDate": "2026-01-02"}]],
+        examples=[[{"security_id": "SEC_AAPL", "price_date": "2026-01-02"}]],
     )
     fx_rates: List[FxRate] = Field(
         default_factory=list,
         description="Canonical FX-rate records included in the bundle.",
-        examples=[[{"fromCurrency": "USD", "toCurrency": "SGD"}]],
+        examples=[[{"from_currency": "USD", "to_currency": "SGD"}]],
     )
 
     @model_validator(mode="after")
@@ -76,29 +84,29 @@ class PortfolioBundleIngestionRequest(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "sourceSystem": "UI_UPLOAD",
+                "source_system": "UI_UPLOAD",
                 "mode": "UPSERT",
-                "businessDates": [{"businessDate": "2026-01-02"}],
+                "business_dates": [{"business_date": "2026-01-02"}],
                 "portfolios": [
                     {
-                        "portfolioId": "PORT_001",
-                        "baseCurrency": "USD",
-                        "openDate": "2024-01-01",
-                        "riskExposure": "Medium",
-                        "investmentTimeHorizon": "Long",
-                        "portfolioType": "Discretionary",
-                        "bookingCenter": "Singapore",
-                        "cifId": "CIF_12345",
+                        "portfolio_id": "PORT_001",
+                        "base_currency": "USD",
+                        "open_date": "2024-01-01",
+                        "risk_exposure": "Medium",
+                        "investment_time_horizon": "Long",
+                        "portfolio_type": "Discretionary",
+                        "booking_center_code": "Singapore",
+                        "client_id": "CIF_12345",
                         "status": "Active",
                     }
                 ],
                 "instruments": [
                     {
-                        "securityId": "SEC_AAPL",
+                        "security_id": "SEC_AAPL",
                         "name": "Apple Inc.",
                         "isin": "US0378331005",
-                        "instrumentCurrency": "USD",
-                        "productType": "Equity",
+                        "currency": "USD",
+                        "product_type": "Equity",
                     }
                 ],
                 "transactions": [
@@ -116,23 +124,22 @@ class PortfolioBundleIngestionRequest(BaseModel):
                         "currency": "USD",
                     }
                 ],
-                "marketPrices": [
+                "market_prices": [
                     {
-                        "securityId": "SEC_AAPL",
-                        "priceDate": "2026-01-02",
+                        "security_id": "SEC_AAPL",
+                        "price_date": "2026-01-02",
                         "price": 200,
                         "currency": "USD",
                     }
                 ],
-                "fxRates": [
+                "fx_rates": [
                     {
-                        "fromCurrency": "USD",
-                        "toCurrency": "SGD",
-                        "rateDate": "2026-01-02",
+                        "from_currency": "USD",
+                        "to_currency": "SGD",
+                        "rate_date": "2026-01-02",
                         "rate": 1.35,
                     }
                 ],
             }
         },
     }
-

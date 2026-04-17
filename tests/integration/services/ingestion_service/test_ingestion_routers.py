@@ -930,6 +930,57 @@ def _business_date_batch_payload(*business_dates: str) -> dict[str, list[dict[st
     }
 
 
+def _portfolio_bundle_payload() -> dict[str, object]:
+    return {
+        "source_system": "UI_UPLOAD",
+        "mode": "UPSERT",
+        "business_dates": [{"business_date": "2026-01-02"}],
+        "portfolios": [
+            {
+                "portfolio_id": "P1",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "s",
+                "risk_exposure": "r",
+                "investment_time_horizon": "i",
+                "portfolio_type": "t",
+                "booking_center_code": "b",
+            }
+        ],
+        "instruments": [
+            {
+                "security_id": "S1",
+                "name": "N1",
+                "isin": "I1",
+                "currency": "USD",
+                "product_type": "E",
+            }
+        ],
+        "transactions": [
+            {
+                "transaction_id": "T1",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2026-01-02T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ],
+        "market_prices": [
+            {"security_id": "S1", "price_date": "2026-01-02", "price": 100, "currency": "USD"}
+        ],
+        "fx_rates": [
+            {"from_currency": "USD", "to_currency": "EUR", "rate_date": "2026-01-02", "rate": 0.9}
+        ],
+    }
+
+
 async def test_ingest_portfolios_endpoint(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -2554,62 +2605,62 @@ async def test_ingest_portfolio_bundle_endpoint(
 ):
     """Tests the POST /ingest/portfolio-bundle endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "source_system": "UI_UPLOAD",
-        "mode": "UPSERT",
-        "business_dates": [{"business_date": "2026-01-02"}],
-        "portfolios": [
-            {
-                "portfolio_id": "P1",
-                "base_currency": "USD",
-                "open_date": "2025-01-01",
-                "client_id": "c",
-                "status": "s",
-                "risk_exposure": "r",
-                "investment_time_horizon": "i",
-                "portfolio_type": "t",
-                "booking_center_code": "b",
-            }
-        ],
-        "instruments": [
-            {
-                "security_id": "S1",
-                "name": "N1",
-                "isin": "I1",
-                "currency": "USD",
-                "product_type": "E",
-            }
-        ],
-        "transactions": [
-            {
-                "transaction_id": "T1",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2026-01-02T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ],
-        "market_prices": [
-            {"security_id": "S1", "price_date": "2026-01-02", "price": 100, "currency": "USD"}
-        ],
-        "fx_rates": [
-            {"from_currency": "USD", "to_currency": "EUR", "rate_date": "2026-01-02", "rate": 0.9}
-        ],
-    }
+    payload = _portfolio_bundle_payload()
 
-    response = await async_test_client.post("/ingest/portfolio-bundle", json=payload)
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=payload,
+        headers={"X-Idempotency-Key": "portfolio-bundle-idem-001"},
+    )
 
     assert response.status_code == 202
     body = response.json()
     assert body["entity_type"] == "portfolio_bundle"
     assert body["accepted_count"] == 6
-    assert "job_id" in body
+    assert body["job_id"]
+    assert body["idempotency_key"] == "portfolio-bundle-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    assert "Published counts:" in body["message"]
+    assert mock_kafka_producer.publish_message.call_count == 6
+    published_topics = [
+        call.kwargs["topic"] for call in mock_kafka_producer.publish_message.call_args_list
+    ]
+    assert published_topics == [
+        "business_dates.raw.received",
+        "portfolios.raw.received",
+        "instruments.received",
+        "transactions.raw.received",
+        "market_prices.raw.received",
+        "fx_rates.raw.received",
+    ]
+    assert (
+        dict(mock_kafka_producer.publish_message.call_args_list[0].kwargs["headers"])[
+            "idempotency_key"
+        ]
+        == b"portfolio-bundle-idem-001"
+    )
+
+
+async def test_ingest_portfolio_bundle_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _portfolio_bundle_payload()
+    headers = {"X-Idempotency-Key": "portfolio-bundle-replay-001"}
+
+    first = await async_test_client.post("/ingest/portfolio-bundle", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/portfolio-bundle", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "portfolio-bundle-replay-001"
     assert mock_kafka_producer.publish_message.call_count == 6
 
 
@@ -2654,6 +2705,75 @@ async def test_ingest_portfolio_bundle_disabled_by_feature_flag(
     assert body["detail"]["code"] == "LOTUS_CORE_ADAPTER_MODE_DISABLED"
     assert body["detail"]["capability"] == "lotus_core.ingestion.portfolio_bundle_adapter"
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolio_bundle_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=_portfolio_bundle_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolio_bundle_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        portfolio_bundle_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=_portfolio_bundle_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/portfolio-bundle blocked after 6 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=_portfolio_bundle_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["P1"]
+    assert "'business_dates': 1" in body["detail"]["message"]
+    assert "'portfolios': 0" in body["detail"]["message"]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["P1"]
 
 
 def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:

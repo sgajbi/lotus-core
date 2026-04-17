@@ -106,6 +106,9 @@ async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(a
     rate_limited = bundle["responses"]["429"]["content"]["application/json"]["example"]
     assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
+    publish_failed = bundle["responses"]["500"]["content"]["application/json"]["example"]
+    assert publish_failed["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+
     mode_blocked = bundle["responses"]["503"]["content"]["application/json"]["example"]
     assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 
@@ -114,6 +117,15 @@ async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(a
     )
     assert bundle_schema["properties"]["transactions"]["examples"] == [
         [{"transaction_id": "TRN_001", "transaction_type": "BUY"}]
+    ]
+    assert bundle_schema["properties"]["business_dates"]["examples"] == [
+        [{"business_date": "2026-01-02", "calendar_code": "GLOBAL"}]
+    ]
+    assert bundle_schema["properties"]["market_prices"]["examples"] == [
+        [{"security_id": "SEC_AAPL", "price_date": "2026-01-02"}]
+    ]
+    assert bundle_schema["properties"]["fx_rates"]["examples"] == [
+        [{"from_currency": "USD", "to_currency": "SGD"}]
     ]
 
 

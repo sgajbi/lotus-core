@@ -937,3 +937,128 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core` | No open issue found for `POST /reprocess/transactions` in this pass. | No GitHub action required. |
 | Downstream repos | No open downstream issue found for reprocessing command-ingress misuse. | No downstream action required. |
+
+## Certified Endpoint Slice: Portfolio Bundle Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/portfolio-bundle`
+
+### Route Contract Decision
+
+This is the governed adapter-mode write-ingress endpoint for mixed portfolio onboarding bundles.
+
+The boundary is explicit:
+
+1. use it for UI/manual/file adapter onboarding flows that need to submit a complete mixed bundle;
+2. do not treat it as the primary upstream system integration path when canonical single-entity
+   ingestion endpoints are available;
+3. do not use it as a read endpoint or downstream source-data product;
+4. treat acknowledgement as asynchronous job acceptance and fan-out publish queueing, not
+   persistence completion;
+5. use ingestion job and event-replay endpoints for operational follow-up, retry, and failure
+   evidence;
+6. use `X-Idempotency-Key` for replay-safe bundle submission.
+
+### Consumer And Integration Reality
+
+This endpoint is consumed by `lotus-gateway` through `POST /api/v1/intake/portfolio-bundle`, which
+forwards to core `POST /ingest/portfolio-bundle`.
+
+Gateway integration is directionally correct but has a downstream contract gap:
+
+1. gateway forwards the opaque bundle body to the canonical core route;
+2. gateway propagates correlation headers;
+3. gateway does not currently expose or forward `X-Idempotency-Key`, so clients cannot use core's
+   idempotency replay semantics through the experience API.
+
+Issue created:
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `sgajbi/lotus-gateway#125` | Valid downstream contract gap: gateway must propagate `X-Idempotency-Key` for portfolio-bundle intake. | Opened during this pass for gateway follow-up. |
+
+No live `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage`
+product consumer code was found for direct calls to this core route.
+
+### Upstream Integration Assessment
+
+The route uses the correct adapter-mode fan-out architecture:
+
+1. it validates the `PortfolioBundleIngestionRequest` schema before accepting records;
+2. it rejects empty or metadata-only bundles;
+3. it is protected by the portfolio-bundle adapter feature flag;
+4. it enforces ingestion operating mode before queueing work;
+5. it enforces write-rate protection using the total bundle record count;
+6. it creates or replays ingestion jobs with idempotency semantics;
+7. it persists the full bundle payload on the ingestion job;
+8. it propagates `X-Idempotency-Key` into each canonical publish family for lineage;
+9. it fan-out publishes to the canonical business-date, portfolio, instrument, transaction,
+   market-price, and FX-rate topics in deterministic order;
+10. it records publish failures with failed record keys and a message that includes completed
+    entity-group counts;
+11. it marks accepted jobs queued only after fan-out publish succeeds, with explicit post-publish
+    bookkeeping failure handling.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice after adding a structured `500` publish-failure response and
+normalizing portfolio-bundle examples to the actual snake_case core contract:
+
+1. route purpose says when to use the endpoint and that it is adapter-mode onboarding;
+2. request attributes include descriptions and examples for every entity collection;
+3. examples now use the actual core request fields rather than stale camelCase aliases;
+4. ACK fields include descriptions and examples for message, entity type, accepted count, job id,
+   correlation/request/trace identifiers, and idempotency key;
+5. `410`, `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for portfolio-bundle fan-out behavior and adapter controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_portfolio_bundle_endpoint`
+2. `test_ingest_portfolio_bundle_replays_duplicate_idempotency_key`
+3. `test_ingest_portfolio_bundle_rejects_empty_payload`
+4. `test_ingest_portfolio_bundle_rejects_metadata_only_payload`
+5. `test_ingest_portfolio_bundle_disabled_by_feature_flag`
+6. `test_ingest_portfolio_bundle_returns_503_when_mode_blocks_writes`
+7. `test_ingest_portfolio_bundle_returns_429_when_rate_limited`
+8. `test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_fails`
+9. `test_openapi_describes_portfolio_bundle_parameters_and_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_rejects_empty_payload tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_rejects_metadata_only_payload tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_disabled_by_feature_flag tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_fails tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_portfolio_bundle_parameters_and_shared_schema -q
+```
+
+Result:
+
+```text
+9 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\portfolio_bundle.py src\services\ingestion_service\app\DTOs\portfolio_bundle_dto.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\portfolio_bundle.py src\services\ingestion_service\app\DTOs\portfolio_bundle_dto.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+4 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/portfolio-bundle` in this pass. | No GitHub action required. |
+| `lotus-gateway#125` | Gateway does not propagate `X-Idempotency-Key` to core for `POST /api/v1/intake/portfolio-bundle`. | Opened for downstream remediation. |
