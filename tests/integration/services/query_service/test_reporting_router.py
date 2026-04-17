@@ -150,19 +150,31 @@ async def test_get_reporting_service_wraps_db_session():
 
 
 @pytest.mark.parametrize(
-    ("path", "payload", "method_name", "error_detail"),
+    ("path", "payload", "method_name", "error_detail", "exception_type", "status_code"),
     [
         (
             "/reporting/asset-allocation/query",
             {"scope": {"portfolio_id": "P1"}, "dimensions": ["asset_class"]},
             "get_asset_allocation",
             "bad allocation scope",
+            ValueError,
+            400,
         ),
         (
             "/reporting/portfolio-summary/query",
             {"portfolio_id": "P1"},
             "get_portfolio_summary",
             "bad snapshot request",
+            ValueError,
+            400,
+        ),
+        (
+            "/reporting/portfolio-summary/query",
+            {"portfolio_id": "P404"},
+            "get_portfolio_summary",
+            "Portfolio with id P404 not found",
+            LookupError,
+            404,
         ),
     ],
 )
@@ -172,11 +184,13 @@ async def test_reporting_router_maps_all_query_value_errors_to_400(
     payload: dict,
     method_name: str,
     error_detail: str,
+    exception_type: type[Exception],
+    status_code: int,
 ):
     client, mock_service = async_test_client
-    getattr(mock_service, method_name).side_effect = ValueError(error_detail)
+    getattr(mock_service, method_name).side_effect = exception_type(error_detail)
 
     response = await client.post(path, json=payload)
 
-    assert response.status_code == 400
+    assert response.status_code == status_code
     assert response.json()["detail"] == error_detail

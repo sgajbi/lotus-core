@@ -240,6 +240,21 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
     assert response.snapshot_metadata.unvalued_position_count == 1
 
 
+async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio() -> None:
+    repo = AsyncMock()
+    repo.get_portfolio_by_id.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
+            await service.get_portfolio_summary(
+                PortfolioSummaryQueryRequest(portfolio_id="P404")
+            )
+
+
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")

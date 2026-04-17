@@ -180,7 +180,7 @@ class ReportingService:
     ) -> PortfolioSummaryResponse:
         portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
         if portfolio is None:
-            raise ValueError(f"Portfolio with id {request.portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {request.portfolio_id} not found")
 
         resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
         if resolved_as_of_date is None:

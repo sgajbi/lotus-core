@@ -14,6 +14,13 @@ from ..services.reporting_service import ReportingService
 
 router = APIRouter(prefix="/reporting", tags=["Wealth Reporting"])
 
+PORTFOLIO_SUMMARY_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": "Portfolio with id PORT-001 not found"
+}
+PORTFOLIO_SUMMARY_INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
+    "detail": "FX rate not found for USD/SGD as of 2026-03-27."
+}
+
 
 def get_reporting_service(
     db: AsyncSession = Depends(get_async_db_session),
@@ -74,6 +81,25 @@ async def query_asset_allocation(
 @router.post(
     "/portfolio-summary/query",
     response_model=PortfolioSummaryResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": (
+                "Invalid portfolio-summary request, including unsupported "
+                "reporting-currency restatement."
+            ),
+            "content": {
+                "application/json": {
+                    "example": PORTFOLIO_SUMMARY_INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE
+                }
+            },
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {
+                "application/json": {"example": PORTFOLIO_SUMMARY_NOT_FOUND_RESPONSE_EXAMPLE}
+            },
+        },
+    },
     summary="Query Portfolio Summary Snapshot",
     description=(
         "What: Return the strategic historical portfolio summary for one portfolio and as-of "
@@ -94,6 +120,8 @@ async def query_portfolio_summary(
 ):
     try:
         return await service.get_portfolio_summary(request)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

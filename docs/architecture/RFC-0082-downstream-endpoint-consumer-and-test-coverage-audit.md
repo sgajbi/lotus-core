@@ -1767,10 +1767,12 @@ For this endpoint, Swagger now makes the following explicit:
 3. it does not own performance, risk, or narrative reporting outputs;
 4. endpoint-specific DTO fields now carry clearer examples for portfolio classification, risk
    posture, lifecycle status, totals, and snapshot metadata.
+5. unknown-portfolio requests now fail as a truthful `404` instead of being flattened into `400`,
+   while invalid reporting-currency restatement remains a `400` contract.
 
 Focused HTTP-level dependency proof exists in
-`tests/integration/services/query_service/test_reporting_router.py` for successful summary routing
-and request validation behavior.
+`tests/integration/services/query_service/test_reporting_router.py` for successful summary routing,
+truthful `404` mapping, and request validation behavior.
 
 Service-level proof exists in `tests/unit/services/query_service/services/test_reporting_service.py`
 for historical restated totals, cash versus invested split, and summary coverage metadata.

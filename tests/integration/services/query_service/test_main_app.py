@@ -277,6 +277,8 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}/positions"]["get"]["responses"]
     assert "400" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
+    assert "400" in paths["/reporting/portfolio-summary/query"]["post"]["responses"]
+    assert "404" in paths["/reporting/portfolio-summary/query"]["post"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cashflow-projection"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
@@ -404,6 +406,18 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     ]
     assert portfolio_summary_response["properties"]["risk_exposure"]["examples"] == ["BALANCED"]
     assert portfolio_summary_response["properties"]["status"]["examples"] == ["ACTIVE"]
+    assert (
+        portfolio_summary_query["responses"]["400"]["content"]["application/json"]["example"][
+            "detail"
+        ]
+        == "FX rate not found for USD/SGD as of 2026-03-27."
+    )
+    assert (
+        portfolio_summary_query["responses"]["404"]["content"]["application/json"]["example"][
+            "detail"
+        ]
+        == "Portfolio with id PORT-001 not found"
+    )
     assert cash_account_query_response["properties"]["cash_accounts"]["description"] == (
         "Canonical cash accounts linked to the portfolio."
     )
