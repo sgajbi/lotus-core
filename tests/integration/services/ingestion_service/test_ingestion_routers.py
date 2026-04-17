@@ -878,6 +878,21 @@ def _market_price_batch_payload(*security_ids: str) -> dict[str, list[dict[str, 
     }
 
 
+def _fx_rate_batch_payload(*pairs: tuple[str, str]) -> dict[str, list[dict[str, object]]]:
+    requested_pairs = pairs or (("USD", "SGD"),)
+    return {
+        "fx_rates": [
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "rate_date": "2025-01-01",
+                "rate": "1.3500000000",
+            }
+            for from_currency, to_currency in requested_pairs
+        ]
+    }
+
+
 async def test_ingest_portfolios_endpoint(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -2329,16 +2344,125 @@ async def test_ingest_fx_rates_endpoint(
 ):
     """Tests the POST /ingest/fx-rates endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "fx_rates": [
-            {"from_currency": "USD", "to_currency": "EUR", "rate_date": "2025-01-01", "rate": 0.9}
-        ]
-    }
+    payload = _fx_rate_batch_payload(("USD", "SGD"))
 
-    response = await async_test_client.post("/ingest/fx-rates", json=payload)
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=payload,
+        headers={"X-Idempotency-Key": "fx-rate-batch-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "FX rates accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "fx_rate"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["idempotency_key"] == "fx-rate-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "fx_rates.raw.received"
+    assert publish_kwargs["key"] == "USD-SGD-2025-01-01"
+    assert publish_kwargs["value"]["from_currency"] == "USD"
+    assert publish_kwargs["value"]["to_currency"] == "SGD"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == b"fx-rate-batch-idem-001"
+
+
+async def test_ingest_fx_rates_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _fx_rate_batch_payload(("USD", "CHF"))
+    headers = {"X-Idempotency-Key": "fx-rate-replay-001"}
+
+    first = await async_test_client.post("/ingest/fx-rates", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/fx-rates", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "fx-rate-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_fx_rates_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=_fx_rate_batch_payload(("USD", "JPY")),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_fx_rates_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        fx_rates_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=_fx_rate_batch_payload(("USD", "SGD"), ("USD", "EUR")),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/fx-rates blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_fx_rates_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=_fx_rate_batch_payload(("USD", "SGD"), ("EUR", "USD")),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == [
+        "USD-SGD-2025-01-01",
+        "EUR-USD-2025-01-01",
+    ]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "USD-SGD-2025-01-01",
+        "EUR-USD-2025-01-01",
+    ]
 
 
 async def test_ingest_cash_account_masters_endpoint(

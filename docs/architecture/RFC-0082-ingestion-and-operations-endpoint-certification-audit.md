@@ -604,3 +604,112 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core` | No open issue found for `POST /ingest/market-prices` in this pass. | No GitHub action required. |
 | Downstream repos | No open downstream issue found for market-price write-ingress misuse. | No downstream action required. |
+
+## Certified Endpoint Slice: FX Rate Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/fx-rates`
+
+### Route Contract Decision
+
+This is the canonical write-ingress endpoint for approved FX reference-rate observations.
+
+The boundary is explicit:
+
+1. use it for scheduled FX reference updates and approved manual corrections;
+2. do not use it as a read endpoint or downstream source-data product;
+3. use `GET /fx-rates/` for downstream read-plane FX history and conversion support;
+4. treat acknowledgement as asynchronous job acceptance and Kafka publish queueing, not
+   persistence completion;
+5. use ingestion job and event-replay endpoints for operational follow-up, retry, and failure
+   evidence;
+6. use `X-Idempotency-Key` for replay-safe upstream batch submission.
+
+### Consumer And Integration Reality
+
+This endpoint is upstream-facing rather than downstream-facing. No direct `lotus-gateway`,
+`lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, or `lotus-manage` product
+consumer should call it for front-office reads.
+
+Repository scan evidence on April 17, 2026 found live downstream read-plane usage of
+`GET /fx-rates/` in `lotus-performance` and `lotus-advise`, which is correct and already covered by
+the downstream endpoint audit. No live product consumer code was found for the write-ingress
+`POST /ingest/fx-rates` route.
+
+### Upstream Integration Assessment
+
+The route uses the correct FX reference-data ingestion architecture:
+
+1. it validates the `FxRateIngestionRequest` schema before accepting records;
+2. it enforces non-empty FX-rate batches through `min_length=1`;
+3. it enforces positive conversion rates through the `FxRate` schema;
+4. it enforces ingestion operating mode before queueing work;
+5. it enforces write-rate protection using the submitted batch size;
+6. it creates or replays ingestion jobs with idempotency semantics;
+7. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
+8. it publishes each record to `fx_rates.raw.received` using
+   `{from_currency}-{to_currency}-{rate_date}` as the partition key;
+9. it records publish failures with failed FX pair/date keys for operational diagnosis and retry;
+10. it marks accepted jobs queued only after publish succeeds, with explicit post-publish
+    bookkeeping failure handling.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice after adding a structured `500` publish-failure response:
+
+1. route purpose says when to use the endpoint and that it is asynchronous FX-rate write ingress;
+2. FX-rate attributes include descriptions and examples for from currency, to currency, business
+   date, and positive conversion rate;
+3. the request batch field is described and constrained with `min_length=1`;
+4. ACK fields include descriptions and examples for message, entity type, accepted count, job id,
+   correlation/request/trace identifiers, and idempotency key;
+5. `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for FX-rate write ingress rather than only a generic happy path.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_fx_rates_endpoint`
+2. `test_ingest_fx_rates_replays_duplicate_idempotency_key`
+3. `test_ingest_fx_rates_returns_503_when_mode_blocks_writes`
+4. `test_ingest_fx_rates_returns_429_when_rate_limited`
+5. `test_ingest_fx_rates_returns_failed_record_keys_when_publish_fails`
+6. `test_openapi_describes_remaining_ingestion_operational_responses`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_fx_rates_endpoint tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_fx_rates_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_fx_rates_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_fx_rates_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_fx_rates_returns_failed_record_keys_when_publish_fails tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses -q
+```
+
+Result:
+
+```text
+6 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\fx_rates.py src\services\ingestion_service\app\DTOs\fx_rate_dto.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\fx_rates.py src\services\ingestion_service\app\DTOs\fx_rate_dto.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+4 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/fx-rates` in this pass. | No GitHub action required. |
+| Downstream repos | No open downstream issue found for FX-rate write-ingress misuse. | No downstream action required. |
