@@ -24,6 +24,7 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     IngestionJobListResponse,
     IngestionJobRecordStatusResponse,
     IngestionJobResponse,
+    IngestionJobStatus,
     IngestionOperatingBandResponse,
     IngestionOpsModeResponse,
     IngestionOpsModeUpdateRequest,
@@ -393,7 +394,7 @@ async def get_ingestion_job(
     },
 )
 async def list_ingestion_jobs(
-    status: str | None = Query(
+    status: IngestionJobStatus | None = Query(
         default=None,
         description="Optional job status filter.",
         examples=["queued"],
@@ -427,9 +428,8 @@ async def list_ingestion_jobs(
     ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
-    status_value = status if status in {"accepted", "queued", "failed"} else None
     jobs, next_cursor = await ingestion_job_service.list_jobs(
-        status=status_value,
+        status=status,
         entity_type=entity_type,
         submitted_from=submitted_from,
         submitted_to=submitted_to,

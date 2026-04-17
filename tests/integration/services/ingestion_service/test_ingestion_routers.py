@@ -229,7 +229,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             cursor: str | None = None,
             limit: int = 100,
         ) -> tuple[list[IngestionJobResponse], str | None]:
-            values = list(self.jobs.values())
+            values = sorted(
+                self.jobs.values(),
+                key=lambda job: job.submitted_at,
+                reverse=True,
+            )
             filtered = [
                 job
                 for job in values
@@ -243,7 +247,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                     if row.job_id == cursor:
                         filtered = filtered[idx + 1 :]
                         break
-            return ([job.model_dump(mode="json") for job in filtered[:limit]], None)
+            page_rows = filtered[:limit]
+            next_cursor = page_rows[-1].job_id if len(filtered) > limit and page_rows else None
+            return ([job.model_dump(mode="json") for job in page_rows], next_cursor)
 
         async def list_failures(self, job_id: str, limit: int = 100) -> list[dict]:
             return self.failures.get(job_id, [])[:limit]
@@ -1395,13 +1401,92 @@ async def test_ingestion_jobs_status_endpoint_returns_failed_job_detail(
     assert job_body["last_retried_at"] is None
 
 
-async def test_ingestion_jobs_list_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/jobs", params={"limit": 5})
+async def test_ingestion_jobs_list_endpoint_filters_and_paginates(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    queued_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_LIST_QUEUED_001"),
+        headers={"X-Idempotency-Key": "job-list-queued-001"},
+    )
+    assert queued_response.status_code == 202
+    queued_job_id = queued_response.json()["job_id"]
+
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_LIST_FAILED_001"),
+        headers={"X-Idempotency-Key": "job-list-failed-001"},
+    )
+    assert failed_response.status_code == 500
+    failed_job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    accepted_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_LIST_ACCEPTED_001"),
+        headers={"X-Idempotency-Key": "job-list-accepted-001"},
+    )
+    assert accepted_response.status_code == 500
+    accepted_job_id = accepted_response.json()["detail"]["job_id"]
+
+    response = await event_replay_test_client.get("/ingestion/jobs", params={"limit": 2})
     assert response.status_code == 200
     body = response.json()
-    assert "jobs" in body
-    assert "total" in body
-    assert "next_cursor" in body
+    assert body["total"] == 2
+    assert body["next_cursor"]
+    assert {job["job_id"] for job in body["jobs"]}.issubset(
+        {accepted_job_id, failed_job_id, queued_job_id}
+    )
+
+    next_page = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"limit": 2, "cursor": body["next_cursor"]},
+    )
+    assert next_page.status_code == 200
+    assert next_page.json()["total"] == 1
+
+    for status_filter, expected_job_id in {
+        "accepted": accepted_job_id,
+        "queued": queued_job_id,
+        "failed": failed_job_id,
+    }.items():
+        filtered = await event_replay_test_client.get(
+            "/ingestion/jobs",
+            params={
+                "status": status_filter,
+                "entity_type": "transaction",
+                "submitted_from": "2020-01-01T00:00:00Z",
+                "submitted_to": "2030-01-01T00:00:00Z",
+                "limit": 10,
+            },
+        )
+        assert filtered.status_code == 200
+        filtered_body = filtered.json()
+        assert filtered_body["total"] == 1
+        assert filtered_body["next_cursor"] is None
+        assert filtered_body["jobs"][0]["job_id"] == expected_job_id
+        assert filtered_body["jobs"][0]["status"] == status_filter
+        assert filtered_body["jobs"][0]["entity_type"] == "transaction"
+
+    entity_miss = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"entity_type": "instrument", "limit": 10},
+    )
+    assert entity_miss.status_code == 200
+    assert entity_miss.json() == {"jobs": [], "total": 0, "next_cursor": None}
+
+    invalid_status = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "complete"},
+    )
+    assert invalid_status.status_code == 422
 
 
 async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClient):

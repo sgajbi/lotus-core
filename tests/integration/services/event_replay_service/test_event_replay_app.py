@@ -124,8 +124,44 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     job_not_found = get_job["responses"]["404"]["content"]["application/json"]["example"]
     assert job_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
 
+    def _enum_values(parameter_schema: dict) -> list[str]:
+        if "enum" in parameter_schema:
+            return parameter_schema["enum"]
+        for candidate in parameter_schema.get("anyOf", []):
+            values = _enum_values(candidate)
+            if values:
+                return values
+        return []
+
     status_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "status")
     assert status_parameter["description"] == "Optional job status filter."
+    assert _enum_values(status_parameter["schema"]) == ["accepted", "queued", "failed"]
+
+    entity_type_parameter = next(
+        param for param in list_jobs["parameters"] if param["name"] == "entity_type"
+    )
+    assert entity_type_parameter["description"] == "Optional canonical entity type filter."
+
+    submitted_from_parameter = next(
+        param for param in list_jobs["parameters"] if param["name"] == "submitted_from"
+    )
+    assert submitted_from_parameter["description"] == (
+        "Optional inclusive lower bound for job submission timestamp."
+    )
+
+    submitted_to_parameter = next(
+        param for param in list_jobs["parameters"] if param["name"] == "submitted_to"
+    )
+    assert submitted_to_parameter["description"] == (
+        "Optional inclusive upper bound for job submission timestamp."
+    )
+
+    cursor_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "cursor")
+    assert cursor_parameter["description"] == "Opaque pagination cursor from the previous page."
+
+    limit_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "limit")
+    assert limit_parameter["schema"]["minimum"] == 1
+    assert limit_parameter["schema"]["maximum"] == 500
 
     retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
         "examples"
@@ -201,6 +237,12 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     )
     assert job_list["properties"]["jobs"]["description"] == (
         "Ingestion jobs matching the requested filters and pagination window."
+    )
+    assert job_list["properties"]["total"]["description"] == (
+        "Number of jobs returned in this response."
+    )
+    assert job_list["properties"]["next_cursor"]["description"] == (
+        "Opaque cursor to fetch the next page of jobs, based on descending ingestion job order."
     )
     assert health_summary["properties"]["oldest_backlog_job_id"]["description"] == (
         "Identifier of the oldest non-terminal job contributing to the backlog."

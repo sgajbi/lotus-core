@@ -2759,3 +2759,99 @@ Result:
 ```text
 5 passed
 ```
+
+## Certified Endpoint Slice: Ingestion Job List Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/jobs`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane list endpoint for ingestion job monitoring,
+pagination, and filtered triage.
+
+Use it to:
+
+1. list recent ingestion jobs for operations dashboards and runbook triage;
+2. filter by lifecycle status across the supported states `accepted`, `queued`, and `failed`;
+3. filter by canonical `entity_type`;
+4. bound the result window by inclusive `submitted_from` and `submitted_to` timestamps;
+5. page through descending job order with `cursor` and bounded `limit`.
+
+Do not use it as a product-facing business-data route. It returns job-control metadata only, and
+callers must use canonical read-side portfolio, instrument, market-data, reference-data, reporting,
+or performance routes for business data.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`,
+   `lotus-manage`, and `lotus-workbench` had no direct `/ingestion/jobs` consumer in the local
+   scan;
+2. the only adjacent downstream match was archived `lotus-advise` execution-integration draft text,
+   not a live lotus-core ingestion job integration;
+3. this route remains suitable for operations dashboards, source-ingestion support, automation,
+   and QA.
+
+No downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct durable ingestion-job control-plane architecture:
+
+1. it reads canonical state through `IngestionJobService.list_jobs`;
+2. it pushes status, entity type, submitted timestamp bounds, cursor, and limit to the service
+   query instead of filtering response payloads in the router;
+3. the service applies status/entity/date filters at query level, orders by descending durable job
+   identity, fetches `limit + 1`, and returns `next_cursor` only when another page exists;
+4. `limit` is constrained to `1..500`;
+5. unsupported status values now return FastAPI `422` validation errors instead of silently
+   widening the query to all statuses.
+
+The implementation change in this pass removes a stale local status coercion branch and reuses the
+shared `IngestionJobStatus` enum as the route contract.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and is now protected by endpoint-specific OpenAPI assertions:
+
+1. the operation summary and description explain filtering, pagination, and operations use;
+2. the status query parameter is documented as the canonical enum `accepted`, `queued`, `failed`;
+3. entity type, submitted-from, submitted-to, cursor, and limit parameters have descriptions and
+   examples;
+4. the limit parameter publishes minimum and maximum bounds;
+5. the shared `IngestionJobListResponse` documents `jobs`, returned `total`, and `next_cursor`;
+6. each listed job uses the already certified `IngestionJobResponse` schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `GET /ingestion/jobs`, `IngestionJobListResponse`, list-ingestion-jobs vocabulary, or status-filter vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for all exposed query options and list output fields.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_jobs_list_endpoint_filters_and_paginates`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_jobs_list_endpoint_filters_and_paginates tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
