@@ -275,6 +275,125 @@ All checks passed.
 OpenAPI quality gate passed for API services.
 ```
 
+## Certified Endpoint Slice: Index Return Series Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/index-return-series`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for source-owned raw index return observations when an
+upstream vendor publishes returns directly.
+
+The boundary is explicit:
+
+1. use it for vendor-provided daily or periodic index return loads and corrections;
+2. use it to maintain raw return observations by `series_id`, `index_id`, and `series_date`;
+3. do not use it as a calculated benchmark return endpoint;
+4. use `POST /integration/indices/{index_id}/return-series` for downstream raw return-series
+   reads when needed;
+5. prefer the strategic benchmark market-series or calculated price-series path when downstream
+   workflows need benchmark component returns rather than raw vendor return evidence;
+6. treat acknowledgement as durable reference-data upsert acceptance, not downstream calculation
+   completion;
+7. use `X-Idempotency-Key` for replay-safe source batch submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream evidence remains weaker for direct raw index-return-series consumption than for
+index price series:
+
+1. `lotus-performance` documents raw index return series as an upstream input family, but local
+   code evidence in this pass points to benchmark market-series and raw index price-series calls as
+   the active calculation paths;
+2. `lotus-risk` had no direct raw index-return-series call in the local scan;
+3. `lotus-gateway`, `lotus-report`, `lotus-advise`, `lotus-manage`, and `lotus-workbench` had no
+   direct write-ingress consumer for `POST /ingest/index-return-series`.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `index_return_series` collection through the DTO contract;
+2. it accepts negative return observations, which are valid for market drawdowns;
+3. it enforces ingestion operating mode before durable upsert;
+4. it enforces write-rate protection using accepted record count;
+5. it creates or replays ingestion jobs with idempotency semantics;
+6. it persists full request payload lineage on the ingestion job;
+7. it upserts rows using `series_id`, `index_id`, and `series_date` as the conflict identity;
+8. it updates return value, period, convention, currency, source lineage, and quality status on
+   conflict;
+9. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+10. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is now aligned with the actual contract:
+
+1. route purpose says when to use vendor-provided raw index return series;
+2. route text says the endpoint validates the canonical record contract instead of overstating a
+   closed convention taxonomy;
+3. all index return series attributes have descriptions, types, and examples;
+4. return period, return convention, source timestamp, vendor, record id, quality status, and
+   currency are modeled explicitly;
+5. ACK fields are covered by the shared batch-ingestion response schema;
+6. `429`, `500`, and `503` operational response examples are present.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `index-return-series`, `IndexReturnSeries`, or index return vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream write-ingress consumer found. No active downstream app was found using a stale or duplicate write route for this family. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for index return series options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_index_return_series_returns_ack_and_persists_full_contract`
+2. `test_ingest_index_return_series_replays_duplicate_idempotency_key`
+3. `test_ingest_index_return_series_rejects_empty_batch`
+4. `test_ingest_index_return_series_returns_503_when_mode_blocks_writes`
+5. `test_ingest_index_return_series_returns_429_when_rate_limited`
+6. `test_ingest_index_return_series_marks_job_failed_when_persist_fails`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_index_return_series_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_return_series_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_return_series_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_return_series_rejects_empty_batch tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_return_series_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_return_series_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_index_return_series_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_index_return_series_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check src\services\ingestion_service\app\routers\reference_data.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check src\services\ingestion_service\app\routers\reference_data.py tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+3 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
 ### Issue Disposition For This Endpoint
 
 | Issue | Assessment | Disposition |

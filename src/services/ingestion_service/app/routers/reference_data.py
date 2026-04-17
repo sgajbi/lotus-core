@@ -335,7 +335,7 @@ async def ingest_index_price_series(
     summary="Ingest index return series",
     description=(
         "What: Accept raw vendor-provided index return series records.\n"
-        "How: Validate return conventions and upsert deterministic time-series rows.\n"
+        "How: Validate the canonical record contract and upsert deterministic time-series rows.\n"
         "When: Use when upstream publishes return series directly."
     ),
 )
