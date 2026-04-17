@@ -40,6 +40,14 @@ REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for /reprocess/transactions.",
     }
 }
+REPROCESSING_PUBLISH_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Failed to publish reprocessing request 'TRN_002'.",
+        "failed_record_keys": ["TRN_002", "TRN_003"],
+        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+    }
+}
 
 
 @router.post(
@@ -54,6 +62,10 @@ REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the reprocessing request.",
             "content": {"application/json": {"example": REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE}},
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Reprocessing command publish failed after job metadata was recorded.",
+            "content": {"application/json": {"example": REPROCESSING_PUBLISH_FAILED_EXAMPLE}},
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
@@ -141,7 +153,15 @@ async def reprocess_transactions(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_PUBLISH_FAILED",
+                "message": str(exc),
+                "failed_record_keys": exc.failed_record_keys,
+                "job_id": job_result.job.job_id,
+            },
+        ) from exc
     except Exception as exc:
         await ingestion_job_service.mark_failed(
             job_result.job.job_id,

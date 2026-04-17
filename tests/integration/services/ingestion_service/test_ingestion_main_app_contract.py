@@ -131,6 +131,9 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
     rate_limited = reprocess["responses"]["429"]["content"]["application/json"]["example"]
     assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
+    publish_failed = reprocess["responses"]["500"]["content"]["application/json"]["example"]
+    assert publish_failed["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+
     mode_blocked = reprocess["responses"]["503"]["content"]["application/json"]["example"]
     assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 

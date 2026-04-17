@@ -90,6 +90,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.fail_mark_retried_job_ids: set[str] = set()
             self.fail_next_mark_queued = False
             self.mode = "normal"
+            self.reprocessing_publish_allowed = True
             self.replay_window_start = None
             self.replay_window_end = None
 
@@ -686,6 +687,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             await self.assert_retry_allowed(submitted_at)
 
         async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
+            if not self.reprocessing_publish_allowed:
+                raise PermissionError(
+                    f"Reprocessing publication is blocked for {record_count} record(s)."
+                )
             return None
 
     class FakeReferenceDataIngestionService:
@@ -2881,13 +2886,108 @@ async def test_reprocess_transactions_deduplicates_transaction_ids_at_ingress(
 
     assert response.status_code == 202
     body = response.json()
+    assert body["message"] == "Successfully queued 2 transactions for reprocessing."
+    assert body["entity_type"] == "reprocessing_request"
     assert body["accepted_count"] == 2
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
 
     published_ids = [
         call.kwargs["value"]["transaction_id"]
         for call in mock_kafka_producer.publish_message.call_args_list
     ]
     assert published_ids == ["TXN1", "TXN2"]
+    publish_kwargs = mock_kafka_producer.publish_message.call_args_list[0].kwargs
+    assert publish_kwargs["topic"] == "transactions.reprocessing.requested"
+    assert publish_kwargs["key"] == "TXN1"
+
+
+async def test_reprocess_transactions_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = {"transaction_ids": ["TXN_IDEM_001", "TXN_IDEM_002"]}
+    headers = {"X-Idempotency-Key": "reprocessing-replay-001"}
+
+    first = await async_test_client.post("/reprocess/transactions", json=payload, headers=headers)
+    second = await async_test_client.post("/reprocess/transactions", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"]
+        == "Duplicate reprocessing request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "reprocessing-replay-001"
+    assert mock_kafka_producer.publish_message.call_count == 2
+
+
+async def test_reprocess_transactions_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN_BLOCKED_001"]},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_reprocess_transactions_returns_409_when_reprocessing_policy_blocks_publish(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].reprocessing_publish_allowed = False
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN_REPLAY_BLOCKED_001", "TXN_REPLAY_BLOCKED_002"]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "INGESTION_REPLAY_BLOCKED",
+        "message": "Reprocessing publication is blocked for 2 record(s).",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_reprocess_transactions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reprocessing_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN_RATE_001", "TXN_RATE_002", "TXN_RATE_001"]},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/reprocess/transactions blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_reprocess_transactions_records_remaining_unpublished_keys_on_partial_failure(
@@ -2897,18 +2997,23 @@ async def test_reprocess_transactions_records_remaining_unpublished_keys_on_part
 ):
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
 
-    with pytest.raises(Exception, match="Failed to publish reprocessing request"):
-        await async_test_client.post(
-            "/reprocess/transactions",
-            json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
-        )
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["TXN2", "TXN3"]
+    failed_job_id = body["detail"]["job_id"]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
         params={"status": "failed"},
     )
     assert jobs_response.status_code == 200
-    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+    assert jobs_response.json()["jobs"][0]["job_id"] == failed_job_id
 
     failure_history = await event_replay_test_client.get(
         f"/ingestion/jobs/{failed_job_id}/failures"
