@@ -1719,6 +1719,199 @@ async def test_ingest_benchmark_assignments_marks_job_failed_when_persist_fails(
     assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
 
 
+def _benchmark_definition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "benchmark_definitions": [
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "benchmark_name": "Global Balanced 60/40 Total Return",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "benchmark_status": "active",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    }
+
+
+async def test_ingest_benchmark_definitions_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_definition_payload()
+    payload["benchmark_definitions"][0].update(
+        {
+            "benchmark_family": "multi_asset_strategic",
+            "benchmark_provider": "MSCI",
+            "rebalance_frequency": "quarterly",
+            "classification_set_id": "wm_global_taxonomy_v1",
+            "classification_labels": {"asset_class": "multi_asset", "region": "global"},
+            "effective_to": "2026-12-31",
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "bmk_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers={"X-Idempotency-Key": "benchmark-definition-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "benchmark_definition"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "benchmark-definition-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_definitions"
+    ]
+    assert len(persisted) == 1
+    definition = persisted[0]
+    assert definition["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert definition["benchmark_name"] == "Global Balanced 60/40 Total Return"
+    assert definition["benchmark_type"] == "composite"
+    assert definition["benchmark_currency"] == "USD"
+    assert definition["return_convention"] == "total_return_index"
+    assert definition["benchmark_family"] == "multi_asset_strategic"
+    assert definition["benchmark_provider"] == "MSCI"
+    assert definition["rebalance_frequency"] == "quarterly"
+    assert definition["classification_set_id"] == "wm_global_taxonomy_v1"
+    assert definition["classification_labels"] == {
+        "asset_class": "multi_asset",
+        "region": "global",
+    }
+    assert definition["effective_from"].isoformat() == "2025-01-01"
+    assert definition["effective_to"].isoformat() == "2026-12-31"
+    assert definition["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert definition["source_vendor"] == "MSCI"
+    assert definition["source_record_id"] == "bmk_v20260102"
+    assert definition["quality_status"] == "accepted"
+
+
+async def test_ingest_benchmark_definitions_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_definition_payload()
+    headers = {"X-Idempotency-Key": "benchmark-definition-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_definitions"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_benchmark_definitions_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=_benchmark_definition_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_definitions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_definitions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=_benchmark_definition_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/benchmark-definitions blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_definitions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_definitions_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("benchmark definition persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_benchmark_definitions",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=_benchmark_definition_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "benchmark definition persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "benchmark definition persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
 async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,

@@ -321,6 +321,34 @@ async def test_openapi_describes_benchmark_assignment_shared_schema(async_test_c
     assert record_schema["properties"]["assignment_version"]["minimum"] == 1.0
 
 
+async def test_openapi_describes_benchmark_definition_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["BenchmarkDefinitionIngestionRequest"]
+    record_schema = components["BenchmarkDefinitionRecord"]
+
+    assert request_schema["properties"]["benchmark_definitions"]["description"] == (
+        "Benchmark definition records to ingest or upsert."
+    )
+    assert record_schema["properties"]["benchmark_id"]["description"] == (
+        "Canonical benchmark identifier."
+    )
+    assert record_schema["properties"]["benchmark_type"]["enum"] == [
+        "single_index",
+        "composite",
+    ]
+    assert record_schema["properties"]["return_convention"]["enum"] == [
+        "price_return_index",
+        "total_return_index",
+    ]
+    assert record_schema["properties"]["classification_labels"]["description"] == (
+        "Canonical classification labels."
+    )
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 

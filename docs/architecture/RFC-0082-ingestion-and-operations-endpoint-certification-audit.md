@@ -1454,3 +1454,126 @@ OpenAPI quality gate passed for API services.
 | --- | --- | --- |
 | `lotus-core#249` | Already closed optional `assignment_recorded_at` defaulting defect; current route and service default the timestamp and focused tests prove it. | No further core action required. |
 | Downstream repos | No direct downstream write-ingress consumer found for `POST /ingest/benchmark-assignments`; downstream benchmark assignment usage is through the strategic query-control-plane read route. | No downstream issue required. |
+
+## Certified Endpoint Slice: Benchmark Definition Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/benchmark-definitions`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for benchmark master definition records.
+
+The boundary is explicit:
+
+1. use it for benchmark master onboarding and benchmark lifecycle updates;
+2. use it to establish source-owned benchmark identity, type, currency, return convention,
+   classification labels, and effective-dated metadata;
+3. do not use it as a benchmark read endpoint;
+4. use query-control-plane benchmark definition, market-series, catalog, and exposure-context read
+   routes for downstream analytics sourcing;
+5. treat acknowledgement as durable reference-data upsert acceptance, not downstream analytics
+   recomputation;
+6. use `X-Idempotency-Key` for replay-safe definition submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream benchmark-definition dependency is read-side and remains separate from this
+endpoint:
+
+1. `lotus-performance` sources benchmark definitions from lotus-core for stateful benchmark,
+   returns-series, attribution, and TWR-adjacent workflows;
+2. `lotus-risk` consumes benchmark-aware analytics downstream of `lotus-performance` and documents
+   lotus-core as the benchmark definition system of record;
+3. `lotus-report`, `lotus-advise`, `lotus-manage`, `lotus-workbench`, and `lotus-gateway` had no
+   direct write-ingress consumer for `POST /ingest/benchmark-definitions` in the local scan.
+
+Related open issues such as `lotus-core#237` and `lotus-core#306` concern benchmark analytics/read
+contracts and index-catalog classification semantics. They are not defects in this write-ingress
+route.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `benchmark_definitions` collection through the DTO contract;
+2. it enforces ingestion operating mode before durable upsert;
+3. it enforces write-rate protection using accepted record count;
+4. it creates or replays ingestion jobs with idempotency semantics;
+5. it persists full request payload lineage on the ingestion job;
+6. it upserts benchmark rows using benchmark id and effective-from date as the conflict identity;
+7. it updates display name, type, currency, return convention, lifecycle status, family, provider,
+   rebalance frequency, classification labels, effective end date, source lineage, and quality
+   status on conflict;
+8. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+9. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+   failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice:
+
+1. route purpose says when to use benchmark definition ingress and that it is durable upsert;
+2. all definition attributes have descriptions, types, and examples;
+3. `benchmark_type` is constrained to `single_index` or `composite`;
+4. `return_convention` is constrained to `price_return_index` or `total_return_index`;
+5. `classification_labels` are modeled as source-owned canonical labels, not a downstream-derived
+   analytics result;
+6. ACK fields are covered by the shared batch-ingestion response schema;
+7. `429`, `500`, and `503` operational response examples are present.
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for benchmark definition options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_benchmark_definitions_returns_ack_and_persists_full_contract`
+2. `test_ingest_benchmark_definitions_replays_duplicate_idempotency_key`
+3. `test_ingest_benchmark_definitions_returns_503_when_mode_blocks_writes`
+4. `test_ingest_benchmark_definitions_returns_429_when_rate_limited`
+5. `test_ingest_benchmark_definitions_marks_job_failed_when_persist_fails`
+6. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+7. `test_reference_data_ingest_reports_bookkeeping_failure_after_persist`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_benchmark_definition_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_definitions_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_definitions_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_definitions_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_definitions_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_benchmark_definitions_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingest_reports_bookkeeping_failure_after_persist tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_benchmark_definition_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+2 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue found for `POST /ingest/benchmark-definitions` in this pass. | No GitHub action required. |
+| `lotus-core#237` | Open grouped benchmark analytics/read-contract request; not a defect in benchmark definition write ingress. | Track separately under analytics/read contract work. |
+| `lotus-core#306` | Open index-catalog classification issue; not a defect in benchmark definition write ingress. | Track separately under index catalog/classification work. |
+| Downstream repos | No direct downstream write-ingress consumer found for `POST /ingest/benchmark-definitions`; downstream usage is via strategic benchmark read contracts. | No downstream issue required. |
