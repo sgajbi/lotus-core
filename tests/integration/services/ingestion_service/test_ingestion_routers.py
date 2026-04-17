@@ -556,6 +556,35 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             queue_latency_threshold_seconds: float = 5.0,
             backlog_age_threshold_seconds: float = 300.0,
         ):
+            slo_status = await self.get_slo_status(
+                lookback_minutes=lookback_minutes,
+                failure_rate_threshold=failure_rate_threshold,
+                queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+                backlog_age_threshold_seconds=backlog_age_threshold_seconds,
+            )
+            error_budget = await self.get_error_budget_status(
+                lookback_minutes=lookback_minutes,
+                failure_rate_threshold=failure_rate_threshold,
+            )
+            triggered_signals: list[str] = []
+            if slo_status["breach_failure_rate"]:
+                triggered_signals.append("breach_failure_rate")
+            if slo_status["breach_queue_latency"]:
+                triggered_signals.append("breach_queue_latency")
+            if slo_status["breach_backlog_age"]:
+                triggered_signals.append("breach_backlog_age")
+            if triggered_signals:
+                return {
+                    "lookback_minutes": lookback_minutes,
+                    "operating_band": "orange",
+                    "recommended_action": (
+                        "Aggressively scale calculators and pause non-critical replay operations."
+                    ),
+                    "backlog_age_seconds": slo_status["backlog_age_seconds"],
+                    "dlq_pressure_ratio": error_budget["dlq_pressure_ratio"],
+                    "failure_rate": slo_status["failure_rate"],
+                    "triggered_signals": triggered_signals,
+                }
             return {
                 "lookback_minutes": lookback_minutes,
                 "operating_band": "yellow",
@@ -4188,13 +4217,60 @@ async def test_ingestion_error_budget_endpoint_evaluates_burn_rate_and_backlog_g
         assert invalid.status_code == 422
 
 
-async def test_ingestion_operating_band_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/operating-band")
+async def test_ingestion_operating_band_endpoint_classifies_breach_signals(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/operating-band",
+        params={
+            "lookback_minutes": 30,
+            "failure_rate_threshold": "0.20",
+            "queue_latency_threshold_seconds": 0.1,
+            "backlog_age_threshold_seconds": 1,
+        },
+    )
+
     assert response.status_code == 200
-    body = response.json()
-    assert body["operating_band"] in {"green", "yellow", "orange", "red"}
-    assert "recommended_action" in body
-    assert "triggered_signals" in body
+    assert response.json() == {
+        "lookback_minutes": 30,
+        "operating_band": "orange",
+        "recommended_action": (
+            "Aggressively scale calculators and pause non-critical replay operations."
+        ),
+        "backlog_age_seconds": 12.0,
+        "dlq_pressure_ratio": "0.4",
+        "failure_rate": "0.3333333333333333333333333333",
+        "triggered_signals": [
+            "breach_failure_rate",
+            "breach_queue_latency",
+            "breach_backlog_age",
+        ],
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"failure_rate_threshold": "-0.01"},
+        {"failure_rate_threshold": "1.01"},
+        {"queue_latency_threshold_seconds": 0},
+        {"queue_latency_threshold_seconds": 601},
+        {"backlog_age_threshold_seconds": 0},
+        {"backlog_age_threshold_seconds": 86401},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/operating-band",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_operating_policy_endpoint(event_replay_test_client: httpx.AsyncClient):

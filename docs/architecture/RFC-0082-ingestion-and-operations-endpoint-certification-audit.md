@@ -968,6 +968,106 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Operating-Band Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/operating-band`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for converting ingestion health signals into a
+single runbook-ready severity band.
+
+Use it to:
+
+1. classify ingestion runtime posture as `green`, `yellow`, `orange`, or `red`;
+2. combine backlog age, DLQ pressure, and SLO breach signals into one operational decision;
+3. drive autoscaling, replay safety gating, and incident triage automation;
+4. expose the exact triggered signals and recommended action behind the band.
+
+Do not use it as a front-office data contract or as a replacement for the underlying SLO,
+error-budget, consumer-lag, DLQ, and job-level diagnostics.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/operating-band` or
+   `IngestionOperatingBandResponse` consumer in `lotus-gateway`, `lotus-risk`,
+   `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. current consumers are expected to be operations tooling, runbooks, and automation rather than
+   front-office product surfaces;
+3. no gateway issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct composed operational evidence source:
+
+1. it calls `get_slo_status` with caller-supplied thresholds;
+2. it calls `get_error_budget_status` to incorporate DLQ pressure;
+3. it classifies via `classify_operating_band` and the runtime operating-band policy;
+4. it returns a runbook action and triggered signal list, making severity decisions auditable.
+
+The supported request options are:
+
+1. `lookback_minutes`, bounded from 5 to 1440;
+2. `failure_rate_threshold`, bounded from 0 to 1;
+3. `queue_latency_threshold_seconds`, bounded from 0.1 to 600;
+4. `backlog_age_threshold_seconds`, bounded from 1 to 86400.
+
+The supported output contract is:
+
+1. `lookback_minutes`;
+2. `operating_band`;
+3. `recommended_action`;
+4. `backlog_age_seconds`;
+5. `dlq_pressure_ratio`;
+6. `failure_rate`;
+7. `triggered_signals`.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain replay safety and incident-triage use;
+2. all query parameters include descriptions, examples, and min/max bounds;
+3. the `200` response includes a concrete operating-band example;
+4. response attributes carry descriptions and examples through the DTO schema, including the
+   explicit `green`/`yellow`/`orange`/`red` enum.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/operating-band`, `IngestionOperatingBandResponse`, or operating-band vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for classifier options, validation bounds, severity output,
+recommended action, numeric signals, and triggered breach signals.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_operating_band_endpoint_classifies_breach_signals`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_event_replay_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_operating_band_endpoint_classifies_breach_signals tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

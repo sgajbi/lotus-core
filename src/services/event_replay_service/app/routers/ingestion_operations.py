@@ -161,6 +161,16 @@ INGESTION_ERROR_BUDGET_STATUS_RESPONSE_EXAMPLE = {
     "breach_backlog_growth": False,
 }
 
+INGESTION_OPERATING_BAND_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "operating_band": "yellow",
+    "recommended_action": "Scale up one band and monitor DLQ pressure.",
+    "backlog_age_seconds": 42.0,
+    "dlq_pressure_ratio": "0.3000",
+    "failure_rate": "0.0125",
+    "triggered_signals": ["backlog_age_seconds>=15", "dlq_pressure_ratio>=0.25"],
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1113,6 +1123,12 @@ async def get_ingestion_error_budget_status(
         "When: Use for autoscaling decisions, replay safety gating, and incident "
         "triage automation."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Canonical ingestion operating severity band and runbook action.",
+            "content": {"application/json": {"example": INGESTION_OPERATING_BAND_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_operating_band(
     lookback_minutes: int = Query(

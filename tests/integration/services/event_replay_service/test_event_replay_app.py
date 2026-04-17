@@ -121,6 +121,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     consumer_lag = schema["paths"]["/ingestion/health/consumer-lag"]["get"]
     slo_status = schema["paths"]["/ingestion/health/slo"]["get"]
     error_budget = schema["paths"]["/ingestion/health/error-budget"]["get"]
+    operating_band = schema["paths"]["/ingestion/health/operating-band"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -311,6 +312,26 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert error_budget_example["remaining_error_budget"] == "0.008125"
     assert error_budget_example["dlq_pressure_ratio"] == "0.4000"
 
+    operating_band_params = {param["name"]: param for param in operating_band["parameters"]}
+    operating_band_example = operating_band["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert operating_band["summary"] == "Get ingestion operating band"
+    assert "replay safety gating" in operating_band["description"]
+    assert operating_band_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert operating_band_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert _schema_bound(operating_band_params["failure_rate_threshold"]["schema"], "minimum") == 0
+    assert _schema_bound(operating_band_params["failure_rate_threshold"]["schema"], "maximum") == 1
+    assert operating_band_params["queue_latency_threshold_seconds"]["schema"]["minimum"] == 0.1
+    assert operating_band_params["queue_latency_threshold_seconds"]["schema"]["maximum"] == 600
+    assert operating_band_params["backlog_age_threshold_seconds"]["schema"]["minimum"] == 1
+    assert operating_band_params["backlog_age_threshold_seconds"]["schema"]["maximum"] == 86400
+    assert operating_band_example["operating_band"] == "yellow"
+    assert operating_band_example["triggered_signals"] == [
+        "backlog_age_seconds>=15",
+        "dlq_pressure_ratio>=0.25",
+    ]
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -330,6 +351,7 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     consumer_lag_group = schema["IngestionConsumerLagGroupResponse"]
     slo_status = schema["IngestionSloStatusResponse"]
     error_budget = schema["IngestionErrorBudgetStatusResponse"]
+    operating_band = schema["IngestionOperatingBandResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -381,6 +403,18 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     )
     assert error_budget["properties"]["dlq_pressure_ratio"]["description"] == (
         "DLQ pressure ratio against budget (dlq_events_in_window / dlq_budget_events_per_window)."
+    )
+    assert operating_band["properties"]["operating_band"]["enum"] == [
+        "green",
+        "yellow",
+        "orange",
+        "red",
+    ]
+    assert operating_band["properties"]["recommended_action"]["description"] == (
+        "Runbook-oriented next action for this band."
+    )
+    assert operating_band["properties"]["triggered_signals"]["description"] == (
+        "List of signals that triggered the final band decision."
     )
 
 
