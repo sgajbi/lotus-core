@@ -275,6 +275,126 @@ All checks passed.
 OpenAPI quality gate passed for API services.
 ```
 
+## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
+
+This certification pass covers:
+
+1. `POST /ingest/reference/instrument-lookthrough-components`
+
+### Route Contract Decision
+
+This is the governed write-ingress endpoint for source-owned fund and structured-product
+look-through composition rows.
+
+The boundary is explicit:
+
+1. use it to publish effective-dated parent-to-component decomposition weights;
+2. use it when source systems introduce, correct, or retire fund/structured-product component
+   weights;
+3. do not use it as a read endpoint for allocation views;
+4. use `POST /reporting/portfolio-summary/query` or gateway allocation surfaces for downstream
+   allocation analysis, depending on the consuming layer;
+5. treat acknowledgement as durable reference-data upsert acceptance, not downstream allocation
+   recomputation;
+6. use `X-Idempotency-Key` for replay-safe source batch submissions.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this write-ingress route directly.
+
+Current downstream usage is read-side through allocation contracts:
+
+1. `lotus-core` allocation/reporting services read `instrument_lookthrough_components` to apply
+   `look_through_mode=prefer_look_through` when source-owned component rows are available;
+2. `lotus-gateway` and `lotus-report` consume allocation/reporting contracts with look-through
+   request and capability metadata;
+3. `lotus-gateway#72` is already closed after gateway adopted region and look-through allocation
+   support;
+4. no direct write-ingress consumer was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`,
+   `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`.
+
+### Upstream Integration Assessment
+
+The route uses the correct reference-data upsert architecture:
+
+1. it validates a non-empty `lookthrough_components` collection through the DTO contract;
+2. it restricts `component_weight` to the unit interval `[0, 1]`;
+3. it preserves effective windows and source lineage for source-owned decomposition rows;
+4. it enforces ingestion operating mode before durable upsert;
+5. it enforces write-rate protection using accepted record count;
+6. it creates or replays ingestion jobs with idempotency semantics;
+7. it persists full request payload lineage on the ingestion job;
+8. it upserts rows using `parent_security_id`, `component_security_id`, and `effective_from` as
+   the conflict identity;
+9. it updates effective end date, component weight, source system, and source record id on
+   conflict;
+10. it marks jobs queued after successful upsert and records post-persist bookkeeping failures;
+11. it returns structured `500` `REFERENCE_DATA_PERSIST_FAILED` responses after marking the job
+    failed when durable upsert fails.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice:
+
+1. route purpose says when to use look-through component ingestion;
+2. all look-through component attributes have descriptions, types, and examples;
+3. `component_weight` is documented with minimum and maximum constraints;
+4. effective dates, source system, and source record id are modeled explicitly;
+5. ACK fields are covered by the shared batch-ingestion response schema;
+6. `429`, `500`, and `503` operational response examples are present.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `instrument-lookthrough-components`, `InstrumentLookthroughComponent`, or look-through vocabulary in this pass. | No core issue update required. |
+| `lotus-gateway#72` | Already closed after gateway adopted region and look-through allocation support. Current scans show gateway uses allocation look-through controls, not this write-ingress route. | Keep closed unless fresh route-level evidence appears. |
+| Downstream repos | No direct downstream write-ingress consumer found. Downstream apps consume look-through through strategic allocation/reporting read contracts. | No new downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for instrument look-through options and operational controls.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingest_instrument_lookthrough_components_returns_ack_and_persists_full_contract`
+2. `test_ingest_instrument_lookthrough_components_replays_duplicate_idempotency_key`
+3. `test_ingest_instrument_lookthrough_components_rejects_invalid_weight`
+4. `test_ingest_instrument_lookthrough_components_returns_503_when_mode_blocks_writes`
+5. `test_ingest_instrument_lookthrough_components_returns_429_when_rate_limited`
+6. `test_ingest_instrument_lookthrough_components_marks_job_failed_when_persist_fails`
+7. `test_reference_data_ingestion_endpoints_return_canonical_ack_contract`
+8. `test_openapi_describes_remaining_ingestion_operational_responses`
+9. `test_openapi_describes_instrument_lookthrough_shared_schema`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instrument_lookthrough_components_returns_ack_and_persists_full_contract tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instrument_lookthrough_components_replays_duplicate_idempotency_key tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instrument_lookthrough_components_rejects_invalid_weight tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instrument_lookthrough_components_returns_503_when_mode_blocks_writes tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instrument_lookthrough_components_returns_429_when_rate_limited tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingest_instrument_lookthrough_components_marks_job_failed_when_persist_fails tests\integration\services\ingestion_service\test_ingestion_routers.py::test_reference_data_ingestion_endpoints_return_canonical_ack_contract tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_remaining_ingestion_operational_responses tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py::test_openapi_describes_instrument_lookthrough_shared_schema -q
+```
+
+Result:
+
+```text
+19 passed
+```
+
+Additional focused gates:
+
+```powershell
+python -m ruff check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python -m ruff format --check tests\integration\services\ingestion_service\test_ingestion_routers.py tests\integration\services\ingestion_service\test_ingestion_main_app_contract.py
+python scripts\openapi_quality_gate.py
+```
+
+Results:
+
+```text
+All checks passed.
+2 files already formatted.
+OpenAPI quality gate passed for API services.
+```
+
 ## Certified Endpoint Slice: Cash Account Master Write Ingress
 
 This certification pass covers:

@@ -707,6 +707,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "risk_free_series": [],
                 "classification_taxonomy": [],
                 "cash_accounts": [],
+                "lookthrough_components": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -751,7 +752,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def upsert_instrument_lookthrough_components(
             self, records: list[dict[str, object]]
         ) -> None:
-            return None
+            self.persisted["lookthrough_components"].extend(records)
 
     class FakeBusinessCalendarRepository:
         def __init__(self):
@@ -4315,28 +4316,197 @@ async def test_ingest_cash_account_masters_rejects_empty_batch(
     assert ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"] == []
 
 
-async def test_ingest_instrument_lookthrough_components_endpoint(
-    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
-):
-    mock_kafka_producer.publish_message.reset_mock()
-    payload = {
+def _instrument_lookthrough_component_payload() -> dict[str, list[dict[str, object]]]:
+    return {
         "lookthrough_components": [
             {
-                "parent_security_id": "FUND_001",
-                "component_security_id": "ETF_001",
+                "parent_security_id": "FUND_GLOBAL_60_40",
+                "component_security_id": "ETF_WORLD_EQUITY",
                 "effective_from": "2026-01-01",
                 "component_weight": "0.6000000000",
             }
         ]
     }
 
+
+async def test_ingest_instrument_lookthrough_components_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _instrument_lookthrough_component_payload()
+    payload["lookthrough_components"][0].update(
+        {
+            "effective_to": "2026-12-31",
+            "source_system": "lotus-manage",
+            "source_record_id": "lt-001",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=payload,
+        headers={"X-Idempotency-Key": "instrument-lookthrough-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "instrument_lookthrough_component"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "instrument-lookthrough-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    mock_kafka_producer.publish_message.assert_not_called()
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "lookthrough_components"
+    ]
+    assert len(persisted) == 1
+    component = persisted[0]
+    assert component["parent_security_id"] == "FUND_GLOBAL_60_40"
+    assert component["component_security_id"] == "ETF_WORLD_EQUITY"
+    assert component["effective_from"].isoformat() == "2026-01-01"
+    assert component["effective_to"].isoformat() == "2026-12-31"
+    assert component["component_weight"] == Decimal("0.6000000000")
+    assert component["source_system"] == "lotus-manage"
+    assert component["source_record_id"] == "lt-001"
+
+
+async def test_ingest_instrument_lookthrough_components_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _instrument_lookthrough_component_payload()
+    headers = {"X-Idempotency-Key": "instrument-lookthrough-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "lookthrough_components"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_instrument_lookthrough_components_rejects_invalid_weight(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _instrument_lookthrough_component_payload()
+    payload["lookthrough_components"][0]["component_weight"] = "1.1000000000"
+
     response = await async_test_client.post(
         "/ingest/reference/instrument-lookthrough-components",
         json=payload,
     )
 
-    assert response.status_code == 202
-    mock_kafka_producer.publish_message.assert_not_called()
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["lookthrough_components"]
+        == []
+    )
+
+
+async def test_ingest_instrument_lookthrough_components_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=_instrument_lookthrough_component_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["lookthrough_components"]
+        == []
+    )
+
+
+async def test_ingest_instrument_lookthrough_components_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=_instrument_lookthrough_component_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/reference/instrument-lookthrough-components blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["lookthrough_components"]
+        == []
+    )
+
+
+async def test_ingest_instrument_lookthrough_components_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("instrument lookthrough component persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_instrument_lookthrough_components",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=_instrument_lookthrough_component_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "instrument lookthrough component persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "instrument lookthrough component persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
 
 
 async def test_ingest_portfolio_bundle_endpoint(

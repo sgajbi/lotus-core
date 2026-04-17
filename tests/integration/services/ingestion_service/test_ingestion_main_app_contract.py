@@ -561,6 +561,35 @@ async def test_openapi_describes_cash_account_master_shared_schema(async_test_cl
     assert record_schema["properties"]["source_system"]["examples"] == ["lotus-manage"]
 
 
+async def test_openapi_describes_instrument_lookthrough_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/reference/instrument-lookthrough-components"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["InstrumentLookthroughComponentIngestionRequest"]
+    record_schema = components["InstrumentLookthroughComponentRecord"]
+
+    assert "source-owned look-through views" in path["description"]
+    assert request_schema["properties"]["lookthrough_components"]["description"] == (
+        "Instrument look-through composition rows to ingest or upsert."
+    )
+    assert record_schema["properties"]["parent_security_id"]["description"] == (
+        "Structured product or fund security identifier being decomposed."
+    )
+    assert record_schema["properties"]["component_security_id"]["description"] == (
+        "Underlying component security identifier."
+    )
+    assert record_schema["properties"]["effective_from"]["examples"] == ["2026-01-01"]
+    assert record_schema["properties"]["effective_to"]["examples"] == ["2026-12-31"]
+    component_weight_number = record_schema["properties"]["component_weight"]["anyOf"][0]
+    assert component_weight_number["minimum"] == 0.0
+    assert component_weight_number["maximum"] == 1.0
+    assert record_schema["properties"]["source_system"]["examples"] == ["lotus-manage"]
+    assert record_schema["properties"]["source_record_id"]["examples"] == ["lt-001"]
+
+
 async def test_openapi_describes_business_date_shared_schema(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
