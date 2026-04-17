@@ -1068,6 +1068,102 @@ Result:
 3 passed
 ```
 
+## Certified Endpoint Slice: Ingestion Operating Policy Operations
+
+This certification pass covers:
+
+1. `GET /ingestion/health/policy`
+
+### Route Contract Decision
+
+This is the governed operator/control-plane endpoint for exposing the active ingestion operating
+policy and replay guardrails.
+
+Use it to:
+
+1. detect runtime policy drift across SLO, error-budget, operating-band, and replay gating flows;
+2. align runbooks and automation with the active policy values;
+3. expose replay limits, DLQ budget, worker/scheduler settings, operating-band thresholds, and
+   partition/replay isolation strategies;
+4. verify deterministic `policy_fingerprint` changes when policy values change.
+
+Do not use it as a front-office data contract or as a write surface. It is read-only operational
+metadata for support, SRE, QA, and platform automation.
+
+### Consumer And Integration Reality
+
+No live downstream product code was found calling this route directly.
+
+Current posture:
+
+1. local scans found no direct `/ingestion/health/policy`, `IngestionOpsPolicyResponse`,
+   `policy_fingerprint`, or `replay_isolation_mode` consumer in `lotus-gateway`, `lotus-risk`,
+   `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`;
+2. current consumers are expected to be operations tooling, runbooks, platform QA, and automation;
+3. no downstream issue is required for this slice.
+
+### Upstream Integration Assessment
+
+The route uses the correct runtime settings source:
+
+1. it exposes defaults and guardrails from ingestion service runtime policy;
+2. it normalizes unsupported replay isolation or partition-growth values to governed fallbacks;
+3. it clamps guardrail and worker/scheduler counts to positive minimums;
+4. it fingerprints the serialized active policy values for drift detection;
+5. it exposes `replay_dry_run_supported` truthfully as a control-plane capability.
+
+The endpoint has no query options and no request body.
+
+The supported output contract is the full `IngestionOpsPolicyResponse`, including:
+
+1. policy identity and fingerprint;
+2. health/SLO default thresholds;
+3. replay and backlog guardrails;
+4. worker and scheduler intervals/batch settings;
+5. DLQ budget;
+6. operating-band backlog/DLQ thresholds;
+7. calculator peak lag-age envelopes;
+8. replay isolation and partition growth strategies;
+9. dry-run support.
+
+### Swagger / OpenAPI Assessment
+
+Swagger is adequate for this slice and now has endpoint-specific assertions:
+
+1. the operation summary and description explain config-drift and runbook-alignment use;
+2. the `200` response includes a complete policy example;
+3. response attributes carry descriptions, types, examples, and enum values through the DTO schema.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| Open `lotus-core` issues | No open route-specific issue was found for `/ingestion/health/policy`, `IngestionOpsPolicyResponse`, `policy_fingerprint`, or replay-isolation vocabulary in this pass. | No core issue update required. |
+| Downstream repos | No direct downstream consumer or route-specific open issue was found in `lotus-gateway`, `lotus-risk`, `lotus-performance`, `lotus-report`, `lotus-advise`, `lotus-manage`, or `lotus-workbench`. | No downstream issue required. |
+
+### Test-Pyramid Assessment
+
+Coverage is now endpoint-specific for the complete policy envelope rather than selected key
+presence.
+
+Focused endpoint proof on April 17, 2026:
+
+1. `test_ingestion_operating_policy_endpoint`
+2. `test_openapi_describes_event_replay_operational_parameters`
+3. `test_openapi_describes_ingestion_job_shared_schema_depth`
+
+Validation command:
+
+```powershell
+python -m pytest tests\integration\services\ingestion_service\test_ingestion_routers.py::test_ingestion_operating_policy_endpoint tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_event_replay_operational_parameters tests\integration\services\event_replay_service\test_event_replay_app.py::test_openapi_describes_ingestion_job_shared_schema_depth -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
 ## Certified Endpoint Slice: Instrument Look-Through Component Write Ingress
 
 This certification pass covers:

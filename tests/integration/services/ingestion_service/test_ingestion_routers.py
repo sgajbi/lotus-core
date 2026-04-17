@@ -4275,20 +4275,39 @@ async def test_ingestion_operating_band_endpoint_classifies_breach_signals(
 
 async def test_ingestion_operating_policy_endpoint(event_replay_test_client: httpx.AsyncClient):
     response = await event_replay_test_client.get("/ingestion/health/policy")
+
     assert response.status_code == 200
-    body = response.json()
-    assert body["policy_version"] == "v1"
-    assert body["policy_fingerprint"]
-    assert "lookback_minutes_default" in body
-    assert "replay_max_records_per_request" in body
-    assert "reprocessing_worker_batch_size" in body
-    assert "valuation_scheduler_dispatch_rounds" in body
-    assert "operating_band_red_backlog_age_seconds" in body
-    assert "calculator_peak_lag_age_seconds" in body
-    assert body["replay_isolation_mode"] in {"shared_workers", "dedicated_workers"}
-    assert body["partition_growth_strategy"] in {
-        "scale_out_only",
-        "pre_shard_large_portfolios",
+    assert response.json() == {
+        "policy_version": "v1",
+        "policy_fingerprint": "e6a9f2cc3bb5e5a7",
+        "lookback_minutes_default": 60,
+        "failure_rate_threshold_default": "0.03",
+        "queue_latency_threshold_seconds_default": 5.0,
+        "backlog_age_threshold_seconds_default": 300.0,
+        "replay_max_records_per_request": 5000,
+        "replay_max_backlog_jobs": 5000,
+        "reprocessing_worker_poll_interval_seconds": 10,
+        "reprocessing_worker_batch_size": 10,
+        "valuation_scheduler_poll_interval_seconds": 30,
+        "valuation_scheduler_batch_size": 100,
+        "valuation_scheduler_dispatch_rounds": 3,
+        "dlq_budget_events_per_window": 10,
+        "operating_band_yellow_backlog_age_seconds": 15.0,
+        "operating_band_orange_backlog_age_seconds": 60.0,
+        "operating_band_red_backlog_age_seconds": 180.0,
+        "operating_band_yellow_dlq_pressure_ratio": "0.25",
+        "operating_band_orange_dlq_pressure_ratio": "0.50",
+        "operating_band_red_dlq_pressure_ratio": "1.0",
+        "calculator_peak_lag_age_seconds": {
+            "position": 30,
+            "cost": 45,
+            "valuation": 60,
+            "cashflow": 45,
+            "timeseries": 120,
+        },
+        "replay_isolation_mode": "shared_workers",
+        "partition_growth_strategy": "scale_out_only",
+        "replay_dry_run_supported": True,
     }
 
 

@@ -171,6 +171,39 @@ INGESTION_OPERATING_BAND_RESPONSE_EXAMPLE = {
     "triggered_signals": ["backlog_age_seconds>=15", "dlq_pressure_ratio>=0.25"],
 }
 
+INGESTION_OPS_POLICY_RESPONSE_EXAMPLE = {
+    "policy_version": "v1",
+    "policy_fingerprint": "e6a9f2cc3bb5e5a7",
+    "lookback_minutes_default": 60,
+    "failure_rate_threshold_default": "0.03",
+    "queue_latency_threshold_seconds_default": 5.0,
+    "backlog_age_threshold_seconds_default": 300.0,
+    "replay_max_records_per_request": 5000,
+    "replay_max_backlog_jobs": 5000,
+    "reprocessing_worker_poll_interval_seconds": 10,
+    "reprocessing_worker_batch_size": 10,
+    "valuation_scheduler_poll_interval_seconds": 30,
+    "valuation_scheduler_batch_size": 100,
+    "valuation_scheduler_dispatch_rounds": 3,
+    "dlq_budget_events_per_window": 10,
+    "operating_band_yellow_backlog_age_seconds": 15.0,
+    "operating_band_orange_backlog_age_seconds": 60.0,
+    "operating_band_red_backlog_age_seconds": 180.0,
+    "operating_band_yellow_dlq_pressure_ratio": "0.25",
+    "operating_band_orange_dlq_pressure_ratio": "0.50",
+    "operating_band_red_dlq_pressure_ratio": "1.0",
+    "calculator_peak_lag_age_seconds": {
+        "position": 30,
+        "cost": 45,
+        "valuation": 60,
+        "cashflow": 45,
+        "timeseries": 120,
+    },
+    "replay_isolation_mode": "shared_workers",
+    "partition_growth_strategy": "scale_out_only",
+    "replay_dry_run_supported": True,
+}
+
 INGESTION_RETRY_REQUEST_EXAMPLES = {
     "full_retry": {
         "summary": "Replay the full stored payload",
@@ -1181,6 +1214,12 @@ async def get_ingestion_operating_band(
         "When: Use to prevent config drift and keep runbooks/automation aligned "
         "with runtime policy."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Active ingestion operating policy and replay guardrails.",
+            "content": {"application/json": {"example": INGESTION_OPS_POLICY_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_operating_policy(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),

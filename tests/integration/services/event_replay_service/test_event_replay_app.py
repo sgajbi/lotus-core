@@ -122,6 +122,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     slo_status = schema["paths"]["/ingestion/health/slo"]["get"]
     error_budget = schema["paths"]["/ingestion/health/error-budget"]["get"]
     operating_band = schema["paths"]["/ingestion/health/operating-band"]["get"]
+    ops_policy = schema["paths"]["/ingestion/health/policy"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
@@ -332,6 +333,14 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
         "dlq_pressure_ratio>=0.25",
     ]
 
+    ops_policy_example = ops_policy["responses"]["200"]["content"]["application/json"]["example"]
+    assert ops_policy["summary"] == "Get ingestion operating policy thresholds"
+    assert "prevent config drift" in ops_policy["description"]
+    assert ops_policy_example["policy_version"] == "v1"
+    assert ops_policy_example["replay_max_records_per_request"] == 5000
+    assert ops_policy_example["calculator_peak_lag_age_seconds"]["timeseries"] == 120
+    assert ops_policy_example["replay_dry_run_supported"] is True
+
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
 
@@ -506,6 +515,18 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     )
     assert ops_policy["properties"]["replay_dry_run_supported"]["description"] == (
         "Whether replay dry-run mode is supported by the active control plane."
+    )
+    assert ops_policy["properties"]["replay_isolation_mode"]["enum"] == [
+        "shared_workers",
+        "dedicated_workers",
+    ]
+    assert ops_policy["properties"]["partition_growth_strategy"]["enum"] == [
+        "scale_out_only",
+        "pre_shard_large_portfolios",
+    ]
+    assert ops_policy["properties"]["calculator_peak_lag_age_seconds"]["description"] == (
+        "Peak-load lag-age SLO envelope (seconds) by calculator group "
+        "(position, cost, valuation, cashflow, timeseries)."
     )
     assert queue_health["properties"]["queues"]["description"] == (
         "Per-job-type queue health rows sorted by highest pending pressure."
