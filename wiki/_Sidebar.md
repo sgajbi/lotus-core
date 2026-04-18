@@ -9,6 +9,7 @@
 - [Ingestion Service](Ingestion-Service)
 - [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
+- [Cost Calculator](Cost-Calculator)
 - [Cashflow Calculator](Cashflow-Calculator)
 - [Position Calculator](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)

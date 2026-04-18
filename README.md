@@ -216,6 +216,8 @@ Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wik
   [wiki/Home.md](wiki/Home.md)
 - wiki data model:
   [wiki/Data-Models.md](wiki/Data-Models.md)
+- wiki cost calculator:
+  [wiki/Cost-Calculator.md](wiki/Cost-Calculator.md)
 - wiki cashflow calculator:
   [wiki/Cashflow-Calculator.md](wiki/Cashflow-Calculator.md)
 - wiki migration guide:

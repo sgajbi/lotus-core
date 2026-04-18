@@ -67,6 +67,7 @@ Downstream workers consume completion topics and build the supported derived sta
 
 See also:
 
+- [Cost Calculator](Cost-Calculator)
 - [Cashflow Calculator](Cashflow-Calculator)
 - [Position Calculator](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
