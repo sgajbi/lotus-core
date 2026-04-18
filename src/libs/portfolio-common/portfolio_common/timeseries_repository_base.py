@@ -505,3 +505,40 @@ class TimeseriesRepositoryBase:
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    @async_timed(repository="TimeseriesRepository", method="get_next_snapshots_after")
+    async def get_next_snapshots_after(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        a_date: date,
+        epoch: int,
+        max_rows: int,
+    ) -> List[DailyPositionSnapshot]:
+        ranked_future_snapshots = (
+            select(
+                DailyPositionSnapshot.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=(DailyPositionSnapshot.date,),
+                    order_by=(DailyPositionSnapshot.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.security_id == security_id,
+                DailyPositionSnapshot.date > a_date,
+                DailyPositionSnapshot.epoch <= epoch,
+            )
+            .subquery()
+        )
+        stmt = (
+            select(DailyPositionSnapshot)
+            .join(ranked_future_snapshots, DailyPositionSnapshot.id == ranked_future_snapshots.c.id)
+            .where(ranked_future_snapshots.c.rn == 1)
+            .order_by(DailyPositionSnapshot.date.asc())
+            .limit(max_rows)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().all()

@@ -149,15 +149,14 @@ class PositionTimeseriesConsumer(BaseConsumer):
         correlation_id: str,
     ) -> None:
         previous_snapshot = current_snapshot
-        for _ in range(MAX_DEPENDENT_PROPAGATION_ROWS):
-            next_snapshot = await repo.get_next_snapshot_after(
-                previous_snapshot.portfolio_id,
-                previous_snapshot.security_id,
-                previous_snapshot.date,
-                epoch,
-            )
-            if next_snapshot is None:
-                return
+        next_snapshots = await repo.get_next_snapshots_after(
+            previous_snapshot.portfolio_id,
+            previous_snapshot.security_id,
+            previous_snapshot.date,
+            epoch,
+            MAX_DEPENDENT_PROPAGATION_ROWS,
+        )
+        for next_snapshot in next_snapshots:
 
             changed, _ = await self._materialize_position_timeseries(
                 repo,
@@ -177,12 +176,13 @@ class PositionTimeseriesConsumer(BaseConsumer):
             )
             previous_snapshot = next_snapshot
 
-        logger.warning(
-            "Stopped dependent position-timeseries propagation after %s rows for %s/%s.",
-            MAX_DEPENDENT_PROPAGATION_ROWS,
-            current_snapshot.portfolio_id,
-            current_snapshot.security_id,
-        )
+        if len(next_snapshots) == MAX_DEPENDENT_PROPAGATION_ROWS:
+            logger.warning(
+                "Stopped dependent position-timeseries propagation after %s rows for %s/%s.",
+                MAX_DEPENDENT_PROPAGATION_ROWS,
+                current_snapshot.portfolio_id,
+                current_snapshot.security_id,
+            )
 
     async def _process_message_with_retry(self, msg: Message):
         try:

@@ -492,6 +492,10 @@ Implementation status as of 2026-04-18:
 13. another drain-path cleanup reordered dependent propagation so the worker now checks whether the
     downstream `position_timeseries` row exists before fetching same-day cashflows; that removes a
     wasted query on absent dependent days while preserving the existing stop-propagation behavior.
+14. dependent propagation now batch-fetches future authoritative snapshots instead of walking them
+    with one `get_next_snapshot_after` query per day; this reduces read amplification in the
+    valuation-to-position-timeseries drain path while keeping the same “latest epoch per future
+    date” semantics.
 
 Phase 1 exit criteria:
 
