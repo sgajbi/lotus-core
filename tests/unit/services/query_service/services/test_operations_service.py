@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.repositories.operations_repository import (
     ExportJobHealthSummary,
     JobHealthSummary,
+    LoadRunProgressSummary,
     ReconciliationFindingSummary,
     ReprocessingHealthSummary,
 )
@@ -2444,5 +2445,67 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         stale_minutes=15,
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
+        as_of=response.generated_at_utc,
+    )
+
+
+async def test_get_load_run_progress_derives_remaining_work_counts(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_load_run_progress.return_value = LoadRunProgressSummary(
+        portfolios_ingested=10,
+        transactions_ingested=100,
+        portfolios_with_snapshots=8,
+        snapshot_rows=80,
+        portfolios_with_position_timeseries=7,
+        position_timeseries_rows=70,
+        portfolios_with_timeseries=6,
+        timeseries_rows=6,
+        pending_valuation_jobs=3,
+        processing_valuation_jobs=2,
+        open_valuation_jobs=5,
+        pending_aggregation_jobs=1,
+        processing_aggregation_jobs=0,
+        open_aggregation_jobs=1,
+        failed_valuation_jobs=0,
+        failed_aggregation_jobs=0,
+        oldest_pending_valuation_date=date(2026, 4, 17),
+        oldest_pending_aggregation_date=date(2026, 4, 17),
+        latest_snapshot_date=date(2026, 4, 17),
+        latest_timeseries_date=date(2026, 4, 17),
+        latest_snapshot_materialized_at_utc=datetime(2026, 4, 18, 8, 0, tzinfo=timezone.utc),
+        latest_position_timeseries_materialized_at_utc=datetime(
+            2026, 4, 18, 8, 5, tzinfo=timezone.utc
+        ),
+        latest_portfolio_timeseries_materialized_at_utc=datetime(
+            2026, 4, 18, 8, 6, tzinfo=timezone.utc
+        ),
+        latest_valuation_job_updated_at_utc=datetime(2026, 4, 18, 7, 55, tzinfo=timezone.utc),
+        latest_aggregation_job_updated_at_utc=datetime(2026, 4, 18, 8, 6, tzinfo=timezone.utc),
+        completed_valuation_jobs_without_position_timeseries=4,
+        completed_valuation_portfolios_without_position_timeseries=2,
+        max_completed_valuation_jobs_without_position_timeseries_single_portfolio=2,
+        oldest_completed_valuation_without_position_timeseries_at_utc=datetime(
+            2026, 4, 18, 7, 50, tzinfo=timezone.utc
+        ),
+        valuation_to_position_timeseries_latency_sample_count=70,
+        valuation_to_position_timeseries_latency_p50_seconds=600.0,
+        valuation_to_position_timeseries_latency_p95_seconds=900.0,
+        valuation_to_position_timeseries_latency_max_seconds=1200.0,
+    )
+
+    response = await service.get_load_run_progress("RUN1", date(2026, 4, 17))
+
+    assert response.complete_portfolios == 6
+    assert response.incomplete_portfolios == 4
+    assert response.portfolios_waiting_for_snapshots == 2
+    assert response.remaining_snapshot_rows == 20
+    assert response.portfolios_waiting_for_position_timeseries == 1
+    assert response.remaining_position_timeseries_rows == 30
+    assert response.portfolios_waiting_for_portfolio_timeseries == 1
+    assert response.remaining_portfolio_timeseries_rows == 4
+    mock_ops_repo.get_load_run_progress.assert_awaited_once_with(
+        run_id="RUN1",
+        business_date=date(2026, 4, 17),
         as_of=response.generated_at_utc,
     )

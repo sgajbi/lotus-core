@@ -573,6 +573,9 @@ Implementation status as of 2026-04-18:
 26. the repo-native bank-day scenario and reconciliation artifacts now carry the same completion
     accounting vocabulary in their tie-out and markdown output, keeping support-surface progress
     facts and operator evidence packs aligned.
+27. the load-run support contract now derives explicit remaining snapshot, position-timeseries,
+    and portfolio-timeseries row counts from ingested work versus materialized rows, so operators
+    can read remaining stage work directly instead of estimating it from raw totals.
 
 Phase 1 exit criteria:
 

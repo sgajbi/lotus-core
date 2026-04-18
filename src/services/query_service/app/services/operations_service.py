@@ -487,6 +487,10 @@ class OperationsService:
                 summary.portfolios_ingested,
                 summary.portfolios_with_snapshots,
             ),
+            remaining_snapshot_rows=self._non_negative_gap(
+                summary.transactions_ingested,
+                summary.snapshot_rows,
+            ),
             snapshot_portfolio_coverage_ratio=self._safe_ratio(
                 summary.portfolios_with_snapshots,
                 summary.portfolios_ingested,
@@ -499,6 +503,10 @@ class OperationsService:
                 summary.portfolios_with_snapshots,
                 summary.portfolios_with_position_timeseries,
             ),
+            remaining_position_timeseries_rows=self._non_negative_gap(
+                summary.transactions_ingested,
+                summary.position_timeseries_rows,
+            ),
             position_timeseries_portfolio_coverage_ratio=self._safe_ratio(
                 summary.portfolios_with_position_timeseries,
                 summary.portfolios_ingested,
@@ -510,6 +518,10 @@ class OperationsService:
             portfolios_waiting_for_portfolio_timeseries=self._non_negative_gap(
                 summary.portfolios_with_position_timeseries,
                 summary.portfolios_with_timeseries,
+            ),
+            remaining_portfolio_timeseries_rows=self._non_negative_gap(
+                summary.portfolios_ingested,
+                summary.timeseries_rows,
             ),
             timeseries_portfolio_coverage_ratio=self._safe_ratio(
                 summary.portfolios_with_timeseries,

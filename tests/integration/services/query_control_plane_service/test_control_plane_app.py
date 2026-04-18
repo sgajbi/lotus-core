@@ -354,13 +354,22 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "portfolios_waiting_for_snapshots"
     ]["description"].startswith("Count of ingested portfolios that still have no target-date")
     assert load_run_progress_schema["properties"][
+        "remaining_snapshot_rows"
+    ]["description"].startswith("Estimated remaining target-date daily position snapshot rows")
+    assert load_run_progress_schema["properties"][
         "portfolios_waiting_for_position_timeseries"
     ]["description"].startswith("Count of ingested portfolios whose target-date daily position")
+    assert load_run_progress_schema["properties"][
+        "remaining_position_timeseries_rows"
+    ]["description"].startswith("Estimated remaining target-date position-timeseries rows")
     assert load_run_progress_schema["properties"][
         "portfolios_waiting_for_portfolio_timeseries"
     ]["description"].startswith(
         "Count of ingested portfolios whose target-date position-timeseries"
     )
+    assert load_run_progress_schema["properties"][
+        "remaining_portfolio_timeseries_rows"
+    ]["description"].startswith("Estimated remaining target-date portfolio-timeseries rows")
     assert load_run_progress_schema["properties"][
         "latest_snapshot_to_position_timeseries_tail_seconds"
     ]["description"].startswith("Seconds between the latest target-date daily position")

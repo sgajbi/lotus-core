@@ -617,6 +617,14 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[827],
     )
+    remaining_snapshot_rows: int = Field(
+        ...,
+        description=(
+            "Estimated remaining target-date daily position snapshot rows, derived as "
+            "`transactions_ingested - snapshot_rows` and clamped at zero."
+        ),
+        examples=[17349],
+    )
     snapshot_portfolio_coverage_ratio: float = Field(
         ...,
         description=(
@@ -640,6 +648,14 @@ class LoadRunProgressResponse(BaseModel):
             "whose target-date position-timeseries coverage is still incomplete."
         ),
         examples=[81],
+    )
+    remaining_position_timeseries_rows: int = Field(
+        ...,
+        description=(
+            "Estimated remaining target-date position-timeseries rows, derived as "
+            "`transactions_ingested - position_timeseries_rows` and clamped at zero."
+        ),
+        examples=[43806],
     )
     position_timeseries_portfolio_coverage_ratio: float = Field(
         ...,
@@ -665,6 +681,14 @@ class LoadRunProgressResponse(BaseModel):
             "but whose target-date portfolio-timeseries row is still missing."
         ),
         examples=[7],
+    )
+    remaining_portfolio_timeseries_rows: int = Field(
+        ...,
+        description=(
+            "Estimated remaining target-date portfolio-timeseries rows, derived as "
+            "`portfolios_ingested - timeseries_rows` and clamped at zero."
+        ),
+        examples=[915],
     )
     timeseries_portfolio_coverage_ratio: float = Field(
         ...,
