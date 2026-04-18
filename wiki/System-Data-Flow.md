@@ -46,6 +46,10 @@ Examples:
 
 This stage is where canonical source records become durable.
 
+See also:
+
+- [Persistence Service](Persistence-Service)
+
 ### 3. Derived-state materialization
 
 Downstream workers consume completion topics and build the supported derived state:

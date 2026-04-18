@@ -18,6 +18,7 @@ Use it for:
 - [Data Models](Data-Models)
 - [API Surface](API-Surface)
 - [Ingestion Service](Ingestion-Service)
+- [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
 - [Getting Started](Getting-Started)
 - [Development Workflow](Development-Workflow)
