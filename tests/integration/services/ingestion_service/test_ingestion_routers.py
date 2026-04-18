@@ -3731,8 +3731,13 @@ async def test_ingestion_job_failure_history_tracks_remaining_unpublished_batch_
         ]
     }
 
-    with pytest.raises(Exception, match="Failed to publish transaction"):
-        await async_test_client.post("/ingest/transactions", json=payload)
+    response = await async_test_client.post("/ingest/transactions", json=payload)
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert response.json()["detail"]["failed_record_keys"] == [
+        "TX_BATCH_FAIL_002",
+        "TX_BATCH_FAIL_003",
+    ]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
