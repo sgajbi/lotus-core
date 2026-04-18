@@ -74,20 +74,33 @@ class PositionTimeseriesConsumer(BaseConsumer):
     async def _stage_aggregation_job(
         self, db_session, portfolio_id: str, a_date: date, correlation_id: str
     ):
+        await self._stage_aggregation_jobs(db_session, portfolio_id, [a_date], correlation_id)
+
+    async def _stage_aggregation_jobs(
+        self, db_session, portfolio_id: str, aggregation_dates: list[date], correlation_id: str
+    ) -> None:
         """
-        Idempotently stage an aggregation job.
+        Idempotently stage aggregation jobs.
 
         Material position-timeseries changes for a portfolio-day must re-arm aggregation,
         even when they arrive under the same correlation id as an earlier partial run.
         Duplicate timeseries writes are filtered before this method is called.
         """
+        if not aggregation_dates:
+            return
+
         job_stmt = (
             pg_insert(PortfolioAggregationJob)
             .values(
-                portfolio_id=portfolio_id,
-                aggregation_date=a_date,
-                status="PENDING",
-                correlation_id=correlation_id,
+                [
+                    {
+                        "portfolio_id": portfolio_id,
+                        "aggregation_date": aggregation_date,
+                        "status": "PENDING",
+                        "correlation_id": correlation_id,
+                    }
+                    for aggregation_date in aggregation_dates
+                ]
             )
             .on_conflict_do_update(
                 index_elements=["portfolio_id", "aggregation_date"],
@@ -105,9 +118,10 @@ class PositionTimeseriesConsumer(BaseConsumer):
         )
         await db_session.execute(job_stmt)
         logger.info(
-            "Successfully staged aggregation job for portfolio %s on %s",
+            "Successfully staged %s aggregation job(s) for portfolio %s on %s",
+            len(aggregation_dates),
             portfolio_id,
-            a_date,
+            aggregation_dates,
         )
 
     async def _materialize_position_timeseries(
@@ -183,6 +197,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
             next_dates,
             epoch,
         )
+        changed_dates: list[date] = []
         for next_snapshot in next_snapshots:
 
             changed, _ = await self._materialize_position_timeseries(
@@ -195,15 +210,17 @@ class PositionTimeseriesConsumer(BaseConsumer):
                 cashflows=cashflows_by_date.get(next_snapshot.date, []),
             )
             if not changed:
-                return
+                break
 
-            await self._stage_aggregation_job(
-                db_session,
-                next_snapshot.portfolio_id,
-                next_snapshot.date,
-                correlation_id,
-            )
+            changed_dates.append(next_snapshot.date)
             previous_snapshot = next_snapshot
+
+        await self._stage_aggregation_jobs(
+            db_session,
+            current_snapshot.portfolio_id,
+            changed_dates,
+            correlation_id,
+        )
 
         if len(next_snapshots) == MAX_DEPENDENT_PROPAGATION_ROWS:
             logger.warning(

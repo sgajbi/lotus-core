@@ -175,6 +175,10 @@ Instead, the run points to a different defect class:
     `1000` portfolios through the new repo-native existing-run reconciliation workflow and found:
     `100/100` positions, `100/100` transactions, expected market value `11617.2163000000`, and
     `0` timeseries-integrity reconciliation findings for every portfolio.
+14. Review-driven Phase 1 drain cleanup continued after the live run: dependent position-timeseries
+    propagation now skips empty future batch reads, uses explicit preload sentinels, tightens batch
+    repository typing, and stages changed dependent aggregation jobs in a single bulk upsert rather
+    than one write per changed future day.
 
 ## Requirement-to-Implementation Traceability
 

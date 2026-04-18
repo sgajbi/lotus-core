@@ -355,6 +355,93 @@ async def test_process_message_recalculates_dependent_next_day_bod(
     assert mock_dependencies["db_session"].execute.await_count == 2
 
 
+async def test_process_message_batches_changed_dependent_aggregation_staging(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    current_snapshot = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1100"),
+    )
+    next_snapshot_1 = DailyPositionSnapshot(
+        id=124,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 13),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1150"),
+    )
+    next_snapshot_2 = DailyPositionSnapshot(
+        id=125,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 14),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1200"),
+    )
+
+    mock_db_session.get.return_value = current_snapshot
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal("1050")
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = None
+    mock_repo.get_position_timeseries_for_dates.return_value = {
+        next_snapshot_1.date: MagicMock(
+            bod_market_value=Decimal("0"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("1150"),
+            fees=Decimal("0"),
+            quantity=Decimal("100"),
+            cost=Decimal("10"),
+        ),
+        next_snapshot_2.date: MagicMock(
+            bod_market_value=Decimal("0"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("1200"),
+            fees=Decimal("0"),
+            quantity=Decimal("100"),
+            cost=Decimal("10"),
+        ),
+    }
+    mock_repo.get_cashflows_for_security_dates.return_value = {
+        next_snapshot_1.date: [],
+        next_snapshot_2.date: [],
+    }
+    mock_repo.get_next_snapshots_after.return_value = [next_snapshot_1, next_snapshot_2]
+
+    await consumer._process_message_with_retry(mock_kafka_message)
+
+    assert mock_repo.upsert_position_timeseries.await_count == 3
+    assert mock_db_session.execute.await_count == 2
+    dependent_stage_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_stmt = str(
+        dependent_stage_stmt.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "VALUES ('PORT_TS_POS_01', '2025-08-13'" in compiled_stmt
+    assert ", ('PORT_TS_POS_01', '2025-08-14'" in compiled_stmt
+    assert compiled_stmt.count("'ts-corr-id'") >= 2
+
+
 async def test_process_message_does_not_precompute_absent_dependent_day(
     consumer: PositionTimeseriesConsumer,
     mock_kafka_message: MagicMock,
