@@ -550,6 +550,10 @@ Implementation status as of 2026-04-18:
     needed to claim the current pending valuation backlog, so dispatch pressure can be read
     directly from the support surface instead of reconstructed manually from queue and settings
     fields.
+22. the support contract now derives an explicit valuation-to-position-timeseries handoff
+    pressure hint that distinguishes scheduler-dispatch-bound backlog from downstream
+    post-valuation materialization lag, so operators can classify the current bottleneck without
+    manually comparing multiple queue and handoff fields.
 
 Phase 1 exit criteria:
 

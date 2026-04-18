@@ -729,6 +729,24 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[30],
     )
+    valuation_to_position_timeseries_handoff_pressure_hint: Literal[
+        "NO_HANDOFF_PRESSURE",
+        "SCHEDULER_DISPATCH_BOUND",
+        "DOWNSTREAM_OF_VALUATION",
+        "MIXED_HANDOFF_PRESSURE",
+    ] = Field(
+        ...,
+        description=(
+            "Derived operator hint describing where current valuation-to-position-timeseries "
+            "handoff pressure is concentrated. `SCHEDULER_DISPATCH_BOUND` means there are still "
+            "pending valuation jobs but no completed valuations waiting for position-timeseries. "
+            "`DOWNSTREAM_OF_VALUATION` means pending valuation jobs are drained but completed "
+            "valuations are still waiting for position-timeseries. `MIXED_HANDOFF_PRESSURE` "
+            "means both conditions are present. `NO_HANDOFF_PRESSURE` means neither condition is "
+            "currently present."
+        ),
+        examples=["DOWNSTREAM_OF_VALUATION"],
+    )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
         description=(

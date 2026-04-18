@@ -114,6 +114,27 @@ class OperationsService:
         return "MATERIALIZING"
 
     @staticmethod
+    def _get_valuation_to_timeseries_handoff_pressure_hint(
+        summary: LoadRunProgressSummary,
+    ) -> str:
+        if (
+            summary.pending_valuation_jobs <= 0
+            and summary.completed_valuation_jobs_without_position_timeseries <= 0
+        ):
+            return "NO_HANDOFF_PRESSURE"
+        if (
+            summary.pending_valuation_jobs > 0
+            and summary.completed_valuation_jobs_without_position_timeseries <= 0
+        ):
+            return "SCHEDULER_DISPATCH_BOUND"
+        if (
+            summary.pending_valuation_jobs <= 0
+            and summary.completed_valuation_jobs_without_position_timeseries > 0
+        ):
+            return "DOWNSTREAM_OF_VALUATION"
+        return "MIXED_HANDOFF_PRESSURE"
+
+    @staticmethod
     def _evidence_product_runtime_metadata(
         *,
         generated_at_utc: datetime,
@@ -500,6 +521,9 @@ class OperationsService:
             valuation_scheduler_pending_dispatch_time_lower_bound_seconds=(
                 valuation_pending_dispatch_polls_lower_bound
                 * VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
+            ),
+            valuation_to_position_timeseries_handoff_pressure_hint=(
+                self._get_valuation_to_timeseries_handoff_pressure_hint(summary)
             ),
             oldest_pending_valuation_date=summary.oldest_pending_valuation_date,
             oldest_pending_aggregation_date=summary.oldest_pending_aggregation_date,

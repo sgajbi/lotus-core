@@ -335,6 +335,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert load_run_progress_schema["properties"][
         "valuation_scheduler_pending_dispatch_time_lower_bound_seconds"
     ]["description"].startswith("Lower bound in seconds to claim the current")
+    assert load_run_progress_schema["properties"][
+        "valuation_to_position_timeseries_handoff_pressure_hint"
+    ]["description"].startswith("Derived operator hint describing where current")
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"

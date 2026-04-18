@@ -1689,6 +1689,9 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
         response.valuation_scheduler_pending_dispatch_time_lower_bound_seconds
         == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
     )
+    assert response.valuation_to_position_timeseries_handoff_pressure_hint == (
+        "SCHEDULER_DISPATCH_BOUND"
+    )
     assert response.oldest_pending_valuation_date == date(2026, 4, 17)
     assert response.oldest_pending_aggregation_date == date(2026, 4, 17)
     assert response.latest_snapshot_date == date(2026, 4, 17)
@@ -1953,6 +1956,9 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     )
     assert response.valuation_scheduler_pending_dispatch_polls_lower_bound == 0
     assert response.valuation_scheduler_pending_dispatch_time_lower_bound_seconds == 0
+    assert response.valuation_to_position_timeseries_handoff_pressure_hint == (
+        "DOWNSTREAM_OF_VALUATION"
+    )
     assert response.completed_valuation_jobs_without_position_timeseries == 1
     assert response.completed_valuation_portfolios_without_position_timeseries == 1
     assert response.completed_valuation_portfolios_without_position_timeseries_ratio == 0.5
