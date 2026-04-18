@@ -59,7 +59,7 @@ def mock_kafka_message(mock_event: DailyPositionSnapshotPersistedEvent) -> Magic
 @pytest.fixture
 def mock_dependencies():
     mock_repo = AsyncMock(spec=TimeseriesRepository)
-    mock_repo.get_next_snapshot_after.return_value = None
+    mock_repo.get_next_snapshots_after.return_value = []
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_transaction = AsyncMock()
@@ -326,7 +326,7 @@ async def test_process_message_recalculates_dependent_next_day_bod(
             cost=Decimal("10"),
         ),
     ]
-    mock_repo.get_next_snapshot_after.side_effect = [next_snapshot, None]
+    mock_repo.get_next_snapshots_after.return_value = [next_snapshot]
 
     await consumer._process_message_with_retry(mock_kafka_message)
 
@@ -371,7 +371,7 @@ async def test_process_message_does_not_precompute_absent_dependent_day(
     )
     mock_repo.get_all_cashflows_for_security_date.return_value = []
     mock_repo.get_position_timeseries.side_effect = [None, None]
-    mock_repo.get_next_snapshot_after.return_value = next_snapshot
+    mock_repo.get_next_snapshots_after.return_value = [next_snapshot]
 
     await consumer._process_message_with_retry(mock_kafka_message)
 
