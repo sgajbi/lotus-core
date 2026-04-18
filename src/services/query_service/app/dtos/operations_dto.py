@@ -797,6 +797,15 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[94.454],
     )
+    max_completed_valuation_jobs_without_position_timeseries_single_portfolio: int = Field(
+        ...,
+        description=(
+            "Largest number of latest-epoch completed valuation jobs still waiting for "
+            "target-date position-timeseries materialization within any single affected "
+            "portfolio in the run."
+        ),
+        examples=[500],
+    )
     oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime] = Field(
         None,
         description=(

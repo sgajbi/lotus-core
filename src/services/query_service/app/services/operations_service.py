@@ -496,6 +496,9 @@ class OperationsService:
                     summary.completed_valuation_portfolios_without_position_timeseries,
                 )
             ),
+            max_completed_valuation_jobs_without_position_timeseries_single_portfolio=(
+                summary.max_completed_valuation_jobs_without_position_timeseries_single_portfolio
+            ),
             oldest_completed_valuation_without_position_timeseries_at_utc=(
                 summary.oldest_completed_valuation_without_position_timeseries_at_utc
             ),

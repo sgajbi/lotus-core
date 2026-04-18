@@ -277,6 +277,7 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
             1832,
             85,
             85,
+            7,
             date(2026, 4, 17),
             datetime(2026, 4, 18, 7, 28, tzinfo=timezone.utc),
             datetime(2026, 4, 18, 7, 27, tzinfo=timezone.utc),
@@ -353,6 +354,7 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     )
     assert summary.completed_valuation_jobs_without_position_timeseries == 11
     assert summary.completed_valuation_portfolios_without_position_timeseries == 4
+    assert summary.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 7
     assert summary.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(
         2026, 4, 18, 6, 45, tzinfo=timezone.utc
     )
@@ -370,6 +372,10 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     assert any("from daily_position_snapshots" in compiled.lower() for compiled in scalar_sql)
     assert any("from position_timeseries" in compiled.lower() for compiled in scalar_sql)
     assert any("from portfolio_timeseries" in compiled.lower() for compiled in scalar_sql)
+    assert any(
+        "max(" in compiled.lower() and "waiting_count" in compiled.lower()
+        for compiled in scalar_sql
+    )
     assert any(
         "daily_position_snapshots.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
         for compiled in scalar_sql

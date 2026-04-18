@@ -196,6 +196,9 @@ Instead, the run points to a different defect class:
 20. The support contract now also publishes waiting valuation-job density per affected portfolio,
     which helps distinguish narrow deep lag from broad shallow incomplete coverage during load
     drain analysis.
+21. The support contract now publishes the maximum waiting valuation-job depth within any single
+    affected portfolio, which gives operators a durable concentration signal for cap-risk and
+    localized backlog diagnosis.
 
 ## Requirement-to-Implementation Traceability
 

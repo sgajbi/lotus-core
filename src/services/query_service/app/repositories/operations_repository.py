@@ -124,6 +124,7 @@ class LoadRunProgressSummary:
     latest_aggregation_job_updated_at_utc: Optional[datetime]
     completed_valuation_jobs_without_position_timeseries: int
     completed_valuation_portfolios_without_position_timeseries: int
+    max_completed_valuation_jobs_without_position_timeseries_single_portfolio: int
     oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime]
     valuation_to_position_timeseries_latency_sample_count: int
     valuation_to_position_timeseries_latency_p50_seconds: Optional[float]
@@ -423,6 +424,23 @@ class OperationsRepository:
             PositionTimeseries,
             valuation_to_position_join,
         ).where(PositionTimeseries.portfolio_id.is_(None))
+        valuation_without_position_timeseries_by_portfolio_subq = (
+            select(
+                valuation_handoff_subq.c.portfolio_id.label("portfolio_id"),
+                func.count().label("waiting_count"),
+            )
+            .select_from(valuation_handoff_subq)
+            .outerjoin(
+                PositionTimeseries,
+                valuation_to_position_join,
+            )
+            .where(PositionTimeseries.portfolio_id.is_(None))
+            .group_by(valuation_handoff_subq.c.portfolio_id)
+            .subquery()
+        )
+        max_waiting_portfolio_depth_stmt = select(
+            func.max(valuation_without_position_timeseries_by_portfolio_subq.c.waiting_count)
+        )
         latest_snapshot_stmt = select(func.max(DailyPositionSnapshot.date)).where(
             DailyPositionSnapshot.portfolio_id.like(portfolio_pattern)
         )
@@ -485,6 +503,7 @@ class OperationsRepository:
         valuation_without_position_timeseries = await self.db.execute(
             valuation_without_position_timeseries_stmt
         )
+        max_waiting_portfolio_depth = await self.db.scalar(max_waiting_portfolio_depth_stmt)
         latest_snapshot_date = await self.db.scalar(latest_snapshot_stmt)
         latest_snapshot_materialized_at_utc = await self.db.scalar(
             latest_snapshot_materialized_stmt
@@ -561,6 +580,9 @@ class OperationsRepository:
             ),
             completed_valuation_portfolios_without_position_timeseries=int(
                 completed_valuation_portfolios_without_position_timeseries or 0
+            ),
+            max_completed_valuation_jobs_without_position_timeseries_single_portfolio=int(
+                max_waiting_portfolio_depth or 0
             ),
             oldest_completed_valuation_without_position_timeseries_at_utc=(
                 oldest_completed_valuation_without_position_timeseries_at_utc
