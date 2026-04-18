@@ -106,7 +106,13 @@ class DatabaseTieOut:
     portfolios_count: int
     instruments_count: int
     transactions_count: int
+    portfolios_with_snapshots: int
     snapshots_count: int
+    portfolios_with_position_timeseries: int
+    snapshot_portfolios_without_position_timeseries: int
+    position_timeseries_count: int
+    portfolios_with_portfolio_timeseries: int
+    position_timeseries_portfolios_without_portfolio_timeseries: int
     portfolio_timeseries_count: int
     summed_snapshot_quantity: str
     expected_total_quantity: str
@@ -114,8 +120,23 @@ class DatabaseTieOut:
     expected_total_market_value: str
     per_security_quantity_min: str | None
     per_security_quantity_max: str | None
+    pending_valuation_jobs: int
+    processing_valuation_jobs: int
     open_valuation_jobs: int
+    pending_aggregation_jobs: int
+    processing_aggregation_jobs: int
     open_aggregation_jobs: int
+    latest_snapshot_materialized_at_utc: str | None
+    latest_position_timeseries_materialized_at_utc: str | None
+    latest_portfolio_timeseries_materialized_at_utc: str | None
+    latest_valuation_job_updated_at_utc: str | None
+    latest_aggregation_job_updated_at_utc: str | None
+    completed_valuation_jobs_without_position_timeseries: int
+    oldest_completed_valuation_without_position_timeseries_at_utc: str | None
+    valuation_to_position_timeseries_latency_sample_count: int
+    valuation_to_position_timeseries_latency_p50_seconds: float | None
+    valuation_to_position_timeseries_latency_p95_seconds: float | None
+    valuation_to_position_timeseries_latency_max_seconds: float | None
 
 
 @dataclass(frozen=True)
@@ -572,23 +593,31 @@ def _wait_for_cycle_completion(
         WHERE portfolio_id LIKE :portfolio_pattern
           AND date = :trade_date
     ),
+    position_timeseries_counts AS (
+        SELECT count(*) AS position_timeseries_count
+        FROM position_timeseries
+        WHERE portfolio_id LIKE :portfolio_pattern
+          AND date = :trade_date
+    ),
     timeseries_counts AS (
         SELECT count(*) AS portfolio_timeseries_count
         FROM portfolio_timeseries
         WHERE portfolio_id LIKE :portfolio_pattern
           AND date = :trade_date
     ),
-    open_val AS (
-        SELECT count(*) AS open_valuation_jobs
+    valuation_job_counts AS (
+        SELECT
+            count(*) FILTER (WHERE status = 'PENDING') AS pending_valuation_jobs,
+            count(*) FILTER (WHERE status = 'PROCESSING') AS processing_valuation_jobs
         FROM portfolio_valuation_jobs
         WHERE portfolio_id LIKE :portfolio_pattern
-          AND status IN ('PENDING', 'PROCESSING')
     ),
-    open_agg AS (
-        SELECT count(*) AS open_aggregation_jobs
+    aggregation_job_counts AS (
+        SELECT
+            count(*) FILTER (WHERE status = 'PENDING') AS pending_aggregation_jobs,
+            count(*) FILTER (WHERE status = 'PROCESSING') AS processing_aggregation_jobs
         FROM portfolio_aggregation_jobs
         WHERE portfolio_id LIKE :portfolio_pattern
-          AND status IN ('PENDING', 'PROCESSING')
     )
     SELECT *
     FROM portfolio_counts,
@@ -596,9 +625,10 @@ def _wait_for_cycle_completion(
          failed_val,
          failed_agg,
          snapshot_counts,
+         position_timeseries_counts,
          timeseries_counts,
-         open_val,
-         open_agg
+         valuation_job_counts,
+         aggregation_job_counts
     """
     params = {
         "portfolio_pattern": f"LOAD_{run_id}_PF_%",
@@ -617,9 +647,12 @@ def _wait_for_cycle_completion(
             int(row["portfolios_count"]) == portfolio_count
             and int(row["transactions_count"]) == transaction_count
             and int(row["snapshots_count"]) == transaction_count
+            and int(row["position_timeseries_count"]) == transaction_count
             and int(row["portfolio_timeseries_count"]) == portfolio_count
-            and int(row["open_valuation_jobs"]) == 0
-            and int(row["open_aggregation_jobs"]) == 0
+            and int(row["pending_valuation_jobs"] or 0) == 0
+            and int(row["processing_valuation_jobs"] or 0) == 0
+            and int(row["pending_aggregation_jobs"] or 0) == 0
+            and int(row["processing_aggregation_jobs"] or 0) == 0
         ):
             return round(time.perf_counter() - started, 3)
         time.sleep(5)
@@ -707,11 +740,35 @@ def _build_database_tie_out(
                 WHERE transaction_id LIKE :transaction_pattern
             ) AS transactions_count,
             (
+                SELECT count(DISTINCT portfolio_id)
+                FROM daily_position_snapshots
+                WHERE portfolio_id LIKE :portfolio_pattern
+                  AND date = :trade_date
+            ) AS portfolios_with_snapshots,
+            (
                 SELECT count(*)
                 FROM daily_position_snapshots
                 WHERE portfolio_id LIKE :portfolio_pattern
                   AND date = :trade_date
             ) AS snapshots_count,
+            (
+                SELECT count(DISTINCT portfolio_id)
+                FROM position_timeseries
+                WHERE portfolio_id LIKE :portfolio_pattern
+                  AND date = :trade_date
+            ) AS portfolios_with_position_timeseries,
+            (
+                SELECT count(*)
+                FROM position_timeseries
+                WHERE portfolio_id LIKE :portfolio_pattern
+                  AND date = :trade_date
+            ) AS position_timeseries_count,
+            (
+                SELECT count(DISTINCT portfolio_id)
+                FROM portfolio_timeseries
+                WHERE portfolio_id LIKE :portfolio_pattern
+                  AND date = :trade_date
+            ) AS portfolios_with_portfolio_timeseries,
             (
                 SELECT count(*)
                 FROM portfolio_timeseries
@@ -733,25 +790,154 @@ def _build_database_tie_out(
             (SELECT min(total_quantity) FROM security_quantities) AS per_security_quantity_min,
             (SELECT max(total_quantity) FROM security_quantities) AS per_security_quantity_max,
             (
-                SELECT count(*)
+                SELECT count(*) FILTER (WHERE status = 'PENDING')
                 FROM portfolio_valuation_jobs
                 WHERE portfolio_id LIKE :portfolio_pattern
-                  AND status IN ('PENDING', 'PROCESSING')
-            ) AS open_valuation_jobs,
+            ) AS pending_valuation_jobs,
             (
-                SELECT count(*)
+                SELECT count(*) FILTER (WHERE status = 'PROCESSING')
+                FROM portfolio_valuation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS processing_valuation_jobs,
+            (
+                SELECT count(*) FILTER (WHERE status = 'PENDING')
                 FROM portfolio_aggregation_jobs
                 WHERE portfolio_id LIKE :portfolio_pattern
-                  AND status IN ('PENDING', 'PROCESSING')
-            ) AS open_aggregation_jobs
+            ) AS pending_aggregation_jobs,
+            (
+                SELECT count(*) FILTER (WHERE status = 'PROCESSING')
+                FROM portfolio_aggregation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS processing_aggregation_jobs,
+            (
+                SELECT max(created_at)
+                FROM daily_position_snapshots
+                WHERE portfolio_id LIKE :portfolio_pattern
+                  AND date = :trade_date
+            ) AS latest_snapshot_materialized_at_utc,
+            (
+                SELECT max(created_at)
+                FROM position_timeseries
+                WHERE portfolio_id LIKE :portfolio_pattern
+                  AND date = :trade_date
+            ) AS latest_position_timeseries_materialized_at_utc,
+            (
+                SELECT max(created_at)
+                FROM portfolio_timeseries
+                WHERE portfolio_id LIKE :portfolio_pattern
+                  AND date = :trade_date
+            ) AS latest_portfolio_timeseries_materialized_at_utc,
+            (
+                SELECT max(updated_at)
+                FROM portfolio_valuation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS latest_valuation_job_updated_at_utc,
+            (
+                SELECT max(updated_at)
+                FROM portfolio_aggregation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS latest_aggregation_job_updated_at_utc,
+            (
+                SELECT count(*)
+                FROM portfolio_valuation_jobs pvj
+                LEFT JOIN position_timeseries pts
+                  ON pts.portfolio_id = pvj.portfolio_id
+                 AND pts.security_id = pvj.security_id
+                 AND pts.date = pvj.valuation_date
+                 AND pts.epoch = pvj.epoch
+                WHERE pvj.portfolio_id LIKE :portfolio_pattern
+                  AND pvj.status = 'COMPLETE'
+                  AND pts.portfolio_id IS NULL
+            ) AS completed_valuation_jobs_without_position_timeseries,
+            (
+                SELECT min(pvj.updated_at)
+                FROM portfolio_valuation_jobs pvj
+                LEFT JOIN position_timeseries pts
+                  ON pts.portfolio_id = pvj.portfolio_id
+                 AND pts.security_id = pvj.security_id
+                 AND pts.date = pvj.valuation_date
+                 AND pts.epoch = pvj.epoch
+                WHERE pvj.portfolio_id LIKE :portfolio_pattern
+                  AND pvj.status = 'COMPLETE'
+                  AND pts.portfolio_id IS NULL
+            ) AS oldest_completed_valuation_without_position_timeseries_at_utc,
+            (
+                SELECT count(*)
+                FROM portfolio_valuation_jobs pvj
+                JOIN position_timeseries pts
+                  ON pts.portfolio_id = pvj.portfolio_id
+                 AND pts.security_id = pvj.security_id
+                 AND pts.date = pvj.valuation_date
+                 AND pts.epoch = pvj.epoch
+                WHERE pvj.portfolio_id LIKE :portfolio_pattern
+                  AND pvj.status = 'COMPLETE'
+            ) AS valuation_to_position_timeseries_latency_sample_count,
+            (
+                SELECT percentile_cont(0.5) WITHIN GROUP (
+                    ORDER BY GREATEST(EXTRACT(EPOCH FROM (pts.created_at - pvj.updated_at)), 0)
+                )
+                FROM portfolio_valuation_jobs pvj
+                JOIN position_timeseries pts
+                  ON pts.portfolio_id = pvj.portfolio_id
+                 AND pts.security_id = pvj.security_id
+                 AND pts.date = pvj.valuation_date
+                 AND pts.epoch = pvj.epoch
+                WHERE pvj.portfolio_id LIKE :portfolio_pattern
+                  AND pvj.status = 'COMPLETE'
+            ) AS valuation_to_position_timeseries_latency_p50_seconds,
+            (
+                SELECT percentile_cont(0.95) WITHIN GROUP (
+                    ORDER BY GREATEST(EXTRACT(EPOCH FROM (pts.created_at - pvj.updated_at)), 0)
+                )
+                FROM portfolio_valuation_jobs pvj
+                JOIN position_timeseries pts
+                  ON pts.portfolio_id = pvj.portfolio_id
+                 AND pts.security_id = pvj.security_id
+                 AND pts.date = pvj.valuation_date
+                 AND pts.epoch = pvj.epoch
+                WHERE pvj.portfolio_id LIKE :portfolio_pattern
+                  AND pvj.status = 'COMPLETE'
+            ) AS valuation_to_position_timeseries_latency_p95_seconds,
+            (
+                SELECT max(GREATEST(EXTRACT(EPOCH FROM (pts.created_at - pvj.updated_at)), 0))
+                FROM portfolio_valuation_jobs pvj
+                JOIN position_timeseries pts
+                  ON pts.portfolio_id = pvj.portfolio_id
+                 AND pts.security_id = pvj.security_id
+                 AND pts.date = pvj.valuation_date
+                 AND pts.epoch = pvj.epoch
+                WHERE pvj.portfolio_id LIKE :portfolio_pattern
+                  AND pvj.status = 'COMPLETE'
+            ) AS valuation_to_position_timeseries_latency_max_seconds
         """,
         params,
+    )
+    pending_valuation_jobs = int(aggregate_row["pending_valuation_jobs"] or 0)
+    processing_valuation_jobs = int(aggregate_row["processing_valuation_jobs"] or 0)
+    pending_aggregation_jobs = int(aggregate_row["pending_aggregation_jobs"] or 0)
+    processing_aggregation_jobs = int(aggregate_row["processing_aggregation_jobs"] or 0)
+    portfolios_with_snapshots = int(aggregate_row["portfolios_with_snapshots"])
+    portfolios_with_position_timeseries = int(aggregate_row["portfolios_with_position_timeseries"])
+    portfolios_with_portfolio_timeseries = int(
+        aggregate_row["portfolios_with_portfolio_timeseries"]
     )
     return DatabaseTieOut(
         portfolios_count=int(aggregate_row["portfolios_count"]),
         instruments_count=int(aggregate_row["instruments_count"]),
         transactions_count=int(aggregate_row["transactions_count"]),
+        portfolios_with_snapshots=portfolios_with_snapshots,
         snapshots_count=int(aggregate_row["snapshots_count"]),
+        portfolios_with_position_timeseries=portfolios_with_position_timeseries,
+        snapshot_portfolios_without_position_timeseries=max(
+            portfolios_with_snapshots - portfolios_with_position_timeseries,
+            0,
+        ),
+        position_timeseries_count=int(aggregate_row["position_timeseries_count"]),
+        portfolios_with_portfolio_timeseries=portfolios_with_portfolio_timeseries,
+        position_timeseries_portfolios_without_portfolio_timeseries=max(
+            portfolios_with_position_timeseries - portfolios_with_portfolio_timeseries,
+            0,
+        ),
         portfolio_timeseries_count=int(aggregate_row["portfolio_timeseries_count"]),
         summed_snapshot_quantity=_decimal_str(
             _parse_decimal(aggregate_row["summed_snapshot_quantity"])
@@ -773,8 +959,66 @@ def _build_database_tie_out(
             if aggregate_row["per_security_quantity_max"] is not None
             else None
         ),
-        open_valuation_jobs=int(aggregate_row["open_valuation_jobs"]),
-        open_aggregation_jobs=int(aggregate_row["open_aggregation_jobs"]),
+        pending_valuation_jobs=pending_valuation_jobs,
+        processing_valuation_jobs=processing_valuation_jobs,
+        open_valuation_jobs=pending_valuation_jobs + processing_valuation_jobs,
+        pending_aggregation_jobs=pending_aggregation_jobs,
+        processing_aggregation_jobs=processing_aggregation_jobs,
+        open_aggregation_jobs=pending_aggregation_jobs + processing_aggregation_jobs,
+        latest_snapshot_materialized_at_utc=(
+            aggregate_row["latest_snapshot_materialized_at_utc"].isoformat()
+            if aggregate_row["latest_snapshot_materialized_at_utc"] is not None
+            else None
+        ),
+        latest_position_timeseries_materialized_at_utc=(
+            aggregate_row["latest_position_timeseries_materialized_at_utc"].isoformat()
+            if aggregate_row["latest_position_timeseries_materialized_at_utc"] is not None
+            else None
+        ),
+        latest_portfolio_timeseries_materialized_at_utc=(
+            aggregate_row["latest_portfolio_timeseries_materialized_at_utc"].isoformat()
+            if aggregate_row["latest_portfolio_timeseries_materialized_at_utc"] is not None
+            else None
+        ),
+        latest_valuation_job_updated_at_utc=(
+            aggregate_row["latest_valuation_job_updated_at_utc"].isoformat()
+            if aggregate_row["latest_valuation_job_updated_at_utc"] is not None
+            else None
+        ),
+        latest_aggregation_job_updated_at_utc=(
+            aggregate_row["latest_aggregation_job_updated_at_utc"].isoformat()
+            if aggregate_row["latest_aggregation_job_updated_at_utc"] is not None
+            else None
+        ),
+        completed_valuation_jobs_without_position_timeseries=int(
+            aggregate_row["completed_valuation_jobs_without_position_timeseries"] or 0
+        ),
+        oldest_completed_valuation_without_position_timeseries_at_utc=(
+            aggregate_row[
+                "oldest_completed_valuation_without_position_timeseries_at_utc"
+            ].isoformat()
+            if aggregate_row["oldest_completed_valuation_without_position_timeseries_at_utc"]
+            is not None
+            else None
+        ),
+        valuation_to_position_timeseries_latency_sample_count=int(
+            aggregate_row["valuation_to_position_timeseries_latency_sample_count"] or 0
+        ),
+        valuation_to_position_timeseries_latency_p50_seconds=(
+            float(aggregate_row["valuation_to_position_timeseries_latency_p50_seconds"])
+            if aggregate_row["valuation_to_position_timeseries_latency_p50_seconds"] is not None
+            else None
+        ),
+        valuation_to_position_timeseries_latency_p95_seconds=(
+            float(aggregate_row["valuation_to_position_timeseries_latency_p95_seconds"])
+            if aggregate_row["valuation_to_position_timeseries_latency_p95_seconds"] is not None
+            else None
+        ),
+        valuation_to_position_timeseries_latency_max_seconds=(
+            float(aggregate_row["valuation_to_position_timeseries_latency_max_seconds"])
+            if aggregate_row["valuation_to_position_timeseries_latency_max_seconds"] is not None
+            else None
+        ),
     )
 
 
@@ -832,6 +1076,9 @@ def _collect_sample_portfolios(
     specs: list[InstrumentSpec],
     trade_date: str,
     sample_size: int,
+    positions_probe_repetitions: int = 3,
+    transactions_probe_repetitions: int = 3,
+    support_probe_repetitions: int = 2,
 ) -> tuple[list[SamplePortfolioResult], list[ApiProbeResult]]:
     samples: list[SamplePortfolioResult] = []
     probes: list[ApiProbeResult] = []
@@ -850,17 +1097,17 @@ def _collect_sample_portfolios(
         positions_status, positions_samples, positions_payload = _probe_json(
             session=session,
             url=positions_url,
-            repetitions=3,
+            repetitions=positions_probe_repetitions,
         )
         tx_status, tx_samples, tx_payload = _probe_json(
             session=session,
             url=tx_url,
-            repetitions=3,
+            repetitions=transactions_probe_repetitions,
         )
         support_status, support_samples, support_payload = _probe_json(
             session=session,
             url=support_url,
-            repetitions=2,
+            repetitions=support_probe_repetitions,
         )
         for endpoint, status, samples_ms, payload in (
             (positions_url, positions_status, positions_samples, positions_payload),
@@ -961,10 +1208,42 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
             "transactions_count "
             f"{tie_out.transactions_count} != expected {report.config['transaction_count']}"
         )
+    if tie_out.portfolios_with_snapshots != int(report.config["portfolio_count"]):
+        failures.append(
+            "portfolios_with_snapshots "
+            f"{tie_out.portfolios_with_snapshots} != expected {report.config['portfolio_count']}"
+        )
     if tie_out.snapshots_count != int(report.config["transaction_count"]):
         failures.append(
             "snapshots_count "
             f"{tie_out.snapshots_count} != expected {report.config['transaction_count']}"
+        )
+    if tie_out.snapshot_portfolios_without_position_timeseries != 0:
+        failures.append(
+            "snapshot_portfolios_without_position_timeseries "
+            f"{tie_out.snapshot_portfolios_without_position_timeseries} != 0"
+        )
+    if tie_out.portfolios_with_position_timeseries != int(report.config["portfolio_count"]):
+        failures.append(
+            "portfolios_with_position_timeseries "
+            f"{tie_out.portfolios_with_position_timeseries} != expected "
+            f"{report.config['portfolio_count']}"
+        )
+    if tie_out.position_timeseries_count != int(report.config["transaction_count"]):
+        failures.append(
+            "position_timeseries_count "
+            f"{tie_out.position_timeseries_count} != expected {report.config['transaction_count']}"
+        )
+    if tie_out.portfolios_with_portfolio_timeseries != int(report.config["portfolio_count"]):
+        failures.append(
+            "portfolios_with_portfolio_timeseries "
+            f"{tie_out.portfolios_with_portfolio_timeseries} != expected "
+            f"{report.config['portfolio_count']}"
+        )
+    if tie_out.position_timeseries_portfolios_without_portfolio_timeseries != 0:
+        failures.append(
+            "position_timeseries_portfolios_without_portfolio_timeseries "
+            f"{tie_out.position_timeseries_portfolios_without_portfolio_timeseries} != 0"
         )
     if tie_out.portfolio_timeseries_count != int(report.config["portfolio_count"]):
         failures.append(
@@ -1111,7 +1390,13 @@ def _zero_tie_out(*, portfolio_count: int, specs: list[InstrumentSpec]) -> Datab
         portfolios_count=0,
         instruments_count=0,
         transactions_count=0,
+        portfolios_with_snapshots=0,
         snapshots_count=0,
+        portfolios_with_position_timeseries=0,
+        snapshot_portfolios_without_position_timeseries=0,
+        position_timeseries_count=0,
+        portfolios_with_portfolio_timeseries=0,
+        position_timeseries_portfolios_without_portfolio_timeseries=0,
         portfolio_timeseries_count=0,
         summed_snapshot_quantity="0.0000000000",
         expected_total_quantity=_decimal_str(Decimal(portfolio_count * len(specs))),
@@ -1121,8 +1406,23 @@ def _zero_tie_out(*, portfolio_count: int, specs: list[InstrumentSpec]) -> Datab
         ),
         per_security_quantity_min=None,
         per_security_quantity_max=None,
+        pending_valuation_jobs=0,
+        processing_valuation_jobs=0,
         open_valuation_jobs=0,
+        pending_aggregation_jobs=0,
+        processing_aggregation_jobs=0,
         open_aggregation_jobs=0,
+        latest_snapshot_materialized_at_utc=None,
+        latest_position_timeseries_materialized_at_utc=None,
+        latest_portfolio_timeseries_materialized_at_utc=None,
+        latest_valuation_job_updated_at_utc=None,
+        latest_aggregation_job_updated_at_utc=None,
+        completed_valuation_jobs_without_position_timeseries=0,
+        oldest_completed_valuation_without_position_timeseries_at_utc=None,
+        valuation_to_position_timeseries_latency_sample_count=0,
+        valuation_to_position_timeseries_latency_p50_seconds=None,
+        valuation_to_position_timeseries_latency_p95_seconds=None,
+        valuation_to_position_timeseries_latency_max_seconds=None,
     )
 
 

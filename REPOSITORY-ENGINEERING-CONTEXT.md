@@ -190,7 +190,11 @@ Most relevant current governance:
 24. the run-scoped support route for institutional load progress is now part of the live local
     runtime baseline for RFC-086 work; after service refresh, use
     `GET /support/load-runs/{run_id}?business_date={date}` as the first completion surface and
-    fall back to direct database facts only when runtime rollout has not yet occurred.
+    fall back to direct database facts only when runtime rollout has not yet occurred,
+25. exact-run correctness evidence for institutional load no longer requires reseeding a fresh
+    workload: use `scripts/bank_day_load_reconciliation_report.py` against the completed `run_id`
+    to collect sampled or exhaustive reconciliation proof for positions, transactions, support
+    overview state, and timeseries-integrity findings.
 25. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 

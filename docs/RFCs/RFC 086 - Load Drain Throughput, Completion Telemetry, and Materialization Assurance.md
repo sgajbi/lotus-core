@@ -25,6 +25,11 @@ This RFC closes that gap by defining a focused hardening program across three li
 2. run-scoped completion telemetry,
 3. interruption-safe, operator-grade evidence generation.
 
+The latest live-run diagnosis on 2026-04-18 also shows that the lag is not evenly distributed
+across the downstream drain. Snapshot coverage materially leads position-timeseries and
+portfolio-timeseries coverage, so Phase 1 must first explain that stage boundary before changing
+worker parallelism or scheduler cadence.
+
 The first implementation slice is intentionally narrow. We should establish truthful completion visibility before changing concurrency or orchestration behavior. Once the platform can explain run state precisely, we can optimize the drain path with much lower operational risk.
 
 ## Decision Summary
@@ -74,18 +79,34 @@ That is a production-readiness defect even when numeric correctness appears stab
 
 ### Live full-run evidence baseline
 
-The active full run `20260418T065154Z` showed:
+At `2026-04-18T09:09:16Z`, direct database facts for the active full run `20260418T065154Z`
+showed:
 
 1. `100000` transactions ingested successfully,
 2. `1000` portfolios ingested successfully,
 3. `0` failed valuation jobs,
 4. `0` failed aggregation jobs,
-5. `173` portfolios with at least one snapshot,
-6. `85` portfolios with at least one portfolio-timeseries row,
-7. `17288` total snapshots written,
-8. `85` total portfolio-timeseries rows written,
-9. low absolute open backlog in sampled snapshots (`13` open valuation jobs, `1` open aggregation job in one live observation),
-10. healthy sample downstream APIs for `LOAD_20260418T065154Z_PF_0001`.
+5. `1000` portfolios with at least one target-date snapshot,
+6. `562` portfolios with at least one target-date position-timeseries row,
+7. `561` portfolios with at least one target-date portfolio-timeseries row,
+8. `100000` total target-date snapshots written,
+9. `56194` total target-date position-timeseries rows written,
+10. `561` total target-date portfolio-timeseries rows written,
+11. `0` pending valuation jobs and `0` processing valuation jobs,
+12. `1` pending aggregation job and `0` processing aggregation jobs,
+13. the target business date `2026-04-17` already present in both snapshots and portfolio
+    timeseries,
+14. valuation-to-position-timeseries handoff latency at `56194` matched rows with p50
+    `2174.8558825` seconds, p95 `2353.17991545` seconds, and max `2371.357363` seconds,
+15. before the targeted service refresh, the running control-plane container still returned `404`
+    for the new support route because the live stack had not yet been refreshed to the Phase 0
+    code,
+16. after the targeted refresh, `GET /support/load-runs/20260418T065154Z?business_date=2026-04-17`
+    returned `COMPLETE` at `2026-04-18T12:00:25Z` with `1000/1000` portfolio coverage for
+    snapshots, position-timeseries, and portfolio-timeseries,
+17. the original harness process PID `42764` no longer existed at measurement time even though
+    downstream services were still materializing new position-timeseries and portfolio-timeseries
+    rows.
 
 ### What this means
 
@@ -95,7 +116,10 @@ Instead, the run points to a different defect class:
 
 1. portfolio-level completion is too slow,
 2. completion visibility is too weak,
-3. the operator evidence model is incomplete for long-running or interrupted executions.
+3. the operator evidence model is incomplete for long-running or interrupted executions,
+4. the current lag now concentrates downstream of valuation completion and before broad
+   position-timeseries completion, not inside portfolio aggregation after the aggregation stage
+   has already caught up to completed position-timeseries breadth.
 
 ## Evidence From Live Run 20260418T065154Z
 
@@ -108,23 +132,59 @@ Instead, the run points to a different defect class:
    - `GET /support/portfolios/{id}/overview` returned `200` with no failed work for the sampled portfolio
 3. Failed valuation and aggregation job counts remained at `0`.
 4. The target materialization date `2026-04-17` was reached in sampled snapshot and timeseries output.
+5. Queue state remained active rather than deadlocked; the open valuation backlog continued to
+   move from processing work into complete state during repeated observations.
 
 ### Limiting signals
 
 1. Portfolio coverage progressed much more slowly than ingestion volume.
 2. The harness produced no final artifact before interruption.
 3. Standard output and error logs for the full run remained empty, which forced manual state reconstruction.
-4. Completion percentage had to be inferred indirectly from DB facts rather than queried through a supported runtime contract.
+4. Before the targeted service refresh, the running control-plane container returned `404` for
+   `GET /support/load-runs/{run_id}`, so completion percentage initially had to be reconstructed
+   from DB facts instead of the intended support contract.
+5. Position-timeseries and portfolio-timeseries coverage lag snapshots materially, so “timeseries
+   lag” is not a single opaque symptom.
+6. At `2026-04-18T09:09:16Z`, valuation backlog had fully drained while position-timeseries and
+   portfolio-timeseries breadth remained only about `56%`, which shifts the primary bottleneck to
+   valuation-to-timeseries handoff and/or position-timeseries consumer throughput rather than
+   valuation scheduler backlog.
+7. The harness process can exit before asynchronous materialization finishes, so process lifetime
+   is not a reliable proxy for pipeline completion.
+8. At `2026-04-18T09:18:31Z`, there were still `26774` valuation jobs already in `COMPLETE`
+   state with no matching `position_timeseries` row, and the oldest such completion had been
+   waiting since `2026-04-18T08:46:24Z`, which confirms that the dominant backlog is now in
+   post-valuation materialization rather than job dispatch.
+9. At `2026-04-18T09:33:17Z`, the same run had reached full target-date coverage:
+   `1000/1000` portfolios with snapshots, `1000/1000` portfolios with position-timeseries,
+   `1000/1000` portfolios with portfolio-timeseries, and `0` completed valuation jobs still
+   waiting for position-timeseries.
+10. Even after materialization convergence, the live stack still carried a large pending outbox
+    tail on topics with weak or no active runtime consumers: `50067`
+    `portfolio_security_day.position_timeseries.completed` events and `503`
+    `portfolio_day.aggregation.completed` events at `2026-04-18T09:33:17Z`.
+11. After the review-driven hot-path cleanup and targeted runtime refresh, the support route
+    returned `COMPLETE` at `2026-04-18T12:00:25Z`, `timeseries_generator_service` startup
+    required only `valuation.snapshot.persisted`, and the dormant completion topics had `0`
+    pending outbox rows; remaining rows were `PROCESSED` history only.
+12. Final sampled reconciliation for the same run at `2026-04-18T12:19:27Z` covered
+    `LOAD_20260418T065154Z_PF_0001` through `LOAD_20260418T065154Z_PF_0005` and found:
+    `100` positions, `100` transactions, expected market value `11617.2163000000`, and `0`
+    timeseries-integrity reconciliation findings for every sampled portfolio.
+13. Exhaustive reconciliation for the same run at `2026-04-18T12:23:35Z` evaluated all
+    `1000` portfolios through the new repo-native existing-run reconciliation workflow and found:
+    `100/100` positions, `100/100` transactions, expected market value `11617.2163000000`, and
+    `0` timeseries-integrity reconciliation findings for every portfolio.
 
 ## Requirement-to-Implementation Traceability
 
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
 | Realistic bank-day load generation | Implemented baseline | `scripts/bank_day_load_scenario.py`; `docs/operations/bank-day-load-scenario.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
-| Correctness under institutional load | Partially implemented | live run `20260418T065154Z`; smoke evidence `output/task-runs/20260418T064716Z-bank-day-load.md`; sample API probes |
-| Deterministic visibility into completion state | Not implemented sufficiently | no run-scoped support contract; manual SQL/API inspection required |
-| Interruption-safe operator evidence | Not implemented | no partial artifact emitted after interruption |
-| Throughput adequate for institutional completion SLA | Partially implemented (requires enhancement) | full ingestion completed, but portfolio completion coverage remained too low after extended drain |
+| Correctness under institutional load | Implemented baseline | live run `20260418T065154Z`; support-route evidence `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`; sampled reconciliation `output/task-runs/20260418T120025Z-rfc086-final-reconciliation.md`; exhaustive reconciliation `output/task-runs/20260418T122335-bank-day-load-reconciliation.md` |
+| Deterministic visibility into completion state | Implemented baseline | run-scoped support contract and stage split metrics are live; `GET /support/load-runs/20260418T065154Z?business_date=2026-04-17` returned `COMPLETE` at `2026-04-18T12:00:25Z`; evidence: `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md` |
+| Interruption-safe operator evidence | Implemented baseline | `scripts/bank_day_load_scenario.py`; `output/task-runs/20260418T064716Z-bank-day-load.json`; `output/task-runs/20260418T064716Z-bank-day-load.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
+| Throughput adequate for institutional completion SLA | Partially implemented (requires enhancement) | full ingestion and snapshot completion were achieved, but target-date coverage remained at `562` position-timeseries portfolios and `561` portfolio-timeseries portfolios at `2026-04-18T09:09:16Z` while valuation-to-position-timeseries p50 latency remained about `36.25` minutes |
 
 ## Goals
 
@@ -344,6 +404,76 @@ Deliver:
 1. scheduler and worker cadence instrumentation,
 2. measured stage latency breakdown,
 3. targeted tuning of batch size, polling, or concurrency where evidence justifies it.
+
+Implementation status as of 2026-04-18:
+
+1. initial diagnostic telemetry landed in the branch by extending load-run progress output with:
+   - target-date position-timeseries portfolio and row coverage,
+   - explicit stage-gap counts between snapshots and position-timeseries, and between
+     position-timeseries and portfolio-timeseries,
+   - split pending versus processing valuation job counts,
+   - split pending versus processing aggregation job counts,
+   - latest per-stage materialization and queue heartbeat timestamps so operators can
+     distinguish active drain from a quiet or stalled stage,
+   - explicit count and oldest completion timestamp for valuation jobs that are already
+     `COMPLETE` but still have no matching position-timeseries row,
+   - valuation-to-position-timeseries handoff latency summary from durable facts,
+   - matching harness evidence-pack fields so JSON and Markdown artifacts now expose the same
+      stage boundary and queue split,
+   - review-driven `as_of` consistency hardening so stage counts, latest-artifact timestamps,
+     and latency samples all honor the same response-generation cutoff instead of mixing
+     pre-cutoff job state with post-cutoff materialized rows,
+   - review-driven cleanup of the `timeseries_generator_service` consumer so it now accepts only
+     the active `valuation.snapshot.persisted` trigger, with dead compatibility parsing for
+     `portfolio_security_day.valuation.completed` removed and runtime/governance docs aligned to
+     the actual handoff path,
+   - review-driven removal of the unused `portfolio_security_day.valuation.completed` outbox
+     emission from `position_valuation_calculator`, eliminating duplicated hot-path outbox work
+     after confirming that the topic has no active runtime producer/consumer path,
+   - follow-up review-driven removal of the unused
+     `portfolio_security_day.position_timeseries.completed` outbox emission from
+     `timeseries_generator_service` after live-run evidence showed a large pending outbox tail on a
+     topic with no active runtime consumer,
+   - targeted write-churn reduction in `timeseries_generator_service` so aggregation jobs are no
+     longer redundantly restaged when the same portfolio-day is already `PENDING` under the same
+     correlation id, while still rearming late material changes when status or correlation
+     actually changes,
+   - follow-up hot-path simplification in `timeseries_generator_service` that removed the
+     redundant per-message `Instrument` lookup and retry branch from
+     `valuation.snapshot.persisted` processing, because the event is emitted only after snapshot
+     persistence and the downstream timeseries calculation does not consume instrument data,
+2. repeated live-run measurement now shows the main lag boundary more precisely:
+   - snapshots (`1000` portfolios) reached full coverage,
+   - valuation backlog drained to `0` open jobs,
+   - follow-up live measurement at `2026-04-18T09:18:31Z` showed position-timeseries (`733`
+     portfolios) and portfolio-timeseries (`732` portfolios) still materially incomplete even
+     after valuation backlog drain,
+   - `26774` completed valuation jobs still had no matching position-timeseries row, with the
+     oldest such completion waiting since `2026-04-18T08:46:24Z`,
+   - valuation-to-position-timeseries latency remains roughly `36` to `40` minutes across
+     `56194` matched rows,
+   - portfolio-timeseries closely tracks completed position-timeseries breadth, so portfolio
+     aggregation is no longer the limiting stage,
+3. the next justified optimization slice should therefore focus on valuation-to-position-timeseries
+   drain behavior and handoff cadence before changing portfolio aggregation internals,
+4. live follow-up at `2026-04-18T09:33:17Z` then showed that the bank-day run does fully
+   converge without failures, but only after a substantial post-valuation drain period of roughly
+   `28` minutes after the last target-date snapshot was persisted (`2026-04-18T09:05:10Z` to
+   `2026-04-18T09:32:59Z` for full position-timeseries coverage),
+5. the same follow-up exposed a large non-critical outbox tail on dormant
+   `portfolio_security_day.position_timeseries.completed` publication, which justifies removing
+   that emission instead of treating worker concurrency as the first optimization lever.
+6. review-driven cleanup then removed the dormant
+   `portfolio_security_day.valuation.completed` and
+   `portfolio_security_day.position_timeseries.completed` hot-path emissions, marked those event
+   families as runtime-dormant in the supportability catalog, and refreshed the runtime so the
+   active timeseries worker now requires only `valuation.snapshot.persisted` at startup.
+7. post-refresh support-route evidence at `2026-04-18T12:00:25Z` shows the run in `COMPLETE`
+   state with `0` open valuation jobs, `0` open aggregation jobs, `0` completed valuations still
+   waiting for position-timeseries, and no pending outbox rows on the dormant completion topics.
+8. a new repo-native `scripts/bank_day_load_reconciliation_report.py` workflow now lets operators
+   reconcile an existing completed run without reseeding data, which reduces pressure to rerun a
+   long institutional load test just to tighten correctness evidence after drain completion.
 
 Phase 1 exit criteria:
 

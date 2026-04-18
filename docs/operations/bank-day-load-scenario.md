@@ -49,7 +49,8 @@ The script:
    transactions,
 4. ingests deterministic BUY transactions in batches,
 5. monitors event-replay health during processing,
-6. waits for position snapshots and portfolio timeseries to converge,
+6. waits for position snapshots, security-level position timeseries, and
+   portfolio-level timeseries to converge,
 7. samples downstream APIs,
 8. runs reconciliation checks for sampled portfolios,
 9. inspects container logs for real error lines,
@@ -80,11 +81,42 @@ The report records:
 1. ingestion duration by endpoint,
 2. drain duration until the asynchronous pipeline quiesces,
 3. peak backlog jobs, backlog age, replay pressure, and DLQ count,
-4. database tie-outs for portfolios, instruments, transactions, snapshots, and
-   timeseries,
-5. sampled positions, transaction-window, and support-overview API latencies,
-6. sampled reconciliation results,
-7. log evidence for core processing services.
+4. database tie-outs for portfolios, instruments, transactions, snapshots,
+   position-timeseries, and portfolio-timeseries,
+5. explicit stage-gap counts showing:
+   - portfolios with snapshots but no position-timeseries yet,
+   - portfolios with position-timeseries but no portfolio-timeseries yet,
+6. split pending versus processing queue counts for valuation and aggregation,
+7. latest materialization and job-update heartbeat timestamps for snapshots,
+   position-timeseries, portfolio-timeseries, valuation jobs, and aggregation jobs,
+8. count and oldest completion timestamp for valuation jobs that are already `COMPLETE` but
+   still have no matching position-timeseries row,
+9. valuation-to-position-timeseries handoff latency summary from durable facts,
+10. sampled positions, transaction-window, and support-overview API latencies,
+11. sampled reconciliation results,
+12. log evidence for core processing services.
+
+## Live Institutional Run Notes
+
+The active institutional run `20260418T065154Z` on `2026-04-18` established three important
+operator rules for this harness:
+
+1. the harness process lifetime is not the same thing as pipeline completion; asynchronous
+   services can keep materializing target-date artifacts after the original Python process exits,
+2. when branch-only support telemetry has not yet been rolled into the running stack, use direct
+   PostgreSQL facts as the source of truth and record the stale runtime route separately; after
+   the targeted `2026-04-18` refresh for run `20260418T065154Z`, the support route returned the
+   same completion facts directly,
+3. completion diagnosis must separate snapshot coverage, security-level
+   `position_timeseries` coverage, and portfolio-level `portfolio_timeseries` coverage because the
+   main lag can sit between valuation completion and position-timeseries breadth rather than in
+   portfolio aggregation.
+
+For completed runs that already converged, use
+`python scripts/bank_day_load_reconciliation_report.py --run-id <run_id> --business-date <YYYY-MM-DD>`
+to collect sampled or exhaustive reconciliation evidence without reseeding data. Increase
+`--portfolio-limit` to widen the proof set; the `20260418T065154Z` institutional run was
+reconciled across all `1000` portfolios with this workflow.
 
 ## Current Known Harness Hardening
 
