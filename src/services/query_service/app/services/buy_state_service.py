@@ -69,6 +69,8 @@ class BuyStateService:
             transaction_type=txn.transaction_type,
             economic_event_id=txn.economic_event_id,
             linked_transaction_group_id=txn.linked_transaction_group_id,
+            calculation_policy_id=txn.calculation_policy_id,
+            calculation_policy_version=txn.calculation_policy_version,
             cashflow_date=cashflow.cashflow_date if cashflow else None,
             cashflow_amount=cashflow.amount if cashflow else None,
             cashflow_currency=cashflow.currency if cashflow else None,

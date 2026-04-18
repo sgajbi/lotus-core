@@ -981,6 +981,17 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
         "Cashflow classification for the linked settlement event."
     )
 
+    buy_cash_linkage_response = components["BuyCashLinkageResponse"]
+    assert buy_cash_linkage_response["properties"]["calculation_policy_id"]["description"] == (
+        "Calculation policy identifier used for BUY processing."
+    )
+    assert buy_cash_linkage_response["properties"]["calculation_policy_id"]["example"] == (
+        "BUY_DEFAULT_POLICY"
+    )
+    assert buy_cash_linkage_response["properties"]["calculation_policy_version"]["example"] == (
+        "1.0.0"
+    )
+
 
 async def test_openapi_describes_shared_read_model_field_examples(async_test_client):
     response = await async_test_client.get("/openapi.json")

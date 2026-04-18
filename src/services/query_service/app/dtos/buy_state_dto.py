@@ -101,6 +101,16 @@ class BuyCashLinkageResponse(BaseModel):
     linked_transaction_group_id: Optional[str] = Field(
         None, description="Group ID used to link cash and security effects.", examples=["LTG-2026-00456"]
     )
+    calculation_policy_id: Optional[str] = Field(
+        None,
+        description="Calculation policy identifier used for BUY processing.",
+        examples=["BUY_DEFAULT_POLICY"],
+    )
+    calculation_policy_version: Optional[str] = Field(
+        None,
+        description="Version of calculation policy used.",
+        examples=["1.0.0"],
+    )
     cashflow_date: Optional[datetime] = Field(
         None, description="Linked cashflow booking date.", examples=["2026-02-28T00:00:00Z"]
     )
