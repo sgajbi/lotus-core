@@ -203,10 +203,17 @@ Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wik
 
 ## Documentation Map
 
-- target architecture:
-  [docs/architecture/lotus-core-target-architecture.md](docs/architecture/lotus-core-target-architecture.md)
+Start here:
+
 - architecture index:
   [docs/architecture/README.md](docs/architecture/README.md)
+- wiki home:
+  [wiki/Home.md](wiki/Home.md)
+
+Architecture and contract truth:
+
+- target architecture:
+  [docs/architecture/lotus-core-target-architecture.md](docs/architecture/lotus-core-target-architecture.md)
 - contract-family inventory:
   [docs/architecture/RFC-0082-contract-family-inventory.md](docs/architecture/RFC-0082-contract-family-inventory.md)
 - RFC-0083 target-state gap analysis:
@@ -217,27 +224,35 @@ Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wik
   [docs/standards/route-contract-family-registry.json](docs/standards/route-contract-family-registry.json)
 - temporal vocabulary:
   [docs/standards/temporal-vocabulary.md](docs/standards/temporal-vocabulary.md)
-- wiki home:
-  [wiki/Home.md](wiki/Home.md)
-- wiki data model:
-  [wiki/Data-Models.md](wiki/Data-Models.md)
-- wiki cost calculator:
-  [wiki/Cost-Calculator.md](wiki/Cost-Calculator.md)
-- wiki cashflow calculator:
-  [wiki/Cashflow-Calculator.md](wiki/Cashflow-Calculator.md)
-- wiki financial reconciliation:
-  [wiki/Financial-Reconciliation.md](wiki/Financial-Reconciliation.md)
-- wiki event replay:
-  [wiki/Event-Replay-Service.md](wiki/Event-Replay-Service.md)
-- wiki query control plane:
+
+Operator and onboarding wiki:
+
+- API surface and route-family examples:
+  [wiki/API-Surface.md](wiki/API-Surface.md)
+- query control plane:
   [wiki/Query-Control-Plane.md](wiki/Query-Control-Plane.md)
-- wiki support and lineage:
+- support and lineage:
   [wiki/Support-and-Lineage.md](wiki/Support-and-Lineage.md)
-- wiki timeseries and aggregation:
+- operations runbook:
+  [wiki/Operations-Runbook.md](wiki/Operations-Runbook.md)
+- validation and CI:
+  [wiki/Validation-and-CI.md](wiki/Validation-and-CI.md)
+- getting started:
+  [wiki/Getting-Started.md](wiki/Getting-Started.md)
+
+Service and subsystem pages:
+
+- data models:
+  [wiki/Data-Models.md](wiki/Data-Models.md)
+- event replay:
+  [wiki/Event-Replay-Service.md](wiki/Event-Replay-Service.md)
+- financial reconciliation:
+  [wiki/Financial-Reconciliation.md](wiki/Financial-Reconciliation.md)
+- timeseries and aggregation:
   [wiki/Timeseries-and-Aggregation.md](wiki/Timeseries-and-Aggregation.md)
-- wiki migration guide:
+- database migrations:
   [wiki/Database-Migrations.md](wiki/Database-Migrations.md)
-- wiki testing guide:
+- testing guide:
   [wiki/Testing-Guide.md](wiki/Testing-Guide.md)
 
 ## Wiki Source
