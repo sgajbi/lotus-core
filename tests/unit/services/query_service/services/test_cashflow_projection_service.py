@@ -29,6 +29,7 @@ def mock_repo() -> AsyncMock:
         return [(d, amount) for d, amount in universe.items() if start_date <= d <= end_date]
 
     repo.get_portfolio_cashflow_series.side_effect = _series
+    repo.get_projected_settlement_cashflow_series.return_value = []
     return repo
 
 
@@ -41,6 +42,11 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         response = await service.get_cashflow_projection(portfolio_id="P1", horizon_days=10)
 
         mock_repo.get_portfolio_cashflow_series.assert_awaited_once_with(
+            portfolio_id="P1",
+            start_date=date(2026, 3, 1),
+            end_date=date(2026, 3, 11),
+        )
+        mock_repo.get_projected_settlement_cashflow_series.assert_awaited_once_with(
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 11),
@@ -71,6 +77,7 @@ async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
             start_date=date(2026, 3, 2),
             end_date=date(2026, 3, 2),
         )
+        mock_repo.get_projected_settlement_cashflow_series.assert_not_awaited()
         assert response.include_projected is False
         assert response.range_end_date == date(2026, 3, 2)
         assert len(response.points) == 1
@@ -88,3 +95,30 @@ async def test_projection_raises_when_portfolio_missing(mock_repo: AsyncMock):
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_cashflow_projection(portfolio_id="P404")
+
+
+async def test_projection_includes_future_settlement_dated_external_flows(mock_repo: AsyncMock):
+    mock_repo.get_projected_settlement_cashflow_series.return_value = [
+        (date(2026, 3, 4), Decimal("-18000"))
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cashflow_projection(
+            portfolio_id="P1",
+            horizon_days=4,
+            as_of_date=date(2026, 3, 1),
+            include_projected=True,
+        )
+
+        points = {point.projection_date: point for point in response.points}
+        assert points[date(2026, 3, 4)].net_cashflow == Decimal("-18000")
+        assert points[date(2026, 3, 4)].projected_cumulative_cashflow == Decimal("-18750")
+        assert response.total_net_cashflow == Decimal("-18750")
+        assert (
+            response.notes
+            == "Projected window includes settlement-dated future external cash movements."
+        )
