@@ -1,8 +1,6 @@
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     BREAK_OPEN,
@@ -13,6 +11,7 @@ from portfolio_common.reconciliation_quality import (
     classify_finding_status,
     classify_reconciliation_status,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.operations_dto import (
     AnalyticsExportJobListResponse,
@@ -22,6 +21,7 @@ from ..dtos.operations_dto import (
     LineageKeyListResponse,
     LineageKeyRecord,
     LineageResponse,
+    LoadRunProgressResponse,
     PortfolioControlStageListResponse,
     PortfolioControlStageRecord,
     PortfolioReadinessBucket,
@@ -41,6 +41,7 @@ from ..dtos.operations_dto import (
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.operations_repository import (
+    LoadRunProgressSummary,
     MissingHistoricalFxDependencySummary,
     OperationsRepository,
     ReconciliationFindingSummary,
@@ -55,6 +56,27 @@ from ..support_policy import (
 class OperationsService:
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
+
+    @staticmethod
+    def _safe_ratio(numerator: int, denominator: int) -> float:
+        if denominator <= 0:
+            return 0.0
+        return round(numerator / denominator, 6)
+
+    @staticmethod
+    def _get_load_run_state(summary: LoadRunProgressSummary) -> str:
+        if summary.failed_valuation_jobs > 0 or summary.failed_aggregation_jobs > 0:
+            return "FAILED"
+        if (
+            summary.portfolios_ingested > 0
+            and summary.portfolios_with_timeseries == summary.portfolios_ingested
+            and summary.open_valuation_jobs == 0
+            and summary.open_aggregation_jobs == 0
+        ):
+            return "COMPLETE"
+        if summary.portfolios_ingested > 0 and summary.transactions_ingested == 0:
+            return "SEEDING"
+        return "MATERIALIZING"
 
     @staticmethod
     def _evidence_product_runtime_metadata(
@@ -369,6 +391,48 @@ class OperationsService:
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+
+    async def get_load_run_progress(
+        self,
+        run_id: str,
+        business_date: date,
+    ) -> LoadRunProgressResponse:
+        generated_at_utc = datetime.now(timezone.utc)
+        summary = await self.repo.get_load_run_progress(
+            run_id=run_id,
+            business_date=business_date,
+            as_of=generated_at_utc,
+        )
+        if summary.portfolios_ingested == 0 and summary.transactions_ingested == 0:
+            raise ValueError(f"Load run {run_id} not found")
+        return LoadRunProgressResponse(
+            run_id=run_id,
+            business_date=business_date,
+            generated_at_utc=generated_at_utc,
+            run_state=self._get_load_run_state(summary),
+            portfolios_ingested=summary.portfolios_ingested,
+            transactions_ingested=summary.transactions_ingested,
+            portfolios_with_snapshots=summary.portfolios_with_snapshots,
+            snapshot_rows=summary.snapshot_rows,
+            portfolios_with_timeseries=summary.portfolios_with_timeseries,
+            timeseries_rows=summary.timeseries_rows,
+            snapshot_portfolio_coverage_ratio=self._safe_ratio(
+                summary.portfolios_with_snapshots,
+                summary.portfolios_ingested,
+            ),
+            timeseries_portfolio_coverage_ratio=self._safe_ratio(
+                summary.portfolios_with_timeseries,
+                summary.portfolios_ingested,
+            ),
+            open_valuation_jobs=summary.open_valuation_jobs,
+            open_aggregation_jobs=summary.open_aggregation_jobs,
+            failed_valuation_jobs=summary.failed_valuation_jobs,
+            failed_aggregation_jobs=summary.failed_aggregation_jobs,
+            oldest_pending_valuation_date=summary.oldest_pending_valuation_date,
+            oldest_pending_aggregation_date=summary.oldest_pending_aggregation_date,
+            latest_snapshot_date=summary.latest_snapshot_date,
+            latest_timeseries_date=summary.latest_timeseries_date,
+        )
 
     async def get_support_overview(
         self,

@@ -3,15 +3,15 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from .source_data_product_identity import (
-    SourceDataProductRuntimeMetadata,
-    product_name_field,
-    product_version_field,
-)
 from ..support_policy import (
     CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+)
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
 )
 
 
@@ -495,6 +495,158 @@ class SupportOverviewResponse(BaseModel):
             "permit downstream publication/release."
         ),
         examples=[True],
+    )
+
+
+class LoadRunProgressResponse(BaseModel):
+    run_id: str = Field(
+        ...,
+        description=(
+            "Governed load run identifier embedded in synthetic portfolio and "
+            "transaction ids."
+        ),
+        examples=["20260418T065154Z"],
+    )
+    business_date: date = Field(
+        ...,
+        description="Target business date used to measure target-date completion coverage.",
+        examples=["2026-04-17"],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when the load-run progress snapshot was generated.",
+        examples=["2026-04-18T07:29:38Z"],
+    )
+    run_state: Literal["SEEDING", "MATERIALIZING", "COMPLETE", "FAILED"] = Field(
+        ...,
+        description=(
+            "High-level run state derived from durable facts. "
+            "`SEEDING` means portfolios exist but transactions have not landed yet. "
+            "`MATERIALIZING` means transactions exist and downstream completion is in progress. "
+            "`COMPLETE` means all ingested portfolios have target-date timeseries coverage "
+            "and no open jobs remain. "
+            "`FAILED` means failed valuation or aggregation jobs exist for the run."
+        ),
+        examples=["MATERIALIZING"],
+    )
+    portfolios_ingested: int = Field(
+        ...,
+        description=(
+            "Number of synthetic load-run portfolios durably ingested into the core ledger."
+        ),
+        examples=[1000],
+    )
+    transactions_ingested: int = Field(
+        ...,
+        description=(
+            "Number of synthetic load-run transactions durably ingested into the transaction "
+            "ledger for the run."
+        ),
+        examples=[100000],
+    )
+    portfolios_with_snapshots: int = Field(
+        ...,
+        description=(
+            "Number of load-run portfolios with at least one daily position snapshot on the "
+            "target business date."
+        ),
+        examples=[173],
+    )
+    snapshot_rows: int = Field(
+        ...,
+        description=(
+            "Number of daily position snapshot rows materialized on the target business date "
+            "for load-run portfolios."
+        ),
+        examples=[17288],
+    )
+    portfolios_with_timeseries: int = Field(
+        ...,
+        description=(
+            "Number of load-run portfolios with at least one portfolio timeseries row on the "
+            "target business date."
+        ),
+        examples=[85],
+    )
+    timeseries_rows: int = Field(
+        ...,
+        description=(
+            "Number of portfolio timeseries rows materialized on the target business date for "
+            "load-run portfolios."
+        ),
+        examples=[85],
+    )
+    snapshot_portfolio_coverage_ratio: float = Field(
+        ...,
+        description=(
+            "Ratio of ingested portfolios that already have target-date snapshot coverage, "
+            "expressed as `portfolios_with_snapshots / portfolios_ingested`."
+        ),
+        examples=[0.173],
+    )
+    timeseries_portfolio_coverage_ratio: float = Field(
+        ...,
+        description=(
+            "Ratio of ingested portfolios that already have target-date timeseries coverage, "
+            "expressed as `portfolios_with_timeseries / portfolios_ingested`."
+        ),
+        examples=[0.085],
+    )
+    open_valuation_jobs: int = Field(
+        ...,
+        description=(
+            "Count of actionable valuation jobs for the run that remain pending or processing."
+        ),
+        examples=[13],
+    )
+    open_aggregation_jobs: int = Field(
+        ...,
+        description=(
+            "Count of portfolio aggregation jobs for the run that remain pending or processing."
+        ),
+        examples=[1],
+    )
+    failed_valuation_jobs: int = Field(
+        ...,
+        description="Count of actionable valuation jobs for the run that are in FAILED state.",
+        examples=[0],
+    )
+    failed_aggregation_jobs: int = Field(
+        ...,
+        description="Count of portfolio aggregation jobs for the run that are in FAILED state.",
+        examples=[0],
+    )
+    oldest_pending_valuation_date: Optional[date] = Field(
+        None,
+        description=(
+            "Oldest valuation date among open actionable valuation jobs for the run, used to "
+            "measure backlog age."
+        ),
+        examples=["2026-04-17"],
+    )
+    oldest_pending_aggregation_date: Optional[date] = Field(
+        None,
+        description=(
+            "Oldest aggregation date among open aggregation jobs for the run, used to measure "
+            "backlog age."
+        ),
+        examples=["2026-04-17"],
+    )
+    latest_snapshot_date: Optional[date] = Field(
+        None,
+        description=(
+            "Latest business date for which any load-run portfolio has daily position snapshot "
+            "materialization."
+        ),
+        examples=["2026-04-17"],
+    )
+    latest_timeseries_date: Optional[date] = Field(
+        None,
+        description=(
+            "Latest business date for which any load-run portfolio has portfolio timeseries "
+            "materialization."
+        ),
+        examples=["2026-04-17"],
     )
 
 

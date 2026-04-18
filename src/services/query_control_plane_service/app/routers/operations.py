@@ -12,6 +12,7 @@ from src.services.query_service.app.dtos.operations_dto import (
     CalculatorSloResponse,
     LineageKeyListResponse,
     LineageResponse,
+    LoadRunProgressResponse,
     PortfolioControlStageListResponse,
     PortfolioReadinessResponse,
     ReconciliationFindingListResponse,
@@ -30,6 +31,7 @@ from src.services.query_service.app.support_policy import (
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
 )
+
 from .response_helpers import problem_response
 
 logger = logging.getLogger(__name__)
@@ -260,8 +262,56 @@ async def get_calculator_slos(
             failed_window_hours=failed_window_hours,
         ),
         log_message="Failed to build calculator SLO snapshot for portfolio %s",
-        unexpected_detail="An unexpected server error occurred while building calculator SLO snapshot.",
+        unexpected_detail=(
+            "An unexpected server error occurred while building calculator SLO snapshot."
+        ),
         log_args=(portfolio_id,),
+    )
+
+
+@router.get(
+    "/support/load-runs/{run_id}",
+    response_model=LoadRunProgressResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Load run not found.",
+            {"detail": "Load run 20260418T065154Z not found"},
+        ),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
+    },
+    summary="Get run-scoped load progress for institutional validation",
+    description=(
+        "What: Return run-scoped progress and completion telemetry for a governed load scenario.\n"
+        "How: Aggregate synthetic load-run portfolio, transaction, snapshot, timeseries, and job "
+        "facts using the run id naming convention and target business date.\n"
+        "When: Use during institutional bank-day validation, interrupted run forensics, and "
+        "operator support workflows to understand whether a load run is still seeding, "
+        "materializing, complete, or failed."
+    ),
+)
+async def get_load_run_progress(
+    run_id: str = Path(
+        ...,
+        description="Governed load run identifier embedded in synthetic ids.",
+        examples=["20260418T065154Z"],
+    ),
+    business_date: str = Query(
+        ...,
+        description=(
+            "Target business date in YYYY-MM-DD format used to measure "
+            "completion coverage."
+        ),
+        examples=["2026-04-17"],
+    ),
+    service: OperationsService = Depends(get_operations_service),
+):
+    parsed_business_date = parse_optional_iso_date("business_date", business_date)
+    assert parsed_business_date is not None
+    return await execute_operations_call(
+        service.get_load_run_progress(run_id=run_id, business_date=parsed_business_date),
+        log_message="Failed to build load-run progress for run %s",
+        unexpected_detail="An unexpected server error occurred while building load-run progress.",
+        log_args=(run_id,),
     )
 
 
@@ -321,7 +371,9 @@ async def get_portfolio_control_stages(
             status=status_filter,
         ),
         log_message="Failed to list portfolio control stages for portfolio %s",
-        unexpected_detail="An unexpected server error occurred while listing portfolio control stages.",
+        unexpected_detail=(
+            "An unexpected server error occurred while listing portfolio control stages."
+        ),
         log_args=(portfolio_id,),
     )
 
@@ -650,7 +702,9 @@ async def get_analytics_export_jobs(
             stale_threshold_minutes=stale_threshold_minutes,
         ),
         log_message="Failed to list analytics export jobs for portfolio %s",
-        unexpected_detail="An unexpected server error occurred while listing analytics export jobs.",
+        unexpected_detail=(
+            "An unexpected server error occurred while listing analytics export jobs."
+        ),
         log_args=(portfolio_id,),
     )
 
@@ -781,7 +835,9 @@ async def get_reconciliation_findings(
             transaction_id=transaction_id,
         ),
         log_message="Failed to list reconciliation findings for portfolio %s run %s",
-        unexpected_detail="An unexpected server error occurred while listing reconciliation findings.",
+        unexpected_detail=(
+            "An unexpected server error occurred while listing reconciliation findings."
+        ),
         log_args=(portfolio_id, run_id),
     )
 

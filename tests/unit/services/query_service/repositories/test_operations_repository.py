@@ -264,6 +264,56 @@ async def test_get_analytics_export_job_health_summary(
     assert "request_fingerprint" in compiled.lower()
 
 
+async def test_get_load_run_progress_aggregates_run_scoped_counts(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_db_session.scalar = AsyncMock(
+        side_effect=[
+            1000,
+            100000,
+            173,
+            17288,
+            85,
+            85,
+            date(2026, 4, 17),
+            date(2026, 4, 17),
+        ]
+    )
+    valuation_result = MagicMock()
+    valuation_result.one.return_value = (13, 0, date(2026, 4, 17))
+    aggregation_result = MagicMock()
+    aggregation_result.one.return_value = (1, 0, date(2026, 4, 17))
+    mock_db_session.execute = AsyncMock(side_effect=[valuation_result, aggregation_result])
+
+    summary = await repository.get_load_run_progress(
+        "20260418T065154Z",
+        business_date=date(2026, 4, 17),
+        as_of=datetime(2026, 4, 18, 7, 29, tzinfo=timezone.utc),
+    )
+
+    assert summary.portfolios_ingested == 1000
+    assert summary.transactions_ingested == 100000
+    assert summary.portfolios_with_snapshots == 173
+    assert summary.snapshot_rows == 17288
+    assert summary.portfolios_with_timeseries == 85
+    assert summary.timeseries_rows == 85
+    assert summary.open_valuation_jobs == 13
+    assert summary.open_aggregation_jobs == 1
+    assert summary.failed_valuation_jobs == 0
+    assert summary.failed_aggregation_jobs == 0
+    assert summary.oldest_pending_valuation_date == date(2026, 4, 17)
+    assert summary.oldest_pending_aggregation_date == date(2026, 4, 17)
+
+    scalar_sql = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in mock_db_session.scalar.call_args_list
+    ]
+    assert any("from portfolios" in compiled.lower() for compiled in scalar_sql)
+    assert any("from transactions" in compiled.lower() for compiled in scalar_sql)
+    assert any("from daily_position_snapshots" in compiled.lower() for compiled in scalar_sql)
+    assert any("from portfolio_timeseries" in compiled.lower() for compiled in scalar_sql)
+
+
 async def test_support_job_queries_honor_job_id_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
