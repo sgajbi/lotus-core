@@ -305,6 +305,7 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     waiting_result = MagicMock()
     waiting_result.one.return_value = (
         11,
+        4,
         datetime(2026, 4, 18, 6, 45, tzinfo=timezone.utc),
     )
     mock_db_session.execute = AsyncMock(
@@ -351,6 +352,7 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
         2026, 4, 18, 7, 29, tzinfo=timezone.utc
     )
     assert summary.completed_valuation_jobs_without_position_timeseries == 11
+    assert summary.completed_valuation_portfolios_without_position_timeseries == 4
     assert summary.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(
         2026, 4, 18, 6, 45, tzinfo=timezone.utc
     )
@@ -386,6 +388,10 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     ]
     assert any(
         "position_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
+        "count(distinct" in compiled.lower() and "portfolio_id" in compiled.lower()
         for compiled in execute_sql
     )
     assert any(

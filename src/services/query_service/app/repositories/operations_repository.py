@@ -123,6 +123,7 @@ class LoadRunProgressSummary:
     latest_valuation_job_updated_at_utc: Optional[datetime]
     latest_aggregation_job_updated_at_utc: Optional[datetime]
     completed_valuation_jobs_without_position_timeseries: int
+    completed_valuation_portfolios_without_position_timeseries: int
     oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime]
     valuation_to_position_timeseries_latency_sample_count: int
     valuation_to_position_timeseries_latency_p50_seconds: Optional[float]
@@ -416,6 +417,7 @@ class OperationsRepository:
         )
         valuation_without_position_timeseries_stmt = select(
             func.count(),
+            func.count(func.distinct(valuation_handoff_subq.c.portfolio_id)),
             func.min(valuation_handoff_subq.c.valuation_completed_at_utc),
         ).select_from(valuation_handoff_subq).outerjoin(
             PositionTimeseries,
@@ -516,6 +518,7 @@ class OperationsRepository:
         ) = valuation_handoff_latency.one()
         (
             completed_valuation_jobs_without_position_timeseries,
+            completed_valuation_portfolios_without_position_timeseries,
             oldest_completed_valuation_without_position_timeseries_at_utc,
         ) = valuation_without_position_timeseries.one()
         open_valuation_jobs = int(pending_valuation_jobs or 0) + int(processing_valuation_jobs or 0)
@@ -555,6 +558,9 @@ class OperationsRepository:
             latest_aggregation_job_updated_at_utc=latest_aggregation_job_updated_at_utc,
             completed_valuation_jobs_without_position_timeseries=int(
                 completed_valuation_jobs_without_position_timeseries or 0
+            ),
+            completed_valuation_portfolios_without_position_timeseries=int(
+                completed_valuation_portfolios_without_position_timeseries or 0
             ),
             oldest_completed_valuation_without_position_timeseries_at_utc=(
                 oldest_completed_valuation_without_position_timeseries_at_utc

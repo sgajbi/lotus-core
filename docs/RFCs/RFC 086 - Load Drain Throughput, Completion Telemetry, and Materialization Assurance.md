@@ -188,6 +188,9 @@ Instead, the run points to a different defect class:
 17. The run-scoped support contract now publishes the configured dependent position-timeseries
     propagation row cap from a shared constant, so operators can interpret timeseries lag against
     the actual per-message drain boundary without reading worker code.
+18. The run-scoped support contract now publishes the distinct portfolio breadth of the
+    valuation-to-position-timeseries handoff backlog, not just raw waiting job count, so operators
+    can distinguish localized lag from broad portfolio-level incomplete coverage.
 
 ## Requirement-to-Implementation Traceability
 

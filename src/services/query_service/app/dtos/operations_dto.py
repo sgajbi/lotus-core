@@ -769,6 +769,15 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[22480],
     )
+    completed_valuation_portfolios_without_position_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of distinct portfolios that already have at least one latest-epoch valuation "
+            "job in COMPLETE state but still have no matching target-date position-timeseries row "
+            "for one or more securities."
+        ),
+        examples=[238],
+    )
     oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime] = Field(
         None,
         description=(
