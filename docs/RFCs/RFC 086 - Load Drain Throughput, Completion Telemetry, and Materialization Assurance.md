@@ -564,6 +564,9 @@ Implementation status as of 2026-04-18:
     materialization timestamps so operators can read snapshot-to-position-timeseries and
     position-timeseries-to-portfolio-timeseries drain gaps directly instead of subtracting UTC
     timestamps manually during live diagnosis.
+24. the support contract now also derives explicit latest valuation-to-snapshot and valuation-to-
+    position-timeseries tail latencies so operators can tell whether the current delay is before
+    snapshot persistence or entirely downstream of valuation completion.
 
 Phase 1 exit criteria:
 

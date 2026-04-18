@@ -339,6 +339,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "valuation_to_position_timeseries_handoff_pressure_hint"
     ]["description"].startswith("Derived operator hint describing where current")
     assert load_run_progress_schema["properties"][
+        "latest_valuation_to_snapshot_tail_seconds"
+    ]["description"].startswith("Seconds between the latest durable valuation-job update")
+    assert load_run_progress_schema["properties"][
+        "latest_valuation_to_position_timeseries_tail_seconds"
+    ]["description"].startswith("Seconds between the latest durable valuation-job update")
+    assert load_run_progress_schema["properties"][
         "latest_snapshot_to_position_timeseries_tail_seconds"
     ]["description"].startswith("Seconds between the latest target-date daily position")
     assert load_run_progress_schema["properties"][

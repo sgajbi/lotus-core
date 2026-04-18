@@ -530,8 +530,20 @@ class OperationsService:
             latest_snapshot_date=summary.latest_snapshot_date,
             latest_timeseries_date=summary.latest_timeseries_date,
             latest_snapshot_materialized_at_utc=summary.latest_snapshot_materialized_at_utc,
+            latest_valuation_to_snapshot_tail_seconds=(
+                self._elapsed_seconds_between(
+                    summary.latest_valuation_job_updated_at_utc,
+                    summary.latest_snapshot_materialized_at_utc,
+                )
+            ),
             latest_position_timeseries_materialized_at_utc=(
                 summary.latest_position_timeseries_materialized_at_utc
+            ),
+            latest_valuation_to_position_timeseries_tail_seconds=(
+                self._elapsed_seconds_between(
+                    summary.latest_valuation_job_updated_at_utc,
+                    summary.latest_position_timeseries_materialized_at_utc,
+                )
             ),
             latest_snapshot_to_position_timeseries_tail_seconds=(
                 self._elapsed_seconds_between(
