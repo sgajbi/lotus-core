@@ -183,3 +183,99 @@ def test_determine_automatic_bundle_outcome_escalates_failed_runs():
         "transaction_cashflow": "recon-tx",
         "timeseries_integrity": "recon-ts",
     }
+
+
+@pytest.mark.asyncio
+async def test_run_timeseries_integrity_records_missing_portfolio_timeseries():
+    run = SimpleNamespace(run_id="recon-ts-1")
+    aggregate_row = SimpleNamespace(
+        portfolio_id="PORT-TS-1",
+        date=date(2026, 3, 8),
+        epoch=2,
+        position_row_count=3,
+        bod_market_value=Decimal("100"),
+        bod_cashflow=Decimal("10"),
+        eod_cashflow=Decimal("5"),
+        eod_market_value=Decimal("115"),
+        fees=Decimal("1"),
+    )
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_portfolio_timeseries_rows.return_value = []
+    repository.fetch_position_timeseries_aggregates.return_value = [aggregate_row]
+    repository.fetch_snapshot_counts.return_value = []
+
+    service = ReconciliationService(repository)
+    with patch(
+        "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
+    ) as observe_metric:
+        await service.run_timeseries_integrity(
+            request=ReconciliationRunRequest(portfolio_id="PORT-TS-1", business_date=date(2026, 3, 8), epoch=2),
+            correlation_id="corr-ts-1",
+        )
+
+    findings = repository.add_findings.await_args.args[0]
+    assert len(findings) == 1
+    assert findings[0].finding_type == "missing_portfolio_timeseries"
+    summary = repository.mark_run_completed.await_args.kwargs["summary"]
+    assert summary["error_count"] == 1
+    observe_metric.assert_called_once()
+    assert observe_metric.call_args.args[:2] == ("timeseries_integrity", "COMPLETED")
+
+
+@pytest.mark.asyncio
+async def test_run_timeseries_integrity_records_completeness_and_aggregate_mismatches():
+    run = SimpleNamespace(run_id="recon-ts-2")
+    portfolio_row = SimpleNamespace(
+        portfolio_id="PORT-TS-2",
+        date=date(2026, 3, 8),
+        epoch=4,
+        bod_market_value=Decimal("200"),
+        bod_cashflow=Decimal("20"),
+        eod_cashflow=Decimal("15"),
+        eod_market_value=Decimal("230"),
+        fees=Decimal("3"),
+    )
+    aggregate_row = SimpleNamespace(
+        portfolio_id="PORT-TS-2",
+        date=date(2026, 3, 8),
+        epoch=4,
+        position_row_count=1,
+        bod_market_value=Decimal("190"),
+        bod_cashflow=Decimal("20"),
+        eod_cashflow=Decimal("10"),
+        eod_market_value=Decimal("225"),
+        fees=Decimal("1"),
+    )
+    snapshot_count_row = SimpleNamespace(
+        portfolio_id="PORT-TS-2",
+        date=date(2026, 3, 8),
+        epoch=4,
+        snapshot_count=3,
+    )
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_portfolio_timeseries_rows.return_value = [portfolio_row]
+    repository.fetch_position_timeseries_aggregates.return_value = [aggregate_row]
+    repository.fetch_snapshot_counts.return_value = [snapshot_count_row]
+
+    service = ReconciliationService(repository)
+    await service.run_timeseries_integrity(
+        request=ReconciliationRunRequest(portfolio_id="PORT-TS-2", business_date=date(2026, 3, 8), epoch=4),
+        correlation_id="corr-ts-2",
+    )
+
+    findings = repository.add_findings.await_args.args[0]
+    assert {finding.finding_type for finding in findings} == {
+        "position_timeseries_completeness_gap",
+        "portfolio_timeseries_aggregate_mismatch",
+    }
+    mismatch_finding = next(
+        finding for finding in findings if finding.finding_type == "portfolio_timeseries_aggregate_mismatch"
+    )
+    assert mismatch_finding.detail["bod_market_value"]["delta"] == "10"
+    assert mismatch_finding.detail["eod_cashflow"]["delta"] == "5"
+    assert mismatch_finding.detail["fees"]["delta"] == "2"
+    summary = repository.mark_run_completed.await_args.kwargs["summary"]
+    assert summary["finding_count"] == 2
+    assert summary["passed"] is False
