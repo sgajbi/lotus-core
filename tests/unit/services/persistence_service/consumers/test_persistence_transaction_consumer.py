@@ -119,7 +119,7 @@ async def test_process_message_success(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_repo.check_portfolio_exists.return_value = True
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
 
     # Use patch.object for robust mocking
     with patch.object(
@@ -134,11 +134,11 @@ async def test_process_message_success(
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
             "test-corr-id"
         )
-        mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-            event_id="UNIT_TEST_01",
-            portfolio_id="PORT_UT_01",
-            service_name="persistence-transactions",
-            correlation_id="test-corr-id",
+        mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
+            "UNIT_TEST_01",
+            "PORT_UT_01",
+            "persistence-transactions",
+            "test-corr-id",
         )
         mock_send_to_dlq.assert_not_called()
 
@@ -153,7 +153,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_repo.check_portfolio_exists.return_value = True
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
 
     token = correlation_id_var.set("<not-set>")
     try:
@@ -164,11 +164,11 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "test-corr-id"
     )
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        event_id="UNIT_TEST_01",
-        portfolio_id="PORT_UT_01",
-        service_name="persistence-transactions",
-        correlation_id="test-corr-id",
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
+        "UNIT_TEST_01",
+        "PORT_UT_01",
+        "persistence-transactions",
+        "test-corr-id",
     )
 
 

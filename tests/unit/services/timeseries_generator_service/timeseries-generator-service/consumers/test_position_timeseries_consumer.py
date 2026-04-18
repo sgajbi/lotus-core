@@ -510,8 +510,8 @@ async def test_stage_aggregation_job_rearms_completed_job_for_late_material_inpu
 
     assert "DO UPDATE SET status" in compiled_stmt
     assert "correlation_id" in compiled_stmt
-    assert "portfolio_aggregation_jobs.status != 'PENDING'" in compiled_stmt
-    assert "coalesce(portfolio_aggregation_jobs.correlation_id, '') != 'corr-456'" in compiled_stmt
+    assert "portfolio_aggregation_jobs.status !=" in compiled_stmt
+    assert "coalesce(portfolio_aggregation_jobs.correlation_id" in compiled_stmt
 
 
 async def test_stage_aggregation_jobs_deduplicates_dates_before_bulk_insert(

@@ -116,7 +116,7 @@ async def test_completion_consumer_updates_orchestrator_stage_and_marks_idempote
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_service = mock_dependencies["service"]
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
 
     await consumer.process_message(mock_kafka_message)
 
@@ -124,7 +124,7 @@ async def test_completion_consumer_updates_orchestrator_stage_and_marks_idempote
         mock_event,
         "corr-ctrl",
     )
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
         "portfolio_day.reconciliation.completed-0-9",
         mock_event.portfolio_id,
         consumer_module.SERVICE_NAME,
@@ -156,7 +156,7 @@ async def test_completion_consumer_preserves_payload_correlation_over_header_ove
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_service = mock_dependencies["service"]
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_kafka_message.headers.return_value = [("correlation_id", b"header-corr")]
 
     await consumer.process_message(mock_kafka_message)
@@ -165,4 +165,4 @@ async def test_completion_consumer_preserves_payload_correlation_over_header_ove
         mock_event,
         "corr-ctrl",
     )
-    assert mock_idempotency_repo.mark_event_processed.await_args.args[3] == "corr-ctrl"
+    assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "corr-ctrl"
