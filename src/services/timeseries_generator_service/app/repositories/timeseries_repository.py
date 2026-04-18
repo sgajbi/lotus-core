@@ -1,3 +1,5 @@
+from datetime import date
+
 from portfolio_common.database_models import PositionTimeseries
 from portfolio_common.timeseries_repository_base import TimeseriesRepositoryBase
 from portfolio_common.utils import async_timed
@@ -7,7 +9,7 @@ from sqlalchemy import select
 class TimeseriesRepository(TimeseriesRepositoryBase):
     @async_timed(repository="TimeseriesRepository", method="get_position_timeseries")
     async def get_position_timeseries(
-        self, portfolio_id: str, security_id: str, a_date, epoch: int
+        self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> PositionTimeseries | None:
         stmt = select(PositionTimeseries).filter_by(
             portfolio_id=portfolio_id,
@@ -23,9 +25,9 @@ class TimeseriesRepository(TimeseriesRepositoryBase):
         self,
         portfolio_id: str,
         security_id: str,
-        dates: list,
+        dates: list[date],
         epoch: int,
-    ) -> dict:
+    ) -> dict[date, PositionTimeseries]:
         if not dates:
             return {}
         stmt = select(PositionTimeseries).where(
