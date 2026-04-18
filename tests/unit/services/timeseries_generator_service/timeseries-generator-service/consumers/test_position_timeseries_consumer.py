@@ -61,6 +61,7 @@ def mock_dependencies():
     mock_repo = AsyncMock(spec=TimeseriesRepository)
     mock_repo.get_next_snapshots_after.return_value = []
     mock_repo.get_position_timeseries_for_dates.return_value = {}
+    mock_repo.get_cashflows_for_security_dates.return_value = {}
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_transaction = AsyncMock()
@@ -330,12 +331,14 @@ async def test_process_message_recalculates_dependent_next_day_bod(
     mock_repo.get_position_timeseries_for_dates.return_value = {
         next_snapshot.date: dependent_existing
     }
+    mock_repo.get_cashflows_for_security_dates.return_value = {next_snapshot.date: []}
     mock_repo.get_next_snapshots_after.return_value = [next_snapshot]
 
     await consumer._process_message_with_retry(mock_kafka_message)
 
     assert mock_repo.upsert_position_timeseries.await_count == 2
     assert mock_repo.get_position_timeseries.await_count == 1
+    assert mock_repo.get_all_cashflows_for_security_date.await_count == 1
     propagated_record = mock_repo.upsert_position_timeseries.await_args_list[1].args[0]
     assert propagated_record.date == date(2025, 8, 13)
     assert propagated_record.bod_market_value == Decimal("1100")
@@ -377,6 +380,7 @@ async def test_process_message_does_not_precompute_absent_dependent_day(
     mock_repo.get_all_cashflows_for_security_date.return_value = []
     mock_repo.get_position_timeseries.return_value = None
     mock_repo.get_position_timeseries_for_dates.return_value = {}
+    mock_repo.get_cashflows_for_security_dates.return_value = {next_snapshot.date: []}
     mock_repo.get_next_snapshots_after.return_value = [next_snapshot]
 
     await consumer._process_message_with_retry(mock_kafka_message)

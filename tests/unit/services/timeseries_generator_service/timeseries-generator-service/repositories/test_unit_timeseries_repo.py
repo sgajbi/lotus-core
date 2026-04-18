@@ -208,6 +208,33 @@ async def test_get_all_cashflows_for_security_date_uses_latest_cashflow_epoch_wi
     assert "anon_1.rn = 1" in compiled_query
 
 
+async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    dated_row = MagicMock()
+    dated_row.cashflow_date = date(2025, 1, 10)
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
+
+    result = await repository.get_cashflows_for_security_dates(
+        "P1",
+        "S1",
+        [date(2025, 1, 10), date(2025, 1, 11)],
+        14,
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "cashflows.portfolio_id = 'P1'" in compiled_query
+    assert "cashflows.security_id = 'S1'" in compiled_query
+    assert "cashflows.cashflow_date IN ('2025-01-10', '2025-01-11')" in compiled_query
+    assert "cashflows.epoch <= 14" in compiled_query
+    assert result[date(2025, 1, 10)] == [dated_row]
+    assert result[date(2025, 1, 11)] == []
+
+
 async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_target_epoch(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):

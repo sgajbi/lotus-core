@@ -502,6 +502,9 @@ Implementation status as of 2026-04-18:
 16. dependent propagation now also batch-fetches existing future `position_timeseries` rows by
     date before iterating, which removes another per-day lookup from the valuation-to-timeseries
     drain path while preserving the existing stop-on-gap semantics.
+17. the same propagation loop now batch-fetches future cashflows by date as well, so downstream
+    recalculation no longer pays one cashflow query per future day once the future snapshot set is
+    known.
 
 Phase 1 exit criteria:
 

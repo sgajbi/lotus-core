@@ -112,6 +112,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
         epoch: int,
         require_existing: bool = False,
         existing_timeseries=...,
+        cashflows=...,
     ) -> tuple[bool, object]:
         if existing_timeseries is ...:
             existing_timeseries = await repo.get_position_timeseries(
@@ -122,12 +123,13 @@ class PositionTimeseriesConsumer(BaseConsumer):
             )
         if require_existing and existing_timeseries is None:
             return False, None
-        cashflows = await repo.get_all_cashflows_for_security_date(
-            current_snapshot.portfolio_id,
-            current_snapshot.security_id,
-            current_snapshot.date,
-            epoch,
-        )
+        if cashflows is ...:
+            cashflows = await repo.get_all_cashflows_for_security_date(
+                current_snapshot.portfolio_id,
+                current_snapshot.security_id,
+                current_snapshot.date,
+                epoch,
+            )
 
         new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
             current_snapshot=current_snapshot,
@@ -158,10 +160,17 @@ class PositionTimeseriesConsumer(BaseConsumer):
             epoch,
             MAX_DEPENDENT_PROPAGATION_ROWS,
         )
+        next_dates = [snapshot.date for snapshot in next_snapshots]
         existing_timeseries_by_date = await repo.get_position_timeseries_for_dates(
             previous_snapshot.portfolio_id,
             previous_snapshot.security_id,
-            [snapshot.date for snapshot in next_snapshots],
+            next_dates,
+            epoch,
+        )
+        cashflows_by_date = await repo.get_cashflows_for_security_dates(
+            previous_snapshot.portfolio_id,
+            previous_snapshot.security_id,
+            next_dates,
             epoch,
         )
         for next_snapshot in next_snapshots:
@@ -173,6 +182,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                 epoch=epoch,
                 require_existing=True,
                 existing_timeseries=existing_timeseries_by_date.get(next_snapshot.date),
+                cashflows=cashflows_by_date.get(next_snapshot.date, []),
             )
             if not changed:
                 return
