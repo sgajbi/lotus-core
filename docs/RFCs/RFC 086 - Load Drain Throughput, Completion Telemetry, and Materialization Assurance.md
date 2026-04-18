@@ -482,6 +482,10 @@ Implementation status as of 2026-04-18:
     `PipelineStageRepository.upsert_stage_flags` to `INSERT .. ON CONFLICT .. RETURNING` with
     `populate_existing=True`; integration tests confirm prerequisite merge behavior and readiness
     emission semantics remain unchanged.
+11. follow-up review of the position-timeseries hot path removed dead exception scaffolding and
+    replaced the dataclass-plus-`asdict` material-change comparison with a direct tuple snapshot of
+    persisted business fields, reducing per-message comparison churn without changing write
+    semantics.
 
 Phase 1 exit criteria:
 

@@ -249,6 +249,37 @@ async def test_process_message_skips_downstream_fanout_for_identical_timeseries(
     mock_db_session.execute.assert_not_awaited()
 
 
+async def test_has_material_change_only_tracks_persisted_business_fields(
+    consumer: PositionTimeseriesConsumer,
+):
+    existing_record = MagicMock(
+        bod_market_value=Decimal("1050"),
+        bod_cashflow_position=Decimal("0"),
+        eod_cashflow_position=Decimal("0"),
+        bod_cashflow_portfolio=Decimal("0"),
+        eod_cashflow_portfolio=Decimal("0"),
+        eod_market_value=Decimal("1100"),
+        fees=Decimal("0"),
+        quantity=Decimal("100"),
+        cost=Decimal("10"),
+        updated_at="old-timestamp",
+    )
+    new_record = MagicMock(
+        bod_market_value=Decimal("1050"),
+        bod_cashflow_position=Decimal("0"),
+        eod_cashflow_position=Decimal("0"),
+        bod_cashflow_portfolio=Decimal("0"),
+        eod_cashflow_portfolio=Decimal("0"),
+        eod_market_value=Decimal("1100"),
+        fees=Decimal("0"),
+        quantity=Decimal("100"),
+        cost=Decimal("10"),
+        updated_at="new-timestamp",
+    )
+
+    assert consumer._has_material_change(existing_record, new_record) is False
+
+
 async def test_process_message_recalculates_dependent_next_day_bod(
     consumer: PositionTimeseriesConsumer,
     mock_kafka_message: MagicMock,

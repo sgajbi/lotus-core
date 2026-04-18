@@ -1,6 +1,5 @@
 import json
 import logging
-from dataclasses import asdict, dataclass
 from datetime import date
 
 from confluent_kafka import Message
@@ -25,23 +24,6 @@ SERVICE_NAME = "timeseries-generator"
 MAX_DEPENDENT_PROPAGATION_ROWS = 500
 
 
-class PreviousTimeseriesNotFoundError(Exception):
-    pass
-
-
-@dataclass(frozen=True)
-class _TimeseriesMaterialState:
-    bod_market_value: object
-    bod_cashflow_position: object
-    eod_cashflow_position: object
-    bod_cashflow_portfolio: object
-    eod_cashflow_portfolio: object
-    eod_market_value: object
-    fees: object
-    quantity: object
-    cost: object
-
-
 class PositionTimeseriesConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         retry_config = retry(
@@ -64,26 +46,24 @@ class PositionTimeseriesConsumer(BaseConsumer):
             await self._send_to_dlq_async(msg, e)
 
     @staticmethod
-    def _material_state(timeseries_record) -> _TimeseriesMaterialState:
-        return _TimeseriesMaterialState(
-            bod_market_value=timeseries_record.bod_market_value,
-            bod_cashflow_position=timeseries_record.bod_cashflow_position,
-            eod_cashflow_position=timeseries_record.eod_cashflow_position,
-            bod_cashflow_portfolio=timeseries_record.bod_cashflow_portfolio,
-            eod_cashflow_portfolio=timeseries_record.eod_cashflow_portfolio,
-            eod_market_value=timeseries_record.eod_market_value,
-            fees=timeseries_record.fees,
-            quantity=timeseries_record.quantity,
-            cost=timeseries_record.cost,
+    def _material_state(timeseries_record) -> tuple[object, ...]:
+        return (
+            timeseries_record.bod_market_value,
+            timeseries_record.bod_cashflow_position,
+            timeseries_record.eod_cashflow_position,
+            timeseries_record.bod_cashflow_portfolio,
+            timeseries_record.eod_cashflow_portfolio,
+            timeseries_record.eod_market_value,
+            timeseries_record.fees,
+            timeseries_record.quantity,
+            timeseries_record.cost,
         )
 
     @classmethod
     def _has_material_change(cls, existing_record, new_record) -> bool:
         if existing_record is None:
             return True
-        return asdict(cls._material_state(existing_record)) != asdict(
-            cls._material_state(new_record)
-        )
+        return cls._material_state(existing_record) != cls._material_state(new_record)
 
     async def _stage_aggregation_job(
         self, db_session, portfolio_id: str, a_date: date, correlation_id: str
