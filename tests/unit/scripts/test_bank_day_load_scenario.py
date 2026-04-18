@@ -147,10 +147,15 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             portfolios_with_snapshots=2,
             snapshots_count=6,
             portfolios_with_position_timeseries=1,
+            complete_portfolios=1,
+            incomplete_portfolios=1,
+            portfolios_waiting_for_snapshots=0,
             snapshot_portfolios_without_position_timeseries=1,
             position_timeseries_count=5,
             portfolios_with_portfolio_timeseries=2,
+            portfolios_waiting_for_position_timeseries=1,
             position_timeseries_portfolios_without_portfolio_timeseries=0,
+            portfolios_waiting_for_portfolio_timeseries=0,
             portfolio_timeseries_count=2,
             summed_snapshot_quantity="5.0000000000",
             expected_total_quantity="6.0000000000",
@@ -216,6 +221,8 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     failures = _evaluate_report(report)
 
     assert any("terminal_status is failed" in failure for failure in failures)
+    assert any("complete_portfolios" in failure for failure in failures)
+    assert any("portfolios_waiting_for_position_timeseries" in failure for failure in failures)
     assert any("snapshot_portfolios_without_position_timeseries" in failure for failure in failures)
     assert any("portfolios_with_position_timeseries" in failure for failure in failures)
     assert any("position_timeseries_count" in failure for failure in failures)
@@ -260,10 +267,15 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             portfolios_with_snapshots=0,
             snapshots_count=0,
             portfolios_with_position_timeseries=0,
+            complete_portfolios=0,
+            incomplete_portfolios=2,
+            portfolios_waiting_for_snapshots=2,
             snapshot_portfolios_without_position_timeseries=0,
             position_timeseries_count=0,
             portfolios_with_portfolio_timeseries=0,
+            portfolios_waiting_for_position_timeseries=0,
             position_timeseries_portfolios_without_portfolio_timeseries=0,
+            portfolios_waiting_for_portfolio_timeseries=0,
             portfolio_timeseries_count=0,
             summed_snapshot_quantity="0.0000000000",
             expected_total_quantity="4.0000000000",

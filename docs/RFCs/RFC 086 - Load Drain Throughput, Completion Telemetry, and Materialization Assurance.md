@@ -570,6 +570,9 @@ Implementation status as of 2026-04-18:
 25. the support contract now publishes explicit complete versus incomplete portfolio counts plus
     stage-waiting portfolio counts for snapshots, position-timeseries, and portfolio-timeseries,
     so operators do not need to derive remaining completion work from multiple coverage metrics.
+26. the repo-native bank-day scenario and reconciliation artifacts now carry the same completion
+    accounting vocabulary in their tie-out and markdown output, keeping support-surface progress
+    facts and operator evidence packs aligned.
 
 Phase 1 exit criteria:
 

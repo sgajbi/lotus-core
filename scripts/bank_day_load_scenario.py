@@ -109,10 +109,15 @@ class DatabaseTieOut:
     portfolios_with_snapshots: int
     snapshots_count: int
     portfolios_with_position_timeseries: int
+    complete_portfolios: int
+    incomplete_portfolios: int
+    portfolios_waiting_for_snapshots: int
     snapshot_portfolios_without_position_timeseries: int
     position_timeseries_count: int
     portfolios_with_portfolio_timeseries: int
+    portfolios_waiting_for_position_timeseries: int
     position_timeseries_portfolios_without_portfolio_timeseries: int
+    portfolios_waiting_for_portfolio_timeseries: int
     portfolio_timeseries_count: int
     summed_snapshot_quantity: str
     expected_total_quantity: str
@@ -916,25 +921,40 @@ def _build_database_tie_out(
     processing_valuation_jobs = int(aggregate_row["processing_valuation_jobs"] or 0)
     pending_aggregation_jobs = int(aggregate_row["pending_aggregation_jobs"] or 0)
     processing_aggregation_jobs = int(aggregate_row["processing_aggregation_jobs"] or 0)
+    portfolios_count = int(aggregate_row["portfolios_count"])
     portfolios_with_snapshots = int(aggregate_row["portfolios_with_snapshots"])
     portfolios_with_position_timeseries = int(aggregate_row["portfolios_with_position_timeseries"])
     portfolios_with_portfolio_timeseries = int(
         aggregate_row["portfolios_with_portfolio_timeseries"]
     )
     return DatabaseTieOut(
-        portfolios_count=int(aggregate_row["portfolios_count"]),
+        portfolios_count=portfolios_count,
         instruments_count=int(aggregate_row["instruments_count"]),
         transactions_count=int(aggregate_row["transactions_count"]),
         portfolios_with_snapshots=portfolios_with_snapshots,
         snapshots_count=int(aggregate_row["snapshots_count"]),
         portfolios_with_position_timeseries=portfolios_with_position_timeseries,
+        complete_portfolios=portfolios_with_portfolio_timeseries,
+        incomplete_portfolios=max(portfolios_count - portfolios_with_portfolio_timeseries, 0),
+        portfolios_waiting_for_snapshots=max(
+            portfolios_count - portfolios_with_snapshots,
+            0,
+        ),
         snapshot_portfolios_without_position_timeseries=max(
             portfolios_with_snapshots - portfolios_with_position_timeseries,
             0,
         ),
         position_timeseries_count=int(aggregate_row["position_timeseries_count"]),
         portfolios_with_portfolio_timeseries=portfolios_with_portfolio_timeseries,
+        portfolios_waiting_for_position_timeseries=max(
+            portfolios_with_snapshots - portfolios_with_position_timeseries,
+            0,
+        ),
         position_timeseries_portfolios_without_portfolio_timeseries=max(
+            portfolios_with_position_timeseries - portfolios_with_portfolio_timeseries,
+            0,
+        ),
+        portfolios_waiting_for_portfolio_timeseries=max(
             portfolios_with_position_timeseries - portfolios_with_portfolio_timeseries,
             0,
         ),
@@ -1213,6 +1233,18 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
             "portfolios_with_snapshots "
             f"{tie_out.portfolios_with_snapshots} != expected {report.config['portfolio_count']}"
         )
+    if tie_out.complete_portfolios != int(report.config["portfolio_count"]):
+        failures.append(
+            "complete_portfolios "
+            f"{tie_out.complete_portfolios} != expected {report.config['portfolio_count']}"
+        )
+    if tie_out.incomplete_portfolios != 0:
+        failures.append(f"incomplete_portfolios {tie_out.incomplete_portfolios} != 0")
+    if tie_out.portfolios_waiting_for_snapshots != 0:
+        failures.append(
+            "portfolios_waiting_for_snapshots "
+            f"{tie_out.portfolios_waiting_for_snapshots} != 0"
+        )
     if tie_out.snapshots_count != int(report.config["transaction_count"]):
         failures.append(
             "snapshots_count "
@@ -1234,6 +1266,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
             "position_timeseries_count "
             f"{tie_out.position_timeseries_count} != expected {report.config['transaction_count']}"
         )
+    if tie_out.portfolios_waiting_for_position_timeseries != 0:
+        failures.append(
+            "portfolios_waiting_for_position_timeseries "
+            f"{tie_out.portfolios_waiting_for_position_timeseries} != 0"
+        )
     if tie_out.portfolios_with_portfolio_timeseries != int(report.config["portfolio_count"]):
         failures.append(
             "portfolios_with_portfolio_timeseries "
@@ -1249,6 +1286,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         failures.append(
             "portfolio_timeseries_count "
             f"{tie_out.portfolio_timeseries_count} != expected {report.config['portfolio_count']}"
+        )
+    if tie_out.portfolios_waiting_for_portfolio_timeseries != 0:
+        failures.append(
+            "portfolios_waiting_for_portfolio_timeseries "
+            f"{tie_out.portfolios_waiting_for_portfolio_timeseries} != 0"
         )
     if tie_out.summed_snapshot_quantity != tie_out.expected_total_quantity:
         failures.append(
@@ -1393,10 +1435,15 @@ def _zero_tie_out(*, portfolio_count: int, specs: list[InstrumentSpec]) -> Datab
         portfolios_with_snapshots=0,
         snapshots_count=0,
         portfolios_with_position_timeseries=0,
+        complete_portfolios=0,
+        incomplete_portfolios=portfolio_count,
+        portfolios_waiting_for_snapshots=portfolio_count,
         snapshot_portfolios_without_position_timeseries=0,
         position_timeseries_count=0,
         portfolios_with_portfolio_timeseries=0,
+        portfolios_waiting_for_position_timeseries=0,
         position_timeseries_portfolios_without_portfolio_timeseries=0,
+        portfolios_waiting_for_portfolio_timeseries=0,
         portfolio_timeseries_count=0,
         summed_snapshot_quantity="0.0000000000",
         expected_total_quantity=_decimal_str(Decimal(portfolio_count * len(specs))),

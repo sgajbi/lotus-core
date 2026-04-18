@@ -1,6 +1,12 @@
+import json
+
 from scripts.bank_day_load_reconciliation_report import (
+    ExistingRunReconciliationReport,
+    ProbeLatencySummary,
+    ReconciliationSummary,
     _build_summary,
     _summarize_probe_group,
+    _write_report,
 )
 from scripts.bank_day_load_scenario import ApiProbeResult, SamplePortfolioResult
 
@@ -119,3 +125,64 @@ def test_build_summary_flags_count_value_and_reconciliation_mismatches() -> None
     assert summary.positions_latency.median_ms == 20.0
     assert summary.transactions_latency.median_ms == 30.0
     assert summary.support_latency.median_ms == 40.0
+
+
+def test_write_report_includes_run_progress_completion_details(tmp_path) -> None:
+    report = ExistingRunReconciliationReport(
+        run_id="RUN1",
+        captured_at_utc="2026-04-18T14:28:50.222327Z",
+        business_date="2026-04-17",
+        portfolio_count_evaluated=2,
+        sample_portfolio_ids=["P1", "P2"],
+        run_progress={
+            "run_state": "RUNNING",
+            "portfolios_ingested": 1000,
+            "complete_portfolios": 733,
+            "incomplete_portfolios": 267,
+            "portfolios_waiting_for_snapshots": 0,
+            "portfolios_waiting_for_position_timeseries": 267,
+            "portfolios_waiting_for_portfolio_timeseries": 1,
+            "valuation_to_position_timeseries_handoff_pressure_hint": "POST_VALUATION_DRAIN",
+        },
+        sample_portfolios=[],
+        api_probes=[],
+        summary=ReconciliationSummary(
+            all_samples_reconciled=True,
+            all_position_counts_match_expected=True,
+            all_transaction_counts_match_expected=True,
+            all_market_values_match_expected=True,
+            expected_portfolio_market_value="11617.2163000000",
+            positions_latency=ProbeLatencySummary(
+                label="positions",
+                probe_count=0,
+                status_codes=[],
+                median_ms=None,
+                p95_ms=None,
+            ),
+            transactions_latency=ProbeLatencySummary(
+                label="transactions",
+                probe_count=0,
+                status_codes=[],
+                median_ms=None,
+                p95_ms=None,
+            ),
+            support_latency=ProbeLatencySummary(
+                label="support_overview",
+                probe_count=0,
+                status_codes=[],
+                median_ms=None,
+                p95_ms=None,
+            ),
+        ),
+    )
+
+    json_path, md_path = _write_report(report=report, output_dir=tmp_path)
+
+    json_payload = json.loads(json_path.read_text(encoding="utf-8"))
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert json_payload["run_progress"]["complete_portfolios"] == 733
+    assert "## Run progress" in markdown
+    assert "- complete portfolios: `733` / `1000`" in markdown
+    assert "- waiting for position timeseries: `267`" in markdown
+    assert "- handoff pressure hint: `POST_VALUATION_DRAIN`" in markdown
