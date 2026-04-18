@@ -22,6 +22,7 @@ Use it for:
 - [Outbox Events](Outbox-Events)
 - [Cost Calculator](Cost-Calculator)
 - [Cashflow Calculator](Cashflow-Calculator)
+- [Financial Reconciliation](Financial-Reconciliation)
 - [Position Calculator](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
