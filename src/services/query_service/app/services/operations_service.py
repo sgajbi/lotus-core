@@ -84,6 +84,12 @@ class OperationsService:
         return max(upstream_count - downstream_count, 0)
 
     @staticmethod
+    def _ceiling_division(numerator: int, denominator: int) -> int:
+        if numerator <= 0 or denominator <= 0:
+            return 0
+        return (numerator + denominator - 1) // denominator
+
+    @staticmethod
     def _age_seconds_since(
         older_timestamp: datetime | None,
         newer_timestamp: datetime,
@@ -434,6 +440,10 @@ class OperationsService:
         )
         if summary.portfolios_ingested == 0 and summary.transactions_ingested == 0:
             raise ValueError(f"Load run {run_id} not found")
+        valuation_pending_dispatch_polls_lower_bound = self._ceiling_division(
+            summary.pending_valuation_jobs,
+            VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL,
+        )
         return LoadRunProgressResponse(
             run_id=run_id,
             business_date=business_date,
@@ -483,6 +493,13 @@ class OperationsService:
             ),
             valuation_scheduler_max_dispatch_jobs_per_poll=(
                 VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL
+            ),
+            valuation_scheduler_pending_dispatch_polls_lower_bound=(
+                valuation_pending_dispatch_polls_lower_bound
+            ),
+            valuation_scheduler_pending_dispatch_time_lower_bound_seconds=(
+                valuation_pending_dispatch_polls_lower_bound
+                * VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
             ),
             oldest_pending_valuation_date=summary.oldest_pending_valuation_date,
             oldest_pending_aggregation_date=summary.oldest_pending_aggregation_date,

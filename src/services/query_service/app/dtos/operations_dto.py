@@ -708,6 +708,27 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[1000],
     )
+    valuation_scheduler_pending_dispatch_polls_lower_bound: int = Field(
+        ...,
+        description=(
+            "Lower bound on scheduler poll cycles required to claim the current "
+            "`pending_valuation_jobs`, expressed as "
+            "`ceil(pending_valuation_jobs / valuation_scheduler_max_dispatch_jobs_per_poll)`. "
+            "This excludes already-processing jobs and assumes no new pending jobs arrive."
+        ),
+        examples=[1],
+    )
+    valuation_scheduler_pending_dispatch_time_lower_bound_seconds: int = Field(
+        ...,
+        description=(
+            "Lower bound in seconds to claim the current `pending_valuation_jobs` at the "
+            "configured scheduler poll interval and maximum per-poll dispatch budget, "
+            "expressed as `valuation_scheduler_pending_dispatch_polls_lower_bound * "
+            "valuation_scheduler_poll_interval_seconds`. This is a claim-budget estimate, "
+            "not a full end-to-end completion forecast."
+        ),
+        examples=[30],
+    )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
         description=(

@@ -546,6 +546,10 @@ Implementation status as of 2026-04-18:
 20. the load-run support contract now publishes the valuation scheduler poll interval and maximum
     dispatch jobs per poll, so operators can compare observed handoff lag against the actual
     configured scheduler claim budget without reading runtime settings directly.
+21. the same support contract now derives a lower bound on scheduler poll cycles and seconds
+    needed to claim the current pending valuation backlog, so dispatch pressure can be read
+    directly from the support surface instead of reconstructed manually from queue and settings
+    fields.
 
 Phase 1 exit criteria:
 

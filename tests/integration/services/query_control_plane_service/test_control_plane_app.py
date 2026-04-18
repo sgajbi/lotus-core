@@ -329,6 +329,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert load_run_progress_schema["properties"][
         "valuation_scheduler_max_dispatch_jobs_per_poll"
     ]["description"].startswith("Configured maximum number of valuation jobs")
+    assert load_run_progress_schema["properties"][
+        "valuation_scheduler_pending_dispatch_polls_lower_bound"
+    ]["description"].startswith("Lower bound on scheduler poll cycles")
+    assert load_run_progress_schema["properties"][
+        "valuation_scheduler_pending_dispatch_time_lower_bound_seconds"
+    ]["description"].startswith("Lower bound in seconds to claim the current")
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
