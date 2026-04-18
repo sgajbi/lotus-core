@@ -9,6 +9,7 @@
 - [Ingestion Service](Ingestion-Service)
 - [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
+- [Cashflow Calculator](Cashflow-Calculator)
 - [Position Calculator](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
