@@ -34,7 +34,7 @@ async def test_cashflow_projection_success(async_test_client):
         "points": [],
         "total_net_cashflow": 0,
         "projection_days": 10,
-        "notes": "Projected window includes settlement-dated future transactions.",
+        "notes": "Projected window includes settlement-dated future external cash movements.",
     }
 
     response = await client.get("/portfolios/P1/cashflow-projection")

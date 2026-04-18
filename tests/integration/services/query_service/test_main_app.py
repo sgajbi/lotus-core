@@ -672,7 +672,8 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
         if parameter["name"] == "include_projected"
     )
     assert include_projected["description"] == (
-        "When true, includes projected future-dated cashflows."
+        "When true, includes projected future-dated external cash movements "
+        "(for example deposits and withdrawals)."
     )
 
     not_found = projection["responses"]["404"]["content"]["application/json"]["example"]
