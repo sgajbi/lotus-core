@@ -540,6 +540,9 @@ Implementation status as of 2026-04-18:
     `valuation.snapshot.persisted` message rather than only the first batch, reducing deep
     single-portfolio handoff lag while preserving stop-on-gap behavior and an explicit shared
     per-message row cap for operator interpretation.
+19. valuation scheduler dispatch now uses a higher default per-poll claim budget and stops early
+    once a partial claimed batch shows the queue is drained for that poll, reducing avoidable
+    handoff idle time without changing worker correctness or duplicate-claim protections.
 
 Phase 1 exit criteria:
 

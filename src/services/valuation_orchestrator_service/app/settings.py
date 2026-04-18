@@ -31,7 +31,7 @@ def load_valuation_runtime_settings(
     *,
     scheduler_poll_interval_default: int = 30,
     scheduler_batch_size_default: int = 100,
-    scheduler_dispatch_rounds_default: int = 3,
+    scheduler_dispatch_rounds_default: int = 10,
     worker_poll_interval_default: int = 10,
     worker_batch_size_default: int = 10,
 ) -> ValuationRuntimeSettings:
@@ -66,7 +66,7 @@ def get_valuation_runtime_settings(
     *,
     scheduler_poll_interval_default: int = 30,
     scheduler_batch_size_default: int = 100,
-    scheduler_dispatch_rounds_default: int = 3,
+    scheduler_dispatch_rounds_default: int = 10,
     worker_poll_interval_default: int = 10,
     worker_batch_size_default: int = 10,
 ) -> ValuationRuntimeSettings:

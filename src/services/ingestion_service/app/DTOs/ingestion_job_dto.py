@@ -336,7 +336,7 @@ class IngestionOpsPolicyResponse(BaseModel):
     valuation_scheduler_dispatch_rounds: int = Field(
         ge=1,
         description="Configured number of dispatch claim rounds executed per scheduler poll.",
-        examples=[3],
+        examples=[10],
     )
     dlq_budget_events_per_window: int = Field(
         ge=1,
