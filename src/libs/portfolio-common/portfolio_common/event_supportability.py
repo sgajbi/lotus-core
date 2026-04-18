@@ -11,7 +11,6 @@ from portfolio_common.source_data_products import (
 )
 from portfolio_common.source_data_security import get_source_data_security_profile
 
-
 SOURCE_INGESTION_EVENT = "source_ingestion_event"
 DOMAIN_STATE_EVENT = "domain_state_event"
 PIPELINE_STAGE_EVENT = "pipeline_stage_event"
@@ -42,6 +41,7 @@ class EventFamilyDefinition:
     idempotency_required: bool
     correlation_required: bool
     schema_version_required: bool
+    runtime_active: bool = True
     supportability_evidence: tuple[str, ...] = ()
     source_data_products: tuple[str, ...] = ()
 
@@ -232,7 +232,8 @@ EVENT_FAMILY_DEFINITIONS: tuple[EventFamilyDefinition, ...] = (
         aggregate_type="portfolio_day",
         topic="portfolio_security_day.valuation.completed",
         producer_service="valuation_service",
-        consumer_services=("position_timeseries_service",),
+        consumer_services=(),
+        runtime_active=False,
         idempotency_required=True,
         correlation_required=True,
         schema_version_required=True,
@@ -247,7 +248,8 @@ EVENT_FAMILY_DEFINITIONS: tuple[EventFamilyDefinition, ...] = (
         aggregate_type="portfolio_day",
         topic="portfolio_security_day.position_timeseries.completed",
         producer_service="position_timeseries_service",
-        consumer_services=("portfolio_aggregation_service",),
+        consumer_services=(),
+        runtime_active=False,
         idempotency_required=True,
         correlation_required=True,
         schema_version_required=True,
@@ -559,7 +561,7 @@ def validate_event_supportability_catalog(
         _normalize_required_text(definition.aggregate_type, "aggregate_type")
         _normalize_required_text(definition.topic, "topic")
         _normalize_required_text(definition.producer_service, "producer_service")
-        if not definition.consumer_services:
+        if definition.runtime_active and not definition.consumer_services:
             raise ValueError(f"{definition.event_type} must define at least one consumer service")
         for consumer_service in definition.consumer_services:
             _normalize_required_text(consumer_service, "consumer_services")

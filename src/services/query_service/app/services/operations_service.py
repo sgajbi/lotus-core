@@ -64,6 +64,19 @@ class OperationsService:
         return round(numerator / denominator, 6)
 
     @staticmethod
+    def _non_negative_gap(upstream_count: int, downstream_count: int) -> int:
+        return max(upstream_count - downstream_count, 0)
+
+    @staticmethod
+    def _age_seconds_since(
+        older_timestamp: datetime | None,
+        newer_timestamp: datetime,
+    ) -> float | None:
+        if older_timestamp is None:
+            return None
+        return round(max((newer_timestamp - older_timestamp).total_seconds(), 0.0), 6)
+
+    @staticmethod
     def _get_load_run_state(summary: LoadRunProgressSummary) -> str:
         if summary.failed_valuation_jobs > 0 or summary.failed_aggregation_jobs > 0:
             return "FAILED"
@@ -414,17 +427,35 @@ class OperationsService:
             transactions_ingested=summary.transactions_ingested,
             portfolios_with_snapshots=summary.portfolios_with_snapshots,
             snapshot_rows=summary.snapshot_rows,
+            portfolios_with_position_timeseries=summary.portfolios_with_position_timeseries,
+            position_timeseries_rows=summary.position_timeseries_rows,
             portfolios_with_timeseries=summary.portfolios_with_timeseries,
             timeseries_rows=summary.timeseries_rows,
             snapshot_portfolio_coverage_ratio=self._safe_ratio(
                 summary.portfolios_with_snapshots,
                 summary.portfolios_ingested,
             ),
+            snapshot_portfolios_without_position_timeseries=self._non_negative_gap(
+                summary.portfolios_with_snapshots,
+                summary.portfolios_with_position_timeseries,
+            ),
+            position_timeseries_portfolio_coverage_ratio=self._safe_ratio(
+                summary.portfolios_with_position_timeseries,
+                summary.portfolios_ingested,
+            ),
+            position_timeseries_portfolios_without_portfolio_timeseries=self._non_negative_gap(
+                summary.portfolios_with_position_timeseries,
+                summary.portfolios_with_timeseries,
+            ),
             timeseries_portfolio_coverage_ratio=self._safe_ratio(
                 summary.portfolios_with_timeseries,
                 summary.portfolios_ingested,
             ),
+            pending_valuation_jobs=summary.pending_valuation_jobs,
+            processing_valuation_jobs=summary.processing_valuation_jobs,
             open_valuation_jobs=summary.open_valuation_jobs,
+            pending_aggregation_jobs=summary.pending_aggregation_jobs,
+            processing_aggregation_jobs=summary.processing_aggregation_jobs,
             open_aggregation_jobs=summary.open_aggregation_jobs,
             failed_valuation_jobs=summary.failed_valuation_jobs,
             failed_aggregation_jobs=summary.failed_aggregation_jobs,
@@ -432,6 +463,39 @@ class OperationsService:
             oldest_pending_aggregation_date=summary.oldest_pending_aggregation_date,
             latest_snapshot_date=summary.latest_snapshot_date,
             latest_timeseries_date=summary.latest_timeseries_date,
+            latest_snapshot_materialized_at_utc=summary.latest_snapshot_materialized_at_utc,
+            latest_position_timeseries_materialized_at_utc=(
+                summary.latest_position_timeseries_materialized_at_utc
+            ),
+            latest_portfolio_timeseries_materialized_at_utc=(
+                summary.latest_portfolio_timeseries_materialized_at_utc
+            ),
+            latest_valuation_job_updated_at_utc=summary.latest_valuation_job_updated_at_utc,
+            latest_aggregation_job_updated_at_utc=summary.latest_aggregation_job_updated_at_utc,
+            completed_valuation_jobs_without_position_timeseries=(
+                summary.completed_valuation_jobs_without_position_timeseries
+            ),
+            oldest_completed_valuation_without_position_timeseries_at_utc=(
+                summary.oldest_completed_valuation_without_position_timeseries_at_utc
+            ),
+            oldest_completed_valuation_without_position_timeseries_age_seconds=(
+                self._age_seconds_since(
+                    summary.oldest_completed_valuation_without_position_timeseries_at_utc,
+                    generated_at_utc,
+                )
+            ),
+            valuation_to_position_timeseries_latency_sample_count=(
+                summary.valuation_to_position_timeseries_latency_sample_count
+            ),
+            valuation_to_position_timeseries_latency_p50_seconds=(
+                summary.valuation_to_position_timeseries_latency_p50_seconds
+            ),
+            valuation_to_position_timeseries_latency_p95_seconds=(
+                summary.valuation_to_position_timeseries_latency_p95_seconds
+            ),
+            valuation_to_position_timeseries_latency_max_seconds=(
+                summary.valuation_to_position_timeseries_latency_max_seconds
+            ),
         )
 
     async def get_support_overview(

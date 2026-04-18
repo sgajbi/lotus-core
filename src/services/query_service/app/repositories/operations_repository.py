@@ -16,6 +16,7 @@ from portfolio_common.database_models import (
     PortfolioValuationJob,
     PositionHistory,
     PositionState,
+    PositionTimeseries,
     ReprocessingJob,
     Transaction,
 )
@@ -100,9 +101,15 @@ class LoadRunProgressSummary:
     transactions_ingested: int
     portfolios_with_snapshots: int
     snapshot_rows: int
+    portfolios_with_position_timeseries: int
+    position_timeseries_rows: int
     portfolios_with_timeseries: int
     timeseries_rows: int
+    pending_valuation_jobs: int
+    processing_valuation_jobs: int
     open_valuation_jobs: int
+    pending_aggregation_jobs: int
+    processing_aggregation_jobs: int
     open_aggregation_jobs: int
     failed_valuation_jobs: int
     failed_aggregation_jobs: int
@@ -110,6 +117,17 @@ class LoadRunProgressSummary:
     oldest_pending_aggregation_date: Optional[date]
     latest_snapshot_date: Optional[date]
     latest_timeseries_date: Optional[date]
+    latest_snapshot_materialized_at_utc: Optional[datetime]
+    latest_position_timeseries_materialized_at_utc: Optional[datetime]
+    latest_portfolio_timeseries_materialized_at_utc: Optional[datetime]
+    latest_valuation_job_updated_at_utc: Optional[datetime]
+    latest_aggregation_job_updated_at_utc: Optional[datetime]
+    completed_valuation_jobs_without_position_timeseries: int
+    oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime]
+    valuation_to_position_timeseries_latency_sample_count: int
+    valuation_to_position_timeseries_latency_p50_seconds: Optional[float]
+    valuation_to_position_timeseries_latency_p95_seconds: Optional[float]
+    valuation_to_position_timeseries_latency_max_seconds: Optional[float]
 
 
 class OperationsRepository:
@@ -140,6 +158,19 @@ class OperationsRepository:
             ),
             else_=true(),
         )
+
+    @staticmethod
+    def _has_superseding_valuation_epoch(*, as_of: Optional[datetime] = None):
+        superseding_job = aliased(PortfolioValuationJob)
+        superseding_exists = select(superseding_job.id).where(
+            superseding_job.portfolio_id == PortfolioValuationJob.portfolio_id,
+            superseding_job.security_id == PortfolioValuationJob.security_id,
+            superseding_job.valuation_date == PortfolioValuationJob.valuation_date,
+            superseding_job.epoch > PortfolioValuationJob.epoch,
+        )
+        if as_of is not None:
+            superseding_exists = superseding_exists.where(superseding_job.updated_at <= as_of)
+        return superseding_exists.exists()
 
     @staticmethod
     def _reprocessing_job_portfolio_scope_exists(
@@ -263,6 +294,16 @@ class OperationsRepository:
             DailyPositionSnapshot.portfolio_id.like(portfolio_pattern),
             DailyPositionSnapshot.date == business_date,
         )
+        position_timeseries_portfolios_stmt = select(
+            func.count(func.distinct(PositionTimeseries.portfolio_id))
+        ).where(
+            PositionTimeseries.portfolio_id.like(portfolio_pattern),
+            PositionTimeseries.date == business_date,
+        )
+        position_timeseries_rows_stmt = select(func.count()).select_from(PositionTimeseries).where(
+            PositionTimeseries.portfolio_id.like(portfolio_pattern),
+            PositionTimeseries.date == business_date,
+        )
         timeseries_portfolios_stmt = select(
             func.count(func.distinct(PortfolioTimeseries.portfolio_id))
         ).where(
@@ -273,10 +314,28 @@ class OperationsRepository:
             PortfolioTimeseries.portfolio_id.like(portfolio_pattern),
             PortfolioTimeseries.date == business_date,
         )
+        if as_of is not None:
+            snapshot_portfolios_stmt = snapshot_portfolios_stmt.where(
+                DailyPositionSnapshot.created_at <= as_of
+            )
+            snapshot_rows_stmt = snapshot_rows_stmt.where(DailyPositionSnapshot.created_at <= as_of)
+            position_timeseries_portfolios_stmt = position_timeseries_portfolios_stmt.where(
+                PositionTimeseries.created_at <= as_of
+            )
+            position_timeseries_rows_stmt = position_timeseries_rows_stmt.where(
+                PositionTimeseries.created_at <= as_of
+            )
+            timeseries_portfolios_stmt = timeseries_portfolios_stmt.where(
+                PortfolioTimeseries.created_at <= as_of
+            )
+            timeseries_rows_stmt = timeseries_rows_stmt.where(
+                PortfolioTimeseries.created_at <= as_of
+            )
 
         valuation_base = select(
             PortfolioValuationJob.status.label("status"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
+            PortfolioValuationJob.updated_at.label("updated_at"),
         ).where(
             PortfolioValuationJob.portfolio_id.like(portfolio_pattern),
             self._is_actionable_valuation_job(as_of=as_of),
@@ -288,47 +347,180 @@ class OperationsRepository:
         aggregation_base = select(
             PortfolioAggregationJob.status.label("status"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
+            PortfolioAggregationJob.updated_at.label("updated_at"),
         ).where(PortfolioAggregationJob.portfolio_id.like(portfolio_pattern))
         if as_of is not None:
             aggregation_base = aggregation_base.where(PortfolioAggregationJob.updated_at <= as_of)
         aggregation_subq = aggregation_base.subquery()
 
         valuation_summary_stmt = select(
-            func.count().filter(valuation_subq.c.status.in_(("PENDING", "PROCESSING"))),
+            func.count().filter(valuation_subq.c.status == "PENDING"),
+            func.count().filter(valuation_subq.c.status == "PROCESSING"),
             func.count().filter(valuation_subq.c.status == "FAILED"),
             func.min(valuation_subq.c.valuation_date).filter(
                 valuation_subq.c.status.in_(("PENDING", "PROCESSING"))
             ),
+            func.max(valuation_subq.c.updated_at),
         )
         aggregation_summary_stmt = select(
-            func.count().filter(aggregation_subq.c.status.in_(("PENDING", "PROCESSING"))),
+            func.count().filter(aggregation_subq.c.status == "PENDING"),
+            func.count().filter(aggregation_subq.c.status == "PROCESSING"),
             func.count().filter(aggregation_subq.c.status == "FAILED"),
             func.min(aggregation_subq.c.aggregation_date).filter(
                 aggregation_subq.c.status.in_(("PENDING", "PROCESSING"))
             ),
+            func.max(aggregation_subq.c.updated_at),
         )
+        valuation_handoff_base = select(
+            PortfolioValuationJob.portfolio_id.label("portfolio_id"),
+            PortfolioValuationJob.security_id.label("security_id"),
+            PortfolioValuationJob.valuation_date.label("valuation_date"),
+            PortfolioValuationJob.epoch.label("epoch"),
+            PortfolioValuationJob.updated_at.label("valuation_completed_at_utc"),
+        ).where(
+            PortfolioValuationJob.portfolio_id.like(portfolio_pattern),
+            PortfolioValuationJob.status == "COMPLETE",
+            ~self._has_superseding_valuation_epoch(as_of=as_of),
+        )
+        if as_of is not None:
+            valuation_handoff_base = valuation_handoff_base.where(
+                PortfolioValuationJob.updated_at <= as_of
+            )
+        valuation_handoff_subq = valuation_handoff_base.subquery()
+        valuation_to_position_join = and_(
+            PositionTimeseries.portfolio_id == valuation_handoff_subq.c.portfolio_id,
+            PositionTimeseries.security_id == valuation_handoff_subq.c.security_id,
+            PositionTimeseries.date == valuation_handoff_subq.c.valuation_date,
+            PositionTimeseries.epoch == valuation_handoff_subq.c.epoch,
+        )
+        if as_of is not None:
+            valuation_to_position_join = and_(
+                valuation_to_position_join,
+                PositionTimeseries.created_at <= as_of,
+            )
+        valuation_to_position_latency_seconds = func.greatest(
+            func.extract(
+                "epoch",
+                PositionTimeseries.created_at - valuation_handoff_subq.c.valuation_completed_at_utc,
+            ),
+            0.0,
+        )
+        valuation_handoff_latency_stmt = select(
+            func.count(),
+            func.percentile_cont(0.5).within_group(valuation_to_position_latency_seconds),
+            func.percentile_cont(0.95).within_group(valuation_to_position_latency_seconds),
+            func.max(valuation_to_position_latency_seconds),
+        ).select_from(valuation_handoff_subq).join(
+            PositionTimeseries,
+            valuation_to_position_join,
+        )
+        valuation_without_position_timeseries_stmt = select(
+            func.count(),
+            func.min(valuation_handoff_subq.c.valuation_completed_at_utc),
+        ).select_from(valuation_handoff_subq).outerjoin(
+            PositionTimeseries,
+            valuation_to_position_join,
+        ).where(PositionTimeseries.portfolio_id.is_(None))
         latest_snapshot_stmt = select(func.max(DailyPositionSnapshot.date)).where(
             DailyPositionSnapshot.portfolio_id.like(portfolio_pattern)
+        )
+        latest_snapshot_materialized_stmt = (
+            select(func.max(DailyPositionSnapshot.created_at))
+            .where(
+                DailyPositionSnapshot.portfolio_id.like(portfolio_pattern),
+                DailyPositionSnapshot.date == business_date,
+            )
+        )
+        latest_position_timeseries_materialized_stmt = select(
+            func.max(PositionTimeseries.created_at)
+        ).where(
+            PositionTimeseries.portfolio_id.like(portfolio_pattern),
+            PositionTimeseries.date == business_date,
         )
         latest_timeseries_stmt = select(func.max(PortfolioTimeseries.date)).where(
             PortfolioTimeseries.portfolio_id.like(portfolio_pattern)
         )
+        latest_portfolio_timeseries_materialized_stmt = select(
+            func.max(PortfolioTimeseries.created_at)
+        ).where(
+            PortfolioTimeseries.portfolio_id.like(portfolio_pattern),
+            PortfolioTimeseries.date == business_date,
+        )
+        if as_of is not None:
+            latest_snapshot_stmt = latest_snapshot_stmt.where(
+                DailyPositionSnapshot.created_at <= as_of
+            )
+            latest_snapshot_materialized_stmt = latest_snapshot_materialized_stmt.where(
+                DailyPositionSnapshot.created_at <= as_of
+            )
+            latest_position_timeseries_materialized_stmt = (
+                latest_position_timeseries_materialized_stmt.where(
+                    PositionTimeseries.created_at <= as_of
+                )
+            )
+            latest_timeseries_stmt = latest_timeseries_stmt.where(
+                PortfolioTimeseries.created_at <= as_of
+            )
+            latest_portfolio_timeseries_materialized_stmt = (
+                latest_portfolio_timeseries_materialized_stmt.where(
+                    PortfolioTimeseries.created_at <= as_of
+                )
+            )
 
         portfolios_ingested = await self.db.scalar(portfolio_stmt)
         transactions_ingested = await self.db.scalar(transaction_stmt)
         portfolios_with_snapshots = await self.db.scalar(snapshot_portfolios_stmt)
         snapshot_rows = await self.db.scalar(snapshot_rows_stmt)
+        portfolios_with_position_timeseries = await self.db.scalar(
+            position_timeseries_portfolios_stmt
+        )
+        position_timeseries_rows = await self.db.scalar(position_timeseries_rows_stmt)
         portfolios_with_timeseries = await self.db.scalar(timeseries_portfolios_stmt)
         timeseries_rows = await self.db.scalar(timeseries_rows_stmt)
         valuation_summary = await self.db.execute(valuation_summary_stmt)
         aggregation_summary = await self.db.execute(aggregation_summary_stmt)
-        latest_snapshot_date = await self.db.scalar(latest_snapshot_stmt)
-        latest_timeseries_date = await self.db.scalar(latest_timeseries_stmt)
-        open_valuation_jobs, failed_valuation_jobs, oldest_pending_valuation_date = (
-            valuation_summary.one()
+        valuation_handoff_latency = await self.db.execute(valuation_handoff_latency_stmt)
+        valuation_without_position_timeseries = await self.db.execute(
+            valuation_without_position_timeseries_stmt
         )
-        open_aggregation_jobs, failed_aggregation_jobs, oldest_pending_aggregation_date = (
-            aggregation_summary.one()
+        latest_snapshot_date = await self.db.scalar(latest_snapshot_stmt)
+        latest_snapshot_materialized_at_utc = await self.db.scalar(
+            latest_snapshot_materialized_stmt
+        )
+        latest_position_timeseries_materialized_at_utc = await self.db.scalar(
+            latest_position_timeseries_materialized_stmt
+        )
+        latest_timeseries_date = await self.db.scalar(latest_timeseries_stmt)
+        latest_portfolio_timeseries_materialized_at_utc = await self.db.scalar(
+            latest_portfolio_timeseries_materialized_stmt
+        )
+        (
+            pending_valuation_jobs,
+            processing_valuation_jobs,
+            failed_valuation_jobs,
+            oldest_pending_valuation_date,
+            latest_valuation_job_updated_at_utc,
+        ) = valuation_summary.one()
+        (
+            pending_aggregation_jobs,
+            processing_aggregation_jobs,
+            failed_aggregation_jobs,
+            oldest_pending_aggregation_date,
+            latest_aggregation_job_updated_at_utc,
+        ) = aggregation_summary.one()
+        (
+            valuation_to_position_timeseries_latency_sample_count,
+            valuation_to_position_timeseries_latency_p50_seconds,
+            valuation_to_position_timeseries_latency_p95_seconds,
+            valuation_to_position_timeseries_latency_max_seconds,
+        ) = valuation_handoff_latency.one()
+        (
+            completed_valuation_jobs_without_position_timeseries,
+            oldest_completed_valuation_without_position_timeseries_at_utc,
+        ) = valuation_without_position_timeseries.one()
+        open_valuation_jobs = int(pending_valuation_jobs or 0) + int(processing_valuation_jobs or 0)
+        open_aggregation_jobs = int(pending_aggregation_jobs or 0) + int(
+            processing_aggregation_jobs or 0
         )
 
         return LoadRunProgressSummary(
@@ -336,16 +528,55 @@ class OperationsRepository:
             transactions_ingested=int(transactions_ingested or 0),
             portfolios_with_snapshots=int(portfolios_with_snapshots or 0),
             snapshot_rows=int(snapshot_rows or 0),
+            portfolios_with_position_timeseries=int(portfolios_with_position_timeseries or 0),
+            position_timeseries_rows=int(position_timeseries_rows or 0),
             portfolios_with_timeseries=int(portfolios_with_timeseries or 0),
             timeseries_rows=int(timeseries_rows or 0),
-            open_valuation_jobs=int(open_valuation_jobs or 0),
-            open_aggregation_jobs=int(open_aggregation_jobs or 0),
+            pending_valuation_jobs=int(pending_valuation_jobs or 0),
+            processing_valuation_jobs=int(processing_valuation_jobs or 0),
+            open_valuation_jobs=open_valuation_jobs,
+            pending_aggregation_jobs=int(pending_aggregation_jobs or 0),
+            processing_aggregation_jobs=int(processing_aggregation_jobs or 0),
+            open_aggregation_jobs=open_aggregation_jobs,
             failed_valuation_jobs=int(failed_valuation_jobs or 0),
             failed_aggregation_jobs=int(failed_aggregation_jobs or 0),
             oldest_pending_valuation_date=oldest_pending_valuation_date,
             oldest_pending_aggregation_date=oldest_pending_aggregation_date,
             latest_snapshot_date=latest_snapshot_date,
             latest_timeseries_date=latest_timeseries_date,
+            latest_snapshot_materialized_at_utc=latest_snapshot_materialized_at_utc,
+            latest_position_timeseries_materialized_at_utc=(
+                latest_position_timeseries_materialized_at_utc
+            ),
+            latest_portfolio_timeseries_materialized_at_utc=(
+                latest_portfolio_timeseries_materialized_at_utc
+            ),
+            latest_valuation_job_updated_at_utc=latest_valuation_job_updated_at_utc,
+            latest_aggregation_job_updated_at_utc=latest_aggregation_job_updated_at_utc,
+            completed_valuation_jobs_without_position_timeseries=int(
+                completed_valuation_jobs_without_position_timeseries or 0
+            ),
+            oldest_completed_valuation_without_position_timeseries_at_utc=(
+                oldest_completed_valuation_without_position_timeseries_at_utc
+            ),
+            valuation_to_position_timeseries_latency_sample_count=int(
+                valuation_to_position_timeseries_latency_sample_count or 0
+            ),
+            valuation_to_position_timeseries_latency_p50_seconds=(
+                float(valuation_to_position_timeseries_latency_p50_seconds)
+                if valuation_to_position_timeseries_latency_p50_seconds is not None
+                else None
+            ),
+            valuation_to_position_timeseries_latency_p95_seconds=(
+                float(valuation_to_position_timeseries_latency_p95_seconds)
+                if valuation_to_position_timeseries_latency_p95_seconds is not None
+                else None
+            ),
+            valuation_to_position_timeseries_latency_max_seconds=(
+                float(valuation_to_position_timeseries_latency_max_seconds)
+                if valuation_to_position_timeseries_latency_max_seconds is not None
+                else None
+            ),
         )
 
     async def get_current_portfolio_epoch(

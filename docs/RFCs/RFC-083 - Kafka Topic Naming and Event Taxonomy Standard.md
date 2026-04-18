@@ -177,8 +177,8 @@ The table below captures the current runtime topology as implemented in service 
 | `market_prices.persisted` | `persistence_service` | `valuation_orchestrator_service` / `valuation_orchestrator_group_price_events` | persistence fact | Clearer grammar than many peers |
 | `valuation.job.requested` | `valuation_orchestrator_service` scheduler | `position_valuation_calculator` / `position_valuation_worker_group` | worker dispatch request | This is the real valuation job command topic |
 | `valuation.snapshot.persisted` | `position_valuation_calculator` | `timeseries_generator_service` / `timeseries_generator_group_positions` | persisted valuation artifact fact | Artifact-oriented name rather than event-oriented name |
-| `portfolio_security_day.valuation.completed` | `position_valuation_calculator` | no primary direct Kafka consumer in current runtime; compatibility parsing remains in `timeseries_generator_service` | stage completion fact | Still has compatibility meaning even though the primary fan-out path uses `valuation.snapshot.persisted` |
-| `portfolio_security_day.position_timeseries.completed` | `timeseries_generator_service` | no direct Kafka consumer found in current runtime | stage completion fact | Current runtime appears to rely on DB/scheduler flow rather than Kafka chaining here |
+| `portfolio_security_day.valuation.completed` | no active producer in current runtime | no direct Kafka consumer in current runtime | stage completion fact | Present in the event catalog, but current runtime handoff to timeseries uses `valuation.snapshot.persisted` |
+| `portfolio_security_day.position_timeseries.completed` | no active producer in current runtime | no direct Kafka consumer found in current runtime | stage completion fact | Current runtime stages aggregation directly in the database instead of chaining via Kafka here |
 | `portfolio_day.aggregation.job.requested` | `portfolio_aggregation_service` scheduler | `portfolio_aggregation_service` / `portfolio_aggregation_group` | worker dispatch request | Producer and consumer live in the same service boundary |
 | `portfolio_day.aggregation.completed` | `portfolio_aggregation_service` | `pipeline_orchestrator_service` / `pipeline_orchestrator_portfolio_aggregation_group` | stage completion fact | Active downstream trigger to reconciliation |
 | `portfolio_day.reconciliation.requested` | `pipeline_orchestrator_service` | `financial_reconciliation_service` / `portfolio_day.reconciliation.requested_group` | orchestration request | Clear command topic, but grammar differs from `valuation.job.requested` and `portfolio_security_day.valuation.ready` |
@@ -432,10 +432,8 @@ Canonical policy should be explicit:
 3. `position_valuation_calculator`
  - consumes `valuation.job.requested`
  - publishes `valuation.snapshot.persisted`
- - publishes `portfolio_security_day.valuation.completed`
 4. `timeseries_generator_service`
  - consumes `valuation.snapshot.persisted`
- - publishes `portfolio_security_day.position_timeseries.completed`
 5. `portfolio_aggregation_service`
  - consumes `portfolio_day.aggregation.job.requested`
  - publishes `portfolio_day.aggregation.completed`

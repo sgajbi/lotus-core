@@ -6,7 +6,6 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-    KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC,
     KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -64,9 +63,7 @@ class ConsumerManager:
         self._shutdown_event.set()
 
     async def run(self):
-        required_topics = [consumer.topic for consumer in self.consumers]
-        required_topics.append(KAFKA_PORTFOLIO_SECURITY_DAY_POSITION_TIMESERIES_COMPLETED_TOPIC)
-        ensure_topics_exist(required_topics)
+        ensure_topics_exist([consumer.topic for consumer in self.consumers])
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)

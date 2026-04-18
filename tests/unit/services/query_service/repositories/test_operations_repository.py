@@ -273,17 +273,43 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
             100000,
             173,
             17288,
+            92,
+            1832,
             85,
             85,
             date(2026, 4, 17),
+            datetime(2026, 4, 18, 7, 28, tzinfo=timezone.utc),
+            datetime(2026, 4, 18, 7, 27, tzinfo=timezone.utc),
             date(2026, 4, 17),
+            datetime(2026, 4, 18, 7, 26, tzinfo=timezone.utc),
         ]
     )
     valuation_result = MagicMock()
-    valuation_result.one.return_value = (13, 0, date(2026, 4, 17))
+    valuation_result.one.return_value = (
+        13,
+        43,
+        0,
+        date(2026, 4, 17),
+        datetime(2026, 4, 18, 7, 29, tzinfo=timezone.utc),
+    )
     aggregation_result = MagicMock()
-    aggregation_result.one.return_value = (1, 0, date(2026, 4, 17))
-    mock_db_session.execute = AsyncMock(side_effect=[valuation_result, aggregation_result])
+    aggregation_result.one.return_value = (
+        2,
+        0,
+        0,
+        date(2026, 4, 17),
+        datetime(2026, 4, 18, 7, 29, tzinfo=timezone.utc),
+    )
+    latency_result = MagicMock()
+    latency_result.one.return_value = (92, 2.5, 8.9, 21.3)
+    waiting_result = MagicMock()
+    waiting_result.one.return_value = (
+        11,
+        datetime(2026, 4, 18, 6, 45, tzinfo=timezone.utc),
+    )
+    mock_db_session.execute = AsyncMock(
+        side_effect=[valuation_result, aggregation_result, latency_result, waiting_result]
+    )
 
     summary = await repository.get_load_run_progress(
         "20260418T065154Z",
@@ -295,14 +321,43 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     assert summary.transactions_ingested == 100000
     assert summary.portfolios_with_snapshots == 173
     assert summary.snapshot_rows == 17288
+    assert summary.portfolios_with_position_timeseries == 92
+    assert summary.position_timeseries_rows == 1832
     assert summary.portfolios_with_timeseries == 85
     assert summary.timeseries_rows == 85
-    assert summary.open_valuation_jobs == 13
-    assert summary.open_aggregation_jobs == 1
+    assert summary.pending_valuation_jobs == 13
+    assert summary.processing_valuation_jobs == 43
+    assert summary.open_valuation_jobs == 56
+    assert summary.pending_aggregation_jobs == 2
+    assert summary.processing_aggregation_jobs == 0
+    assert summary.open_aggregation_jobs == 2
     assert summary.failed_valuation_jobs == 0
     assert summary.failed_aggregation_jobs == 0
     assert summary.oldest_pending_valuation_date == date(2026, 4, 17)
     assert summary.oldest_pending_aggregation_date == date(2026, 4, 17)
+    assert summary.latest_snapshot_materialized_at_utc == datetime(
+        2026, 4, 18, 7, 28, tzinfo=timezone.utc
+    )
+    assert summary.latest_position_timeseries_materialized_at_utc == datetime(
+        2026, 4, 18, 7, 27, tzinfo=timezone.utc
+    )
+    assert summary.latest_portfolio_timeseries_materialized_at_utc == datetime(
+        2026, 4, 18, 7, 26, tzinfo=timezone.utc
+    )
+    assert summary.latest_valuation_job_updated_at_utc == datetime(
+        2026, 4, 18, 7, 29, tzinfo=timezone.utc
+    )
+    assert summary.latest_aggregation_job_updated_at_utc == datetime(
+        2026, 4, 18, 7, 29, tzinfo=timezone.utc
+    )
+    assert summary.completed_valuation_jobs_without_position_timeseries == 11
+    assert summary.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(
+        2026, 4, 18, 6, 45, tzinfo=timezone.utc
+    )
+    assert summary.valuation_to_position_timeseries_latency_sample_count == 92
+    assert summary.valuation_to_position_timeseries_latency_p50_seconds == 2.5
+    assert summary.valuation_to_position_timeseries_latency_p95_seconds == 8.9
+    assert summary.valuation_to_position_timeseries_latency_max_seconds == 21.3
 
     scalar_sql = [
         str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
@@ -311,7 +366,31 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     assert any("from portfolios" in compiled.lower() for compiled in scalar_sql)
     assert any("from transactions" in compiled.lower() for compiled in scalar_sql)
     assert any("from daily_position_snapshots" in compiled.lower() for compiled in scalar_sql)
+    assert any("from position_timeseries" in compiled.lower() for compiled in scalar_sql)
     assert any("from portfolio_timeseries" in compiled.lower() for compiled in scalar_sql)
+    assert any(
+        "daily_position_snapshots.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in scalar_sql
+    )
+    assert any(
+        "position_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in scalar_sql
+    )
+    assert any(
+        "portfolio_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in scalar_sql
+    )
+    execute_sql = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in mock_db_session.execute.call_args_list
+    ]
+    assert any(
+        "position_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
+        "left outer join position_timeseries" in compiled.lower() for compiled in execute_sql
+    )
 
 
 async def test_support_job_queries_honor_job_id_filters(

@@ -1,6 +1,5 @@
-import pytest
-
 import portfolio_common.event_supportability as event_supportability
+import pytest
 from portfolio_common import events
 from portfolio_common.event_supportability import (
     CONTROL_EXECUTION,
@@ -10,11 +9,12 @@ from portfolio_common.event_supportability import (
     DOMAIN_STATE_EVENT,
     EVENT_FAMILY_DEFINITIONS,
     INGESTION_EVIDENCE_BUNDLE,
+    PIPELINE_STAGE_EVENT,
     RECONCILIATION_CONTROL_EVENT,
     RECONCILIATION_EVIDENCE_BUNDLE,
     SOURCE_INGESTION_EVENT,
-    SUPPORTABILITY_SURFACE_DEFINITIONS,
     SUPPORTABILITY_RECOVERY_EVENT,
+    SUPPORTABILITY_SURFACE_DEFINITIONS,
     DirectKafkaTopicDefinition,
     EventFamilyDefinition,
     SupportabilitySurfaceDefinition,
@@ -337,6 +337,26 @@ def test_validation_rejects_unknown_source_data_product_binding() -> None:
 
     with pytest.raises(ValueError, match="references unknown source-data product"):
         validate_event_supportability_catalog((invalid,), ())
+
+
+def test_validation_allows_dormant_event_without_active_consumers() -> None:
+    dormant = EventFamilyDefinition(
+        event_type="DormantEvent",
+        schema_model="PortfolioEvent",
+        family=PIPELINE_STAGE_EVENT,
+        direction="internal",
+        aggregate_type="portfolio",
+        topic="portfolio.dormant",
+        producer_service="catalog_only",
+        consumer_services=(),
+        runtime_active=False,
+        idempotency_required=True,
+        correlation_required=True,
+        schema_version_required=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    )
+
+    validate_event_supportability_catalog((dormant,), ())
 
 
 def test_validation_rejects_direct_kafka_topic_without_correlation_header() -> None:

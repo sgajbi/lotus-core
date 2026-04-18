@@ -10,7 +10,7 @@ The health of this service is critical for the availability of all performance a
 
 * **Consumer Lag:** Monitor consumer lag on both primary topics:
   * `valuation.snapshot.persisted`: High lag here indicates the service is failing to generate the base `position_timeseries` records.
-  * `portfolio_security_day.position_timeseries.completed`: High lag downstream of this signal usually indicates portfolio aggregation orchestration is stalled in `portfolio_aggregation_service`, not in the position-timeseries worker.
+  * `portfolio_day.aggregation.job.requested`: High lag here indicates portfolio aggregation orchestration or consumption is stalled in `portfolio_aggregation_service`.
 * **`events_dlqd_total` (Counter):** An increase in this metric signifies a "poison pill" message that could not be processed, likely due to a persistent error like a missing FX rate.
 * **`event_processing_latency_seconds` (Histogram):** A sudden increase in the latency for the `portfolio_day.aggregation.job.requested` consumer can indicate that it is processing portfolios with a very large number of positions.
 

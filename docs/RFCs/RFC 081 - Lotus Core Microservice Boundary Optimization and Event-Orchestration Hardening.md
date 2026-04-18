@@ -456,11 +456,15 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
   - orchestrator emits `portfolio_security_day.valuation.ready` alongside transaction completion
   - valuation service consumes readiness events and idempotently upserts valuation jobs.
 - Added valuation completion gate path:
-  - valuation service emits `portfolio_security_day.valuation.completed` after valuation snapshot persistence
-  - timeseries service consumes `portfolio_security_day.valuation.completed` as canonical trigger while
-    retaining `valuation.snapshot.persisted` compatibility.
+  - current runtime valuation handoff to timeseries remains `valuation.snapshot.persisted`
+    after valuation snapshot persistence
+  - `portfolio_security_day.valuation.completed` remains in the event catalog as a dormant
+    completion fact and has no active producer or direct Kafka consumer in the current runtime.
 - Added timeseries completion gate path:
-  - timeseries service emits `portfolio_security_day.position_timeseries.completed` after position-timeseries persistence
+  - current runtime stages aggregation jobs directly after position-timeseries persistence
+  - `portfolio_security_day.position_timeseries.completed` remains in the event catalog as a
+    dormant completion fact and has no active producer or direct Kafka consumer in the current
+    runtime
   - timeseries service emits `portfolio_day.aggregation.completed` after portfolio aggregation completion
   - outbox dispatcher is now active in timeseries runtime for durable gate publication.
 
@@ -597,8 +601,7 @@ Testing completed for this slice:
   - updated container topology and observability wiring for the new service.
 - Phase 3 timeseries split delivered:
   - narrowed `timeseries_generator_service` to position-timeseries worker-only
-    processing (`valuation.snapshot.persisted` and `portfolio_security_day.valuation.completed`
-    consumers + position completion publication).
+    processing (`valuation.snapshot.persisted` consumer + position completion publication).
   - added `portfolio_aggregation_service` for aggregation job scheduling,
     `portfolio_day.aggregation.job.requested` consumption, portfolio-timeseries persistence,
     and completion publication.
@@ -633,10 +636,13 @@ Testing completed for this slice:
   - `transaction_processing.ready` based on:
   - processed transaction signal present
   - cashflow signal present.
-  - `portfolio_security_day.valuation.ready` for security-scoped stage completions.
-- `portfolio_security_day.valuation.completed` from valuation to timeseries is now implemented.
-- `portfolio_security_day.position_timeseries.completed` and `portfolio_day.aggregation.completed`
-  are now implemented.
+- `portfolio_security_day.valuation.ready` for security-scoped stage completions.
+- active runtime timeseries handoff remains `valuation.snapshot.persisted`; the
+  `portfolio_security_day.valuation.completed` topic remains cataloged but currently has no
+  active producer or direct Kafka consumer.
+- `portfolio_day.aggregation.completed` is implemented.
+- `portfolio_security_day.position_timeseries.completed` remains cataloged but currently has no
+  active producer or direct Kafka consumer.
 
 ### 15.3 Remaining roadmap alignment
 

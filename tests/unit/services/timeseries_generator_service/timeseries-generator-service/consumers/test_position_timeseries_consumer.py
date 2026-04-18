@@ -7,11 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
-    Instrument,
 )
-from portfolio_common.events import DailyPositionSnapshotPersistedEvent, ValuationDayCompletedEvent
+from portfolio_common.events import DailyPositionSnapshotPersistedEvent
 from portfolio_common.logging_utils import correlation_id_var
-from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,7 +60,6 @@ def mock_kafka_message(mock_event: DailyPositionSnapshotPersistedEvent) -> Magic
 def mock_dependencies():
     mock_repo = AsyncMock(spec=TimeseriesRepository)
     mock_repo.get_next_snapshot_after.return_value = None
-    mock_outbox_repo = AsyncMock(spec=OutboxRepository)
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_transaction = AsyncMock()
@@ -79,12 +76,8 @@ def mock_dependencies():
             "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.TimeseriesRepository",
             return_value=mock_repo,
         ),
-        patch(
-            "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.OutboxRepository",
-            return_value=mock_outbox_repo,
-        ),
     ):
-        yield {"repo": mock_repo, "db_session": mock_db_session, "outbox_repo": mock_outbox_repo}
+        yield {"repo": mock_repo, "db_session": mock_db_session}
 
 
 async def test_process_message_success(
@@ -96,11 +89,6 @@ async def test_process_message_success(
     # ARRANGE
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-
-    mock_repo.get_instrument.return_value = Instrument(
-        security_id=mock_event.security_id, currency="USD"
-    )
     mock_db_session.get.return_value = DailyPositionSnapshot(
         id=mock_event.id,
         portfolio_id=mock_event.portfolio_id,
@@ -116,81 +104,47 @@ async def test_process_message_success(
     mock_repo.get_all_cashflows_for_security_date.return_value = []
     mock_repo.get_position_timeseries.return_value = None
 
-    # Mock the fencer to return True (process the message)
-    with patch(
-        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
-    ) as mock_fencer_class:
-        mock_fencer_instance = AsyncMock()
-        mock_fencer_instance.check.return_value = True
-        mock_fencer_class.return_value = mock_fencer_instance
+    await consumer._process_message_with_retry(mock_kafka_message)
 
-        # ACT
-        await consumer._process_message_with_retry(mock_kafka_message)
-
-        # ASSERT
-        mock_fencer_class.assert_not_called()
-        mock_repo.get_last_snapshot_before.assert_awaited_once_with(
-            portfolio_id=mock_event.portfolio_id,
-            security_id=mock_event.security_id,
-            a_date=mock_event.date,
-            epoch=mock_event.epoch,
-        )
-        mock_repo.get_all_cashflows_for_security_date.assert_awaited_once_with(
-            mock_event.portfolio_id,
-            mock_event.security_id,
-            mock_event.date,
-            mock_event.epoch,
-        )
-        mock_repo.upsert_position_timeseries.assert_awaited_once()
-        mock_outbox_repo.create_outbox_event.assert_awaited_once()
-        assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
-            "ts-corr-id"
-        )
-        created_record = mock_repo.upsert_position_timeseries.call_args[0][0]
-        assert created_record.epoch == 1
+    mock_repo.get_last_snapshot_before.assert_awaited_once_with(
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        a_date=mock_event.date,
+        epoch=mock_event.epoch,
+    )
+    mock_repo.get_all_cashflows_for_security_date.assert_awaited_once_with(
+        mock_event.portfolio_id,
+        mock_event.security_id,
+        mock_event.date,
+        mock_event.epoch,
+    )
+    mock_repo.get_instrument.assert_not_called()
+    mock_repo.upsert_position_timeseries.assert_awaited_once()
+    assert mock_db_session.execute.await_count == 1
+    created_record = mock_repo.upsert_position_timeseries.call_args[0][0]
+    assert created_record.epoch == 1
 
 
-async def test_process_message_skips_stale_epoch(
+async def test_process_message_sends_unsupported_event_shape_to_dlq(
     consumer: PositionTimeseriesConsumer,
     mock_dependencies: dict,
-    caplog,
 ):
-    # ARRANGE
     mock_repo = mock_dependencies["repo"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-
-    valuation_event = ValuationDayCompletedEvent(
-        daily_position_snapshot_id=123,
-        portfolio_id="PORT_TS_POS_01",
-        security_id="SEC_TS_POS_01",
-        valuation_date=date(2025, 8, 12),
-        epoch=1,
-    )
     msg = MagicMock()
-    msg.value.return_value = valuation_event.model_dump_json().encode("utf-8")
+    msg.value.return_value = (
+        b'{"daily_position_snapshot_id":123,"portfolio_id":"PORT_TS_POS_01",'
+        b'"security_id":"SEC_TS_POS_01","valuation_date":"2025-08-12","epoch":1}'
+    )
     msg.headers.return_value = []
 
-    # Mock the fencer to return False (discard the message)
-    with patch(
-        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
-    ) as mock_fencer_class:
-        mock_fencer_instance = AsyncMock()
-        mock_fencer_instance.check.return_value = False
-        mock_fencer_class.return_value = mock_fencer_instance
+    await consumer._process_message_with_retry(msg)
 
-        # ACT
-        with caplog.at_level(logging.WARNING):
-            await consumer._process_message_with_retry(msg)
-
-        # ASSERT
-        mock_repo.get_instrument.assert_not_called()
-        mock_repo.upsert_position_timeseries.assert_not_called()
-        mock_outbox_repo.create_outbox_event.assert_not_called()
-        # The fencer now handles logging, so we don't need to check caplog here.
-        # The key assertion is that the business logic was not executed.
+    mock_repo.get_instrument.assert_not_called()
+    mock_repo.upsert_position_timeseries.assert_not_called()
+    consumer._send_to_dlq_async.assert_awaited_once()
 
 
-async def test_process_message_bypasses_epoch_fencing_for_snapshot_backfill(
+async def test_process_message_supports_snapshot_backfill_without_epoch_fencing(
     consumer: PositionTimeseriesConsumer,
     mock_kafka_message: MagicMock,
     mock_event: DailyPositionSnapshotPersistedEvent,
@@ -198,11 +152,6 @@ async def test_process_message_bypasses_epoch_fencing_for_snapshot_backfill(
 ):
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-
-    mock_repo.get_instrument.return_value = Instrument(
-        security_id=mock_event.security_id, currency="USD"
-    )
     mock_db_session.get.return_value = DailyPositionSnapshot(
         id=mock_event.id,
         portfolio_id=mock_event.portfolio_id,
@@ -218,67 +167,10 @@ async def test_process_message_bypasses_epoch_fencing_for_snapshot_backfill(
     mock_repo.get_all_cashflows_for_security_date.return_value = []
     mock_repo.get_position_timeseries.return_value = None
 
-    with patch(
-        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
-    ) as mock_fencer_class:
-        mock_fencer_instance = AsyncMock()
-        mock_fencer_instance.check.return_value = False
-        mock_fencer_class.return_value = mock_fencer_instance
-
-        await consumer._process_message_with_retry(mock_kafka_message)
-
-    mock_fencer_class.assert_not_called()
-    mock_repo.upsert_position_timeseries.assert_awaited_once()
-    mock_outbox_repo.create_outbox_event.assert_awaited_once()
-
-
-async def test_process_message_accepts_valuation_completed_event(
-    consumer: PositionTimeseriesConsumer,
-    mock_dependencies: dict,
-):
-    mock_repo = mock_dependencies["repo"]
-    mock_db_session = mock_dependencies["db_session"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-    valuation_event = ValuationDayCompletedEvent(
-        daily_position_snapshot_id=123,
-        portfolio_id="PORT_TS_POS_01",
-        security_id="SEC_TS_POS_01",
-        valuation_date=date(2025, 8, 12),
-        epoch=1,
-    )
-    msg = MagicMock()
-    msg.value.return_value = valuation_event.model_dump_json().encode("utf-8")
-    msg.headers.return_value = []
-
-    mock_repo.get_instrument.return_value = Instrument(
-        security_id=valuation_event.security_id, currency="USD"
-    )
-    mock_db_session.get.return_value = DailyPositionSnapshot(
-        id=valuation_event.daily_position_snapshot_id,
-        portfolio_id=valuation_event.portfolio_id,
-        security_id=valuation_event.security_id,
-        date=valuation_event.valuation_date,
-        quantity=Decimal(100),
-        cost_basis_local=Decimal(1000),
-        market_value_local=Decimal(1100),
-    )
-    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
-        market_value_local=Decimal(1050)
-    )
-    mock_repo.get_all_cashflows_for_security_date.return_value = []
-    mock_repo.get_position_timeseries.return_value = None
-
-    with patch(
-        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
-    ) as mock_fencer_class:
-        mock_fencer_instance = AsyncMock()
-        mock_fencer_instance.check.return_value = True
-        mock_fencer_class.return_value = mock_fencer_instance
-
-        await consumer._process_message_with_retry(msg)
+    await consumer._process_message_with_retry(mock_kafka_message)
 
     mock_repo.upsert_position_timeseries.assert_awaited_once()
-    mock_outbox_repo.create_outbox_event.assert_awaited_once()
+    assert mock_db_session.execute.await_count == 1
 
 
 async def test_process_message_uses_header_correlation_on_direct_path(
@@ -289,11 +181,6 @@ async def test_process_message_uses_header_correlation_on_direct_path(
 ):
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-
-    mock_repo.get_instrument.return_value = Instrument(
-        security_id=mock_event.security_id, currency="USD"
-    )
     mock_db_session.get.return_value = DailyPositionSnapshot(
         id=mock_event.id,
         portfolio_id=mock_event.portfolio_id,
@@ -311,18 +198,16 @@ async def test_process_message_uses_header_correlation_on_direct_path(
 
     token = correlation_id_var.set("<not-set>")
     try:
-        with patch(
-            "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
-        ) as mock_fencer_class:
-            mock_fencer_instance = AsyncMock()
-            mock_fencer_instance.check.return_value = True
-            mock_fencer_class.return_value = mock_fencer_instance
-
-            await consumer._process_message_with_retry(mock_kafka_message)
+        await consumer._process_message_with_retry(mock_kafka_message)
     finally:
         correlation_id_var.reset(token)
 
-    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == ("ts-corr-id")
+    compiled_stmt = str(
+        mock_db_session.execute.call_args.args[0].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "'ts-corr-id'" in compiled_stmt
 
 
 async def test_process_message_skips_downstream_fanout_for_identical_timeseries(
@@ -333,11 +218,6 @@ async def test_process_message_skips_downstream_fanout_for_identical_timeseries(
 ):
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-
-    mock_repo.get_instrument.return_value = Instrument(
-        security_id=mock_event.security_id, currency="USD"
-    )
     mock_db_session.get.return_value = DailyPositionSnapshot(
         id=mock_event.id,
         portfolio_id=mock_event.portfolio_id,
@@ -363,17 +243,10 @@ async def test_process_message_skips_downstream_fanout_for_identical_timeseries(
         cost=Decimal("10"),
     )
 
-    with patch(
-        "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.EpochFencer"
-    ) as mock_fencer_class:
-        mock_fencer_instance = AsyncMock()
-        mock_fencer_instance.check.return_value = True
-        mock_fencer_class.return_value = mock_fencer_instance
-
-        await consumer._process_message_with_retry(mock_kafka_message)
+    await consumer._process_message_with_retry(mock_kafka_message)
 
     mock_repo.upsert_position_timeseries.assert_not_awaited()
-    mock_outbox_repo.create_outbox_event.assert_not_awaited()
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_process_message_recalculates_dependent_next_day_bod(
@@ -384,8 +257,6 @@ async def test_process_message_recalculates_dependent_next_day_bod(
 ):
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-
     current_snapshot = DailyPositionSnapshot(
         id=mock_event.id,
         portfolio_id=mock_event.portfolio_id,
@@ -405,9 +276,6 @@ async def test_process_message_recalculates_dependent_next_day_bod(
         market_value_local=Decimal("1150"),
     )
 
-    mock_repo.get_instrument.return_value = Instrument(
-        security_id=mock_event.security_id, currency="USD"
-    )
     mock_db_session.get.return_value = current_snapshot
     mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
         market_value_local=Decimal("1050")
@@ -436,7 +304,6 @@ async def test_process_message_recalculates_dependent_next_day_bod(
     assert propagated_record.date == date(2025, 8, 13)
     assert propagated_record.bod_market_value == Decimal("1100")
     assert propagated_record.eod_market_value == Decimal("1150")
-    assert mock_outbox_repo.create_outbox_event.await_count == 2
     assert mock_dependencies["db_session"].execute.await_count == 2
 
 
@@ -448,8 +315,6 @@ async def test_process_message_does_not_precompute_absent_dependent_day(
 ):
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
-    mock_outbox_repo = mock_dependencies["outbox_repo"]
-
     current_snapshot = DailyPositionSnapshot(
         id=mock_event.id,
         portfolio_id=mock_event.portfolio_id,
@@ -469,9 +334,6 @@ async def test_process_message_does_not_precompute_absent_dependent_day(
         market_value_local=Decimal("1150"),
     )
 
-    mock_repo.get_instrument.return_value = Instrument(
-        security_id=mock_event.security_id, currency="USD"
-    )
     mock_db_session.get.return_value = current_snapshot
     mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
         market_value_local=Decimal("1050")
@@ -485,7 +347,7 @@ async def test_process_message_does_not_precompute_absent_dependent_day(
     mock_repo.upsert_position_timeseries.assert_awaited_once()
     created_record = mock_repo.upsert_position_timeseries.await_args.args[0]
     assert created_record.date == mock_event.date
-    mock_outbox_repo.create_outbox_event.assert_awaited_once()
+    assert mock_db_session.execute.await_count == 1
 
 
 async def test_stage_aggregation_job_rearms_completed_job_for_late_material_input(
@@ -506,4 +368,5 @@ async def test_stage_aggregation_job_rearms_completed_job_for_late_material_inpu
 
     assert "DO UPDATE SET status" in compiled_stmt
     assert "correlation_id" in compiled_stmt
-    assert "WHERE NOT (" not in compiled_stmt
+    assert "portfolio_aggregation_jobs.status != 'PENDING'" in compiled_stmt
+    assert "coalesce(portfolio_aggregation_jobs.correlation_id, '') != 'corr-456'" in compiled_stmt
