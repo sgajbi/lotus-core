@@ -120,6 +120,15 @@ async def test_process_message_success(
         mock_event.date,
         mock_event.epoch,
     )
+    mock_repo.get_next_snapshots_after.assert_awaited_once_with(
+        mock_event.portfolio_id,
+        mock_event.security_id,
+        mock_event.date,
+        mock_event.epoch,
+        500,
+    )
+    mock_repo.get_position_timeseries_for_dates.assert_not_awaited()
+    mock_repo.get_cashflows_for_security_dates.assert_not_awaited()
     mock_repo.get_instrument.assert_not_called()
     mock_repo.upsert_position_timeseries.assert_awaited_once()
     assert mock_db_session.execute.await_count == 1

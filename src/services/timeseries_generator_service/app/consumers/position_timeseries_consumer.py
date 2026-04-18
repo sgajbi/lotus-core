@@ -160,6 +160,9 @@ class PositionTimeseriesConsumer(BaseConsumer):
             epoch,
             MAX_DEPENDENT_PROPAGATION_ROWS,
         )
+        if not next_snapshots:
+            return
+
         next_dates = [snapshot.date for snapshot in next_snapshots]
         existing_timeseries_by_date = await repo.get_position_timeseries_for_dates(
             previous_snapshot.portfolio_id,
