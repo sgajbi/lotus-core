@@ -6,6 +6,7 @@
 - [System Data Flow](System-Data-Flow)
 - [Data Models](Data-Models)
 - [API Surface](API-Surface)
+- [Query Control Plane](Query-Control-Plane)
 - [Ingestion Service](Ingestion-Service)
 - [Event Replay Service](Event-Replay-Service)
 - [Persistence Service](Persistence-Service)

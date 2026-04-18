@@ -25,6 +25,10 @@ Governed downstream contracts for:
 - integration policy and capabilities
 - export lifecycle
 
+See also:
+
+- [Query Control Plane](Query-Control-Plane)
+
 ### `ingestion_service`
 
 Write-ingress contracts for source-data and adapter upload flows.
