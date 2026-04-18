@@ -20,6 +20,7 @@ Use it for:
 - [Ingestion Service](Ingestion-Service)
 - [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
+- [Timeseries Generator Service](Timeseries-Generator-Service)
 - [Getting Started](Getting-Started)
 - [Development Workflow](Development-Workflow)
 - [Validation and CI](Validation-and-CI)

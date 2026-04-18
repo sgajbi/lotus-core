@@ -65,6 +65,10 @@ Downstream workers consume completion topics and build the supported derived sta
 - timeseries generator
   materializes position and portfolio time-series state
 
+See also:
+
+- [Timeseries Generator Service](Timeseries-Generator-Service)
+
 ### 4. Read and support surfaces
 
 Persisted operational state is then exposed through:
