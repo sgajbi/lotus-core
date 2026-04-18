@@ -191,6 +191,8 @@ Instead, the run points to a different defect class:
 18. The run-scoped support contract now publishes the distinct portfolio breadth of the
     valuation-to-position-timeseries handoff backlog, not just raw waiting job count, so operators
     can distinguish localized lag from broad portfolio-level incomplete coverage.
+19. The same support contract now publishes the backlog breadth as a ratio of ingested portfolios,
+    so operators can read the handoff lag in scale terms without manually normalizing counts.
 
 ## Requirement-to-Implementation Traceability
 

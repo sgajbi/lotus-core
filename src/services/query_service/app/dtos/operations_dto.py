@@ -778,6 +778,15 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[238],
     )
+    completed_valuation_portfolios_without_position_timeseries_ratio: float = Field(
+        ...,
+        description=(
+            "Ratio of ingested portfolios that already have at least one completed valuation "
+            "waiting for target-date position-timeseries materialization, expressed as "
+            "`completed_valuation_portfolios_without_position_timeseries / portfolios_ingested`."
+        ),
+        examples=[0.238],
+    )
     oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime] = Field(
         None,
         description=(
