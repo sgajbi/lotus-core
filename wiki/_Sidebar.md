@@ -7,6 +7,7 @@
 - [Data Models](Data-Models)
 - [API Surface](API-Surface)
 - [Ingestion Service](Ingestion-Service)
+- [Outbox Events](Outbox-Events)
 - [Getting Started](Getting-Started)
 - [Development Workflow](Development-Workflow)
 - [Validation and CI](Validation-and-CI)

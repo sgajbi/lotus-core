@@ -44,6 +44,7 @@ Control execution and reconciliation run contracts.
 - [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
 - [System Data Flow](System-Data-Flow)
+- [Outbox Events](Outbox-Events)
 
 ## Ownership rule
 

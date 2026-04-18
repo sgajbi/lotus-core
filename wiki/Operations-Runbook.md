@@ -30,6 +30,9 @@ Use APIs before going directly to the database where possible:
 - replay and ingestion-health routes
 - reconciliation run inspection
 
+For event-publication drift, inspect outbox backlog and dispatcher health before assuming downstream
+consumer faults.
+
 ## Startup checks
 
 When app-local runtime is unhealthy, check this order:
