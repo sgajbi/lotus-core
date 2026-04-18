@@ -90,11 +90,11 @@ class OperationsService:
         return (numerator + denominator - 1) // denominator
 
     @staticmethod
-    def _age_seconds_since(
+    def _elapsed_seconds_between(
         older_timestamp: datetime | None,
-        newer_timestamp: datetime,
+        newer_timestamp: datetime | None,
     ) -> float | None:
-        if older_timestamp is None:
+        if older_timestamp is None or newer_timestamp is None:
             return None
         return round(max((newer_timestamp - older_timestamp).total_seconds(), 0.0), 6)
 
@@ -533,8 +533,20 @@ class OperationsService:
             latest_position_timeseries_materialized_at_utc=(
                 summary.latest_position_timeseries_materialized_at_utc
             ),
+            latest_snapshot_to_position_timeseries_tail_seconds=(
+                self._elapsed_seconds_between(
+                    summary.latest_snapshot_materialized_at_utc,
+                    summary.latest_position_timeseries_materialized_at_utc,
+                )
+            ),
             latest_portfolio_timeseries_materialized_at_utc=(
                 summary.latest_portfolio_timeseries_materialized_at_utc
+            ),
+            latest_position_timeseries_to_portfolio_timeseries_tail_seconds=(
+                self._elapsed_seconds_between(
+                    summary.latest_position_timeseries_materialized_at_utc,
+                    summary.latest_portfolio_timeseries_materialized_at_utc,
+                )
             ),
             latest_valuation_job_updated_at_utc=summary.latest_valuation_job_updated_at_utc,
             latest_aggregation_job_updated_at_utc=summary.latest_aggregation_job_updated_at_utc,
@@ -567,7 +579,7 @@ class OperationsService:
                 summary.oldest_completed_valuation_without_position_timeseries_at_utc
             ),
             oldest_completed_valuation_without_position_timeseries_age_seconds=(
-                self._age_seconds_since(
+                self._elapsed_seconds_between(
                     summary.oldest_completed_valuation_without_position_timeseries_at_utc,
                     generated_at_utc,
                 )

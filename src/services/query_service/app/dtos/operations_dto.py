@@ -795,6 +795,14 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=["2026-04-18T08:44:41Z"],
     )
+    latest_snapshot_to_position_timeseries_tail_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Seconds between the latest target-date daily position snapshot materialization and "
+            "the latest target-date position-timeseries materialization observed for the run."
+        ),
+        examples=[1668.362283],
+    )
     latest_portfolio_timeseries_materialized_at_utc: Optional[datetime] = Field(
         None,
         description=(
@@ -802,6 +810,14 @@ class LoadRunProgressResponse(BaseModel):
             "materialized for the run."
         ),
         examples=["2026-04-18T08:44:39Z"],
+    )
+    latest_position_timeseries_to_portfolio_timeseries_tail_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Seconds between the latest target-date position-timeseries materialization and the "
+            "latest target-date portfolio-timeseries materialization observed for the run."
+        ),
+        examples=[0.565207],
     )
     latest_valuation_job_updated_at_utc: Optional[datetime] = Field(
         None,

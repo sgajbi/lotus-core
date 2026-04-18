@@ -175,17 +175,23 @@ Instead, the run points to a different defect class:
     `1000` portfolios through the new repo-native existing-run reconciliation workflow and found:
     `100/100` positions, `100/100` transactions, expected market value `11617.2163000000`, and
     `0` timeseries-integrity reconciliation findings for every portfolio.
-14. Review-driven Phase 1 drain cleanup continued after the live run: dependent position-timeseries
+14. Latest sampled reconciliation at `2026-04-18T14:28:50Z` again confirmed the live support
+    route was serving `200` responses and the run remained `COMPLETE` with `1000/1000`
+    target-date coverage, `0` open valuation jobs, `0` open aggregation jobs, valuation-to-
+    position-timeseries latency `p50=2008.715376s`, `p95=2335.8380432s`,
+    `max=2371.357363s`, and a latest snapshot-to-position-timeseries tail of `1668.362283s`
+    versus only `0.565207s` from latest position-timeseries to latest portfolio-timeseries.
+15. Review-driven Phase 1 drain cleanup continued after the live run: dependent position-timeseries
     propagation now skips empty future batch reads, uses explicit preload sentinels, tightens batch
     repository typing, and stages changed dependent aggregation jobs in a single bulk upsert rather
     than one write per changed future day.
-15. The dependent aggregation bulk-staging path now normalizes duplicate dates before insert and
+16. The dependent aggregation bulk-staging path now normalizes duplicate dates before insert and
     logs only the staged date range, which reduces hot-path log noise during long future chains.
-16. The dependent propagation truncation warning is now truthful: the consumer probes for
+17. The dependent propagation truncation warning is now truthful: the consumer probes for
     `MAX_DEPENDENT_PROPAGATION_ROWS + 1` future snapshots and warns only when more than the
     configured cap actually exists, avoiding false-positive operator alerts when the future chain
     length is exactly equal to the cap.
-17. The run-scoped support contract now publishes the configured dependent position-timeseries
+18. The run-scoped support contract now publishes the configured dependent position-timeseries
     propagation row cap from a shared constant, so operators can interpret timeseries lag against
     the actual per-message drain boundary without reading worker code.
 18. The run-scoped support contract now publishes the distinct portfolio breadth of the
@@ -212,8 +218,8 @@ Instead, the run points to a different defect class:
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
 | Realistic bank-day load generation | Implemented baseline | `scripts/bank_day_load_scenario.py`; `docs/operations/bank-day-load-scenario.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
-| Correctness under institutional load | Implemented baseline | live run `20260418T065154Z`; support-route evidence `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`; sampled reconciliation `output/task-runs/20260418T120025Z-rfc086-final-reconciliation.md`; exhaustive reconciliation `output/task-runs/20260418T122335-bank-day-load-reconciliation.md` |
-| Deterministic visibility into completion state | Implemented baseline | run-scoped support contract and stage split metrics are live; `GET /support/load-runs/20260418T065154Z?business_date=2026-04-17` returned `COMPLETE` at `2026-04-18T12:00:25Z`; evidence: `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md` |
+| Correctness under institutional load | Implemented baseline | live run `20260418T065154Z`; support-route evidence `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`; sampled reconciliation `output/task-runs/20260418T120025Z-rfc086-final-reconciliation.md`; exhaustive reconciliation `output/task-runs/20260418T122335-bank-day-load-reconciliation.md`; latest sampled reconciliation refresh `output/task-runs/20260418T142850-bank-day-load-reconciliation.md` |
+| Deterministic visibility into completion state | Implemented baseline | run-scoped support contract and stage split metrics are live; `GET /support/load-runs/20260418T065154Z?business_date=2026-04-17` returned `COMPLETE` at `2026-04-18T12:00:25Z` and still returned `COMPLETE` with full coverage plus latency evidence at `2026-04-18T14:28:50Z`; evidence: `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`, `output/task-runs/20260418T142850-bank-day-load-reconciliation.md` |
 | Interruption-safe operator evidence | Implemented baseline | `scripts/bank_day_load_scenario.py`; `output/task-runs/20260418T064716Z-bank-day-load.json`; `output/task-runs/20260418T064716Z-bank-day-load.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
 | Throughput adequate for institutional completion SLA | Partially implemented (requires enhancement) | full ingestion and snapshot completion were achieved, but target-date coverage remained at `562` position-timeseries portfolios and `561` portfolio-timeseries portfolios at `2026-04-18T09:09:16Z` while valuation-to-position-timeseries p50 latency remained about `36.25` minutes |
 
@@ -554,6 +560,10 @@ Implementation status as of 2026-04-18:
     pressure hint that distinguishes scheduler-dispatch-bound backlog from downstream
     post-valuation materialization lag, so operators can classify the current bottleneck without
     manually comparing multiple queue and handoff fields.
+23. the support contract now derives explicit latest-stage tail latencies from existing
+    materialization timestamps so operators can read snapshot-to-position-timeseries and
+    position-timeseries-to-portfolio-timeseries drain gaps directly instead of subtracting UTC
+    timestamps manually during live diagnosis.
 
 Phase 1 exit criteria:
 

@@ -1702,9 +1702,11 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     assert response.latest_position_timeseries_materialized_at_utc == datetime(
         2025, 8, 30, 11, 45, tzinfo=timezone.utc
     )
+    assert response.latest_snapshot_to_position_timeseries_tail_seconds == 300.0
     assert response.latest_portfolio_timeseries_materialized_at_utc == datetime(
         2025, 8, 30, 11, 50, tzinfo=timezone.utc
     )
+    assert response.latest_position_timeseries_to_portfolio_timeseries_tail_seconds == 300.0
     assert response.latest_valuation_job_updated_at_utc == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc
     )
@@ -1938,9 +1940,11 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     assert response.latest_position_timeseries_materialized_at_utc == datetime(
         2025, 8, 30, 11, 45, tzinfo=timezone.utc
     )
+    assert response.latest_snapshot_to_position_timeseries_tail_seconds == 300.0
     assert response.latest_portfolio_timeseries_materialized_at_utc == datetime(
         2025, 8, 30, 11, 50, tzinfo=timezone.utc
     )
+    assert response.latest_position_timeseries_to_portfolio_timeseries_tail_seconds == 300.0
     assert (
         response.dependent_position_timeseries_propagation_row_cap
         == DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
