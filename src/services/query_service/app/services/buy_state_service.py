@@ -18,8 +18,12 @@ class BuyStateService:
         self, portfolio_id: str, security_id: str
     ) -> PositionLotsResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
         lots = await self.repo.get_position_lots(portfolio_id=portfolio_id, security_id=security_id)
+        if not lots:
+            raise LookupError(
+                f"BUY state not found for portfolio {portfolio_id} and security {security_id}"
+            )
         return PositionLotsResponse(
             portfolio_id=portfolio_id,
             security_id=security_id,
@@ -30,8 +34,15 @@ class BuyStateService:
         self, portfolio_id: str, security_id: str
     ) -> AccruedIncomeOffsetsResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
-        offsets = await self.repo.get_accrued_offsets(portfolio_id=portfolio_id, security_id=security_id)
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        offsets = await self.repo.get_accrued_offsets(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+        )
+        if not offsets:
+            raise LookupError(
+                f"BUY state not found for portfolio {portfolio_id} and security {security_id}"
+            )
         return AccruedIncomeOffsetsResponse(
             portfolio_id=portfolio_id,
             security_id=security_id,
@@ -42,12 +53,15 @@ class BuyStateService:
         self, portfolio_id: str, transaction_id: str
     ) -> BuyCashLinkageResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
         row = await self.repo.get_buy_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )
         if row is None:
-            raise ValueError(f"Transaction {transaction_id} not found for portfolio {portfolio_id}")
+            raise LookupError(
+                f"BUY cash linkage not found for portfolio {portfolio_id} and transaction "
+                f"{transaction_id}"
+            )
         txn, cashflow = row
         return BuyCashLinkageResponse(
             portfolio_id=portfolio_id,

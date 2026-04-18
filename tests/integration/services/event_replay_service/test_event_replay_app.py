@@ -113,24 +113,404 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     schema = response.json()
 
     get_job = schema["paths"]["/ingestion/jobs/{job_id}"]["get"]
+    list_failures = schema["paths"]["/ingestion/jobs/{job_id}/failures"]["get"]
+    get_records = schema["paths"]["/ingestion/jobs/{job_id}/records"]["get"]
     retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
+    health_summary = schema["paths"]["/ingestion/health/summary"]["get"]
+    health_lag = schema["paths"]["/ingestion/health/lag"]["get"]
+    consumer_lag = schema["paths"]["/ingestion/health/consumer-lag"]["get"]
+    slo_status = schema["paths"]["/ingestion/health/slo"]["get"]
+    error_budget = schema["paths"]["/ingestion/health/error-budget"]["get"]
+    operating_band = schema["paths"]["/ingestion/health/operating-band"]["get"]
+    ops_policy = schema["paths"]["/ingestion/health/policy"]["get"]
+    reprocessing_queue = schema["paths"]["/ingestion/health/reprocessing-queue"]["get"]
+    capacity = schema["paths"]["/ingestion/health/capacity"]["get"]
+    backlog_breakdown = schema["paths"]["/ingestion/health/backlog-breakdown"]["get"]
+    stalled_jobs = schema["paths"]["/ingestion/health/stalled-jobs"]["get"]
+    consumer_dlq_events = schema["paths"]["/ingestion/dlq/consumer-events"]["get"]
     replay_dlq = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
+    replay_audits = schema["paths"]["/ingestion/audit/replays"]["get"]
+    replay_audit = schema["paths"]["/ingestion/audit/replays/{replay_id}"]["get"]
+    ops_control_get = schema["paths"]["/ingestion/ops/control"]["get"]
+    ops_control_put = schema["paths"]["/ingestion/ops/control"]["put"]
+    idempotency_diagnostics = schema["paths"]["/ingestion/idempotency/diagnostics"]["get"]
     list_jobs = schema["paths"]["/ingestion/jobs"]["get"]
 
     job_id_parameter = next(param for param in get_job["parameters"] if param["name"] == "job_id")
+    assert get_job["summary"] == "Get ingestion job status"
+    assert "track asynchronous ingestion completion or failure" in get_job["description"]
     assert job_id_parameter["description"] == "Ingestion job identifier."
+    job_not_found = get_job["responses"]["404"]["content"]["application/json"]["example"]
+    assert job_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+
+    def _enum_values(parameter_schema: dict) -> list[str]:
+        if "enum" in parameter_schema:
+            return parameter_schema["enum"]
+        for candidate in parameter_schema.get("anyOf", []):
+            values = _enum_values(candidate)
+            if values:
+                return values
+        return []
+
+    def _schema_bound(parameter_schema: dict, bound: str):
+        if bound in parameter_schema:
+            return parameter_schema[bound]
+        for candidate in parameter_schema.get("anyOf", []):
+            if bound in candidate:
+                return candidate[bound]
+        raise AssertionError(f"Schema bound {bound} not found in {parameter_schema}")
 
     status_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "status")
     assert status_parameter["description"] == "Optional job status filter."
+    assert _enum_values(status_parameter["schema"]) == ["accepted", "queued", "failed"]
+
+    entity_type_parameter = next(
+        param for param in list_jobs["parameters"] if param["name"] == "entity_type"
+    )
+    assert entity_type_parameter["description"] == "Optional canonical entity type filter."
+
+    submitted_from_parameter = next(
+        param for param in list_jobs["parameters"] if param["name"] == "submitted_from"
+    )
+    assert submitted_from_parameter["description"] == (
+        "Optional inclusive lower bound for job submission timestamp."
+    )
+
+    submitted_to_parameter = next(
+        param for param in list_jobs["parameters"] if param["name"] == "submitted_to"
+    )
+    assert submitted_to_parameter["description"] == (
+        "Optional inclusive upper bound for job submission timestamp."
+    )
+
+    cursor_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "cursor")
+    assert cursor_parameter["description"] == "Opaque pagination cursor from the previous page."
+
+    limit_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "limit")
+    assert limit_parameter["schema"]["minimum"] == 1
+    assert limit_parameter["schema"]["maximum"] == 500
+
+    failure_job_id_parameter = next(
+        param for param in list_failures["parameters"] if param["name"] == "job_id"
+    )
+    failure_limit_parameter = next(
+        param for param in list_failures["parameters"] if param["name"] == "limit"
+    )
+    failure_example = list_failures["responses"]["200"]["content"]["application/json"]["example"]
+    failure_not_found = list_failures["responses"]["404"]["content"]["application/json"]["example"]
+    assert list_failures["summary"] == "List ingestion job failures"
+    assert "failure history with most-recent-first ordering" in list_failures["description"]
+    assert failure_job_id_parameter["description"] == "Ingestion job identifier."
+    assert failure_limit_parameter["schema"]["minimum"] == 1
+    assert failure_limit_parameter["schema"]["maximum"] == 500
+    assert failure_example["failures"][0]["failure_phase"] == "publish"
+    assert failure_example["failures"][0]["failed_record_keys"] == [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+    ]
+    assert failure_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+
+    record_job_id_parameter = next(
+        param for param in get_records["parameters"] if param["name"] == "job_id"
+    )
+    record_example = get_records["responses"]["200"]["content"]["application/json"]["example"]
+    record_not_found = get_records["responses"]["404"]["content"]["application/json"]["example"]
+    assert get_records["summary"] == "Get ingestion job record-level status"
+    assert "Derive replayable keys from stored payload" in get_records["description"]
+    assert record_job_id_parameter["description"] == "Ingestion job identifier."
+    assert record_example["accepted_count"] == 3
+    assert record_example["failed_record_keys"] == [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+    ]
+    assert record_example["replayable_record_keys"] == [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+        "TXN-2026-000147",
+    ]
+    assert record_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
 
     retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
         "examples"
     ]
+    retry_bookkeeping_failed = retry_job["responses"]["500"]["content"]["application/json"][
+        "example"
+    ]
+    retry_body_schema = retry_job["requestBody"]["content"]["application/json"]["schema"]
+    assert retry_job["summary"] == "Retry a failed ingestion job"
+    assert "full or partial payload replay" in retry_job["description"]
+    assert retry_body_schema["$ref"].endswith("/IngestionRetryRequest")
     assert "retry_unsupported" in retry_conflict_examples
+    assert "partial_retry_unsupported" in retry_conflict_examples
+    assert "retry_blocked" in retry_conflict_examples
     assert "duplicate_blocked" in retry_conflict_examples
+    assert (
+        retry_conflict_examples["partial_retry_unsupported"]["value"]["detail"]["code"]
+        == "INGESTION_PARTIAL_RETRY_UNSUPPORTED"
+    )
+    assert (
+        retry_conflict_examples["retry_blocked"]["value"]["detail"]["code"]
+        == "INGESTION_RETRY_BLOCKED"
+    )
+    assert retry_bookkeeping_failed["detail"]["code"] == "INGESTION_RETRY_BOOKKEEPING_FAILED"
 
+    health_example = health_summary["responses"]["200"]["content"]["application/json"]["example"]
+    assert health_summary["summary"] == "Get ingestion operational health summary"
+    assert "fast operational health checks and dashboards" in health_summary["description"]
+    assert health_example == {
+        "total_jobs": 2450,
+        "accepted_jobs": 3,
+        "queued_jobs": 7,
+        "failed_jobs": 2,
+        "backlog_jobs": 10,
+        "oldest_backlog_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    }
+
+    health_lag_example = health_lag["responses"]["200"]["content"]["application/json"]["example"]
+    assert health_lag["summary"] == "Get ingestion backlog indicators"
+    assert "quick backlog signal during ingestion incidents" in health_lag["description"]
+    assert health_lag_example == health_example
+
+    consumer_lag_params = {param["name"]: param for param in consumer_lag["parameters"]}
+    consumer_lag_example = consumer_lag["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert consumer_lag["summary"] == "Get consumer lag diagnostics"
+    assert (
+        "triage downstream consumer lag before replaying ingestion jobs"
+        in consumer_lag["description"]
+    )
+    assert consumer_lag_params["lookback_minutes"]["description"] == (
+        "Lookback window, in minutes, used to aggregate consumer lag diagnostics."
+    )
+    assert consumer_lag_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert consumer_lag_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert consumer_lag_params["limit"]["description"] == (
+        "Maximum number of consumer-group/topic lag rows to return."
+    )
+    assert consumer_lag_params["limit"]["schema"]["minimum"] == 1
+    assert consumer_lag_params["limit"]["schema"]["maximum"] == 500
+    assert consumer_lag_example["groups"][0]["lag_severity"] == "high"
+    assert consumer_lag_example["groups"][1]["lag_severity"] == "medium"
+
+    slo_params = {param["name"]: param for param in slo_status["parameters"]}
+    slo_example = slo_status["responses"]["200"]["content"]["application/json"]["example"]
+    assert slo_status["summary"] == "Evaluate ingestion SLO status"
+    assert "alert evaluation, on-call triage" in slo_status["description"]
+    assert slo_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert slo_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert _schema_bound(slo_params["failure_rate_threshold"]["schema"], "minimum") == 0
+    assert _schema_bound(slo_params["failure_rate_threshold"]["schema"], "maximum") == 1
+    assert slo_params["queue_latency_threshold_seconds"]["schema"]["minimum"] == 0.1
+    assert slo_params["queue_latency_threshold_seconds"]["schema"]["maximum"] == 600
+    assert slo_params["backlog_age_threshold_seconds"]["schema"]["minimum"] == 1
+    assert slo_params["backlog_age_threshold_seconds"]["schema"]["maximum"] == 86400
+    assert slo_example["failure_rate"] == "0.0125"
+    assert slo_example["breach_failure_rate"] is False
+
+    error_budget_params = {param["name"]: param for param in error_budget["parameters"]}
+    error_budget_example = error_budget["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert error_budget["summary"] == "Get ingestion error-budget and backlog-growth status"
+    assert "burn-rate alerts and release-go/no-go" in error_budget["description"]
+    assert error_budget_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert error_budget_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert _schema_bound(error_budget_params["failure_rate_threshold"]["schema"], "minimum") == 0
+    assert _schema_bound(error_budget_params["failure_rate_threshold"]["schema"], "maximum") == 1
+    assert error_budget_params["backlog_growth_threshold"]["schema"]["minimum"] == 0
+    assert error_budget_params["backlog_growth_threshold"]["schema"]["maximum"] == 10000
+    assert error_budget_example["remaining_error_budget"] == "0.008125"
+    assert error_budget_example["dlq_pressure_ratio"] == "0.4000"
+
+    operating_band_params = {param["name"]: param for param in operating_band["parameters"]}
+    operating_band_example = operating_band["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert operating_band["summary"] == "Get ingestion operating band"
+    assert "replay safety gating" in operating_band["description"]
+    assert operating_band_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert operating_band_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert _schema_bound(operating_band_params["failure_rate_threshold"]["schema"], "minimum") == 0
+    assert _schema_bound(operating_band_params["failure_rate_threshold"]["schema"], "maximum") == 1
+    assert operating_band_params["queue_latency_threshold_seconds"]["schema"]["minimum"] == 0.1
+    assert operating_band_params["queue_latency_threshold_seconds"]["schema"]["maximum"] == 600
+    assert operating_band_params["backlog_age_threshold_seconds"]["schema"]["minimum"] == 1
+    assert operating_band_params["backlog_age_threshold_seconds"]["schema"]["maximum"] == 86400
+    assert operating_band_example["operating_band"] == "yellow"
+    assert operating_band_example["triggered_signals"] == [
+        "backlog_age_seconds>=15",
+        "dlq_pressure_ratio>=0.25",
+    ]
+
+    ops_policy_example = ops_policy["responses"]["200"]["content"]["application/json"]["example"]
+    assert ops_policy["summary"] == "Get ingestion operating policy thresholds"
+    assert "prevent config drift" in ops_policy["description"]
+    assert ops_policy_example["policy_version"] == "v1"
+    assert ops_policy_example["replay_max_records_per_request"] == 5000
+    assert ops_policy_example["calculator_peak_lag_age_seconds"]["timeseries"] == 120
+    assert ops_policy_example["replay_dry_run_supported"] is True
+
+    reprocessing_queue_example = reprocessing_queue["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert reprocessing_queue["summary"] == "Get reprocessing queue health by job type"
+    assert "replay worker scaling decisions" in reprocessing_queue["description"]
+    assert reprocessing_queue_example["total_pending_jobs"] == 5
+    assert reprocessing_queue_example["queues"][0]["job_type"] == "RESET_WATERMARKS"
+    assert reprocessing_queue_example["queues"][1]["failed_jobs"] == 1
+
+    capacity_params = {param["name"]: param for param in capacity["parameters"]}
+    capacity_example = capacity["responses"]["200"]["content"]["application/json"]["example"]
+    assert capacity["summary"] == "Get ingestion capacity and saturation diagnostics"
+    assert "detect overload, prioritize scaling" in capacity["description"]
+    assert capacity_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert capacity_params["lookback_minutes"]["schema"]["maximum"] == 1440
+    assert capacity_params["limit"]["schema"]["minimum"] == 1
+    assert capacity_params["limit"]["schema"]["maximum"] == 500
+    assert capacity_params["assumed_replicas"]["schema"]["minimum"] == 1
+    assert capacity_params["assumed_replicas"]["schema"]["maximum"] == 500
+    assert capacity_example["total_backlog_records"] == 300
+    assert capacity_example["groups"][0]["estimated_drain_seconds"] == 1800.0
+    assert capacity_example["groups"][0]["saturation_state"] == "stable"
+
+    backlog_breakdown_params = {param["name"]: param for param in backlog_breakdown["parameters"]}
+    backlog_breakdown_example = backlog_breakdown["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert backlog_breakdown["summary"] == "Get ingestion backlog breakdown by endpoint and entity"
+    assert "highest-impact ingestion pipeline segment" in backlog_breakdown["description"]
+    assert backlog_breakdown_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert backlog_breakdown_params["lookback_minutes"]["schema"]["maximum"] == 10080
+    assert backlog_breakdown_params["limit"]["schema"]["minimum"] == 1
+    assert backlog_breakdown_params["limit"]["schema"]["maximum"] == 500
+    assert backlog_breakdown_example["largest_group_backlog_share"] == "0.75"
+    assert backlog_breakdown_example["groups"][0]["backlog_jobs"] == 6
+    assert backlog_breakdown_example["groups"][1]["failure_rate"] == "0.5"
+
+    stalled_jobs_params = {param["name"]: param for param in stalled_jobs["parameters"]}
+    stalled_jobs_example = stalled_jobs["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert stalled_jobs["summary"] == "List stalled ingestion jobs"
+    assert (
+        "identify concrete stuck jobs requiring operator intervention"
+        in stalled_jobs["description"]
+    )
+    assert stalled_jobs_params["threshold_seconds"]["schema"]["minimum"] == 30
+    assert stalled_jobs_params["threshold_seconds"]["schema"]["maximum"] == 86400
+    assert stalled_jobs_params["limit"]["schema"]["minimum"] == 1
+    assert stalled_jobs_params["limit"]["schema"]["maximum"] == 500
+    assert stalled_jobs_example["total"] == 2
+    assert stalled_jobs_example["jobs"][0]["queue_age_seconds"] == 901.0
+    assert stalled_jobs_example["jobs"][1]["status"] == "queued"
+    assert "dependency saturation" in stalled_jobs_example["jobs"][1]["suggested_action"]
+
+    consumer_dlq_events_params = {
+        param["name"]: param for param in consumer_dlq_events["parameters"]
+    }
+    consumer_dlq_events_example = consumer_dlq_events["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert consumer_dlq_events["summary"] == "List consumer dead-letter events"
+    assert "consumer-side validation/processing failures" in consumer_dlq_events["description"]
+    assert consumer_dlq_events_params["limit"]["schema"]["minimum"] == 1
+    assert consumer_dlq_events_params["limit"]["schema"]["maximum"] == 500
+    assert (
+        consumer_dlq_events_params["original_topic"]["description"]
+        == "Optional original Kafka topic filter."
+    )
+    assert (
+        consumer_dlq_events_params["consumer_group"]["description"]
+        == "Optional consumer-group filter."
+    )
+    assert consumer_dlq_events_example["total"] == 2
+    assert consumer_dlq_events_example["events"][0]["error_reason_code"] == "VALIDATION_ERROR"
+    assert consumer_dlq_events_example["events"][1]["consumer_group"] == "valuation-service-group"
+    assert "TimeoutError" in consumer_dlq_events_example["events"][1]["error_reason"]
+
+    replay_dlq_event_id_parameter = next(
+        param for param in replay_dlq["parameters"] if param["name"] == "event_id"
+    )
+    replay_dlq_examples = replay_dlq["requestBody"]["content"]["application/json"]["examples"]
+    replay_dlq_example = replay_dlq["responses"]["200"]["content"]["application/json"]["example"]
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
+    assert replay_dlq["summary"] == "Replay ingestion payload for correlated consumer DLQ event"
+    assert "recover rejected events safely" in replay_dlq["description"]
+    assert replay_dlq_event_id_parameter["description"] == "Consumer dead-letter event identifier."
+    assert replay_dlq_examples["dry_run"]["value"]["dry_run"] is True
+    assert replay_dlq_example["replay_status"] == "replayed"
+    assert replay_dlq_example["message"] == (
+        "Replayed ingestion job from correlated consumer DLQ event."
+    )
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
+
+    replay_audits_params = {param["name"]: param for param in replay_audits["parameters"]}
+    replay_audits_example = replay_audits["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert replay_audits["summary"] == "List ingestion replay audit records"
+    assert "incident forensics and replay governance review" in replay_audits["description"]
+    assert replay_audits_params["limit"]["schema"]["minimum"] == 1
+    assert replay_audits_params["limit"]["schema"]["maximum"] == 500
+    assert replay_audits_params["recovery_path"]["description"] == "Optional recovery-path filter."
+    assert replay_audits_params["replay_status"]["description"] == "Optional replay-status filter."
+    assert (
+        replay_audits_params["replay_fingerprint"]["description"]
+        == "Optional deterministic replay fingerprint filter."
+    )
+    assert replay_audits_example["total"] == 2
+    assert replay_audits_example["audits"][1]["replay_status"] == "dry_run"
+    assert replay_audits_example["audits"][1]["dry_run"] is True
+
+    replay_audit_id_parameter = next(
+        param for param in replay_audit["parameters"] if param["name"] == "replay_id"
+    )
+    replay_audit_not_found = replay_audit["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert replay_audit["summary"] == "Get one ingestion replay audit record"
+    assert (
+        "inspect a specific replay action referenced in incident timelines"
+        in replay_audit["description"]
+    )
+    assert replay_audit_id_parameter["description"] == "Replay audit identifier."
+    assert replay_audit_not_found["detail"]["code"] == "INGESTION_REPLAY_AUDIT_NOT_FOUND"
+
+    ops_control_get_example = ops_control_get["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    ops_control_put_examples = ops_control_put["requestBody"]["content"]["application/json"][
+        "examples"
+    ]
+    assert ops_control_get["summary"] == "Get ingestion operations control mode"
+    assert "before maintenance, pause/drain actions" in ops_control_get["description"]
+    assert ops_control_get_example["mode"] == "paused"
+    assert ops_control_get_example["updated_by"] == "ops_automation"
+    assert "pause_with_window" in ops_control_put_examples
+    assert ops_control_put_examples["pause_with_window"]["value"]["mode"] == "paused"
+    assert ops_control_put["summary"] == "Update ingestion operations control mode"
+    assert (
+        "planned maintenance, controlled drain, or replay governance actions"
+        in ops_control_put["description"]
+    )
+
+    idempotency_params = {param["name"]: param for param in idempotency_diagnostics["parameters"]}
+    idempotency_example = idempotency_diagnostics["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert idempotency_diagnostics["summary"] == "Get idempotency key diagnostics"
+    assert (
+        "detect client integration anti-patterns before they create replay ambiguity"
+        in idempotency_diagnostics["description"]
+    )
+    assert idempotency_params["lookback_minutes"]["schema"]["minimum"] == 5
+    assert idempotency_params["lookback_minutes"]["schema"]["maximum"] == 10080
+    assert idempotency_params["limit"]["schema"]["minimum"] == 1
+    assert idempotency_params["limit"]["schema"]["maximum"] == 500
+    assert idempotency_example["collisions"] == 1
+    assert idempotency_example["keys"][0]["collision_detected"] is True
+    assert idempotency_example["keys"][0]["endpoint_count"] == 2
 
 
 async def test_openapi_describes_event_replay_shared_schema_depth(async_test_client):
@@ -140,9 +520,21 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
 
     ops_mode = schema["IngestionOpsModeResponse"]
     ops_mode_update = schema["IngestionOpsModeUpdateRequest"]
+    retry_request = schema["IngestionRetryRequest"]
     replay_request = schema["ConsumerDlqReplayRequest"]
     replay_audit_list = schema["IngestionReplayAuditListResponse"]
     idempotency = schema["IngestionIdempotencyDiagnosticsResponse"]
+    consumer_lag = schema["IngestionConsumerLagResponse"]
+    consumer_lag_group = schema["IngestionConsumerLagGroupResponse"]
+    slo_status = schema["IngestionSloStatusResponse"]
+    error_budget = schema["IngestionErrorBudgetStatusResponse"]
+    operating_band = schema["IngestionOperatingBandResponse"]
+    stalled_jobs = schema["IngestionStalledJobListResponse"]
+    stalled_job = schema["IngestionStalledJobResponse"]
+    consumer_dlq_event = schema["ConsumerDlqEventResponse"]
+    consumer_dlq_event_list = schema["ConsumerDlqEventListResponse"]
+    consumer_dlq_replay = schema["ConsumerDlqReplayResponse"]
+    replay_audit = schema["IngestionReplayAuditResponse"]
 
     assert ops_mode["properties"]["mode"]["description"] == (
         "Current ingestion operations mode used to control replay and write-ingress behavior."
@@ -153,11 +545,105 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     assert replay_request["properties"]["dry_run"]["description"] == (
         "When true, validate replayability and replay mapping without republishing messages."
     )
+    assert retry_request["properties"]["record_keys"]["description"] == (
+        "Optional subset of record keys to replay. Empty list replays full stored payload."
+    )
+    assert retry_request["properties"]["dry_run"]["description"] == (
+        "When true, validates retry scope without publishing messages."
+    )
     assert replay_audit_list["properties"]["audits"]["description"] == (
         "Replay audit rows matching the requested filters and time window."
     )
+    assert stalled_jobs["properties"]["jobs"]["description"] == (
+        "Jobs older than threshold in accepted or queued state."
+    )
+    assert stalled_job["properties"]["queue_age_seconds"]["description"] == (
+        "Current age in seconds since submission."
+    )
+    assert stalled_job["properties"]["suggested_action"]["description"] == (
+        "Runbook-oriented suggested action for operations."
+    )
+    assert consumer_dlq_event["properties"]["error_reason_code"]["description"] == (
+        "Canonical DLQ reason code for routing, replay policy, and incident analytics."
+    )
+    assert consumer_dlq_event["properties"]["payload_excerpt"]["description"] == (
+        "Truncated payload excerpt for operational triage."
+    )
+    assert consumer_dlq_event_list["properties"]["events"]["description"] == (
+        "Consumer dead-letter events for operational triage."
+    )
+    assert consumer_dlq_replay["properties"]["replay_status"]["description"] == (
+        "Replay execution result."
+    )
+    assert consumer_dlq_replay["properties"]["replay_fingerprint"]["description"] == (
+        "Deterministic fingerprint for this replay mapping and payload."
+    )
+    assert replay_audit["properties"]["replay_status"]["description"] == "Replay outcome status."
+    assert replay_audit["properties"]["requested_by"]["description"] == (
+        "Ops principal who initiated replay."
+    )
+    assert ops_mode["properties"]["updated_by"]["description"] == (
+        "Principal or automation actor who last changed ops mode."
+    )
+    assert ops_mode_update["properties"]["replay_window_end"]["description"] == (
+        "Optional replay window end for retry operations."
+    )
     assert idempotency["properties"]["keys"]["description"] == (
         "Key-level idempotency diagnostics sorted by highest usage count."
+    )
+    assert idempotency["properties"]["collisions"]["description"] == (
+        "Number of keys reused across multiple endpoints."
+    )
+    assert ops_mode["properties"]["updated_by"]["description"] == (
+        "Principal or automation actor who last changed ops mode."
+    )
+    assert ops_mode_update["properties"]["replay_window_end"]["description"] == (
+        "Optional replay window end for retry operations."
+    )
+    assert idempotency["properties"]["keys"]["description"] == (
+        "Key-level idempotency diagnostics sorted by highest usage count."
+    )
+    assert consumer_lag["properties"]["groups"]["description"] == (
+        "Consumer lag group diagnostics sorted by highest pressure first."
+    )
+    assert consumer_lag_group["properties"]["dlq_events"]["description"] == (
+        "Number of DLQ events for this consumer/topic in lookback window."
+    )
+    assert consumer_lag_group["properties"]["lag_severity"]["enum"] == [
+        "low",
+        "medium",
+        "high",
+    ]
+    assert slo_status["properties"]["failure_rate"]["description"] == (
+        "Failed jobs divided by total jobs in the lookback window."
+    )
+    assert slo_status["properties"]["p95_queue_latency_seconds"]["description"] == (
+        "95th percentile latency from job submission to queue completion."
+    )
+    assert slo_status["properties"]["breach_backlog_age"]["description"] == (
+        "Whether backlog age exceeds configured threshold."
+    )
+    assert error_budget["properties"]["remaining_error_budget"]["description"] == (
+        "Remaining budget to threshold (max(0, threshold - failure_rate))."
+    )
+    assert error_budget["properties"]["replay_backlog_pressure_ratio"]["description"] == (
+        "Backlog saturation ratio against replay guardrail capacity "
+        "(backlog_jobs / replay_max_backlog_jobs)."
+    )
+    assert error_budget["properties"]["dlq_pressure_ratio"]["description"] == (
+        "DLQ pressure ratio against budget (dlq_events_in_window / dlq_budget_events_per_window)."
+    )
+    assert operating_band["properties"]["operating_band"]["enum"] == [
+        "green",
+        "yellow",
+        "orange",
+        "red",
+    ]
+    assert operating_band["properties"]["recommended_action"]["description"] == (
+        "Runbook-oriented next action for this band."
+    )
+    assert operating_band["properties"]["triggered_signals"]["description"] == (
+        "List of signals that triggered the final band decision."
     )
 
 
@@ -166,13 +652,88 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     assert response.status_code == 200
     schema = response.json()["components"]["schemas"]
 
+    job_detail = schema["IngestionJobResponse"]
+    job_failure = schema["IngestionJobFailureResponse"]
+    job_failure_list = schema["IngestionJobFailureListResponse"]
     job_list = schema["IngestionJobListResponse"]
+    job_record_status = schema["IngestionJobRecordStatusResponse"]
     health_summary = schema["IngestionHealthSummaryResponse"]
     ops_policy = schema["IngestionOpsPolicyResponse"]
     queue_health = schema["IngestionReprocessingQueueHealthResponse"]
+    queue_item = schema["IngestionReprocessingQueueItemResponse"]
+    capacity = schema["IngestionCapacityStatusResponse"]
+    capacity_group = schema["IngestionCapacityGroupResponse"]
+    backlog_breakdown = schema["IngestionBacklogBreakdownResponse"]
+    backlog_breakdown_item = schema["IngestionBacklogBreakdownItemResponse"]
 
+    assert set(job_detail["required"]) == {
+        "job_id",
+        "endpoint",
+        "entity_type",
+        "status",
+        "accepted_count",
+        "correlation_id",
+        "request_id",
+        "trace_id",
+        "submitted_at",
+        "retry_count",
+    }
+    assert job_detail["properties"]["endpoint"]["description"] == (
+        "Ingestion API endpoint that created this job."
+    )
+    assert job_detail["properties"]["accepted_count"]["minimum"] == 0
+    assert job_detail["properties"]["status"]["enum"] == ["accepted", "queued", "failed"]
+    assert job_detail["properties"]["failure_reason"]["description"] == (
+        "Failure reason when status is failed."
+    )
+    assert job_detail["properties"]["last_retried_at"]["description"] == (
+        "Timestamp of the most recent retry attempt."
+    )
     assert job_list["properties"]["jobs"]["description"] == (
         "Ingestion jobs matching the requested filters and pagination window."
+    )
+    assert job_list["properties"]["total"]["description"] == (
+        "Number of jobs returned in this response."
+    )
+    assert job_list["properties"]["next_cursor"]["description"] == (
+        "Opaque cursor to fetch the next page of jobs, based on descending ingestion job order."
+    )
+    assert job_failure["properties"]["failure_phase"]["description"] == (
+        "Pipeline phase where the job failure occurred."
+    )
+    assert job_failure["properties"]["failed_record_keys"]["description"] == (
+        "Record keys that failed during publish/retry processing, including batch records "
+        "left unpublished after a mid-batch publish failure."
+    )
+    assert job_failure_list["properties"]["failures"]["description"] == (
+        "Failure events captured for the requested ingestion job."
+    )
+    assert job_failure_list["properties"]["total"]["description"] == (
+        "Number of failure events returned in this response."
+    )
+    assert job_record_status["properties"]["accepted_count"]["description"] == (
+        "Number of records accepted by the original ingestion request."
+    )
+    assert job_record_status["properties"]["failed_record_keys"]["description"] == (
+        "Record keys failed across publish/retry lifecycle."
+    )
+    assert job_record_status["properties"]["replayable_record_keys"]["description"] == (
+        "Record keys available for deterministic partial replay operations."
+    )
+    assert health_summary["properties"]["total_jobs"]["description"] == (
+        "Total ingestion jobs stored in operational state."
+    )
+    assert health_summary["properties"]["accepted_jobs"]["description"] == (
+        "Total jobs currently in accepted state."
+    )
+    assert health_summary["properties"]["queued_jobs"]["description"] == (
+        "Total jobs currently queued for asynchronous processing."
+    )
+    assert health_summary["properties"]["failed_jobs"]["description"] == (
+        "Total jobs currently marked as failed."
+    )
+    assert health_summary["properties"]["backlog_jobs"]["description"] == (
+        "Operational backlog count (accepted + queued)."
     )
     assert health_summary["properties"]["oldest_backlog_job_id"]["description"] == (
         "Identifier of the oldest non-terminal job contributing to the backlog."
@@ -180,8 +741,40 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
     assert ops_policy["properties"]["replay_dry_run_supported"]["description"] == (
         "Whether replay dry-run mode is supported by the active control plane."
     )
+    assert ops_policy["properties"]["replay_isolation_mode"]["enum"] == [
+        "shared_workers",
+        "dedicated_workers",
+    ]
+    assert ops_policy["properties"]["partition_growth_strategy"]["enum"] == [
+        "scale_out_only",
+        "pre_shard_large_portfolios",
+    ]
+    assert ops_policy["properties"]["calculator_peak_lag_age_seconds"]["description"] == (
+        "Peak-load lag-age SLO envelope (seconds) by calculator group "
+        "(position, cost, valuation, cashflow, timeseries)."
+    )
     assert queue_health["properties"]["queues"]["description"] == (
         "Per-job-type queue health rows sorted by highest pending pressure."
+    )
+    assert queue_item["properties"]["oldest_pending_age_seconds"]["description"] == (
+        "Age in seconds for the oldest pending job for this type."
+    )
+    assert capacity["properties"]["groups"]["description"] == (
+        "Per endpoint/entity capacity diagnostics sorted by highest backlog pressure."
+    )
+    assert capacity_group["properties"]["headroom_ratio"]["description"] == (
+        "Capacity headroom ratio (`1 - rho`). Negative values indicate sustained overload."
+    )
+    assert capacity_group["properties"]["saturation_state"]["enum"] == [
+        "stable",
+        "near_capacity",
+        "over_capacity",
+    ]
+    assert backlog_breakdown["properties"]["top_3_backlog_share"]["description"] == (
+        "Backlog concentration share of the top 3 groups by backlog_jobs."
+    )
+    assert backlog_breakdown_item["properties"]["oldest_backlog_age_seconds"]["description"] == (
+        "Age in seconds of oldest non-terminal job in this group."
     )
 
 

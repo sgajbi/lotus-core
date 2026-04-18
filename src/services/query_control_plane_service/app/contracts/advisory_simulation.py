@@ -17,18 +17,41 @@ class CanonicalSimulationErrorCode(str, Enum):
 
 
 class CanonicalSimulationProblemDetails(BaseModel):
-    type: str = Field(description="Problem type URI.")
-    title: str = Field(description="Short human-readable problem summary.")
-    status: int = Field(description="HTTP status code.")
-    detail: str = Field(description="Detailed problem description.")
-    instance: str = Field(description="Request path for the failing simulation call.")
+    type: str = Field(
+        description="Problem type URI.",
+        examples=[
+            "https://lotus-platform.dev/problems/canonical-simulation/"
+            "canonical_simulation_contract_version_mismatch"
+        ],
+    )
+    title: str = Field(
+        description="Short human-readable problem summary.",
+        examples=["Canonical Simulation Contract Error"],
+    )
+    status: int = Field(description="HTTP status code.", examples=[412])
+    detail: str = Field(
+        description="Detailed problem description.",
+        examples=[
+            "Unsupported canonical simulation contract version: "
+            "advisory-simulation.v0. Expected advisory-simulation.v1."
+        ],
+    )
+    instance: str = Field(
+        description="Request path for the failing simulation call.",
+        examples=["/integration/advisory/proposals/simulate-execution"],
+    )
     error_code: CanonicalSimulationErrorCode = Field(
-        description="Stable canonical simulation error code."
+        description="Stable canonical simulation error code.",
+        examples=[CanonicalSimulationErrorCode.CONTRACT_VERSION_MISMATCH],
     )
     contract_version: str = Field(
-        description="Canonical simulation contract version expected by this service."
+        description="Canonical simulation contract version expected by this service.",
+        examples=[ADVISORY_SIMULATION_CONTRACT_VERSION],
     )
-    correlation_id: str = Field(description="Correlation identifier for supportability.")
+    correlation_id: str = Field(
+        description="Correlation identifier for supportability.",
+        examples=["corr-upstream-1"],
+    )
 
 
 class CanonicalSimulationContractError(Exception):

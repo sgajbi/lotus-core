@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -529,12 +530,22 @@ async def test_fetch_benchmark_and_index_catalog_router_functions() -> None:
         integration_service=mock_service,
     )
     index_response = await fetch_index_catalog(
-        request=IndexCatalogRequest(as_of_date="2026-01-31"),
+        request=IndexCatalogRequest(
+            as_of_date="2026-01-31",
+            index_ids=["IDX_MSCI_WORLD_TR"],
+        ),
         integration_service=mock_service,
     )
 
     assert benchmark_response["records"] == []
     assert index_response["records"] == []
+    mock_service.list_index_catalog.assert_awaited_once_with(
+        as_of_date=date(2026, 1, 31),
+        index_ids=["IDX_MSCI_WORLD_TR"],
+        index_currency=None,
+        index_type=None,
+        index_status=None,
+    )
 
 
 @pytest.mark.asyncio

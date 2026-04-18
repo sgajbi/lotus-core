@@ -1,8 +1,8 @@
 import logging
 from datetime import date
-from typing import Optional
+from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,16 +30,71 @@ from src.services.query_service.app.support_policy import (
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
 )
+from .response_helpers import problem_response
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Operations Support"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-OPS-001 not found"}
+INVALID_DATE_RESPONSE_DESCRIPTION = "Invalid date filter."
 
 LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
 }
+RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
+}
+T = TypeVar("T")
+
+
+def portfolio_not_found_response(
+    description: str = "Portfolio not found.",
+) -> dict[str, object]:
+    return problem_response(description, PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE)
+
+
+def invalid_date_response(field_name: str) -> dict[str, object]:
+    return problem_response(
+        INVALID_DATE_RESPONSE_DESCRIPTION,
+        invalid_date_response_example(field_name),
+    )
+
+
+def invalid_date_response_example(field_name: str) -> dict[str, str]:
+    return {"detail": f"Invalid {field_name} '2026-31-03'. Expected YYYY-MM-DD format."}
+
+
+def parse_optional_iso_date(field_name: str, value: Optional[str]) -> Optional[date]:
+    if value is None:
+        return None
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name} '{value}'. Expected YYYY-MM-DD format.",
+        ) from exc
+
+
+async def execute_operations_call(
+    operation: Awaitable[T],
+    *,
+    log_message: str,
+    unexpected_detail: str,
+    log_args: tuple[object, ...],
+) -> T:
+    try:
+        return await operation
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(log_message, *log_args)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=unexpected_detail,
+        ) from exc
 
 
 def get_operations_service(
@@ -51,18 +106,17 @@ def get_operations_service(
 @router.get(
     "/support/portfolios/{portfolio_id}/overview",
     response_model=SupportOverviewResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="Get operational support overview for a portfolio",
     description=(
         "What: Return support-oriented operational state for one portfolio.\n"
         "How: Aggregate reprocessing, valuation, and latest-data availability markers "
         "for the key.\n"
-        "When: Use during incidents to quickly assess whether portfolio processing is healthy."
+        "When: Use in gateway support panels, operator consoles, and incident workflows to "
+        "quickly assess whether portfolio processing is healthy, blocked, or backlogged. "
+        "Use this route when backlog, control-stage, or replay evidence matters; use "
+        "`/support/portfolios/{portfolio_id}/readiness` for source-owned readiness signals. "
+        "This route publishes supportability evidence, not business-calculation inputs."
     ),
 )
 async def get_support_overview(
@@ -87,30 +141,24 @@ async def get_support_overview(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_support_overview(
+    return await execute_operations_call(
+        service.get_support_overview(
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to build support overview for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building support overview.",
-        )
+        ),
+        log_message="Failed to build support overview for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while building support overview.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/readiness",
     response_model=PortfolioReadinessResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("as_of_date"),
     },
     summary="Get source-owned portfolio readiness for pricing and reporting coverage",
     description=(
@@ -119,7 +167,10 @@ async def get_support_overview(
         "How: Combine durable support/control state with snapshot and historical-FX dependency "
         "signals to expose explicit readiness reasons.\n"
         "When: Use in gateway/UI and operations flows instead of inferring readiness from row "
-        "counts or indirect heuristics."
+        "counts or indirect heuristics. Use this route for front-office readiness indicators "
+        "and workflow gating; use `/support/portfolios/{portfolio_id}/overview` when deeper "
+        "operator backlog or incident evidence is required. This route publishes "
+        "supportability and readiness posture, not calculation-grade portfolio analytics."
     ),
 )
 async def get_portfolio_readiness(
@@ -151,40 +202,33 @@ async def get_portfolio_readiness(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        parsed_as_of_date = date.fromisoformat(as_of_date) if as_of_date else None
-        return await service.get_portfolio_readiness(
+    parsed_as_of_date = parse_optional_iso_date("as_of_date", as_of_date)
+    return await execute_operations_call(
+        service.get_portfolio_readiness(
             portfolio_id=portfolio_id,
             as_of_date=parsed_as_of_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to build readiness response for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building portfolio readiness.",
-        )
+        ),
+        log_message="Failed to build readiness response for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while building portfolio readiness.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/calculator-slos",
     response_model=CalculatorSloResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="Get calculator SLO baseline snapshot for a portfolio",
     description=(
         "What: Return calculator backlog, stale-processing, and failed-job baselines for one "
         "portfolio.\n"
         "How: Aggregate valuation/aggregation job states and reprocessing key counts in a single "
         "support payload.\n"
-        "When: Use before scaling actions, during incidents, and for daily operational SLO checks."
+        "When: Use before scaling actions, during incidents, and for daily operational SLO checks. "
+        "Use this route for fleet-health baselining; drill into valuation, aggregation, replay, "
+        "or export-job listings when specific stuck workloads need investigation."
     ),
 )
 async def get_calculator_slos(
@@ -209,37 +253,32 @@ async def get_calculator_slos(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_calculator_slos(
+    return await execute_operations_call(
+        service.get_calculator_slos(
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to build calculator SLO snapshot for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building calculator SLO snapshot.",
-        )
+        ),
+        log_message="Failed to build calculator SLO snapshot for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while building calculator SLO snapshot.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/control-stages",
     response_model=PortfolioControlStageListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
     },
     summary="List portfolio-day control stages for support workflows",
     description=(
         "What: List durable portfolio-day control stage rows for a portfolio.\n"
         "How: Query control stage records with pagination and optional stage/date/status filters.\n"
         "When: Use to inspect blocking portfolio-day controls and verify stage progression "
-        "over time."
+        "over time after `overview` or `readiness` indicates a blocked or lagging portfolio. "
+        "This is operator investigation evidence, not a front-office analytics contract."
     ),
 )
 async def get_portfolio_control_stages(
@@ -270,9 +309,9 @@ async def get_portfolio_control_stages(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        parsed_business_date = date.fromisoformat(business_date) if business_date else None
-        return await service.get_portfolio_control_stages(
+    parsed_business_date = parse_optional_iso_date("business_date", business_date)
+    return await execute_operations_call(
+        service.get_portfolio_control_stages(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -280,25 +319,19 @@ async def get_portfolio_control_stages(
             stage_name=stage_name,
             business_date=parsed_business_date,
             status=status_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list portfolio control stages for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing portfolio control stages.",
-        )
+        ),
+        log_message="Failed to list portfolio control stages for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing portfolio control stages.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/reprocessing-keys",
     response_model=ReprocessingKeyListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("watermark_date"),
     },
     summary="List durable replay keys for support workflows",
     description=(
@@ -306,7 +339,9 @@ async def get_portfolio_control_stages(
         "How: Query `position_state` rows with pagination and optional status, security, and "
         "watermark-date filters.\n"
         "When: Use to inspect stuck or stale REPROCESSING keys and verify replay normalization "
-        "after recovery."
+        "after recovery, typically after `overview` or reconciliation evidence points to replay "
+        "work. These rows are operational evidence and not direct business-calculation inputs or "
+        "front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
@@ -338,9 +373,9 @@ async def get_reprocessing_keys(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        parsed_watermark_date = date.fromisoformat(watermark_date) if watermark_date else None
-        return await service.get_reprocessing_keys(
+    parsed_watermark_date = parse_optional_iso_date("watermark_date", watermark_date)
+    return await execute_operations_call(
+        service.get_reprocessing_keys(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -348,33 +383,26 @@ async def get_reprocessing_keys(
             security_id=security_id,
             watermark_date=parsed_watermark_date,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list reprocessing keys for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reprocessing keys.",
-        )
+        ),
+        log_message="Failed to list reprocessing keys for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing reprocessing keys.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/reprocessing-jobs",
     response_model=ReprocessingJobListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List durable replay jobs for support workflows",
     description=(
         "What: List durable replay jobs currently relevant to a portfolio.\n"
         "How: Query reprocessing jobs linked to the portfolio's replay keys, with pagination and "
         "optional id, status, correlation, and security filters.\n"
         "When: Use to inspect queued, stale, retried, or failed replay jobs without direct "
-        "database access."
+        "database access, typically after `overview` or reconciliation evidence indicates replay "
+        "pressure. These jobs are operational evidence and not direct business-calculation inputs "
+        "or front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
@@ -411,8 +439,8 @@ async def get_reprocessing_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_reprocessing_jobs(
+    return await execute_operations_call(
+        service.get_reprocessing_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -421,32 +449,28 @@ async def get_reprocessing_jobs(
             status=status_filter,
             security_id=security_id,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list reprocessing jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reprocessing jobs.",
-        )
+        ),
+        log_message="Failed to list reprocessing jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing reprocessing jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/valuation-jobs",
     response_model=SupportJobListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
     },
     summary="List valuation jobs for support workflows",
     description=(
         "What: List valuation jobs for a portfolio with support filters.\n"
         "How: Query valuation job records with pagination and optional id, date, security, "
         "status, and correlation filtering.\n"
-        "When: Use to triage stuck valuation workloads and verify drain progress."
+        "When: Use to triage stuck valuation workloads and verify drain progress after "
+        "`overview`, `calculator-slos`, or readiness evidence suggests pricing publication is "
+        "lagging. This is operator support evidence, not a front-office analytics contract."
     ),
 )
 async def get_valuation_jobs(
@@ -487,9 +511,9 @@ async def get_valuation_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        parsed_business_date = date.fromisoformat(business_date) if business_date else None
-        return await service.get_valuation_jobs(
+    parsed_business_date = parse_optional_iso_date("business_date", business_date)
+    return await execute_operations_call(
+        service.get_valuation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -499,32 +523,28 @@ async def get_valuation_jobs(
             correlation_id=correlation_id,
             status=status,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list valuation jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing valuation jobs.",
-        )
+        ),
+        log_message="Failed to list valuation jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing valuation jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/aggregation-jobs",
     response_model=SupportJobListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
     },
     summary="List aggregation jobs for support workflows",
     description=(
         "What: List portfolio aggregation jobs for support workflows.\n"
         "How: Query aggregation job records with pagination and optional id, date, status, "
         "and correlation filtering.\n"
-        "When: Use when portfolio rollups are stale or downstream timeseries appears delayed."
+        "When: Use when portfolio rollups are stale or downstream timeseries appears delayed, "
+        "typically after `overview` or `calculator-slos` indicates aggregation backlog. "
+        "This is operator support evidence, not a front-office analytics contract."
     ),
 )
 async def get_aggregation_jobs(
@@ -560,9 +580,9 @@ async def get_aggregation_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        parsed_business_date = date.fromisoformat(business_date) if business_date else None
-        return await service.get_aggregation_jobs(
+    parsed_business_date = parse_optional_iso_date("business_date", business_date)
+    return await execute_operations_call(
+        service.get_aggregation_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -571,31 +591,24 @@ async def get_aggregation_jobs(
             correlation_id=correlation_id,
             status=status,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list aggregation jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing aggregation jobs.",
-        )
+        ),
+        log_message="Failed to list aggregation jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing aggregation jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/analytics-export-jobs",
     response_model=AnalyticsExportJobListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List analytics export jobs for support workflows",
     description=(
         "What: List durable analytics export jobs for a portfolio with support filters.\n"
         "How: Query export job lifecycle records with pagination and optional status filtering.\n"
-        "When: Use to investigate stuck, failed, or repeated analytics export requests."
+        "When: Use to investigate stuck, failed, or repeated analytics export requests after "
+        "large-window extraction or support escalation. This is operator support evidence, not "
+        "a front-office analytics contract."
     ),
 )
 async def get_analytics_export_jobs(
@@ -626,8 +639,8 @@ async def get_analytics_export_jobs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_analytics_export_jobs(
+    return await execute_operations_call(
+        service.get_analytics_export_jobs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -635,33 +648,26 @@ async def get_analytics_export_jobs(
             request_fingerprint=request_fingerprint,
             status=status_filter,
             stale_threshold_minutes=stale_threshold_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list analytics export jobs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing analytics export jobs.",
-        )
+        ),
+        log_message="Failed to list analytics export jobs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing analytics export jobs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/reconciliation-runs",
     response_model=ReconciliationRunListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List reconciliation runs for support workflows",
     description=(
         "What: List durable reconciliation control runs for a portfolio.\n"
         "How: Query reconciliation run records with pagination and optional id, requester, "
         "deduplication key, type, status, and correlation filters.\n"
         "When: Use to investigate blocked portfolio-day controls, repeated replay demands, or "
-        "unexpected reconciliation failures."
+        "unexpected reconciliation failures, usually after `overview` shows control blocking or "
+        "`readiness` exposes unresolved source-owned gaps. These records are operator evidence, "
+        "not business calculations or front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
@@ -701,8 +707,8 @@ async def get_reconciliation_runs(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_reconciliation_runs(
+    return await execute_operations_call(
+        service.get_reconciliation_runs(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
@@ -712,32 +718,29 @@ async def get_reconciliation_runs(
             correlation_id=correlation_id,
             reconciliation_type=reconciliation_type,
             status=status_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list reconciliation runs for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reconciliation runs.",
-        )
+        ),
+        log_message="Failed to list reconciliation runs for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing reconciliation runs.",
+        log_args=(portfolio_id,),
+    )
 
 
 @router.get(
     "/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings",
     response_model=ReconciliationFindingListResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio or reconciliation run not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio or reconciliation run not found.",
+            RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE,
+        )
     },
     summary="List reconciliation findings for one support run",
     description=(
         "What: Return durable findings for one reconciliation run.\n"
         "How: Query persisted reconciliation findings scoped to the requested run identifier.\n"
         "When: Use after a control failure or replay requirement to inspect the exact breaches "
-        "that blocked publication."
+        "that blocked publication. These findings are operator evidence, not business "
+        "calculations or front-office readiness indicators."
     ),
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
@@ -768,43 +771,36 @@ async def get_reconciliation_findings(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_reconciliation_findings(
+    return await execute_operations_call(
+        service.get_reconciliation_findings(
             portfolio_id=portfolio_id,
             run_id=run_id,
             limit=limit,
             finding_id=finding_id,
             security_id=security_id,
             transaction_id=transaction_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception(
-            "Failed to list reconciliation findings for portfolio %s run %s",
-            portfolio_id,
-            run_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing reconciliation findings.",
-        )
+        ),
+        log_message="Failed to list reconciliation findings for portfolio %s run %s",
+        unexpected_detail="An unexpected server error occurred while listing reconciliation findings.",
+        log_args=(portfolio_id, run_id),
+    )
 
 
 @router.get(
     "/lineage/portfolios/{portfolio_id}/securities/{security_id}",
     response_model=LineageResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio/security lineage not found.",
-            "content": {"application/json": {"example": LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio/security lineage not found.",
+            LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE,
+        )
     },
     summary="Get lineage state for a portfolio-security key",
     description=(
         "What: Return lineage state for one portfolio-security key.\n"
         "How: Read epoch, watermark, and latest artifact pointers from lineage state services.\n"
-        "When: Use during replay/reprocessing investigations for deterministic state validation."
+        "When: Use during replay/reprocessing investigations for deterministic state validation. "
+        "This is operational lineage evidence, not a business-calculation contract."
     ),
 )
 async def get_lineage(
@@ -812,34 +808,24 @@ async def get_lineage(
     security_id: str = Path(..., description="Security identifier.", examples=["SEC-US-IBM"]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_lineage(portfolio_id, security_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception(
-            "Failed to build lineage for portfolio %s security %s", portfolio_id, security_id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while building lineage response.",
-        )
+    return await execute_operations_call(
+        service.get_lineage(portfolio_id, security_id),
+        log_message="Failed to build lineage for portfolio %s security %s",
+        unexpected_detail="An unexpected server error occurred while building lineage response.",
+        log_args=(portfolio_id, security_id),
+    )
 
 
 @router.get(
     "/lineage/portfolios/{portfolio_id}/keys",
     response_model=LineageKeyListResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
-    },
+    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
     summary="List lineage keys for a portfolio",
     description=(
         "What: List lineage keys for a portfolio.\n"
         "How: Query portfolio-security lineage rows with status/security filters and pagination.\n"
-        "When: Use to scope impacted keys before running replay, backfill, or targeted recovery."
+        "When: Use to scope impacted keys before running replay, backfill, or targeted recovery. "
+        "These records are operational lineage evidence and not business-calculation inputs."
     ),
     openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
@@ -859,19 +845,15 @@ async def get_lineage_keys(
     limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
     service: OperationsService = Depends(get_operations_service),
 ):
-    try:
-        return await service.get_lineage_keys(
+    return await execute_operations_call(
+        service.get_lineage_keys(
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,
             reprocessing_status=reprocessing_status,
             security_id=security_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception:
-        logger.exception("Failed to list lineage keys for portfolio %s", portfolio_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected server error occurred while listing lineage keys.",
-        )
+        ),
+        log_message="Failed to list lineage keys for portfolio %s",
+        unexpected_detail="An unexpected server error occurred while listing lineage keys.",
+        log_args=(portfolio_id,),
+    )

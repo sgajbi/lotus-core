@@ -27,6 +27,7 @@ async def async_test_client():
     mock_transaction_service.get_transactions = AsyncMock(
         return_value=PaginatedTransactionResponse(
             portfolio_id="P1",
+            reporting_currency="SGD",
             total=1,
             skip=0,
             limit=10,
@@ -45,6 +46,9 @@ async def async_test_client():
                     trade_fee=Decimal("2.50"),
                     trade_currency="USD",
                     currency="USD",
+                    gross_transaction_amount_reporting_currency=Decimal("170.00"),
+                    gross_cost_reporting_currency=Decimal("170.00"),
+                    trade_fee_reporting_currency=Decimal("3.40"),
                     costs=[
                         TransactionCostRecord(
                             fee_type="BROKERAGE",
@@ -96,11 +100,15 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     assert response.status_code == 200
     payload = response.json()
     assert payload["portfolio_id"] == "P1"
+    assert payload["reporting_currency"] == "SGD"
     assert payload["transactions"][0]["transaction_id"] == "T1"
     assert payload["transactions"][0]["settlement_date"] == "2025-08-03T00:00:00"
     assert payload["transactions"][0]["gross_cost"] == "125.00"
     assert payload["transactions"][0]["trade_fee"] == "2.50"
     assert payload["transactions"][0]["trade_currency"] == "USD"
+    assert payload["transactions"][0]["gross_transaction_amount_reporting_currency"] == "170.00"
+    assert payload["transactions"][0]["gross_cost_reporting_currency"] == "170.00"
+    assert payload["transactions"][0]["trade_fee_reporting_currency"] == "3.40"
     assert payload["transactions"][0]["costs"][0]["fee_type"] == "BROKERAGE"
     assert payload["transactions"][0]["cash_entry_mode"] == "UPSTREAM_PROVIDED"
     assert payload["transactions"][0]["external_cash_transaction_id"] == "CASH-ENTRY-2026-0001"
@@ -123,6 +131,7 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
         end_date=datetime(2025, 8, 31, 0, 0).date(),
         as_of_date=None,
         include_projected=False,
+        reporting_currency=None,
         skip=5,
         limit=20,
         sort_by="transaction_date",
@@ -144,12 +153,22 @@ async def test_get_transactions_unhandled_error_is_globally_mapped(async_test_cl
 
 async def test_get_transactions_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_transactions.side_effect = ValueError("portfolio missing")
+    mock_service.get_transactions.side_effect = LookupError("portfolio missing")
 
     response = await client.get("/portfolios/P404/transactions")
 
     assert response.status_code == 404
     assert "portfolio missing" in response.json()["detail"].lower()
+
+
+async def test_get_transactions_validation_error_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_transactions.side_effect = ValueError("FX rate not found for USD/SGD")
+
+    response = await client.get("/portfolios/P1/transactions?reporting_currency=SGD")
+
+    assert response.status_code == 400
+    assert "fx rate not found" in response.json()["detail"].lower()
 
 
 async def test_get_transactions_forwards_as_of_and_include_projected(async_test_client):
@@ -175,6 +194,7 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
         end_date=None,
         as_of_date=datetime(2026, 2, 28, 0, 0).date(),
         include_projected=True,
+        reporting_currency=None,
         skip=0,
         limit=100,
         sort_by=None,
@@ -205,6 +225,7 @@ async def test_get_transactions_for_security_drill_down_defaults_to_latest_first
         end_date=None,
         as_of_date=None,
         include_projected=False,
+        reporting_currency=None,
         skip=0,
         limit=100,
         sort_by=None,
@@ -237,6 +258,7 @@ async def test_get_transactions_forwards_fx_filters(async_test_client):
         end_date=None,
         as_of_date=None,
         include_projected=False,
+        reporting_currency=None,
         skip=0,
         limit=100,
         sort_by=None,
@@ -248,6 +270,35 @@ async def test_get_transactions_forwards_fx_filters(async_test_client):
         swap_event_id="FXSWAP-LTG-FX-2026-0001",
         near_leg_group_id="FXSWAP-LTG-FX-2026-0001-NEAR",
         far_leg_group_id="FXSWAP-LTG-FX-2026-0001-FAR",
+    )
+
+
+async def test_get_transactions_forwards_reporting_currency(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/portfolios/P1/transactions?reporting_currency=SGD")
+
+    assert response.status_code == 200
+    mock_service.get_transactions.assert_awaited_once_with(
+        portfolio_id="P1",
+        instrument_id=None,
+        security_id=None,
+        transaction_type=None,
+        component_type=None,
+        linked_transaction_group_id=None,
+        fx_contract_id=None,
+        swap_event_id=None,
+        near_leg_group_id=None,
+        far_leg_group_id=None,
+        start_date=None,
+        end_date=None,
+        as_of_date=None,
+        include_projected=False,
+        reporting_currency="SGD",
+        skip=0,
+        limit=100,
+        sort_by=None,
+        sort_order="desc",
     )
 
 

@@ -112,7 +112,6 @@ async def test_openapi_exposes_holdings_as_of_runtime_supportability_metadata(
     holdings_response_schemas = [
         components["PortfolioPositionsResponse"],
         components["CashBalancesResponse"],
-        components["HoldingsSnapshotResponse"],
     ]
 
     for response_schema in holdings_response_schemas:
@@ -130,8 +129,6 @@ async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadat
 
     ledger_response_schemas = [
         components["PaginatedTransactionResponse"],
-        components["IncomeSummaryResponse"],
-        components["ActivitySummaryResponse"],
     ]
 
     for response_schema in ledger_response_schemas:
@@ -276,8 +273,12 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     paths = response.json()["paths"]
 
     assert "404" in paths["/portfolios/{portfolio_id}"]["get"]["responses"]
+    assert "404" in paths["/portfolios/{portfolio_id}/cash-balances"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/positions"]["get"]["responses"]
+    assert "400" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
+    assert "400" in paths["/reporting/portfolio-summary/query"]["post"]["responses"]
+    assert "404" in paths["/reporting/portfolio-summary/query"]["post"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cashflow-projection"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
@@ -290,40 +291,9 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
 
     assert "/reporting/assets-under-management/query" in paths
     assert "/reporting/asset-allocation/query" in paths
-    assert "/reporting/cash-balances/query" in paths
+    assert "/portfolios/{portfolio_id}/cash-balances" in paths
     assert "/reporting/portfolio-summary/query" in paths
-    assert "/reporting/holdings-snapshot/query" in paths
-    assert "/reporting/income-summary/query" in paths
-    assert "/reporting/activity-summary/query" in paths
     assert "/portfolios/{portfolio_id}/cash-accounts" in paths
-
-
-async def test_openapi_deprecates_reporting_convenience_shapes(async_test_client):
-    response = await async_test_client.get("/openapi.json")
-    assert response.status_code == 200
-    paths = response.json()["paths"]
-
-    deprecated_routes = {
-        route: product.product_name
-        for product in SOURCE_DATA_PRODUCT_CATALOG
-        for route in product.replaces_convenience_shapes
-        if route.startswith("/reporting/")
-    }
-
-    assert deprecated_routes == {
-        "/reporting/cash-balances/query": "HoldingsAsOf",
-        "/reporting/holdings-snapshot/query": "HoldingsAsOf",
-        "/reporting/income-summary/query": "TransactionLedgerWindow",
-        "/reporting/activity-summary/query": "TransactionLedgerWindow",
-    }
-    for route, target_product in deprecated_routes.items():
-        operation = paths[route]["post"]
-        assert operation["deprecated"] is True
-        assert target_product in operation["description"]
-
-    assert paths["/reporting/assets-under-management/query"]["post"].get("deprecated") is not True
-    assert paths["/reporting/asset-allocation/query"]["post"].get("deprecated") is not True
-    assert paths["/reporting/portfolio-summary/query"]["post"].get("deprecated") is not True
 
 
 async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(async_test_client):
@@ -335,25 +305,61 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
 
     aum_query = paths["/reporting/assets-under-management/query"]["post"]
     allocation_query = paths["/reporting/asset-allocation/query"]["post"]
-    cash_query = paths["/reporting/cash-balances/query"]["post"]
     portfolio_summary_query = paths["/reporting/portfolio-summary/query"]["post"]
-    holdings_snapshot_query = paths["/reporting/holdings-snapshot/query"]["post"]
-    income_query = paths["/reporting/income-summary/query"]["post"]
-    activity_query = paths["/reporting/activity-summary/query"]["post"]
     portfolios_query = paths["/portfolios/"]["get"]
+    strategic_cash_balances_query = paths["/portfolios/{portfolio_id}/cash-balances"]["get"]
     cash_accounts_query = paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]
 
     assert (
-        "single portfolio, an explicit portfolio list, or a business unit"
+        "source-owned assets-under-management views for a resolved reporting scope"
         in aum_query["description"]
     )
-    assert "classification dimensions" in allocation_query["description"]
-    assert "portfolio currency and reporting currency" in cash_query["description"]
-    assert "true historical as-of portfolio summary" in portfolio_summary_query["description"]
-    assert "true historical as-of holdings snapshot" in holdings_snapshot_query["description"]
-    assert "requested reporting window and year-to-date" in income_query["description"]
-    assert "portfolio-level flow buckets" in activity_query["description"]
+    assert (
+        "Prefer this route over reconstructing AUM from holdings rows" in aum_query["description"]
+    )
+    assert "strategic allocation views" in allocation_query["description"]
+    assert (
+        "Prefer this route over mining allocation views from `core-snapshot`"
+        in allocation_query["description"]
+    )
+    assert (
+        "strategic HoldingsAsOf cash-account balance read"
+        in strategic_cash_balances_query["description"]
+    )
+    assert (
+        "Prefer this contract for new gateway, advise, or report integrations"
+        in strategic_cash_balances_query["description"]
+    )
+    assert "strategic historical portfolio summary" in portfolio_summary_query["description"]
+    assert (
+        "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`"
+        in portfolio_summary_query["description"]
+    )
+    assert (
+        "correct lotus-core summary seam for report-ready wealth totals"
+        in portfolio_summary_query["description"]
+    )
     assert "canonical cash-account master records" in cash_accounts_query["description"]
+    assert "Do not use this route for per-account balances" in cash_accounts_query["description"]
+
+    strategic_cash_balances_as_of_date = next(
+        parameter
+        for parameter in strategic_cash_balances_query["parameters"]
+        if parameter["name"] == "as_of_date"
+    )
+    assert strategic_cash_balances_as_of_date["description"] == (
+        "Optional as-of date for booked cash-account balances. "
+        "When omitted, lotus-core resolves the latest booked business date."
+    )
+
+    strategic_cash_balances_reporting_currency = next(
+        parameter
+        for parameter in strategic_cash_balances_query["parameters"]
+        if parameter["name"] == "reporting_currency"
+    )
+    assert strategic_cash_balances_reporting_currency["description"] == (
+        "Optional reporting currency. Defaults to the portfolio currency when omitted."
+    )
 
     portfolio_ids = next(
         parameter
@@ -366,37 +372,83 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     allocation_response = components["AssetAllocationResponse"]
     cash_response = components["CashBalancesResponse"]
     portfolio_summary_response = components["PortfolioSummaryResponse"]
-    holdings_snapshot_response = components["HoldingsSnapshotResponse"]
-    income_response = components["IncomeSummaryResponse"]
-    activity_response = components["ActivitySummaryResponse"]
     cash_account_query_response = components["CashAccountQueryResponse"]
     transaction_record = components["TransactionRecord"]
 
     assert aum_request["properties"]["reporting_currency"]["description"].startswith(
         "Optional reporting currency."
     )
+    assert components["AssetsUnderManagementResponse"]["properties"]["resolved_as_of_date"][
+        "examples"
+    ] == ["2026-03-27"]
+    assert components["AssetsUnderManagementResponse"]["properties"]["reporting_currency"][
+        "examples"
+    ] == ["USD"]
     assert allocation_response["properties"]["look_through"]["description"].startswith(
         "Applied look-through mode"
     )
+    assert allocation_response["properties"]["resolved_as_of_date"]["examples"] == ["2026-03-27"]
+    assert allocation_response["properties"]["reporting_currency"]["examples"] == ["USD"]
+    assert allocation_response["properties"]["total_market_value_reporting_currency"][
+        "examples"
+    ] == [1000000.0]
     assert cash_response["properties"]["totals"]["description"] == "Portfolio-level cash totals."
+    assert cash_response["properties"]["reporting_currency"]["examples"] == ["USD"]
+    assert cash_response["properties"]["resolved_as_of_date"]["examples"] == ["2026-03-27"]
     assert cash_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert cash_response["properties"]["product_version"]["default"] == "v1"
     assert (
         portfolio_summary_response["properties"]["snapshot_metadata"]["description"]
         == "Resolved snapshot metadata for the summary query."
     )
-    assert holdings_snapshot_response["properties"]["positions"]["description"].startswith(
-        "Holdings snapshot rows"
-    )
-    assert holdings_snapshot_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
-    assert income_response["properties"]["totals"]["description"] == "Scope-level income totals."
-    assert income_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
+    assert portfolio_summary_response["properties"]["portfolio_type"]["examples"] == [
+        "DISCRETIONARY"
+    ]
+    assert portfolio_summary_response["properties"]["risk_exposure"]["examples"] == ["BALANCED"]
+    assert portfolio_summary_response["properties"]["status"]["examples"] == ["ACTIVE"]
     assert (
-        activity_response["properties"]["totals"]["description"] == "Scope-level activity totals."
+        portfolio_summary_query["responses"]["400"]["content"]["application/json"]["example"][
+            "detail"
+        ]
+        == "FX rate not found for USD/SGD as of 2026-03-27."
     )
-    assert activity_response["properties"]["product_name"]["default"] == "TransactionLedgerWindow"
+    assert (
+        portfolio_summary_query["responses"]["404"]["content"]["application/json"]["example"][
+            "detail"
+        ]
+        == "Portfolio with id PORT-001 not found"
+    )
     assert cash_account_query_response["properties"]["cash_accounts"]["description"] == (
         "Canonical cash accounts linked to the portfolio."
+    )
+    assert cash_account_query_response["properties"]["cash_accounts"]["examples"] == [
+        [
+            {
+                "cash_account_id": "CASH-ACC-USD-001",
+                "portfolio_id": "PORT-001",
+                "security_id": "CASH_USD",
+                "display_name": "USD Operating Cash",
+                "account_currency": "USD",
+                "account_role": "OPERATING_CASH",
+                "lifecycle_status": "ACTIVE",
+                "opened_on": "2026-01-01",
+                "source_system": "lotus-manage",
+            }
+        ]
+    ]
+    portfolio_id_param = next(
+        parameter
+        for parameter in cash_accounts_query["parameters"]
+        if parameter["name"] == "portfolio_id"
+    )
+    assert portfolio_id_param["description"] == "Portfolio identifier."
+    as_of_date_param = next(
+        parameter
+        for parameter in cash_accounts_query["parameters"]
+        if parameter["name"] == "as_of_date"
+    )
+    assert as_of_date_param["description"] == (
+        "Optional as-of date used to filter cash-account master records by open/close window."
     )
     assert transaction_record["properties"]["trade_fee"]["description"] == (
         "Primary trade fee recorded directly on the transaction."
@@ -448,11 +500,36 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         "Filter by a specific security identifier for holdings drill-down and latest "
         "transaction retrieval within the portfolio."
     )
+    component_type = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "component_type"
+    )
+    assert component_type["description"] == "Filter by FX component type such as FX_CONTRACT_OPEN."
+    reporting_currency = next(
+        parameter
+        for parameter in transactions["parameters"]
+        if parameter["name"] == "reporting_currency"
+    )
+    assert reporting_currency["description"] == (
+        "Optional reporting currency for restated monetary fields on each returned ledger row. "
+        "Use this when a downstream needs strategic transaction rows plus reporting-currency "
+        "amounts for reporting or aggregation workflows."
+    )
     assert transactions["summary"] == "Get Portfolio Transactions"
+    assert "strategic TransactionLedgerWindow operational read" in transactions["description"]
+    assert "FX and linked-event filters" in transactions["description"]
     assert (
-        "Use `security_id` for holdings drill-down and latest transaction retrieval for a "
-        "specific security within the portfolio."
-    ) in transactions["description"]
+        "optional reporting-currency restatement for monetary fields" in transactions["description"]
+    )
+    assert (
+        "`component_type`, `linked_transaction_group_id`, `fx_contract_id`, `swap_event_id`"
+        in transactions["description"]
+    )
+    assert (
+        "Use `reporting_currency` when a downstream reporting surface needs"
+        in transactions["description"]
+    )
     assert (
         "Results default to latest-first ordering by `transaction_date` descending"
         in transactions["description"]
@@ -468,7 +545,19 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         "TransactionLedgerWindow"
     )
     assert transaction_response["properties"]["product_version"]["default"] == "v1"
+    assert transaction_response["properties"]["reporting_currency"]["description"].startswith(
+        "Resolved reporting currency for optional restated transaction amounts."
+    )
+    assert (
+        schema["components"]["schemas"]["TransactionRecord"]["properties"][
+            "gross_transaction_amount_reporting_currency"
+        ]["description"]
+        == "Gross transaction amount restated into the requested reporting currency when "
+        "`reporting_currency` is supplied on the route."
+    )
 
+    bad_request = transactions["responses"]["400"]["content"]["application/json"]["example"]
+    assert bad_request["detail"] == "FX rate not found for USD/SGD as of 2026-03-10."
     not_found = transactions["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-TXN-001 not found"
 
@@ -488,6 +577,14 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         if parameter["name"] == "portfolio_id"
     )
     assert positions_portfolio_id["description"] == "Portfolio identifier."
+    assert "strategic HoldingsAsOf operational read" in latest_positions["description"]
+    assert "gateway portfolio position books" in latest_positions["description"]
+    assert "Use `as_of_date` for booked historical state" in latest_positions["description"]
+    assert (
+        "Do not treat this route as a substitute for performance, risk, "
+        "or reporting-specific aggregation contracts"
+        in latest_positions["description"]
+    )
 
     include_projected = next(
         parameter
@@ -495,7 +592,18 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         if parameter["name"] == "include_projected"
     )
     assert include_projected["description"] == (
-        "When true, includes future-dated projected position state beyond current business_date."
+        "When true, returns the latest projected state even if future-dated transactions "
+        "push holdings beyond the latest booked business_date."
+    )
+
+    as_of_date = next(
+        parameter
+        for parameter in latest_positions["parameters"]
+        if parameter["name"] == "as_of_date"
+    )
+    assert as_of_date["description"] == (
+        "Optional as-of date for booked position state. When omitted and "
+        "`include_projected=false`, lotus-core resolves the latest booked business date."
     )
 
     history_security_id = next(
@@ -506,6 +614,15 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert history_security_id["description"] == (
         "Security identifier for the position-history drill-down."
     )
+    assert (
+        "holdings drill-down, lineage-aware troubleshooting, and historical "
+        "security-level state inspection"
+        in (position_history["description"])
+    )
+    assert (
+        "do not use it as a substitute for the strategic latest-holdings read"
+        in (position_history["description"])
+    )
 
     positions_not_found = latest_positions["responses"]["404"]["content"]["application/json"][
         "example"
@@ -513,10 +630,17 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     history_not_found = position_history["responses"]["404"]["content"]["application/json"][
         "example"
     ]
+    position_history_response = schema["components"]["schemas"]["PortfolioPositionHistoryResponse"]
     assert positions_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
     assert history_not_found["detail"] == "Portfolio with id PORT-POS-001 not found"
+    assert position_history_response["properties"]["positions"]["description"] == (
+        "Time-series list of position-history records for the security."
+    )
     assert positions_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert positions_response["properties"]["product_version"]["default"] == "v1"
+    assert positions_response["properties"]["positions"]["description"].startswith(
+        "Governed holdings rows for the resolved HoldingsAsOf scope."
+    )
 
 
 async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):
@@ -525,6 +649,12 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     schema = response.json()
 
     projection = schema["paths"]["/portfolios/{portfolio_id}/cashflow-projection"]["get"]
+    assert "portfolio-level daily net cashflow projection" in projection["description"]
+    assert (
+        "forecasting, performance analytics, and advisory recommendation logic "
+        "outside this contract"
+        in projection["description"]
+    )
 
     portfolio_id = next(
         parameter for parameter in projection["parameters"] if parameter["name"] == "portfolio_id"
@@ -553,9 +683,23 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    components = schema["components"]["schemas"]
 
     portfolio_query = schema["paths"]["/portfolios/"]["get"]
     single_portfolio = schema["paths"]["/portfolios/{portfolio_id}"]["get"]
+
+    assert (
+        "portfolio lookup, selector population, and navigation scope discovery"
+        in (portfolio_query["description"])
+    )
+    assert (
+        "do not use it as a substitute for single-portfolio detail"
+        in (portfolio_query["description"])
+    )
+    assert "canonical portfolio identity and standing metadata" in single_portfolio["description"]
+    assert (
+        "do not use it as a substitute for portfolio positions" in single_portfolio["description"]
+    )
 
     client_id = next(
         parameter for parameter in portfolio_query["parameters"] if parameter["name"] == "client_id"
@@ -580,6 +724,18 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
     )
     assert portfolio_id["description"] == "Portfolio identifier."
 
+    portfolio_query_response = components["PortfolioQueryResponse"]
+    portfolio_record = components["PortfolioRecord"]
+    assert portfolio_query_response["properties"]["portfolios"]["description"] == (
+        "List of portfolio records matching the applied query filters."
+    )
+    assert portfolio_record["properties"]["objective"]["description"] == (
+        "Primary client objective for this portfolio."
+    )
+    assert portfolio_record["properties"]["cost_basis_method"]["description"] == (
+        "Portfolio-level cost-basis accounting method used by lot accounting."
+    )
+
     not_found = single_portfolio["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-DISC-001 not found"
 
@@ -588,9 +744,23 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    components = schema["components"]["schemas"]
 
+    instruments = schema["paths"]["/instruments/"]["get"]
     prices = schema["paths"]["/prices/"]["get"]
     fx_rates = schema["paths"]["/fx-rates/"]["get"]
+
+    assert "canonical security master lookup" in instruments["description"]
+    assert "do not use it as a substitute for portfolio positions" in instruments["description"]
+    assert "source-owned pricing history" in prices["description"]
+    assert "do not use it as a substitute for performance analytics" in prices["description"]
+    assert "source-owned FX conversion history" in fx_rates["description"]
+    assert "do not use it as a substitute for portfolio performance" in fx_rates["description"]
+
+    instrument_security_id = next(
+        parameter for parameter in instruments["parameters"] if parameter["name"] == "security_id"
+    )
+    assert instrument_security_id["description"] == "Filter by a specific security identifier."
 
     security_id = next(
         parameter for parameter in prices["parameters"] if parameter["name"] == "security_id"
@@ -607,15 +777,42 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
     )
     assert to_currency["description"] == "Quote currency code for the requested FX series."
 
+    instrument_response = components["PaginatedInstrumentResponse"]
+    price_response = components["MarketPriceResponse"]
+    fx_response = components["FxRateResponse"]
+    assert instrument_response["properties"]["instruments"]["description"] == (
+        "The list of instrument records for the current page."
+    )
+    assert price_response["properties"]["prices"]["description"] == (
+        "Market price records for the requested security and date range."
+    )
+    assert fx_response["properties"]["rates"]["description"] == (
+        "FX rate observations for the requested currency pair and date range."
+    )
+
 
 async def test_openapi_describes_lookup_catalog_contract_examples(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    components = schema["components"]["schemas"]
 
     portfolio_lookups = schema["paths"]["/lookups/portfolios"]["get"]
     instrument_lookups = schema["paths"]["/lookups/instruments"]["get"]
     currency_lookups = schema["paths"]["/lookups/currencies"]["get"]
+
+    assert "thin selector catalogs only" in portfolio_lookups["description"]
+    assert (
+        "do not use it as a substitute for canonical portfolio detail"
+        in (portfolio_lookups["description"])
+    )
+    assert "thin selector catalogs only" in instrument_lookups["description"]
+    assert (
+        "do not use it as a substitute for canonical instrument reference reads"
+        in (instrument_lookups["description"])
+    )
+    assert "selector population only" in currency_lookups["description"]
+    assert "do not use it as a substitute for FX-rate history" in currency_lookups["description"]
 
     portfolio_client_id = next(
         parameter
@@ -638,6 +835,18 @@ async def test_openapi_describes_lookup_catalog_contract_examples(async_test_cli
     )
     assert currency_source["description"] == (
         "Currency source scope. Use ALL, PORTFOLIOS, or INSTRUMENTS."
+    )
+
+    lookup_response = components["LookupResponse"]
+    lookup_item = components["LookupItem"]
+    assert lookup_response["properties"]["items"]["description"] == (
+        "Lookup options returned for the requested catalog."
+    )
+    assert lookup_item["properties"]["id"]["description"] == (
+        "Canonical identifier used by UI selectors."
+    )
+    assert lookup_item["properties"]["label"]["description"] == (
+        "Display label for UI selector option."
     )
 
 
@@ -673,6 +882,12 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
     schema = response.json()
 
     buy_lots = schema["paths"]["/portfolios/{portfolio_id}/positions/{security_id}/lots"]["get"]
+    buy_offsets = schema["paths"][
+        "/portfolios/{portfolio_id}/positions/{security_id}/accrued-offsets"
+    ]["get"]
+    buy_cash_linkage = schema["paths"][
+        "/portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage"
+    ]["get"]
     sell_disposals = schema["paths"][
         "/portfolios/{portfolio_id}/positions/{security_id}/sell-disposals"
     ]["get"]
@@ -680,10 +895,32 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
         "/portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage"
     ]["get"]
 
+    assert "do not use it as a general holdings or reporting read" in buy_lots["description"]
+    assert "do not use it as a portfolio-income summary route" in buy_offsets["description"]
+    assert (
+        "do not use it as a general cash-balance or portfolio-cashflow read"
+        in buy_cash_linkage["description"]
+    )
+    assert (
+        "do not use it as a general performance, tax-reporting, or holdings read"
+        in (sell_disposals["description"])
+    )
+    assert (
+        "do not use it as a portfolio cashflow, liquidity, or reporting summary route"
+        in (sell_cash_linkage["description"])
+    )
+
     buy_security_id = next(
         parameter for parameter in buy_lots["parameters"] if parameter["name"] == "security_id"
     )
     assert buy_security_id["description"] == "Security identifier for the BUY-state position key."
+
+    buy_transaction_id = next(
+        parameter
+        for parameter in buy_cash_linkage["parameters"]
+        if parameter["name"] == "transaction_id"
+    )
+    assert buy_transaction_id["description"] == "Security-side BUY transaction identifier."
 
     sell_security_id = next(
         parameter
@@ -700,12 +937,25 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
     assert sell_transaction_id["description"] == "Security-side SELL transaction identifier."
 
     buy_not_found = buy_lots["responses"]["404"]["content"]["application/json"]["example"]
+    buy_cash_not_found = buy_cash_linkage["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     sell_not_found = sell_disposals["responses"]["404"]["content"]["application/json"]["example"]
+    sell_cash_not_found = sell_cash_linkage["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
     assert buy_not_found["detail"] == (
         "BUY state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
     )
+    assert buy_cash_not_found["detail"] == (
+        "BUY cash linkage not found for portfolio PORT-STATE-001 and transaction TXN-BUY-2026-0001"
+    )
     assert sell_not_found["detail"] == (
         "SELL state not found for portfolio PORT-STATE-001 and security SEC-US-AAPL"
+    )
+    assert sell_cash_not_found["detail"] == (
+        "SELL cash linkage not found for portfolio PORT-STATE-001 and transaction "
+        "TXN-SELL-2026-0001"
     )
 
 

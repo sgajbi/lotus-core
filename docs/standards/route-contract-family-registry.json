@@ -131,6 +131,7 @@
         "GET /lookups/portfolios",
         "GET /portfolios",
         "GET /portfolios/{portfolio_id}",
+        "GET /portfolios/{portfolio_id}/cash-balances",
         "GET /portfolios/{portfolio_id}/cash-accounts",
         "GET /portfolios/{portfolio_id}/cashflow-projection",
         "GET /portfolios/{portfolio_id}/position-history",
@@ -142,12 +143,8 @@
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage",
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage",
         "GET /prices",
-        "POST /reporting/activity-summary/query",
         "POST /reporting/asset-allocation/query",
         "POST /reporting/assets-under-management/query",
-        "POST /reporting/cash-balances/query",
-        "POST /reporting/holdings-snapshot/query",
-        "POST /reporting/income-summary/query",
         "POST /reporting/portfolio-summary/query"
       ]
     }

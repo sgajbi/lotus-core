@@ -54,6 +54,7 @@ from src.services.ingestion_service.app.routers import (
 from src.services.ingestion_service.app.routers import (
     transactions as transactions_router,
 )
+from src.services.ingestion_service.app.routers import uploads as uploads_router
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     get_ingestion_job_service,
 )
@@ -90,6 +91,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.fail_mark_retried_job_ids: set[str] = set()
             self.fail_next_mark_queued = False
             self.mode = "normal"
+            self.reprocessing_publish_allowed = True
             self.replay_window_start = None
             self.replay_window_end = None
 
@@ -227,7 +229,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             cursor: str | None = None,
             limit: int = 100,
         ) -> tuple[list[IngestionJobResponse], str | None]:
-            values = list(self.jobs.values())
+            values = sorted(
+                self.jobs.values(),
+                key=lambda job: job.submitted_at,
+                reverse=True,
+            )
             filtered = [
                 job
                 for job in values
@@ -241,7 +247,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                     if row.job_id == cursor:
                         filtered = filtered[idx + 1 :]
                         break
-            return ([job.model_dump(mode="json") for job in filtered[:limit]], None)
+            page_rows = filtered[:limit]
+            next_cursor = page_rows[-1].job_id if len(filtered) > limit and page_rows else None
+            return ([job.model_dump(mode="json") for job in page_rows], next_cursor)
 
         async def list_failures(self, job_id: str, limit: int = 100) -> list[dict]:
             return self.failures.get(job_id, [])[:limit]
@@ -251,12 +259,23 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             accepted_jobs = sum(1 for j in self.jobs.values() if j.status == "accepted")
             queued_jobs = sum(1 for j in self.jobs.values() if j.status == "queued")
             failed_jobs = sum(1 for j in self.jobs.values() if j.status == "failed")
+            backlog_jobs = [
+                job for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            ]
+            oldest_backlog_job = min(
+                backlog_jobs,
+                key=lambda job: job.submitted_at,
+                default=None,
+            )
             return {
                 "total_jobs": total_jobs,
                 "accepted_jobs": accepted_jobs,
                 "queued_jobs": queued_jobs,
                 "failed_jobs": failed_jobs,
                 "backlog_jobs": accepted_jobs + queued_jobs,
+                "oldest_backlog_job_id": (
+                    oldest_backlog_job.job_id if oldest_backlog_job is not None else None
+                ),
             }
 
         async def get_slo_status(
@@ -272,16 +291,23 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             failure_rate = (
                 Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
             )
+            backlog_jobs = [
+                job for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            ]
+            backlog_age_seconds = 12.0 if backlog_jobs else 0.0
+            p95_queue_latency_seconds = 0.2
             return {
                 "lookback_minutes": lookback_minutes,
                 "total_jobs": total_jobs,
                 "failed_jobs": failed_jobs,
                 "failure_rate": failure_rate,
-                "p95_queue_latency_seconds": 0.2,
-                "backlog_age_seconds": 0.0,
+                "p95_queue_latency_seconds": p95_queue_latency_seconds,
+                "backlog_age_seconds": backlog_age_seconds,
                 "breach_failure_rate": failure_rate > failure_rate_threshold,
-                "breach_queue_latency": False,
-                "breach_backlog_age": False,
+                "breach_queue_latency": (
+                    p95_queue_latency_seconds > queue_latency_threshold_seconds
+                ),
+                "breach_backlog_age": backlog_age_seconds > backlog_age_threshold_seconds,
             }
 
         async def get_backlog_breakdown(
@@ -290,26 +316,39 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             lookback_minutes: int = 1440,
             limit: int = 200,
         ):
+            groups = [
+                {
+                    "endpoint": "/ingest/transactions",
+                    "entity_type": "transaction",
+                    "total_jobs": 10,
+                    "accepted_jobs": 2,
+                    "queued_jobs": 4,
+                    "failed_jobs": 4,
+                    "backlog_jobs": 6,
+                    "oldest_backlog_submitted_at": datetime.now(UTC),
+                    "oldest_backlog_age_seconds": 127.5,
+                    "failure_rate": Decimal("0.4"),
+                },
+                {
+                    "endpoint": "/ingest/instruments",
+                    "entity_type": "instrument",
+                    "total_jobs": 4,
+                    "accepted_jobs": 1,
+                    "queued_jobs": 1,
+                    "failed_jobs": 2,
+                    "backlog_jobs": 2,
+                    "oldest_backlog_submitted_at": datetime.now(UTC),
+                    "oldest_backlog_age_seconds": 75.0,
+                    "failure_rate": Decimal("0.5"),
+                },
+            ][:limit]
             return {
                 "lookback_minutes": lookback_minutes,
-                "total_backlog_jobs": 1,
-                "largest_group_backlog_jobs": 1,
-                "largest_group_backlog_share": Decimal("1"),
-                "top_3_backlog_share": Decimal("1"),
-                "groups": [
-                    {
-                        "endpoint": "/ingest/transactions",
-                        "entity_type": "transaction",
-                        "total_jobs": 3,
-                        "accepted_jobs": 1,
-                        "queued_jobs": 0,
-                        "failed_jobs": 2,
-                        "backlog_jobs": 1,
-                        "oldest_backlog_submitted_at": datetime.now(UTC),
-                        "oldest_backlog_age_seconds": 12.0,
-                        "failure_rate": Decimal("0.6667"),
-                    }
-                ][:limit],
+                "total_backlog_jobs": sum(item["backlog_jobs"] for item in groups),
+                "largest_group_backlog_jobs": groups[0]["backlog_jobs"] if groups else 0,
+                "largest_group_backlog_share": Decimal("0.75") if groups else Decimal("0"),
+                "top_3_backlog_share": Decimal("1") if groups else Decimal("0"),
+                "groups": groups,
             }
 
         async def list_stalled_jobs(
@@ -318,23 +357,36 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             threshold_seconds: int = 300,
             limit: int = 100,
         ):
+            jobs = [
+                {
+                    "job_id": "job_stalled_001",
+                    "endpoint": "/ingest/transactions",
+                    "entity_type": "transaction",
+                    "status": "accepted",
+                    "submitted_at": datetime(2026, 3, 3, 4, 10, 11, tzinfo=UTC),
+                    "queue_age_seconds": 901.0,
+                    "retry_count": 0,
+                    "suggested_action": (
+                        "Investigate consumer lag and retry this job once root cause is resolved."  # noqa: E501
+                    ),
+                },
+                {
+                    "job_id": "job_stalled_002",
+                    "endpoint": "/ingest/portfolio-bundles",
+                    "entity_type": "portfolio_bundle",
+                    "status": "queued",
+                    "submitted_at": datetime(2026, 3, 3, 3, 58, 2, tzinfo=UTC),
+                    "queue_age_seconds": 1632.5,
+                    "retry_count": 2,
+                    "suggested_action": (
+                        "Inspect downstream dependency saturation before forcing replay or pausing intake."  # noqa: E501
+                    ),
+                },
+            ][:limit]
             return {
                 "threshold_seconds": threshold_seconds,
-                "total": 1,
-                "jobs": [
-                    {
-                        "job_id": "job_stalled_001",
-                        "endpoint": "/ingest/transactions",
-                        "entity_type": "transaction",
-                        "status": "accepted",
-                        "submitted_at": datetime.now(UTC),
-                        "queue_age_seconds": 901.0,
-                        "retry_count": 0,
-                        "suggested_action": (
-                            "Investigate consumer lag and retry this job once root cause is resolved."  # noqa: E501
-                        ),
-                    }
-                ][:limit],
+                "total": len(jobs),
+                "jobs": jobs,
             }
 
         async def list_consumer_dlq_events(
@@ -344,36 +396,66 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             original_topic: str | None = None,
             consumer_group: str | None = None,
         ) -> list[dict]:
-            return [
+            events = [
                 {
                     "event_id": "cdlq_test_001",
-                    "original_topic": original_topic or "transactions.raw.received",
-                    "consumer_group": consumer_group or "persistence-service-group",
+                    "original_topic": "transactions.raw.received",
+                    "consumer_group": "persistence-service-group",
                     "dlq_topic": "dlq.persistence_service",
                     "original_key": "TXN-2026-000145",
                     "error_reason_code": "VALIDATION_ERROR",
                     "error_reason": "ValidationError: portfolio_id is required",
                     "correlation_id": "ING:test-correlation-id",
-                    "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
-                    "observed_at": datetime.now(UTC),
-                }
-            ][:limit]
+                    "payload_excerpt": '{"transaction_id":"TXN-2026-000145","portfolio_id":null}',
+                    "observed_at": datetime(2026, 3, 6, 9, 11, 5, 812000, tzinfo=UTC),
+                },
+                {
+                    "event_id": "cdlq_test_002",
+                    "original_topic": "portfolio-bundles.raw.received",
+                    "consumer_group": "valuation-service-group",
+                    "dlq_topic": "dlq.valuation_service",
+                    "original_key": "BUNDLE-2026-000014",
+                    "error_reason_code": "DEPENDENCY_TIMEOUT",
+                    "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
+                    "correlation_id": "ING:test-correlation-bundle",
+                    "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
+                    "observed_at": datetime(2026, 3, 6, 9, 15, 42, 114000, tzinfo=UTC),
+                },
+            ]
+            if original_topic is not None:
+                events = [event for event in events if event["original_topic"] == original_topic]
+            if consumer_group is not None:
+                events = [event for event in events if event["consumer_group"] == consumer_group]
+            return events[:limit]
 
         async def get_consumer_dlq_event(self, event_id: str):
-            if event_id != "cdlq_test_001":
-                return None
-            return SimpleNamespace(
-                event_id=event_id,
-                original_topic="transactions.raw.received",
-                consumer_group="persistence-service-group",
-                dlq_topic="dlq.persistence_service",
-                original_key="TXN-2026-000145",
-                error_reason_code="VALIDATION_ERROR",
-                error_reason="ValidationError: portfolio_id is required",
-                correlation_id="ING:test-correlation-id",
-                payload_excerpt='{"transaction_id":"TXN-2026-000145"}',
-                observed_at=datetime.now(UTC),
-            )
+            if event_id == "cdlq_test_001":
+                return SimpleNamespace(
+                    event_id=event_id,
+                    original_topic="transactions.raw.received",
+                    consumer_group="persistence-service-group",
+                    dlq_topic="dlq.persistence_service",
+                    original_key="TXN-2026-000145",
+                    error_reason_code="VALIDATION_ERROR",
+                    error_reason="ValidationError: portfolio_id is required",
+                    correlation_id="ING:test-correlation-id",
+                    payload_excerpt='{"transaction_id":"TXN-2026-000145"}',
+                    observed_at=datetime(2026, 3, 6, 9, 11, 5, 812000, tzinfo=UTC),
+                )
+            if event_id == "cdlq_test_no_corr":
+                return SimpleNamespace(
+                    event_id=event_id,
+                    original_topic="transactions.raw.received",
+                    consumer_group="persistence-service-group",
+                    dlq_topic="dlq.persistence_service",
+                    original_key="TXN-2026-000199",
+                    error_reason_code="MISSING_CORRELATION",
+                    error_reason="Correlation id missing from failed message envelope",
+                    correlation_id=None,
+                    payload_excerpt='{"transaction_id":"TXN-2026-000199"}',
+                    observed_at=datetime(2026, 3, 6, 9, 20, 0, tzinfo=UTC),
+                )
+            return None
 
         async def get_consumer_lag(
             self,
@@ -381,31 +463,83 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             lookback_minutes: int = 60,
             limit: int = 100,
         ):
+            groups = [
+                {
+                    "consumer_group": "persistence-service-group",
+                    "original_topic": "transactions.raw.received",
+                    "dlq_events": 21,
+                    "last_observed_at": datetime.now(UTC),
+                    "lag_severity": "high",
+                },
+                {
+                    "consumer_group": "valuation-service-group",
+                    "original_topic": "market-prices.raw.received",
+                    "dlq_events": 8,
+                    "last_observed_at": datetime.now(UTC),
+                    "lag_severity": "medium",
+                },
+                {
+                    "consumer_group": "reference-service-group",
+                    "original_topic": "reference-data.raw.received",
+                    "dlq_events": 3,
+                    "last_observed_at": datetime.now(UTC),
+                    "lag_severity": "low",
+                },
+            ][:limit]
+            backlog_jobs = sum(
+                1 for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            )
             return {
                 "lookback_minutes": lookback_minutes,
-                "backlog_jobs": 1,
-                "total_groups": 1,
-                "groups": [
-                    {
-                        "consumer_group": "persistence-service-group",
-                        "original_topic": "transactions.raw.received",
-                        "dlq_events": 3,
-                        "last_observed_at": datetime.now(UTC),
-                        "lag_severity": "low",
-                    }
-                ][:limit],
+                "backlog_jobs": backlog_jobs,
+                "total_groups": len(groups),
+                "groups": groups,
             }
 
         async def get_job_record_status(self, job_id: str):
             job = self.jobs.get(job_id)
             if not job:
                 return None
+            payload = self.job_payloads.get(job_id, {})
+            replayable_keys: list[str] = []
+            if job.endpoint == "/ingest/transactions":
+                replayable_keys = [
+                    str(row["transaction_id"])
+                    for row in payload.get("transactions", [])
+                    if row.get("transaction_id")
+                ]
+            elif job.endpoint == "/ingest/portfolios":
+                replayable_keys = [
+                    str(row["portfolio_id"])
+                    for row in payload.get("portfolios", [])
+                    if row.get("portfolio_id")
+                ]
+            elif job.endpoint == "/ingest/instruments":
+                replayable_keys = [
+                    str(row["security_id"])
+                    for row in payload.get("instruments", [])
+                    if row.get("security_id")
+                ]
+            elif job.endpoint == "/ingest/business-dates":
+                replayable_keys = [
+                    str(row["business_date"])
+                    for row in payload.get("business_dates", [])
+                    if row.get("business_date")
+                ]
+            failed_keys = sorted(
+                {
+                    key
+                    for failure in self.failures.get(job_id, [])
+                    for key in failure.get("failed_record_keys", [])
+                    if isinstance(key, str)
+                }
+            )
             return {
                 "job_id": job_id,
                 "entity_type": job.entity_type,
                 "accepted_count": job.accepted_count,
-                "failed_record_keys": ["TXN-2026-000145"],
-                "replayable_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+                "failed_record_keys": failed_keys,
+                "replayable_record_keys": replayable_keys,
             }
 
         async def get_idempotency_diagnostics(
@@ -414,21 +548,31 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             lookback_minutes: int = 1440,
             limit: int = 200,
         ):
+            keys = [
+                {
+                    "idempotency_key": "integration-ingestion-idempotency-001",
+                    "usage_count": 3,
+                    "endpoint_count": 2,
+                    "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
+                    "first_seen_at": datetime(2026, 3, 6, 7, 10, 11, 211000, tzinfo=UTC),
+                    "last_seen_at": datetime(2026, 3, 6, 7, 15, 1, 127000, tzinfo=UTC),
+                    "collision_detected": True,
+                },
+                {
+                    "idempotency_key": "integration-ingestion-idempotency-002",
+                    "usage_count": 2,
+                    "endpoint_count": 1,
+                    "endpoints": ["/ingest/transactions"],
+                    "first_seen_at": datetime(2026, 3, 6, 8, 1, 3, tzinfo=UTC),
+                    "last_seen_at": datetime(2026, 3, 6, 8, 5, 17, tzinfo=UTC),
+                    "collision_detected": False,
+                },
+            ][:limit]
             return {
                 "lookback_minutes": lookback_minutes,
-                "total_keys": 1,
-                "collisions": 0,
-                "keys": [
-                    {
-                        "idempotency_key": "integration-ingestion-idempotency-001",
-                        "usage_count": 2,
-                        "endpoint_count": 1,
-                        "endpoints": ["/ingest/transactions"],
-                        "first_seen_at": datetime.now(UTC),
-                        "last_seen_at": datetime.now(UTC),
-                        "collision_detected": False,
-                    }
-                ][:limit],
+                "total_keys": len(keys),
+                "collisions": sum(1 for item in keys if item["collision_detected"]),
+                "keys": keys,
             }
 
         async def get_error_budget_status(
@@ -438,22 +582,36 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             failure_rate_threshold: Decimal = Decimal("0.03"),
             backlog_growth_threshold: int = 5,
         ):
+            total_jobs = len(self.jobs)
+            failed_jobs = sum(1 for job in self.jobs.values() if job.status == "failed")
+            failure_rate = (
+                Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
+            )
+            remaining_error_budget = max(Decimal("0"), failure_rate_threshold - failure_rate)
+            backlog_jobs = sum(
+                1 for job in self.jobs.values() if job.status in {"accepted", "queued"}
+            )
+            previous_backlog_jobs = 0
+            backlog_growth = backlog_jobs - previous_backlog_jobs
+            dlq_events_in_window = 4 if total_jobs else 0
+            dlq_budget_events_per_window = 10
             return {
                 "lookback_minutes": lookback_minutes,
                 "previous_lookback_minutes": lookback_minutes,
-                "total_jobs": len(self.jobs),
-                "failed_jobs": 0,
-                "failure_rate": Decimal("0"),
-                "remaining_error_budget": failure_rate_threshold,
-                "backlog_jobs": 1,
-                "previous_backlog_jobs": 1,
-                "backlog_growth": 0,
-                "replay_backlog_pressure_ratio": Decimal("0.0002"),
-                "dlq_events_in_window": 0,
-                "dlq_budget_events_per_window": 10,
-                "dlq_pressure_ratio": Decimal("0"),
-                "breach_failure_rate": False,
-                "breach_backlog_growth": False,
+                "total_jobs": total_jobs,
+                "failed_jobs": failed_jobs,
+                "failure_rate": failure_rate,
+                "remaining_error_budget": remaining_error_budget,
+                "backlog_jobs": backlog_jobs,
+                "previous_backlog_jobs": previous_backlog_jobs,
+                "backlog_growth": backlog_growth,
+                "replay_backlog_pressure_ratio": Decimal(backlog_jobs) / Decimal("5000"),
+                "dlq_events_in_window": dlq_events_in_window,
+                "dlq_budget_events_per_window": dlq_budget_events_per_window,
+                "dlq_pressure_ratio": Decimal(dlq_events_in_window)
+                / Decimal(dlq_budget_events_per_window),
+                "breach_failure_rate": failure_rate > failure_rate_threshold,
+                "breach_backlog_growth": backlog_growth > backlog_growth_threshold,
             }
 
         async def get_operating_band(
@@ -464,6 +622,35 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             queue_latency_threshold_seconds: float = 5.0,
             backlog_age_threshold_seconds: float = 300.0,
         ):
+            slo_status = await self.get_slo_status(
+                lookback_minutes=lookback_minutes,
+                failure_rate_threshold=failure_rate_threshold,
+                queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+                backlog_age_threshold_seconds=backlog_age_threshold_seconds,
+            )
+            error_budget = await self.get_error_budget_status(
+                lookback_minutes=lookback_minutes,
+                failure_rate_threshold=failure_rate_threshold,
+            )
+            triggered_signals: list[str] = []
+            if slo_status["breach_failure_rate"]:
+                triggered_signals.append("breach_failure_rate")
+            if slo_status["breach_queue_latency"]:
+                triggered_signals.append("breach_queue_latency")
+            if slo_status["breach_backlog_age"]:
+                triggered_signals.append("breach_backlog_age")
+            if triggered_signals:
+                return {
+                    "lookback_minutes": lookback_minutes,
+                    "operating_band": "orange",
+                    "recommended_action": (
+                        "Aggressively scale calculators and pause non-critical replay operations."
+                    ),
+                    "backlog_age_seconds": slo_status["backlog_age_seconds"],
+                    "dlq_pressure_ratio": error_budget["dlq_pressure_ratio"],
+                    "failure_rate": slo_status["failure_rate"],
+                    "triggered_signals": triggered_signals,
+                }
             return {
                 "lookback_minutes": lookback_minutes,
                 "operating_band": "yellow",
@@ -512,9 +699,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             now = datetime.now(UTC)
             return {
                 "as_of": now,
-                "total_pending_jobs": 4,
-                "total_processing_jobs": 1,
-                "total_failed_jobs": 0,
+                "total_pending_jobs": 5,
+                "total_processing_jobs": 2,
+                "total_failed_jobs": 1,
                 "queues": [
                     {
                         "job_type": "RESET_WATERMARKS",
@@ -523,7 +710,15 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                         "failed_jobs": 0,
                         "oldest_pending_created_at": now,
                         "oldest_pending_age_seconds": 12.5,
-                    }
+                    },
+                    {
+                        "job_type": "RECALCULATE_POSITIONS",
+                        "pending_jobs": 1,
+                        "processing_jobs": 1,
+                        "failed_jobs": 1,
+                        "oldest_pending_created_at": now,
+                        "oldest_pending_age_seconds": 4.0,
+                    },
                 ],
             }
 
@@ -686,6 +881,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             await self.assert_retry_allowed(submitted_at)
 
         async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
+            if not self.reprocessing_publish_allowed:
+                raise PermissionError(
+                    f"Reprocessing publication is blocked for {record_count} record(s)."
+                )
             return None
 
     class FakeReferenceDataIngestionService:
@@ -693,6 +892,15 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted: dict[str, list[dict]] = {
                 "benchmark_assignments": [],
                 "benchmark_definitions": [],
+                "benchmark_compositions": [],
+                "indices": [],
+                "index_price_series": [],
+                "index_return_series": [],
+                "benchmark_return_series": [],
+                "risk_free_series": [],
+                "classification_taxonomy": [],
+                "cash_accounts": [],
+                "lookthrough_components": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -711,36 +919,44 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.persisted["benchmark_definitions"].extend(records)
 
         async def upsert_benchmark_compositions(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["benchmark_compositions"].extend(records)
 
         async def upsert_indices(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["indices"].extend(records)
 
         async def upsert_index_price_series(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["index_price_series"].extend(records)
 
         async def upsert_index_return_series(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["index_return_series"].extend(records)
 
         async def upsert_benchmark_return_series(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["benchmark_return_series"].extend(records)
 
         async def upsert_risk_free_series(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["risk_free_series"].extend(records)
 
         async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["classification_taxonomy"].extend(records)
 
         async def upsert_cash_account_masters(self, records: list[dict[str, object]]) -> None:
-            return None
+            self.persisted["cash_accounts"].extend(records)
 
         async def upsert_instrument_lookthrough_components(
             self, records: list[dict[str, object]]
         ) -> None:
-            return None
+            self.persisted["lookthrough_components"].extend(records)
+
+    class FakeBusinessCalendarRepository:
+        def __init__(self):
+            self.latest_business_dates = {}
+
+        async def get_latest_business_date(self, calendar_code: str):
+            return self.latest_business_dates.get(calendar_code)
 
     fake_job_service = FakeIngestionJobService()
     fake_reference_data_service = FakeReferenceDataIngestionService()
+    fake_business_calendar_repository = FakeBusinessCalendarRepository()
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -761,6 +977,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[business_dates_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
+    app.dependency_overrides[business_dates_router.get_business_calendar_repository] = lambda: (
+        fake_business_calendar_repository
+    )
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
@@ -780,6 +999,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     yield {
         "fake_job_service": fake_job_service,
         "fake_reference_data_service": fake_reference_data_service,
+        "fake_business_calendar_repository": fake_business_calendar_repository,
     }
 
     for target_app in target_apps:
@@ -791,6 +1011,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(market_prices_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(fx_rates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(business_dates_router.get_ingestion_job_service, None)
+    app.dependency_overrides.pop(
+        business_dates_router.get_business_calendar_repository,
+        None,
+    )
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)
@@ -826,6 +1050,140 @@ async def event_replay_test_client(ingestion_test_harness):
         yield client
 
 
+def _single_transaction_payload(transaction_id: str = "TX_SINGLE_001") -> dict[str, object]:
+    return {
+        "transaction_id": transaction_id,
+        "portfolio_id": "P1",
+        "instrument_id": "I1",
+        "security_id": "S1",
+        "transaction_date": "2025-08-12T10:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": 1,
+        "price": 1,
+        "gross_transaction_amount": 1,
+        "trade_currency": "USD",
+        "currency": "USD",
+    }
+
+
+def _transaction_batch_payload(*transaction_ids: str) -> dict[str, list[dict[str, object]]]:
+    ids = transaction_ids or ("TX_BATCH_001",)
+    return {"transactions": [_single_transaction_payload(transaction_id) for transaction_id in ids]}
+
+
+def _instrument_batch_payload(*security_ids: str) -> dict[str, list[dict[str, object]]]:
+    ids = security_ids or ("SEC_INST_001",)
+    return {
+        "instruments": [
+            {
+                "security_id": security_id,
+                "name": f"Instrument {security_id}",
+                "isin": f"ISIN{security_id[-6:]}",
+                "currency": "USD",
+                "product_type": "bond",
+            }
+            for security_id in ids
+        ]
+    }
+
+
+def _market_price_batch_payload(*security_ids: str) -> dict[str, list[dict[str, object]]]:
+    ids = security_ids or ("SEC_PRICE_001",)
+    return {
+        "market_prices": [
+            {
+                "security_id": security_id,
+                "price_date": "2025-01-01",
+                "price": 100,
+                "currency": "USD",
+            }
+            for security_id in ids
+        ]
+    }
+
+
+def _fx_rate_batch_payload(*pairs: tuple[str, str]) -> dict[str, list[dict[str, object]]]:
+    requested_pairs = pairs or (("USD", "SGD"),)
+    return {
+        "fx_rates": [
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "rate_date": "2025-01-01",
+                "rate": "1.3500000000",
+            }
+            for from_currency, to_currency in requested_pairs
+        ]
+    }
+
+
+def _business_date_batch_payload(*business_dates: str) -> dict[str, list[dict[str, object]]]:
+    dates = business_dates or ("2025-01-01",)
+    return {
+        "business_dates": [
+            {
+                "business_date": business_date,
+                "calendar_code": "GLOBAL",
+                "market_code": "XSWX",
+                "source_system": "lotus-manage",
+                "source_batch_id": "business-dates-certification",
+            }
+            for business_date in dates
+        ]
+    }
+
+
+def _portfolio_bundle_payload() -> dict[str, object]:
+    return {
+        "source_system": "UI_UPLOAD",
+        "mode": "UPSERT",
+        "business_dates": [{"business_date": "2026-01-02"}],
+        "portfolios": [
+            {
+                "portfolio_id": "P1",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "s",
+                "risk_exposure": "r",
+                "investment_time_horizon": "i",
+                "portfolio_type": "t",
+                "booking_center_code": "b",
+            }
+        ],
+        "instruments": [
+            {
+                "security_id": "S1",
+                "name": "N1",
+                "isin": "I1",
+                "currency": "USD",
+                "product_type": "E",
+            }
+        ],
+        "transactions": [
+            {
+                "transaction_id": "T1",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2026-01-02T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ],
+        "market_prices": [
+            {"security_id": "S1", "price_date": "2026-01-02", "price": 100, "currency": "USD"}
+        ],
+        "fx_rates": [
+            {"from_currency": "USD", "to_currency": "EUR", "rate_date": "2026-01-02", "rate": 0.9}
+        ],
+    }
+
+
 async def test_ingest_portfolios_endpoint(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -850,7 +1208,265 @@ async def test_ingest_portfolios_endpoint(
     response = await async_test_client.post("/ingest/portfolios", json=payload)
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Portfolios accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "portfolio"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_portfolios_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = {
+        "portfolios": [
+            {
+                "portfolio_id": "P1",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "active",
+                "risk_exposure": "balanced",
+                "investment_time_horizon": "long_term",
+                "portfolio_type": "discretionary",
+                "booking_center_code": "SG_BOOKING",
+            }
+        ]
+    }
+    headers = {"X-Idempotency-Key": "portfolio-master-replay-001"}
+
+    first = await async_test_client.post("/ingest/portfolios", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/portfolios", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "portfolio-master-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_portfolios_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/portfolios",
+        json={
+            "portfolios": [
+                {
+                    "portfolio_id": "P1",
+                    "base_currency": "USD",
+                    "open_date": "2025-01-01",
+                    "client_id": "c",
+                    "status": "active",
+                    "risk_exposure": "balanced",
+                    "investment_time_horizon": "long_term",
+                    "portfolio_type": "discretionary",
+                    "booking_center_code": "SG_BOOKING",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolios_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        portfolios_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/portfolios",
+        json={
+            "portfolios": [
+                {
+                    "portfolio_id": "P1",
+                    "base_currency": "USD",
+                    "open_date": "2025-01-01",
+                    "client_id": "c",
+                    "status": "active",
+                    "risk_exposure": "balanced",
+                    "investment_time_horizon": "long_term",
+                    "portfolio_type": "discretionary",
+                    "booking_center_code": "SG_BOOKING",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolios_marks_job_failed_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    payload = {
+        "portfolios": [
+            {
+                "portfolio_id": "P1",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "active",
+                "risk_exposure": "balanced",
+                "investment_time_horizon": "long_term",
+                "portfolio_type": "discretionary",
+                "booking_center_code": "SG_BOOKING",
+            },
+            {
+                "portfolio_id": "P2",
+                "base_currency": "EUR",
+                "open_date": "2025-01-01",
+                "client_id": "c",
+                "status": "active",
+                "risk_exposure": "conservative",
+                "investment_time_horizon": "medium_term",
+                "portfolio_type": "advisory",
+                "booking_center_code": "EU_BOOKING",
+            },
+        ]
+    }
+
+    with pytest.raises(Exception, match="Failed to publish portfolio"):
+        await async_test_client.post("/ingest/portfolios", json=payload)
+
+    jobs_response = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "failed", "entity_type": "portfolio"},
+    )
+    assert jobs_response.status_code == 200
+    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+
+    failure_history = await event_replay_test_client.get(
+        f"/ingestion/jobs/{failed_job_id}/failures"
+    )
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["P1", "P2"]
+
+
+async def test_ingest_single_transaction_endpoint(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_ACK_001"),
+        headers={"X-Idempotency-Key": "single-transaction-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Transaction accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "single-transaction-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    assert "job_id" not in body
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+
+    mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "transactions.raw.received"
+    assert publish_kwargs["key"] == "P1"
+    assert publish_kwargs["value"]["transaction_id"] == "TX_SINGLE_ACK_001"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"single-transaction-idem-001")
+
+
+async def test_ingest_single_transaction_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_BLOCKED_001"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_single_transaction_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        transactions_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_RATE_LIMIT_001"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/transaction blocked after 1 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_single_transaction_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_PUBLISH_FAIL_001"),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Failed to publish transaction 'TX_SINGLE_PUBLISH_FAIL_001'.",
+        "failed_record_keys": ["TX_SINGLE_PUBLISH_FAIL_001"],
+    }
 
 
 async def test_ingest_transactions_endpoint(
@@ -858,32 +1474,30 @@ async def test_ingest_transactions_endpoint(
 ):
     """Tests the POST /ingest/transactions endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "T1",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
+    payload = _transaction_batch_payload("TX_BATCH_ACK_001")
 
-    response = await async_test_client.post("/ingest/transactions", json=payload)
+    response = await async_test_client.post(
+        "/ingest/transactions",
+        json=payload,
+        headers={"X-Idempotency-Key": "transaction-batch-idem-001"},
+    )
 
     assert response.status_code == 202
     body = response.json()
+    assert body["message"] == "Transactions accepted for asynchronous ingestion processing."
     assert body["entity_type"] == "transaction"
     assert body["accepted_count"] == 1
-    assert "job_id" in body
+    assert body["job_id"]
+    assert body["idempotency_key"] == "transaction-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "transactions.raw.received"
+    assert publish_kwargs["key"] == "P1"
+    assert publish_kwargs["value"]["transaction_id"] == "TX_BATCH_ACK_001"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"transaction-batch-idem-001")
 
 
 async def test_ingest_transactions_endpoint_accepts_empty_batch(
@@ -907,43 +1521,231 @@ async def test_ingestion_jobs_status_endpoint(
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "T100",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
+    payload = _transaction_batch_payload("TX_JOB_DETAIL_001")
+    headers = {
+        "X-Idempotency-Key": "job-detail-idempotency-001",
+        "X-Correlation-Id": "ING:test-job-detail-correlation",
     }
 
-    ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions", json=payload, headers=headers
+    )
     assert ingest_response.status_code == 202
-    job_id = ingest_response.json()["job_id"]
+    ingest_body = ingest_response.json()
+    job_id = ingest_body["job_id"]
 
     job_response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}")
     assert job_response.status_code == 200
     job_body = job_response.json()
     assert job_body["job_id"] == job_id
-    assert job_body["status"] == "queued"
+    assert job_body["endpoint"] == "/ingest/transactions"
     assert job_body["entity_type"] == "transaction"
+    assert job_body["status"] == "queued"
+    assert job_body["accepted_count"] == 1
+    assert job_body["idempotency_key"] == "job-detail-idempotency-001"
+    assert job_body["correlation_id"] == "ING:test-job-detail-correlation"
+    assert job_body["request_id"]
+    assert job_body["trace_id"]
+    assert job_body["submitted_at"]
+    assert job_body["completed_at"]
+    assert job_body["failure_reason"] is None
+    assert job_body["retry_count"] == 0
+    assert job_body["last_retried_at"] is None
+    assert job_body["accepted_count"] == ingest_body["accepted_count"]
 
 
-async def test_ingestion_jobs_list_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/jobs", params={"limit": 5})
+async def test_ingestion_jobs_status_endpoint_returns_failed_job_detail(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_DETAIL_FAILED_001"),
+        headers={"X-Idempotency-Key": "job-detail-failed-idempotency-001"},
+    )
+
+    assert failed_response.status_code == 500
+    failed_body = failed_response.json()["detail"]
+    assert failed_body["code"] == "INGESTION_PUBLISH_FAILED"
+    job_id = failed_body["job_id"]
+
+    job_response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}")
+    assert job_response.status_code == 200
+    job_body = job_response.json()
+    assert job_body["job_id"] == job_id
+    assert job_body["endpoint"] == "/ingest/transactions"
+    assert job_body["entity_type"] == "transaction"
+    assert job_body["status"] == "failed"
+    assert job_body["accepted_count"] == 1
+    assert job_body["idempotency_key"] == "job-detail-failed-idempotency-001"
+    assert "TX_JOB_DETAIL_FAILED_001" in job_body["failure_reason"]
+    assert "Remaining unpublished record keys" in job_body["failure_reason"]
+    assert job_body["completed_at"]
+    assert job_body["retry_count"] == 0
+    assert job_body["last_retried_at"] is None
+
+
+async def test_ingestion_jobs_list_endpoint_filters_and_paginates(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    queued_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_LIST_QUEUED_001"),
+        headers={"X-Idempotency-Key": "job-list-queued-001"},
+    )
+    assert queued_response.status_code == 202
+    queued_job_id = queued_response.json()["job_id"]
+
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_LIST_FAILED_001"),
+        headers={"X-Idempotency-Key": "job-list-failed-001"},
+    )
+    assert failed_response.status_code == 500
+    failed_job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    accepted_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_JOB_LIST_ACCEPTED_001"),
+        headers={"X-Idempotency-Key": "job-list-accepted-001"},
+    )
+    assert accepted_response.status_code == 500
+    accepted_job_id = accepted_response.json()["detail"]["job_id"]
+
+    response = await event_replay_test_client.get("/ingestion/jobs", params={"limit": 2})
     assert response.status_code == 200
     body = response.json()
-    assert "jobs" in body
-    assert "total" in body
-    assert "next_cursor" in body
+    assert body["total"] == 2
+    assert body["next_cursor"]
+    assert {job["job_id"] for job in body["jobs"]}.issubset(
+        {accepted_job_id, failed_job_id, queued_job_id}
+    )
+
+    next_page = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"limit": 2, "cursor": body["next_cursor"]},
+    )
+    assert next_page.status_code == 200
+    assert next_page.json()["total"] == 1
+
+    for status_filter, expected_job_id in {
+        "accepted": accepted_job_id,
+        "queued": queued_job_id,
+        "failed": failed_job_id,
+    }.items():
+        filtered = await event_replay_test_client.get(
+            "/ingestion/jobs",
+            params={
+                "status": status_filter,
+                "entity_type": "transaction",
+                "submitted_from": "2020-01-01T00:00:00Z",
+                "submitted_to": "2030-01-01T00:00:00Z",
+                "limit": 10,
+            },
+        )
+        assert filtered.status_code == 200
+        filtered_body = filtered.json()
+        assert filtered_body["total"] == 1
+        assert filtered_body["next_cursor"] is None
+        assert filtered_body["jobs"][0]["job_id"] == expected_job_id
+        assert filtered_body["jobs"][0]["status"] == status_filter
+        assert filtered_body["jobs"][0]["entity_type"] == "transaction"
+
+    entity_miss = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"entity_type": "instrument", "limit": 10},
+    )
+    assert entity_miss.status_code == 200
+    assert entity_miss.json() == {"jobs": [], "total": 0, "next_cursor": None}
+
+    invalid_status = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        params={"status": "complete"},
+    )
+    assert invalid_status.status_code == 422
+
+
+async def test_ingestion_job_failures_endpoint_returns_full_failure_rows(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"),
+        headers={"X-Idempotency-Key": "job-failure-row-001"},
+    )
+
+    assert failed_response.status_code == 500
+    job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    response = await event_replay_test_client.get(
+        f"/ingestion/jobs/{job_id}/failures",
+        params={"limit": 1},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    failure = body["failures"][0]
+    assert failure["failure_id"]
+    assert failure["job_id"] == job_id
+    assert failure["failure_phase"] == "publish"
+    assert "TX_FAILURE_ROW_001" in failure["failure_reason"]
+    assert failure["failed_record_keys"] == ["TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"]
+    assert failure["failed_at"]
+
+
+async def test_ingestion_job_failures_endpoint_returns_empty_history_for_clean_job(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    queued_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_FAILURE_EMPTY_001"),
+        headers={"X-Idempotency-Key": "job-failure-empty-001"},
+    )
+    assert queued_response.status_code == 202
+
+    response = await event_replay_test_client.get(
+        f"/ingestion/jobs/{queued_response.json()['job_id']}/failures"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"failures": [], "total": 0}
+
+
+async def test_ingestion_job_failures_endpoint_validates_job_and_limit(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    missing = await event_replay_test_client.get("/ingestion/jobs/job_missing_001/failures")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job_missing_001' was not found.",
+    }
+
+    invalid_limit = await event_replay_test_client.get(
+        "/ingestion/jobs/job_missing_001/failures",
+        params={"limit": 0},
+    )
+    assert invalid_limit.status_code == 422
 
 
 async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClient):
@@ -951,28 +1753,15 @@ async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClie
     assert response.status_code == 404
     body = response.json()
     assert body["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+    assert body["detail"]["message"] == "Ingestion job 'job_missing_001' was not found."
 
 
 async def test_ingestion_jobs_idempotency_replays_existing_job(
     async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_IDEMPOTENT_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _transaction_batch_payload("TX_IDEMPOTENT_001")
     headers = {"X-Idempotency-Key": "idem-batch-001"}
 
     first = await async_test_client.post("/ingest/transactions", json=payload, headers=headers)
@@ -981,6 +1770,38 @@ async def test_ingestion_jobs_idempotency_replays_existing_job(
     assert first.status_code == 202
     assert second.status_code == 202
     assert first.json()["job_id"] == second.json()["job_id"]
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["idempotency_key"] == "idem-batch-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_transactions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        transactions_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_BATCH_RATE_LIMIT_001", "TX_BATCH_RATE_LIMIT_002"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/transactions blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_ingestion_job_failure_history_and_retry(
@@ -989,26 +1810,12 @@ async def test_ingestion_job_failure_history_and_retry(
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_FAIL_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
+    payload = _transaction_batch_payload("TX_FAIL_001")
 
-    with pytest.raises(Exception, match="Failed to publish transaction"):
-        await async_test_client.post("/ingest/transactions", json=payload)
+    failed_response = await async_test_client.post("/ingest/transactions", json=payload)
+    assert failed_response.status_code == 500
+    assert failed_response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert failed_response.json()["detail"]["failed_record_keys"] == ["TX_FAIL_001"]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -1022,6 +1829,7 @@ async def test_ingestion_job_failure_history_and_retry(
     )
     assert failure_history.status_code == 200
     assert failure_history.json()["total"] >= 1
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["TX_FAIL_001"]
 
     mock_kafka_producer.publish_message.side_effect = None
     retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{failed_job_id}/retry")
@@ -1113,7 +1921,20 @@ async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
-    payload = {
+    payload = _benchmark_assignment_payload()
+
+    response = await async_test_client.post("/ingest/benchmark-assignments", json=payload)
+
+    assert response.status_code == 202
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_assignments"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["assignment_recorded_at"] is not None
+
+
+def _benchmark_assignment_payload() -> dict[str, list[dict[str, object]]]:
+    return {
         "benchmark_assignments": [
             {
                 "portfolio_id": "LIVE_REAL_005607",
@@ -1126,14 +1947,1676 @@ async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when
         ]
     }
 
-    response = await async_test_client.post("/ingest/benchmark-assignments", json=payload)
+
+async def test_ingest_benchmark_assignments_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_assignment_payload()
+    payload["benchmark_assignments"][0].update(
+        {
+            "effective_to": "2026-12-31",
+            "assignment_recorded_at": "2026-01-02T08:00:00Z",
+            "assignment_version": 2,
+            "policy_pack_id": "policy_pack_wm_v1",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=payload,
+        headers={"X-Idempotency-Key": "benchmark-assignment-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "benchmark_assignment"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "benchmark-assignment-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
     persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
         "benchmark_assignments"
     ]
     assert len(persisted) == 1
-    assert persisted[0]["assignment_recorded_at"] is not None
+    assignment = persisted[0]
+    assert assignment["portfolio_id"] == "LIVE_REAL_005607"
+    assert assignment["benchmark_id"] == "BMK_US_60_40_005607"
+    assert assignment["effective_from"].isoformat() == "2026-01-01"
+    assert assignment["effective_to"].isoformat() == "2026-12-31"
+    assert assignment["assignment_source"] == "benchmark_policy_engine"
+    assert assignment["assignment_status"] == "active"
+    assert assignment["source_system"] == "lotus-manage"
+    assert assignment["assignment_recorded_at"].isoformat() == "2026-01-02T08:00:00+00:00"
+    assert assignment["assignment_version"] == 2
+    assert assignment["policy_pack_id"] == "policy_pack_wm_v1"
+
+
+async def test_ingest_benchmark_assignments_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_assignment_payload()
+    headers = {"X-Idempotency-Key": "benchmark-assignment-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_assignments"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_benchmark_assignments_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=_benchmark_assignment_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_assignments"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_assignments_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=_benchmark_assignment_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/benchmark-assignments blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_assignments"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_assignments_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("benchmark assignment persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_portfolio_benchmark_assignments",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=_benchmark_assignment_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "benchmark assignment persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "benchmark assignment persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _benchmark_definition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "benchmark_definitions": [
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "benchmark_name": "Global Balanced 60/40 Total Return",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "benchmark_status": "active",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    }
+
+
+async def test_ingest_benchmark_definitions_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_definition_payload()
+    payload["benchmark_definitions"][0].update(
+        {
+            "benchmark_family": "multi_asset_strategic",
+            "benchmark_provider": "MSCI",
+            "rebalance_frequency": "quarterly",
+            "classification_set_id": "wm_global_taxonomy_v1",
+            "classification_labels": {"asset_class": "multi_asset", "region": "global"},
+            "effective_to": "2026-12-31",
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "bmk_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers={"X-Idempotency-Key": "benchmark-definition-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "benchmark_definition"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "benchmark-definition-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_definitions"
+    ]
+    assert len(persisted) == 1
+    definition = persisted[0]
+    assert definition["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert definition["benchmark_name"] == "Global Balanced 60/40 Total Return"
+    assert definition["benchmark_type"] == "composite"
+    assert definition["benchmark_currency"] == "USD"
+    assert definition["return_convention"] == "total_return_index"
+    assert definition["benchmark_family"] == "multi_asset_strategic"
+    assert definition["benchmark_provider"] == "MSCI"
+    assert definition["rebalance_frequency"] == "quarterly"
+    assert definition["classification_set_id"] == "wm_global_taxonomy_v1"
+    assert definition["classification_labels"] == {
+        "asset_class": "multi_asset",
+        "region": "global",
+    }
+    assert definition["effective_from"].isoformat() == "2025-01-01"
+    assert definition["effective_to"].isoformat() == "2026-12-31"
+    assert definition["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert definition["source_vendor"] == "MSCI"
+    assert definition["source_record_id"] == "bmk_v20260102"
+    assert definition["quality_status"] == "accepted"
+
+
+async def test_ingest_benchmark_definitions_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_definition_payload()
+    headers = {"X-Idempotency-Key": "benchmark-definition-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_definitions"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_benchmark_definitions_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=_benchmark_definition_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_definitions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_definitions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=_benchmark_definition_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/benchmark-definitions blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_definitions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_definitions_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("benchmark definition persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_benchmark_definitions",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=_benchmark_definition_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "benchmark definition persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "benchmark definition persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _benchmark_composition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "benchmark_compositions": [
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "index_id": "IDX_MSCI_WORLD_TR",
+                "composition_effective_from": "2026-01-01",
+                "composition_weight": "0.6000000000",
+            }
+        ]
+    }
+
+
+async def test_ingest_benchmark_compositions_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_composition_payload()
+    payload["benchmark_compositions"][0].update(
+        {
+            "composition_effective_to": "2026-03-31",
+            "rebalance_event_id": "rebalance_2026q1",
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "cmp_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=payload,
+        headers={"X-Idempotency-Key": "benchmark-composition-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "benchmark_composition"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "benchmark-composition-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_compositions"
+    ]
+    assert len(persisted) == 1
+    composition = persisted[0]
+    assert composition["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert composition["index_id"] == "IDX_MSCI_WORLD_TR"
+    assert composition["composition_effective_from"].isoformat() == "2026-01-01"
+    assert composition["composition_effective_to"].isoformat() == "2026-03-31"
+    assert composition["composition_weight"] == Decimal("0.6000000000")
+    assert composition["rebalance_event_id"] == "rebalance_2026q1"
+    assert composition["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert composition["source_vendor"] == "MSCI"
+    assert composition["source_record_id"] == "cmp_v20260102"
+    assert composition["quality_status"] == "accepted"
+
+
+async def test_ingest_benchmark_compositions_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_composition_payload()
+    headers = {"X-Idempotency-Key": "benchmark-composition-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_compositions"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_benchmark_compositions_rejects_weight_outside_unit_interval(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_composition_payload()
+    payload["benchmark_compositions"][0]["composition_weight"] = "1.5000000000"
+
+    response = await async_test_client.post("/ingest/benchmark-compositions", json=payload)
+
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_compositions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_compositions_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=_benchmark_composition_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_compositions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_compositions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=_benchmark_composition_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/benchmark-compositions blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_compositions"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_compositions_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("benchmark composition persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_benchmark_compositions",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-compositions",
+        json=_benchmark_composition_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "benchmark composition persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "benchmark composition persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _index_definition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "indices": [
+            {
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "index_name": "Global Equity Total Return",
+                "index_currency": "USD",
+                "index_type": "equity_index",
+                "index_status": "active",
+                "effective_from": "2026-01-01",
+            }
+        ]
+    }
+
+
+async def test_ingest_indices_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_definition_payload()
+    payload["indices"][0].update(
+        {
+            "index_provider": "MSCI",
+            "index_market": "global_developed",
+            "classification_set_id": "wm_global_taxonomy_v1",
+            "classification_labels": {
+                "asset_class": "equity",
+                "sector": "broad_market_equity",
+                "region": "global",
+            },
+            "effective_to": "2026-12-31",
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "idx_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/indices",
+        json=payload,
+        headers={"X-Idempotency-Key": "index-definition-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "index_definition"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "index-definition-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["indices"]
+    assert len(persisted) == 1
+    index = persisted[0]
+    assert index["index_id"] == "IDX_GLOBAL_EQUITY_TR"
+    assert index["index_name"] == "Global Equity Total Return"
+    assert index["index_currency"] == "USD"
+    assert index["index_type"] == "equity_index"
+    assert index["index_status"] == "active"
+    assert index["index_provider"] == "MSCI"
+    assert index["index_market"] == "global_developed"
+    assert index["classification_set_id"] == "wm_global_taxonomy_v1"
+    assert index["classification_labels"] == {
+        "asset_class": "equity",
+        "sector": "broad_market_equity",
+        "region": "global",
+    }
+    assert index["effective_from"].isoformat() == "2026-01-01"
+    assert index["effective_to"].isoformat() == "2026-12-31"
+    assert index["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert index["source_vendor"] == "MSCI"
+    assert index["source_record_id"] == "idx_v20260102"
+    assert index["quality_status"] == "accepted"
+
+
+async def test_ingest_indices_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_definition_payload()
+    headers = {"X-Idempotency-Key": "index-definition-replay-001"}
+
+    first = await async_test_client.post("/ingest/indices", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/indices", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert len(ingestion_test_harness["fake_reference_data_service"].persisted["indices"]) == 1
+
+
+async def test_ingest_indices_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post("/ingest/indices", json=_index_definition_payload())
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["indices"] == []
+
+
+async def test_ingest_indices_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post("/ingest/indices", json=_index_definition_payload())
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/indices blocked after 1 records",
+    }
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["indices"] == []
+
+
+async def test_ingest_indices_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("index definition persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_indices",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post("/ingest/indices", json=_index_definition_payload())
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "index definition persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "index definition persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _index_price_series_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "index_price_series": [
+            {
+                "series_id": "series_idx_global_equity_price",
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "series_date": "2026-01-02",
+                "index_price": "4567.1234000000",
+                "series_currency": "USD",
+                "value_convention": "official_close",
+            }
+        ]
+    }
+
+
+async def test_ingest_index_price_series_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_price_series_payload()
+    payload["index_price_series"][0].update(
+        {
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "idx_price_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/index-price-series",
+        json=payload,
+        headers={"X-Idempotency-Key": "index-price-series-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "index_price_series"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "index-price-series-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "index_price_series"
+    ]
+    assert len(persisted) == 1
+    series = persisted[0]
+    assert series["series_id"] == "series_idx_global_equity_price"
+    assert series["index_id"] == "IDX_GLOBAL_EQUITY_TR"
+    assert series["series_date"].isoformat() == "2026-01-02"
+    assert series["index_price"] == Decimal("4567.1234000000")
+    assert series["series_currency"] == "USD"
+    assert series["value_convention"] == "official_close"
+    assert series["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert series["source_vendor"] == "MSCI"
+    assert series["source_record_id"] == "idx_price_v20260102"
+    assert series["quality_status"] == "accepted"
+
+
+async def test_ingest_index_price_series_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_price_series_payload()
+    headers = {"X-Idempotency-Key": "index-price-series-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/index-price-series",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/index-price-series",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "index_price_series"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_index_price_series_rejects_non_positive_price(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_price_series_payload()
+    payload["index_price_series"][0]["index_price"] = "0"
+
+    response = await async_test_client.post("/ingest/index-price-series", json=payload)
+
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["index_price_series"] == []
+    )
+
+
+async def test_ingest_index_price_series_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/index-price-series",
+        json=_index_price_series_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["index_price_series"] == []
+    )
+
+
+async def test_ingest_index_price_series_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/index-price-series",
+        json=_index_price_series_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/index-price-series blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["index_price_series"] == []
+    )
+
+
+async def test_ingest_index_price_series_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("index price series persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_index_price_series",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/index-price-series",
+        json=_index_price_series_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "index price series persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "index price series persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _index_return_series_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "index_return_series": [
+            {
+                "series_id": "series_idx_global_equity_return",
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "series_date": "2026-01-02",
+                "index_return": "-0.0150000000",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": "USD",
+            }
+        ]
+    }
+
+
+async def test_ingest_index_return_series_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_return_series_payload()
+    payload["index_return_series"][0].update(
+        {
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "idx_return_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/index-return-series",
+        json=payload,
+        headers={"X-Idempotency-Key": "index-return-series-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "index_return_series"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "index-return-series-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "index_return_series"
+    ]
+    assert len(persisted) == 1
+    series = persisted[0]
+    assert series["series_id"] == "series_idx_global_equity_return"
+    assert series["index_id"] == "IDX_GLOBAL_EQUITY_TR"
+    assert series["series_date"].isoformat() == "2026-01-02"
+    assert series["index_return"] == Decimal("-0.0150000000")
+    assert series["return_period"] == "1d"
+    assert series["return_convention"] == "total_return_index"
+    assert series["series_currency"] == "USD"
+    assert series["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert series["source_vendor"] == "MSCI"
+    assert series["source_record_id"] == "idx_return_v20260102"
+    assert series["quality_status"] == "accepted"
+
+
+async def test_ingest_index_return_series_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _index_return_series_payload()
+    headers = {"X-Idempotency-Key": "index-return-series-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/index-return-series",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/index-return-series",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "index_return_series"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_index_return_series_rejects_empty_batch(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/index-return-series",
+        json={"index_return_series": []},
+    )
+
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["index_return_series"] == []
+    )
+
+
+async def test_ingest_index_return_series_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/index-return-series",
+        json=_index_return_series_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["index_return_series"] == []
+    )
+
+
+async def test_ingest_index_return_series_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/index-return-series",
+        json=_index_return_series_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/index-return-series blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["index_return_series"] == []
+    )
+
+
+async def test_ingest_index_return_series_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("index return series persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_index_return_series",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/index-return-series",
+        json=_index_return_series_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "index return series persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "index return series persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _benchmark_return_series_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "benchmark_return_series": [
+            {
+                "series_id": "series_bmk_global_balanced_return",
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "series_date": "2026-01-02",
+                "benchmark_return": "-0.0065000000",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": "USD",
+            }
+        ]
+    }
+
+
+async def test_ingest_benchmark_return_series_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_return_series_payload()
+    payload["benchmark_return_series"][0].update(
+        {
+            "source_timestamp": "2026-01-02T21:00:00Z",
+            "source_vendor": "MSCI",
+            "source_record_id": "bmk_return_v20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-return-series",
+        json=payload,
+        headers={"X-Idempotency-Key": "benchmark-return-series-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "benchmark_return_series"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "benchmark-return-series-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_return_series"
+    ]
+    assert len(persisted) == 1
+    series = persisted[0]
+    assert series["series_id"] == "series_bmk_global_balanced_return"
+    assert series["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert series["series_date"].isoformat() == "2026-01-02"
+    assert series["benchmark_return"] == Decimal("-0.0065000000")
+    assert series["return_period"] == "1d"
+    assert series["return_convention"] == "total_return_index"
+    assert series["series_currency"] == "USD"
+    assert series["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert series["source_vendor"] == "MSCI"
+    assert series["source_record_id"] == "bmk_return_v20260102"
+    assert series["quality_status"] == "accepted"
+
+
+async def test_ingest_benchmark_return_series_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _benchmark_return_series_payload()
+    headers = {"X-Idempotency-Key": "benchmark-return-series-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/benchmark-return-series",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/benchmark-return-series",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "benchmark_return_series"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_benchmark_return_series_rejects_empty_batch(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/benchmark-return-series",
+        json={"benchmark_return_series": []},
+    )
+
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_return_series"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_return_series_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-return-series",
+        json=_benchmark_return_series_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_return_series"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_return_series_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-return-series",
+        json=_benchmark_return_series_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/benchmark-return-series blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_return_series"]
+        == []
+    )
+
+
+async def test_ingest_benchmark_return_series_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("benchmark return series persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_benchmark_return_series",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-return-series",
+        json=_benchmark_return_series_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "benchmark return series persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "benchmark return series persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _risk_free_series_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "risk_free_series": [
+            {
+                "series_id": "rf_usd_sofr_3m",
+                "risk_free_curve_id": "USD_SOFR_3M",
+                "series_date": "2026-01-02",
+                "value": "0.0350000000",
+                "value_convention": "annualized_rate",
+                "series_currency": "USD",
+            }
+        ]
+    }
+
+
+async def test_ingest_risk_free_series_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _risk_free_series_payload()
+    payload["risk_free_series"][0].update(
+        {
+            "day_count_convention": "act_360",
+            "compounding_convention": "simple",
+            "source_timestamp": "2026-01-02T06:00:00Z",
+            "source_vendor": "BLOOMBERG",
+            "source_record_id": "rf_20260102",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=payload,
+        headers={"X-Idempotency-Key": "risk-free-series-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "risk_free_series"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "risk-free-series-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"]
+    assert len(persisted) == 1
+    series = persisted[0]
+    assert series["series_id"] == "rf_usd_sofr_3m"
+    assert series["risk_free_curve_id"] == "USD_SOFR_3M"
+    assert series["series_date"].isoformat() == "2026-01-02"
+    assert series["value"] == Decimal("0.0350000000")
+    assert series["value_convention"] == "annualized_rate"
+    assert series["day_count_convention"] == "act_360"
+    assert series["compounding_convention"] == "simple"
+    assert series["series_currency"] == "USD"
+    assert series["source_timestamp"].isoformat() == "2026-01-02T06:00:00+00:00"
+    assert series["source_vendor"] == "BLOOMBERG"
+    assert series["source_record_id"] == "rf_20260102"
+    assert series["quality_status"] == "accepted"
+
+
+async def test_ingest_risk_free_series_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _risk_free_series_payload()
+    headers = {"X-Idempotency-Key": "risk-free-series-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"]
+    assert len(persisted) == 1
+
+
+async def test_ingest_risk_free_series_rejects_unknown_value_convention(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _risk_free_series_payload()
+    payload["risk_free_series"][0]["value_convention"] = "spot_rate"
+
+    response = await async_test_client.post("/ingest/risk-free-series", json=payload)
+
+    assert response.status_code == 422
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"] == []
+
+
+async def test_ingest_risk_free_series_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=_risk_free_series_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"] == []
+
+
+async def test_ingest_risk_free_series_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=_risk_free_series_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/risk-free-series blocked after 1 records",
+    }
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["risk_free_series"] == []
+
+
+async def test_ingest_risk_free_series_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("risk-free series persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_risk_free_series",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/risk-free-series",
+        json=_risk_free_series_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "risk-free series persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "risk-free series persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+def _classification_taxonomy_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "classification_taxonomy": [
+            {
+                "classification_set_id": "wm_global_taxonomy_v1",
+                "taxonomy_scope": "instrument",
+                "dimension_name": "asset_class",
+                "dimension_value": "equity",
+                "effective_from": "2026-01-01",
+            }
+        ]
+    }
+
+
+async def test_ingest_classification_taxonomy_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _classification_taxonomy_payload()
+    payload["classification_taxonomy"][0].update(
+        {
+            "dimension_description": "Listed equity instrument taxonomy label",
+            "effective_to": "2026-12-31",
+            "source_timestamp": "2026-01-31T23:00:00Z",
+            "source_vendor": "LOTUS_TAXONOMY",
+            "source_record_id": "tax_20260131",
+            "quality_status": "accepted",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=payload,
+        headers={"X-Idempotency-Key": "classification-taxonomy-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "classification_taxonomy"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "classification-taxonomy-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "classification_taxonomy"
+    ]
+    assert len(persisted) == 1
+    taxonomy = persisted[0]
+    assert taxonomy["classification_set_id"] == "wm_global_taxonomy_v1"
+    assert taxonomy["taxonomy_scope"] == "instrument"
+    assert taxonomy["dimension_name"] == "asset_class"
+    assert taxonomy["dimension_value"] == "equity"
+    assert taxonomy["dimension_description"] == "Listed equity instrument taxonomy label"
+    assert taxonomy["effective_from"].isoformat() == "2026-01-01"
+    assert taxonomy["effective_to"].isoformat() == "2026-12-31"
+    assert taxonomy["source_timestamp"].isoformat() == "2026-01-31T23:00:00+00:00"
+    assert taxonomy["source_vendor"] == "LOTUS_TAXONOMY"
+    assert taxonomy["source_record_id"] == "tax_20260131"
+    assert taxonomy["quality_status"] == "accepted"
+
+
+async def test_ingest_classification_taxonomy_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _classification_taxonomy_payload()
+    headers = {"X-Idempotency-Key": "classification-taxonomy-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "classification_taxonomy"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_classification_taxonomy_rejects_empty_batch(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json={"classification_taxonomy": []},
+    )
+
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["classification_taxonomy"]
+        == []
+    )
+
+
+async def test_ingest_classification_taxonomy_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=_classification_taxonomy_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["classification_taxonomy"]
+        == []
+    )
+
+
+async def test_ingest_classification_taxonomy_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=_classification_taxonomy_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/reference/classification-taxonomy blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["classification_taxonomy"]
+        == []
+    )
+
+
+async def test_ingest_classification_taxonomy_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("classification taxonomy persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_classification_taxonomy",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/classification-taxonomy",
+        json=_classification_taxonomy_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "classification taxonomy persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "classification taxonomy persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
 
 
 async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publish(
@@ -1161,8 +3644,10 @@ async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publ
         ]
     }
 
-    with pytest.raises(Exception, match="Failed to publish transaction"):
-        await async_test_client.post("/ingest/transactions", json=payload)
+    failed_response = await async_test_client.post("/ingest/transactions", json=payload)
+
+    assert failed_response.status_code == 500
+    assert failed_response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -1246,8 +3731,13 @@ async def test_ingestion_job_failure_history_tracks_remaining_unpublished_batch_
         ]
     }
 
-    with pytest.raises(Exception, match="Failed to publish transaction"):
-        await async_test_client.post("/ingest/transactions", json=payload)
+    response = await async_test_client.post("/ingest/transactions", json=payload)
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert response.json()["detail"]["failed_record_keys"] == [
+        "TX_BATCH_FAIL_002",
+        "TX_BATCH_FAIL_003",
+    ]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -1310,6 +3800,20 @@ async def test_ingestion_job_partial_retry_dry_run(
         json={"record_keys": ["TX_PARTIAL_002"], "dry_run": True},
     )
     assert dry_run.status_code == 200
+    body = dry_run.json()
+    assert body["job_id"] == job_id
+    assert body["retry_count"] == 0
+    assert body["status"] == "queued"
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": job_id, "replay_status": "dry_run"},
+    )
+    assert audit_response.status_code == 200
+    audit = audit_response.json()["audits"][0]
+    assert audit["recovery_path"] == "ingestion_job_retry"
+    assert audit["dry_run"] is True
+    assert audit["replay_reason"] == "Dry-run successful. Ingestion job retry is replayable."
 
 
 async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
@@ -1349,20 +3853,275 @@ async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
     assert second.json()["detail"]["code"] == "INGESTION_RETRY_DUPLICATE_BLOCKED"
 
 
-async def test_ingestion_health_summary(event_replay_test_client: httpx.AsyncClient):
+async def test_ingestion_job_full_retry_returns_complete_job_contract(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RETRY_FULL_001"),
+        headers={
+            "X-Idempotency-Key": "job-retry-full-001",
+            "X-Correlation-Id": "ING:test-retry-full-correlation",
+        },
+    )
+    assert ingest_response.status_code == 202
+    job_id = ingest_response.json()["job_id"]
+    mock_kafka_producer.publish_message.reset_mock()
+
+    retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{job_id}/retry")
+
+    assert retry_response.status_code == 200
+    body = retry_response.json()
+    assert body["job_id"] == job_id
+    assert body["endpoint"] == "/ingest/transactions"
+    assert body["entity_type"] == "transaction"
+    assert body["status"] == "queued"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "job-retry-full-001"
+    assert body["correlation_id"] == "ING:test-retry-full-correlation"
+    assert body["request_id"]
+    assert body["trace_id"]
+    assert body["submitted_at"]
+    assert body["completed_at"]
+    assert body["failure_reason"] is None
+    assert body["retry_count"] == 1
+    assert body["last_retried_at"]
+    mock_kafka_producer.publish_message.assert_called_once()
+
+    audit_response = await event_replay_test_client.get(
+        "/ingestion/audit/replays",
+        params={"job_id": job_id, "replay_status": "replayed"},
+    )
+    assert audit_response.status_code == 200
+    audit = audit_response.json()["audits"][0]
+    assert audit["recovery_path"] == "ingestion_job_retry"
+    assert audit["dry_run"] is False
+    assert audit["replay_reason"] == "Ingestion job retry replay succeeded."
+
+
+async def test_ingestion_job_retry_returns_not_found_and_unsupported_payload_errors(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    missing = await event_replay_test_client.post("/ingestion/jobs/job_missing_001/retry")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job_missing_001' was not found.",
+    }
+
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RETRY_NO_PAYLOAD_001"),
+        headers={"X-Idempotency-Key": "job-retry-no-payload-001"},
+    )
+    assert ingest_response.status_code == 202
+    job_id = ingest_response.json()["job_id"]
+    ingestion_test_harness["fake_job_service"].job_payloads.pop(job_id)
+
+    unsupported = await event_replay_test_client.post(f"/ingestion/jobs/{job_id}/retry")
+
+    assert unsupported.status_code == 409
+    assert unsupported.json()["detail"] == {
+        "code": "INGESTION_JOB_RETRY_UNSUPPORTED",
+        "message": (
+            f"Ingestion job '{job_id}' does not have stored request payload and cannot be retried."
+        ),
+    }
+
+
+async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_mode(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    market_price_response = await async_test_client.post(
+        "/ingest/market-prices",
+        json=_market_price_batch_payload("SEC_RETRY_PARTIAL_UNSUPPORTED_001"),
+    )
+    assert market_price_response.status_code == 202
+    market_price_job_id = market_price_response.json()["job_id"]
+
+    partial_unsupported = await event_replay_test_client.post(
+        f"/ingestion/jobs/{market_price_job_id}/retry",
+        json={"record_keys": ["SEC_RETRY_PARTIAL_UNSUPPORTED_001"], "dry_run": True},
+    )
+    assert partial_unsupported.status_code == 409
+    assert partial_unsupported.json()["detail"] == {
+        "code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED",
+        "message": "Partial retry is not supported for endpoint '/ingest/market-prices'.",
+    }
+
+    transaction_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RETRY_PAUSED_001"),
+    )
+    assert transaction_response.status_code == 202
+    transaction_job_id = transaction_response.json()["job_id"]
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    blocked = await event_replay_test_client.post(f"/ingestion/jobs/{transaction_job_id}/retry")
+
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"] == {
+        "code": "INGESTION_RETRY_BLOCKED",
+        "message": "Retries are blocked while ingestion is paused.",
+    }
+    ingestion_test_harness["fake_job_service"].mode = "normal"
+
+
+async def _seed_ingestion_health_jobs(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> dict[str, str]:
+    mock_kafka_producer.publish_message.reset_mock()
+
+    queued_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_HEALTH_SUMMARY_QUEUED_001"),
+        headers={"X-Idempotency-Key": "health-summary-queued-001"},
+    )
+    assert queued_response.status_code == 202
+    queued_job_id = queued_response.json()["job_id"]
+
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_HEALTH_SUMMARY_FAILED_001"),
+        headers={"X-Idempotency-Key": "health-summary-failed-001"},
+    )
+    assert failed_response.status_code == 500
+    failed_job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
+    accepted_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_HEALTH_SUMMARY_ACCEPTED_001"),
+        headers={"X-Idempotency-Key": "health-summary-accepted-001"},
+    )
+    assert accepted_response.status_code == 500
+    accepted_job_id = accepted_response.json()["detail"]["job_id"]
+
+    return {
+        "accepted_job_id": accepted_job_id,
+        "failed_job_id": failed_job_id,
+        "queued_job_id": queued_job_id,
+    }
+
+
+async def test_ingestion_health_summary_reports_backlog_counts_and_oldest_job(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    job_ids = await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
     response = await event_replay_test_client.get("/ingestion/health/summary")
+
     assert response.status_code == 200
     body = response.json()
-    assert "total_jobs" in body
-    assert "backlog_jobs" in body
+    assert body == {
+        "total_jobs": 3,
+        "accepted_jobs": 1,
+        "queued_jobs": 1,
+        "failed_jobs": 1,
+        "backlog_jobs": 2,
+        "oldest_backlog_job_id": job_ids["queued_job_id"],
+    }
+    assert job_ids["failed_job_id"] not in {
+        job_ids["accepted_job_id"],
+        job_ids["queued_job_id"],
+        body["oldest_backlog_job_id"],
+    }
 
 
-async def test_ingestion_slo_status(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/slo")
+async def test_ingestion_health_lag_reuses_canonical_backlog_summary(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    job_ids = await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get("/ingestion/health/lag")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_jobs": 3,
+        "accepted_jobs": 1,
+        "queued_jobs": 1,
+        "failed_jobs": 1,
+        "backlog_jobs": 2,
+        "oldest_backlog_job_id": job_ids["queued_job_id"],
+    }
+
+
+async def test_ingestion_slo_status_evaluates_threshold_options(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/slo",
+        params={
+            "lookback_minutes": 30,
+            "failure_rate_threshold": "0.20",
+            "queue_latency_threshold_seconds": 0.1,
+            "backlog_age_threshold_seconds": 1,
+        },
+    )
+
     assert response.status_code == 200
     body = response.json()
-    assert "failure_rate" in body
-    assert "p95_queue_latency_seconds" in body
+    assert body == {
+        "lookback_minutes": 30,
+        "total_jobs": 3,
+        "failed_jobs": 1,
+        "failure_rate": "0.3333333333333333333333333333",
+        "p95_queue_latency_seconds": 0.2,
+        "backlog_age_seconds": 12.0,
+        "breach_failure_rate": True,
+        "breach_queue_latency": True,
+        "breach_backlog_age": True,
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"failure_rate_threshold": "-0.01"},
+        {"failure_rate_threshold": "1.01"},
+        {"queue_latency_threshold_seconds": 0},
+        {"queue_latency_threshold_seconds": 601},
+        {"backlog_age_threshold_seconds": 0},
+        {"backlog_age_threshold_seconds": 86401},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/slo",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_backlog_breakdown(event_replay_test_client: httpx.AsyncClient):
@@ -1376,13 +4135,107 @@ async def test_ingestion_backlog_breakdown(event_replay_test_client: httpx.Async
     assert body["groups"][0]["endpoint"] == "/ingest/transactions"
 
 
-async def test_ingestion_stalled_jobs(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/stalled-jobs")
+async def test_ingestion_stalled_jobs_endpoint_reports_all_stalled_job_fields(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get(
+        "/ingestion/health/stalled-jobs",
+        params={"threshold_seconds": 600, "limit": 2},
+    )
     assert response.status_code == 200
-    body = response.json()
-    assert "jobs" in body
-    assert "threshold_seconds" in body
-    assert body["jobs"][0]["status"] == "accepted"
+    assert response.json() == {
+        "threshold_seconds": 600,
+        "total": 2,
+        "jobs": [
+            {
+                "job_id": "job_stalled_001",
+                "endpoint": "/ingest/transactions",
+                "entity_type": "transaction",
+                "status": "accepted",
+                "submitted_at": "2026-03-03T04:10:11Z",
+                "queue_age_seconds": 901.0,
+                "retry_count": 0,
+                "suggested_action": (
+                    "Investigate consumer lag and retry this job once root cause is resolved."
+                ),
+            },
+            {
+                "job_id": "job_stalled_002",
+                "endpoint": "/ingest/portfolio-bundles",
+                "entity_type": "portfolio_bundle",
+                "status": "queued",
+                "submitted_at": "2026-03-03T03:58:02Z",
+                "queue_age_seconds": 1632.5,
+                "retry_count": 2,
+                "suggested_action": (
+                    "Inspect downstream dependency saturation before forcing replay "
+                    "or pausing intake."
+                ),
+            },
+        ],
+    }
+
+    for invalid_params in (
+        {"threshold_seconds": 29},
+        {"threshold_seconds": 86401},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/health/stalled-jobs",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
+
+
+async def test_ingestion_ops_control_routes_return_mode_window_and_actor_fields(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    initial_response = await event_replay_test_client.get("/ingestion/ops/control")
+    assert initial_response.status_code == 200
+    initial_body = initial_response.json()
+    assert initial_body["mode"] == "normal"
+    assert initial_body["replay_window_start"] is None
+    assert initial_body["replay_window_end"] is None
+    assert initial_body["updated_by"] == "test"
+    assert initial_body["updated_at"]
+
+    update_response = await event_replay_test_client.put(
+        "/ingestion/ops/control",
+        json={
+            "mode": "drain",
+            "replay_window_start": "2026-03-06T00:00:00Z",
+            "replay_window_end": "2026-03-06T06:00:00Z",
+            "updated_by": "ops_automation",
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "mode": "drain",
+        "replay_window_start": "2026-03-06T00:00:00Z",
+        "replay_window_end": "2026-03-06T06:00:00Z",
+        "updated_by": "ops_automation",
+        "updated_at": update_response.json()["updated_at"],
+    }
+
+
+async def test_ingestion_ops_control_rejects_invalid_replay_window(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.put(
+        "/ingestion/ops/control",
+        json={
+            "mode": "paused",
+            "replay_window_start": "2026-03-06T06:00:00Z",
+            "replay_window_end": "2026-03-06T00:00:00Z",
+            "updated_by": "ops_automation",
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "INGESTION_INVALID_REPLAY_WINDOW",
+        "message": "replay_window_start must be before replay_window_end.",
+    }
 
 
 async def test_ingestion_ops_control_mode_blocks_writes(
@@ -1422,59 +4275,262 @@ async def test_ingestion_ops_control_mode_blocks_writes(
     assert restore_response.status_code == 200
 
 
-async def test_ingestion_consumer_dlq_events_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/dlq/consumer-events")
+async def test_ingestion_consumer_dlq_events_endpoint_filters_and_returns_full_rows(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get(
+        "/ingestion/dlq/consumer-events",
+        params={
+            "limit": 1,
+            "original_topic": "transactions.raw.received",
+            "consumer_group": "persistence-service-group",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "events": [
+            {
+                "event_id": "cdlq_test_001",
+                "original_topic": "transactions.raw.received",
+                "consumer_group": "persistence-service-group",
+                "dlq_topic": "dlq.persistence_service",
+                "original_key": "TXN-2026-000145",
+                "error_reason_code": "VALIDATION_ERROR",
+                "error_reason": "ValidationError: portfolio_id is required",
+                "correlation_id": "ING:test-correlation-id",
+                "payload_excerpt": '{"transaction_id":"TXN-2026-000145","portfolio_id":null}',
+                "observed_at": "2026-03-06T09:11:05.812000Z",
+            }
+        ],
+        "total": 1,
+    }
+
+    unfiltered_response = await event_replay_test_client.get(
+        "/ingestion/dlq/consumer-events",
+        params={"limit": 2},
+    )
+    assert unfiltered_response.status_code == 200
+    unfiltered_body = unfiltered_response.json()
+    assert unfiltered_body["total"] == 2
+    assert unfiltered_body["events"][1] == {
+        "event_id": "cdlq_test_002",
+        "original_topic": "portfolio-bundles.raw.received",
+        "consumer_group": "valuation-service-group",
+        "dlq_topic": "dlq.valuation_service",
+        "original_key": "BUNDLE-2026-000014",
+        "error_reason_code": "DEPENDENCY_TIMEOUT",
+        "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
+        "correlation_id": "ING:test-correlation-bundle",
+        "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
+        "observed_at": "2026-03-06T09:15:42.114000Z",
+    }
+
+    for invalid_params in ({"limit": 0}, {"limit": 501}):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/dlq/consumer-events",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
+
+
+async def test_ingestion_consumer_lag_endpoint_filters_and_reports_groups(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/consumer-lag",
+        params={"lookback_minutes": 15, "limit": 2},
+    )
+
     assert response.status_code == 200
     body = response.json()
-    assert "events" in body
-    assert "total" in body
+    assert body["lookback_minutes"] == 15
+    assert body["backlog_jobs"] == 2
+    assert body["total_groups"] == 2
+    assert body["groups"] == [
+        {
+            "consumer_group": "persistence-service-group",
+            "original_topic": "transactions.raw.received",
+            "dlq_events": 21,
+            "last_observed_at": body["groups"][0]["last_observed_at"],
+            "lag_severity": "high",
+        },
+        {
+            "consumer_group": "valuation-service-group",
+            "original_topic": "market-prices.raw.received",
+            "dlq_events": 8,
+            "last_observed_at": body["groups"][1]["last_observed_at"],
+            "lag_severity": "medium",
+        },
+    ]
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/consumer-lag",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
-async def test_ingestion_consumer_lag_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/consumer-lag")
+async def test_ingestion_error_budget_endpoint_evaluates_burn_rate_and_backlog_growth(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/error-budget",
+        params={
+            "lookback_minutes": 30,
+            "failure_rate_threshold": "0.20",
+            "backlog_growth_threshold": 1,
+        },
+    )
+
     assert response.status_code == 200
-    body = response.json()
-    assert "groups" in body
-    assert "backlog_jobs" in body
+    assert response.json() == {
+        "lookback_minutes": 30,
+        "previous_lookback_minutes": 30,
+        "total_jobs": 3,
+        "failed_jobs": 1,
+        "failure_rate": "0.3333333333333333333333333333",
+        "remaining_error_budget": "0",
+        "backlog_jobs": 2,
+        "previous_backlog_jobs": 0,
+        "backlog_growth": 2,
+        "replay_backlog_pressure_ratio": "0.0004",
+        "dlq_events_in_window": 4,
+        "dlq_budget_events_per_window": 10,
+        "dlq_pressure_ratio": "0.4",
+        "breach_failure_rate": True,
+        "breach_backlog_growth": True,
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"failure_rate_threshold": "-0.01"},
+        {"failure_rate_threshold": "1.01"},
+        {"backlog_growth_threshold": -1},
+        {"backlog_growth_threshold": 10001},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/error-budget",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
-async def test_ingestion_error_budget_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/error-budget")
+async def test_ingestion_operating_band_endpoint_classifies_breach_signals(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    await _seed_ingestion_health_jobs(
+        async_test_client=async_test_client,
+        ingestion_test_harness=ingestion_test_harness,
+        mock_kafka_producer=mock_kafka_producer,
+    )
+
+    response = await event_replay_test_client.get(
+        "/ingestion/health/operating-band",
+        params={
+            "lookback_minutes": 30,
+            "failure_rate_threshold": "0.20",
+            "queue_latency_threshold_seconds": 0.1,
+            "backlog_age_threshold_seconds": 1,
+        },
+    )
+
     assert response.status_code == 200
-    body = response.json()
-    assert "failure_rate" in body
-    assert "remaining_error_budget" in body
-    assert "replay_backlog_pressure_ratio" in body
-    assert "dlq_events_in_window" in body
-    assert "dlq_budget_events_per_window" in body
-    assert "dlq_pressure_ratio" in body
+    assert response.json() == {
+        "lookback_minutes": 30,
+        "operating_band": "orange",
+        "recommended_action": (
+            "Aggressively scale calculators and pause non-critical replay operations."
+        ),
+        "backlog_age_seconds": 12.0,
+        "dlq_pressure_ratio": "0.4",
+        "failure_rate": "0.3333333333333333333333333333",
+        "triggered_signals": [
+            "breach_failure_rate",
+            "breach_queue_latency",
+            "breach_backlog_age",
+        ],
+    }
 
-
-async def test_ingestion_operating_band_endpoint(event_replay_test_client: httpx.AsyncClient):
-    response = await event_replay_test_client.get("/ingestion/health/operating-band")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["operating_band"] in {"green", "yellow", "orange", "red"}
-    assert "recommended_action" in body
-    assert "triggered_signals" in body
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"failure_rate_threshold": "-0.01"},
+        {"failure_rate_threshold": "1.01"},
+        {"queue_latency_threshold_seconds": 0},
+        {"queue_latency_threshold_seconds": 601},
+        {"backlog_age_threshold_seconds": 0},
+        {"backlog_age_threshold_seconds": 86401},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/operating-band",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_operating_policy_endpoint(event_replay_test_client: httpx.AsyncClient):
     response = await event_replay_test_client.get("/ingestion/health/policy")
+
     assert response.status_code == 200
-    body = response.json()
-    assert body["policy_version"] == "v1"
-    assert body["policy_fingerprint"]
-    assert "lookback_minutes_default" in body
-    assert "replay_max_records_per_request" in body
-    assert "reprocessing_worker_batch_size" in body
-    assert "valuation_scheduler_dispatch_rounds" in body
-    assert "operating_band_red_backlog_age_seconds" in body
-    assert "calculator_peak_lag_age_seconds" in body
-    assert body["replay_isolation_mode"] in {"shared_workers", "dedicated_workers"}
-    assert body["partition_growth_strategy"] in {
-        "scale_out_only",
-        "pre_shard_large_portfolios",
+    assert response.json() == {
+        "policy_version": "v1",
+        "policy_fingerprint": "e6a9f2cc3bb5e5a7",
+        "lookback_minutes_default": 60,
+        "failure_rate_threshold_default": "0.03",
+        "queue_latency_threshold_seconds_default": 5.0,
+        "backlog_age_threshold_seconds_default": 300.0,
+        "replay_max_records_per_request": 5000,
+        "replay_max_backlog_jobs": 5000,
+        "reprocessing_worker_poll_interval_seconds": 10,
+        "reprocessing_worker_batch_size": 10,
+        "valuation_scheduler_poll_interval_seconds": 30,
+        "valuation_scheduler_batch_size": 100,
+        "valuation_scheduler_dispatch_rounds": 3,
+        "dlq_budget_events_per_window": 10,
+        "operating_band_yellow_backlog_age_seconds": 15.0,
+        "operating_band_orange_backlog_age_seconds": 60.0,
+        "operating_band_red_backlog_age_seconds": 180.0,
+        "operating_band_yellow_dlq_pressure_ratio": "0.25",
+        "operating_band_orange_dlq_pressure_ratio": "0.50",
+        "operating_band_red_dlq_pressure_ratio": "1.0",
+        "calculator_peak_lag_age_seconds": {
+            "position": 30,
+            "cost": 45,
+            "valuation": 60,
+            "cashflow": 45,
+            "timeseries": 120,
+        },
+        "replay_isolation_mode": "shared_workers",
+        "partition_growth_strategy": "scale_out_only",
+        "replay_dry_run_supported": True,
     }
 
 
@@ -1482,74 +4538,300 @@ async def test_ingestion_reprocessing_queue_health_endpoint(
     event_replay_test_client: httpx.AsyncClient,
 ):
     response = await event_replay_test_client.get("/ingestion/health/reprocessing-queue")
+
     assert response.status_code == 200
     body = response.json()
     assert "as_of" in body
-    assert body["total_pending_jobs"] >= 0
-    assert body["queues"][0]["job_type"] == "RESET_WATERMARKS"
-    assert "oldest_pending_age_seconds" in body["queues"][0]
+    assert body["total_pending_jobs"] == 5
+    assert body["total_processing_jobs"] == 2
+    assert body["total_failed_jobs"] == 1
+    assert body["queues"] == [
+        {
+            "job_type": "RESET_WATERMARKS",
+            "pending_jobs": 4,
+            "processing_jobs": 1,
+            "failed_jobs": 0,
+            "oldest_pending_created_at": body["queues"][0]["oldest_pending_created_at"],
+            "oldest_pending_age_seconds": 12.5,
+        },
+        {
+            "job_type": "RECALCULATE_POSITIONS",
+            "pending_jobs": 1,
+            "processing_jobs": 1,
+            "failed_jobs": 1,
+            "oldest_pending_created_at": body["queues"][1]["oldest_pending_created_at"],
+            "oldest_pending_age_seconds": 4.0,
+        },
+    ]
 
 
 async def test_ingestion_capacity_status_endpoint(event_replay_test_client: httpx.AsyncClient):
     response = await event_replay_test_client.get(
         "/ingestion/health/capacity",
-        params={"lookback_minutes": 60, "assumed_replicas": 2},
+        params={"lookback_minutes": 60, "limit": 1, "assumed_replicas": 2},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["lookback_minutes"] == 60
-    assert body["assumed_replicas"] == 2
-    assert body["total_backlog_records"] >= 0
-    assert body["total_groups"] >= 1
-    assert body["groups"][0]["endpoint"] == "/ingest/transactions"
-    assert "lambda_in_events_per_second" in body["groups"][0]
-    assert "mu_msg_per_replica_events_per_second" in body["groups"][0]
-    assert body["groups"][0]["saturation_state"] in {
-        "stable",
-        "near_capacity",
-        "over_capacity",
+    assert body == {
+        "as_of": body["as_of"],
+        "lookback_minutes": 60,
+        "assumed_replicas": 2,
+        "total_backlog_records": 300,
+        "total_groups": 1,
+        "groups": [
+            {
+                "endpoint": "/ingest/transactions",
+                "entity_type": "transaction",
+                "total_records": 1200,
+                "processed_records": 900,
+                "backlog_records": 300,
+                "backlog_jobs": 6,
+                "lambda_in_events_per_second": "0.333333",
+                "mu_msg_per_replica_events_per_second": "0.250000",
+                "assumed_replicas": 2,
+                "effective_capacity_events_per_second": "0.500000",
+                "utilization_ratio": "0.666666",
+                "headroom_ratio": "0.333334",
+                "estimated_drain_seconds": 1800.0,
+                "saturation_state": "stable",
+            }
+        ],
     }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 1441},
+        {"limit": 0},
+        {"limit": 501},
+        {"assumed_replicas": 0},
+        {"assumed_replicas": 501},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/capacity",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
+
+
+async def test_ingestion_backlog_breakdown_endpoint_reports_group_concentration(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get(
+        "/ingestion/health/backlog-breakdown",
+        params={"lookback_minutes": 1440, "limit": 2},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "lookback_minutes": 1440,
+        "total_backlog_jobs": 8,
+        "largest_group_backlog_jobs": 6,
+        "largest_group_backlog_share": "0.75",
+        "top_3_backlog_share": "1",
+        "groups": [
+            {
+                "endpoint": "/ingest/transactions",
+                "entity_type": "transaction",
+                "total_jobs": 10,
+                "accepted_jobs": 2,
+                "queued_jobs": 4,
+                "failed_jobs": 4,
+                "backlog_jobs": 6,
+                "oldest_backlog_submitted_at": body["groups"][0]["oldest_backlog_submitted_at"],
+                "oldest_backlog_age_seconds": 127.5,
+                "failure_rate": "0.4",
+            },
+            {
+                "endpoint": "/ingest/instruments",
+                "entity_type": "instrument",
+                "total_jobs": 4,
+                "accepted_jobs": 1,
+                "queued_jobs": 1,
+                "failed_jobs": 2,
+                "backlog_jobs": 2,
+                "oldest_backlog_submitted_at": body["groups"][1]["oldest_backlog_submitted_at"],
+                "oldest_backlog_age_seconds": 75.0,
+                "failure_rate": "0.5",
+            },
+        ],
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 10081},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid = await event_replay_test_client.get(
+            "/ingestion/health/backlog-breakdown",
+            params=invalid_params,
+        )
+        assert invalid.status_code == 422
 
 
 async def test_ingestion_idempotency_diagnostics_endpoint(
     event_replay_test_client: httpx.AsyncClient,
 ):
-    response = await event_replay_test_client.get("/ingestion/idempotency/diagnostics")
+    response = await event_replay_test_client.get(
+        "/ingestion/idempotency/diagnostics",
+        params={"lookback_minutes": 1440, "limit": 2},
+    )
     assert response.status_code == 200
-    body = response.json()
-    assert "keys" in body
-    assert "collisions" in body
+    assert response.json() == {
+        "lookback_minutes": 1440,
+        "total_keys": 2,
+        "collisions": 1,
+        "keys": [
+            {
+                "idempotency_key": "integration-ingestion-idempotency-001",
+                "usage_count": 3,
+                "endpoint_count": 2,
+                "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
+                "first_seen_at": "2026-03-06T07:10:11.211000Z",
+                "last_seen_at": "2026-03-06T07:15:01.127000Z",
+                "collision_detected": True,
+            },
+            {
+                "idempotency_key": "integration-ingestion-idempotency-002",
+                "usage_count": 2,
+                "endpoint_count": 1,
+                "endpoints": ["/ingest/transactions"],
+                "first_seen_at": "2026-03-06T08:01:03Z",
+                "last_seen_at": "2026-03-06T08:05:17Z",
+                "collision_detected": False,
+            },
+        ],
+    }
+
+    for invalid_params in (
+        {"lookback_minutes": 4},
+        {"lookback_minutes": 10081},
+        {"limit": 0},
+        {"limit": 501},
+    ):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/idempotency/diagnostics",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
 
 
-async def test_ingestion_job_records_endpoint(
+async def test_ingestion_job_record_status_endpoint_returns_transaction_replayability(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_RECORD_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
+    mock_kafka_producer.publish_message.reset_mock()
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RECORD_001", "TX_RECORD_002"),
+        headers={"X-Idempotency-Key": "job-record-status-001"},
+    )
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
+
     response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": job_id,
+        "entity_type": "transaction",
+        "accepted_count": 2,
+        "failed_record_keys": [],
+        "replayable_record_keys": ["TX_RECORD_001", "TX_RECORD_002"],
+    }
+
+
+async def test_ingestion_job_record_status_endpoint_merges_failure_keys(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    failed_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"),
+        headers={"X-Idempotency-Key": "job-record-status-failed-001"},
+    )
+    assert failed_response.status_code == 500
+    job_id = failed_response.json()["detail"]["job_id"]
+    mock_kafka_producer.publish_message.side_effect = None
+
+    response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
+
     assert response.status_code == 200
     body = response.json()
     assert body["job_id"] == job_id
-    assert "replayable_record_keys" in body
+    assert body["entity_type"] == "transaction"
+    assert body["accepted_count"] == 2
+    assert body["failed_record_keys"] == ["TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"]
+    assert body["replayable_record_keys"] == ["TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"]
+
+
+async def test_ingestion_job_record_status_endpoint_returns_supported_source_keys(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    portfolio_payload = {
+        "portfolios": [
+            {
+                "portfolio_id": "P_RECORD_001",
+                "base_currency": "USD",
+                "open_date": "2025-01-01",
+                "client_id": "client-record",
+                "status": "active",
+                "risk_exposure": "balanced",
+                "investment_time_horizon": "long",
+                "portfolio_type": "discretionary",
+                "booking_center_code": "SG",
+            }
+        ]
+    }
+    cases = [
+        ("/ingest/portfolios", portfolio_payload, "portfolio", ["P_RECORD_001"]),
+        (
+            "/ingest/instruments",
+            _instrument_batch_payload("SEC_RECORD_001"),
+            "instrument",
+            ["SEC_RECORD_001"],
+        ),
+        (
+            "/ingest/business-dates",
+            _business_date_batch_payload("2025-01-10"),
+            "business_date",
+            ["2025-01-10"],
+        ),
+    ]
+
+    for endpoint, payload, entity_type, expected_keys in cases:
+        ingest_response = await async_test_client.post(endpoint, json=payload)
+        assert ingest_response.status_code == 202
+        job_id = ingest_response.json()["job_id"]
+
+        response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["job_id"] == job_id
+        assert body["entity_type"] == entity_type
+        assert body["accepted_count"] == 1
+        assert body["failed_record_keys"] == []
+        assert body["replayable_record_keys"] == expected_keys
+
+
+async def test_ingestion_job_record_status_endpoint_validates_missing_job(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get("/ingestion/jobs/job_missing_001/records")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job_missing_001' was not found.",
+    }
 
 
 async def test_replay_consumer_dlq_event_endpoint(
@@ -1584,9 +4866,47 @@ async def test_replay_consumer_dlq_event_endpoint(
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["replay_status"] in {"dry_run", "not_replayable", "replayed"}
-    assert body.get("replay_audit_id")
-    assert body.get("replay_fingerprint")
+    assert body["event_id"] == "cdlq_test_001"
+    assert body["correlation_id"] == "ING:test-correlation-id"
+    assert body["job_id"]
+    assert body["replay_status"] == "dry_run"
+    assert body["replay_audit_id"]
+    assert body["replay_fingerprint"]
+    assert body["message"] == "Dry-run successful. Correlated ingestion job is replayable."
+
+
+async def test_replay_consumer_dlq_event_reports_not_replayable_without_correlation(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_no_corr/replay",
+        json={"dry_run": True},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "event_id": "cdlq_test_no_corr",
+        "correlation_id": None,
+        "job_id": None,
+        "replay_status": "not_replayable",
+        "replay_audit_id": body["replay_audit_id"],
+        "replay_fingerprint": body["replay_fingerprint"],
+        "message": "DLQ event has no correlation id and cannot be mapped to ingestion payload.",
+    }
+
+
+async def test_replay_consumer_dlq_event_returns_not_found_for_missing_event(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_missing_001/replay",
+        json={"dry_run": False},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND",
+        "message": "Consumer DLQ event 'cdlq_missing_001' was not found.",
+    }
 
 
 async def test_replay_consumer_dlq_event_blocks_duplicate_replay(
@@ -1685,7 +5005,7 @@ async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publi
     assert second.json()["replay_status"] == "duplicate_blocked"
 
 
-async def test_ingestion_replay_audit_list_and_get(
+async def test_ingestion_replay_audit_list_and_get_filters_full_rows(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
 ):
@@ -1716,19 +5036,62 @@ async def test_ingestion_replay_audit_list_and_get(
         json={"dry_run": True},
     )
     assert replay_response.status_code == 200
-    replay_id = replay_response.json()["replay_audit_id"]
+    replay_body = replay_response.json()
+    replay_id = replay_body["replay_audit_id"]
+    replay_fingerprint = replay_body["replay_fingerprint"]
 
     list_response = await event_replay_test_client.get(
         "/ingestion/audit/replays",
-        params={"recovery_path": "consumer_dlq_replay"},
+        params={
+            "limit": 1,
+            "recovery_path": "consumer_dlq_replay",
+            "replay_status": "dry_run",
+            "replay_fingerprint": replay_fingerprint,
+        },
     )
     assert list_response.status_code == 200
-    audits = list_response.json()["audits"]
-    assert any(item["replay_id"] == replay_id for item in audits)
+    assert list_response.json() == {
+        "audits": [
+            {
+                "replay_id": replay_id,
+                "recovery_path": "consumer_dlq_replay",
+                "event_id": "cdlq_test_001",
+                "replay_fingerprint": replay_fingerprint,
+                "correlation_id": "ING:test-correlation-id",
+                "job_id": replay_body["job_id"],
+                "endpoint": "/ingest/transactions",
+                "replay_status": "dry_run",
+                "dry_run": True,
+                "replay_reason": "Dry-run successful. Correlated ingestion job is replayable.",
+                "requested_by": "ops-token",
+                "requested_at": list_response.json()["audits"][0]["requested_at"],
+                "completed_at": list_response.json()["audits"][0]["completed_at"],
+            }
+        ],
+        "total": 1,
+    }
 
     get_response = await event_replay_test_client.get(f"/ingestion/audit/replays/{replay_id}")
     assert get_response.status_code == 200
-    assert get_response.json()["replay_id"] == replay_id
+    assert get_response.json() == list_response.json()["audits"][0]
+
+    for invalid_params in ({"limit": 0}, {"limit": 501}):
+        invalid_response = await event_replay_test_client.get(
+            "/ingestion/audit/replays",
+            params=invalid_params,
+        )
+        assert invalid_response.status_code == 422
+
+
+async def test_ingestion_replay_audit_detail_returns_not_found_for_missing_row(
+    event_replay_test_client: httpx.AsyncClient,
+):
+    response = await event_replay_test_client.get("/ingestion/audit/replays/replay_missing_001")
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_REPLAY_AUDIT_NOT_FOUND",
+        "message": "Replay audit 'replay_missing_001' was not found.",
+    }
 
 
 def _build_hs256_jwt(secret: str, payload: dict) -> str:
@@ -1772,22 +5135,121 @@ async def test_ingest_instruments_endpoint(
 ):
     """Tests the POST /ingest/instruments endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "instruments": [
-            {
-                "security_id": "S1",
-                "name": "N1",
-                "isin": "I1",
-                "currency": "USD",
-                "product_type": "E",
-            }
-        ]
-    }
+    payload = _instrument_batch_payload("SEC_INST_ACK_001")
 
-    response = await async_test_client.post("/ingest/instruments", json=payload)
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=payload,
+        headers={"X-Idempotency-Key": "instrument-batch-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Instruments accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "instrument"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["idempotency_key"] == "instrument-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "instruments.received"
+    assert publish_kwargs["key"] == "SEC_INST_ACK_001"
+    assert publish_kwargs["value"]["security_id"] == "SEC_INST_ACK_001"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"instrument-batch-idem-001")
+
+
+async def test_ingest_instruments_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _instrument_batch_payload("SEC_INST_IDEM_001")
+    headers = {"X-Idempotency-Key": "instrument-replay-001"}
+
+    first = await async_test_client.post("/ingest/instruments", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/instruments", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "instrument-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_instruments_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_INST_BLOCKED_001"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_instruments_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        instruments_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_INST_RATE_001", "SEC_INST_RATE_002"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/instruments blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_instruments_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_INST_FAIL_001", "SEC_INST_FAIL_002"),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["SEC_INST_FAIL_001", "SEC_INST_FAIL_002"]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "SEC_INST_FAIL_001",
+        "SEC_INST_FAIL_002",
+    ]
 
 
 async def test_ingest_market_prices_endpoint(
@@ -1795,16 +5257,121 @@ async def test_ingest_market_prices_endpoint(
 ):
     """Tests the POST /ingest/market-prices endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "market_prices": [
-            {"security_id": "S1", "price_date": "2025-01-01", "price": 100, "currency": "USD"}
-        ]
-    }
+    payload = _market_price_batch_payload("SEC_PRICE_ACK_001")
 
-    response = await async_test_client.post("/ingest/market-prices", json=payload)
+    response = await async_test_client.post(
+        "/ingest/market-prices",
+        json=payload,
+        headers={"X-Idempotency-Key": "market-price-batch-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Market prices accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "market_price"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["idempotency_key"] == "market-price-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "market_prices.raw.received"
+    assert publish_kwargs["key"] == "SEC_PRICE_ACK_001"
+    assert publish_kwargs["value"]["security_id"] == "SEC_PRICE_ACK_001"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"market-price-batch-idem-001")
+
+
+async def test_ingest_market_prices_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _market_price_batch_payload("SEC_PRICE_IDEM_001")
+    headers = {"X-Idempotency-Key": "market-price-replay-001"}
+
+    first = await async_test_client.post("/ingest/market-prices", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/market-prices", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "market-price-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_market_prices_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/market-prices",
+        json=_market_price_batch_payload("SEC_PRICE_BLOCKED_001"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_market_prices_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        market_prices_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/market-prices",
+        json=_market_price_batch_payload("SEC_PRICE_RATE_001", "SEC_PRICE_RATE_002"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/market-prices blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_market_prices_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/market-prices",
+        json=_market_price_batch_payload("SEC_PRICE_FAIL_001", "SEC_PRICE_FAIL_002"),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["SEC_PRICE_FAIL_001", "SEC_PRICE_FAIL_002"]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "SEC_PRICE_FAIL_001",
+        "SEC_PRICE_FAIL_002",
+    ]
 
 
 async def test_ingest_fx_rates_endpoint(
@@ -1812,23 +5379,129 @@ async def test_ingest_fx_rates_endpoint(
 ):
     """Tests the POST /ingest/fx-rates endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "fx_rates": [
-            {"from_currency": "USD", "to_currency": "EUR", "rate_date": "2025-01-01", "rate": 0.9}
-        ]
-    }
+    payload = _fx_rate_batch_payload(("USD", "SGD"))
 
-    response = await async_test_client.post("/ingest/fx-rates", json=payload)
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=payload,
+        headers={"X-Idempotency-Key": "fx-rate-batch-idem-001"},
+    )
 
     assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "FX rates accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "fx_rate"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["idempotency_key"] == "fx-rate-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "fx_rates.raw.received"
+    assert publish_kwargs["key"] == "USD-SGD-2025-01-01"
+    assert publish_kwargs["value"]["from_currency"] == "USD"
+    assert publish_kwargs["value"]["to_currency"] == "SGD"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == b"fx-rate-batch-idem-001"
+
+
+async def test_ingest_fx_rates_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _fx_rate_batch_payload(("USD", "CHF"))
+    headers = {"X-Idempotency-Key": "fx-rate-replay-001"}
+
+    first = await async_test_client.post("/ingest/fx-rates", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/fx-rates", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "fx-rate-replay-001"
     mock_kafka_producer.publish_message.assert_called_once()
 
 
-async def test_ingest_cash_account_masters_endpoint(
-    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+async def test_ingest_fx_rates_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
 ):
-    mock_kafka_producer.publish_message.reset_mock()
-    payload = {
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=_fx_rate_batch_payload(("USD", "JPY")),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_fx_rates_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        fx_rates_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=_fx_rate_batch_payload(("USD", "SGD"), ("USD", "EUR")),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/fx-rates blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_fx_rates_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/fx-rates",
+        json=_fx_rate_batch_payload(("USD", "SGD"), ("EUR", "USD")),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == [
+        "USD-SGD-2025-01-01",
+        "EUR-USD-2025-01-01",
+    ]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "USD-SGD-2025-01-01",
+        "EUR-USD-2025-01-01",
+    ]
+
+
+def _cash_account_master_payload() -> dict[str, list[dict[str, object]]]:
+    return {
         "cash_accounts": [
             {
                 "cash_account_id": "CASH-ACC-USD-001",
@@ -1841,34 +5514,261 @@ async def test_ingest_cash_account_masters_endpoint(
         ]
     }
 
-    response = await async_test_client.post("/ingest/reference/cash-accounts", json=payload)
 
-    assert response.status_code == 202
-    mock_kafka_producer.publish_message.assert_not_called()
-
-
-async def test_ingest_instrument_lookthrough_components_endpoint(
-    async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
+async def test_ingest_cash_account_masters_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
+    payload = _cash_account_master_payload()
+    payload["cash_accounts"][0].update(
+        {
+            "account_role": "OPERATING_CASH",
+            "opened_on": "2026-01-01",
+            "closed_on": "2026-12-31",
+            "source_system": "lotus-manage",
+            "source_record_id": "cash-account-001",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json=payload,
+        headers={"X-Idempotency-Key": "cash-account-master-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "cash_account_master"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "cash-account-master-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    mock_kafka_producer.publish_message.assert_not_called()
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"]
+    assert len(persisted) == 1
+    cash_account = persisted[0]
+    assert cash_account["cash_account_id"] == "CASH-ACC-USD-001"
+    assert cash_account["portfolio_id"] == "P1"
+    assert cash_account["security_id"] == "CASH_USD"
+    assert cash_account["display_name"] == "USD Operating Cash"
+    assert cash_account["account_currency"] == "USD"
+    assert cash_account["account_role"] == "OPERATING_CASH"
+    assert cash_account["lifecycle_status"] == "ACTIVE"
+    assert cash_account["opened_on"].isoformat() == "2026-01-01"
+    assert cash_account["closed_on"].isoformat() == "2026-12-31"
+    assert cash_account["source_system"] == "lotus-manage"
+    assert cash_account["source_record_id"] == "cash-account-001"
+
+
+async def test_ingest_cash_account_masters_rejects_empty_batch(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json={"cash_accounts": []},
+    )
+
+    assert response.status_code == 422
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"] == []
+
+
+def _instrument_lookthrough_component_payload() -> dict[str, list[dict[str, object]]]:
+    return {
         "lookthrough_components": [
             {
-                "parent_security_id": "FUND_001",
-                "component_security_id": "ETF_001",
+                "parent_security_id": "FUND_GLOBAL_60_40",
+                "component_security_id": "ETF_WORLD_EQUITY",
                 "effective_from": "2026-01-01",
                 "component_weight": "0.6000000000",
             }
         ]
     }
 
+
+async def test_ingest_instrument_lookthrough_components_returns_ack_and_persists_full_contract(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _instrument_lookthrough_component_payload()
+    payload["lookthrough_components"][0].update(
+        {
+            "effective_to": "2026-12-31",
+            "source_system": "lotus-manage",
+            "source_record_id": "lt-001",
+        }
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=payload,
+        headers={"X-Idempotency-Key": "instrument-lookthrough-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "instrument_lookthrough_component"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "instrument-lookthrough-idem-001"
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    mock_kafka_producer.publish_message.assert_not_called()
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "lookthrough_components"
+    ]
+    assert len(persisted) == 1
+    component = persisted[0]
+    assert component["parent_security_id"] == "FUND_GLOBAL_60_40"
+    assert component["component_security_id"] == "ETF_WORLD_EQUITY"
+    assert component["effective_from"].isoformat() == "2026-01-01"
+    assert component["effective_to"].isoformat() == "2026-12-31"
+    assert component["component_weight"] == Decimal("0.6000000000")
+    assert component["source_system"] == "lotus-manage"
+    assert component["source_record_id"] == "lt-001"
+
+
+async def test_ingest_instrument_lookthrough_components_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _instrument_lookthrough_component_payload()
+    headers = {"X-Idempotency-Key": "instrument-lookthrough-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=payload,
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "lookthrough_components"
+    ]
+    assert len(persisted) == 1
+
+
+async def test_ingest_instrument_lookthrough_components_rejects_invalid_weight(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _instrument_lookthrough_component_payload()
+    payload["lookthrough_components"][0]["component_weight"] = "1.1000000000"
+
     response = await async_test_client.post(
         "/ingest/reference/instrument-lookthrough-components",
         json=payload,
     )
 
-    assert response.status_code == 202
-    mock_kafka_producer.publish_message.assert_not_called()
+    assert response.status_code == 422
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["lookthrough_components"]
+        == []
+    )
+
+
+async def test_ingest_instrument_lookthrough_components_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=_instrument_lookthrough_component_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["lookthrough_components"]
+        == []
+    )
+
+
+async def test_ingest_instrument_lookthrough_components_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reference_data_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=_instrument_lookthrough_component_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/reference/instrument-lookthrough-components blocked after 1 records",
+    }
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["lookthrough_components"]
+        == []
+    )
+
+
+async def test_ingest_instrument_lookthrough_components_marks_job_failed_when_persist_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    async def _raise_persist_failure(records: list[dict[str, object]]) -> None:
+        raise RuntimeError("instrument lookthrough component persist failed")
+
+    fake_reference_data_service = ingestion_test_harness["fake_reference_data_service"]
+    monkeypatch.setattr(
+        fake_reference_data_service,
+        "upsert_instrument_lookthrough_components",
+        _raise_persist_failure,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/reference/instrument-lookthrough-components",
+        json=_instrument_lookthrough_component_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    assert body["detail"]["message"] == "instrument lookthrough component persist failed"
+    job_id = body["detail"]["job_id"]
+
+    failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
+    assert failed_job.status == "failed"
+    assert failed_job.failure_reason == "instrument lookthrough component persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
 
 
 async def test_ingest_portfolio_bundle_endpoint(
@@ -1876,62 +5776,62 @@ async def test_ingest_portfolio_bundle_endpoint(
 ):
     """Tests the POST /ingest/portfolio-bundle endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = {
-        "source_system": "UI_UPLOAD",
-        "mode": "UPSERT",
-        "business_dates": [{"business_date": "2026-01-02"}],
-        "portfolios": [
-            {
-                "portfolio_id": "P1",
-                "base_currency": "USD",
-                "open_date": "2025-01-01",
-                "client_id": "c",
-                "status": "s",
-                "risk_exposure": "r",
-                "investment_time_horizon": "i",
-                "portfolio_type": "t",
-                "booking_center_code": "b",
-            }
-        ],
-        "instruments": [
-            {
-                "security_id": "S1",
-                "name": "N1",
-                "isin": "I1",
-                "currency": "USD",
-                "product_type": "E",
-            }
-        ],
-        "transactions": [
-            {
-                "transaction_id": "T1",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2026-01-02T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ],
-        "market_prices": [
-            {"security_id": "S1", "price_date": "2026-01-02", "price": 100, "currency": "USD"}
-        ],
-        "fx_rates": [
-            {"from_currency": "USD", "to_currency": "EUR", "rate_date": "2026-01-02", "rate": 0.9}
-        ],
-    }
+    payload = _portfolio_bundle_payload()
 
-    response = await async_test_client.post("/ingest/portfolio-bundle", json=payload)
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=payload,
+        headers={"X-Idempotency-Key": "portfolio-bundle-idem-001"},
+    )
 
     assert response.status_code == 202
     body = response.json()
     assert body["entity_type"] == "portfolio_bundle"
     assert body["accepted_count"] == 6
-    assert "job_id" in body
+    assert body["job_id"]
+    assert body["idempotency_key"] == "portfolio-bundle-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    assert "Published counts:" in body["message"]
+    assert mock_kafka_producer.publish_message.call_count == 6
+    published_topics = [
+        call.kwargs["topic"] for call in mock_kafka_producer.publish_message.call_args_list
+    ]
+    assert published_topics == [
+        "business_dates.raw.received",
+        "portfolios.raw.received",
+        "instruments.received",
+        "transactions.raw.received",
+        "market_prices.raw.received",
+        "fx_rates.raw.received",
+    ]
+    assert (
+        dict(mock_kafka_producer.publish_message.call_args_list[0].kwargs["headers"])[
+            "idempotency_key"
+        ]
+        == b"portfolio-bundle-idem-001"
+    )
+
+
+async def test_ingest_portfolio_bundle_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _portfolio_bundle_payload()
+    headers = {"X-Idempotency-Key": "portfolio-bundle-replay-001"}
+
+    first = await async_test_client.post("/ingest/portfolio-bundle", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/portfolio-bundle", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "portfolio-bundle-replay-001"
     assert mock_kafka_producer.publish_message.call_count == 6
 
 
@@ -1978,6 +5878,75 @@ async def test_ingest_portfolio_bundle_disabled_by_feature_flag(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+async def test_ingest_portfolio_bundle_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=_portfolio_bundle_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolio_bundle_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        portfolio_bundle_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=_portfolio_bundle_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/portfolio-bundle blocked after 6 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=_portfolio_bundle_payload(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["P1"]
+    assert "'business_dates': 1" in body["detail"]["message"]
+    assert "'portfolios': 0" in body["detail"]["message"]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["P1"]
+
+
 def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
     workbook = Workbook()
     worksheet = workbook.active
@@ -1987,6 +5956,187 @@ def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()
+
+
+UPLOAD_ENTITY_CASES = [
+    {
+        "entity_type": entity_type,
+        "headers": headers,
+        "row": row,
+        "expected_sample_key": expected_sample_key,
+        "expected_topic": expected_topic,
+        "expected_partition_key": expected_partition_key,
+    }
+    for (
+        entity_type,
+        headers,
+        row,
+        expected_sample_key,
+        expected_topic,
+        expected_partition_key,
+    ) in [
+        (
+            "portfolios",
+            [
+                "portfolio_id",
+                "base_currency",
+                "open_date",
+                "risk_exposure",
+                "investment_time_horizon",
+                "portfolio_type",
+                "booking_center_code",
+                "client_id",
+                "status",
+            ],
+            [
+                "P1",
+                "USD",
+                "2025-01-01",
+                "balanced",
+                "long_term",
+                "discretionary",
+                "SG",
+                "C1",
+                "active",
+            ],
+            "portfolio_id",
+            "portfolios.raw.received",
+            "P1",
+        ),
+        (
+            "instruments",
+            ["security_id", "name", "isin", "currency", "product_type"],
+            ["SEC1", "Bond A", "ISIN1", "USD", "bond"],
+            "security_id",
+            "instruments.received",
+            "SEC1",
+        ),
+        (
+            "transactions",
+            [
+                "transaction_id",
+                "portfolio_id",
+                "instrument_id",
+                "security_id",
+                "transaction_date",
+                "transaction_type",
+                "quantity",
+                "price",
+                "gross_transaction_amount",
+                "trade_currency",
+                "currency",
+            ],
+            [
+                "T1",
+                "P1",
+                "I1",
+                "SEC1",
+                "2026-01-02T10:00:00Z",
+                "BUY",
+                "10",
+                "100",
+                "1000",
+                "USD",
+                "USD",
+            ],
+            "transaction_id",
+            "transactions.raw.received",
+            "P1",
+        ),
+        (
+            "market_prices",
+            ["security_id", "price_date", "price", "currency"],
+            ["SEC1", "2026-01-02", "100", "USD"],
+            "security_id",
+            "market_prices.raw.received",
+            "SEC1",
+        ),
+        (
+            "fx_rates",
+            ["from_currency", "to_currency", "rate_date", "rate"],
+            ["USD", "SGD", "2026-01-02", "1.35"],
+            "from_currency",
+            "fx_rates.raw.received",
+            "USD-SGD-2026-01-02",
+        ),
+        (
+            "business_dates",
+            ["business_date", "calendar_code", "market_code", "source_system", "source_batch_id"],
+            ["2026-01-02", "GLOBAL", "NYSE", "UPLOAD", "BATCH1"],
+            "business_date",
+            "business_dates.raw.received",
+            "GLOBAL|2026-01-02",
+        ),
+    ]
+]
+
+
+def _upload_csv_content(headers: list[str], row: list[str]) -> bytes:
+    return ("\n".join([",".join(headers), ",".join(row)])).encode("utf-8")
+
+
+@pytest.mark.parametrize("case", UPLOAD_ENTITY_CASES)
+async def test_upload_preview_accepts_all_supported_entity_families(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    case: dict[str, object],
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    csv_content = _upload_csv_content(
+        headers=case["headers"],
+        row=case["row"],
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": (f"{case['entity_type']}.csv", csv_content, "text/csv")},
+        data={"entity_type": case["entity_type"], "sample_size": "10"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["entity_type"] == case["entity_type"]
+    assert body["file_format"] == "csv"
+    assert body["total_rows"] == 1
+    assert body["valid_rows"] == 1
+    assert body["invalid_rows"] == 0
+    assert case["expected_sample_key"] in body["sample_rows"][0]
+    assert body["errors"] == []
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+@pytest.mark.parametrize("case", UPLOAD_ENTITY_CASES)
+async def test_upload_commit_accepts_all_supported_entity_families(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    case: dict[str, object],
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    csv_content = _upload_csv_content(
+        headers=case["headers"],
+        row=case["row"],
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": (f"{case['entity_type']}.csv", csv_content, "text/csv")},
+        data={"entity_type": case["entity_type"], "allow_partial": "false"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == case["entity_type"]
+    assert body["file_format"] == "csv"
+    assert body["total_rows"] == 1
+    assert body["valid_rows"] == 1
+    assert body["invalid_rows"] == 0
+    assert body["published_rows"] == 1
+    assert body["skipped_rows"] == 0
+    assert body["message"] == "Upload committed and queued for processing."
+    mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == case["expected_topic"]
+    assert publish_kwargs["key"] == case["expected_partition_key"]
 
 
 async def test_upload_preview_transactions_csv(async_test_client: httpx.AsyncClient):
@@ -2012,6 +6162,37 @@ async def test_upload_preview_transactions_csv(async_test_client: httpx.AsyncCli
     assert body["invalid_rows"] == 1
 
 
+async def test_upload_preview_limits_sample_rows_and_errors(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    csv_content = "\n".join(
+        [
+            "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+            "T1,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            "T2,P1,I1,S1,INVALID_DATE,BUY,10,100,1000,USD,USD",
+            "T3,P1,I1,S1,2026-01-02T10:00:00Z,BUY,not-a-number,100,1000,USD,USD",
+        ]
+    ).encode("utf-8")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "sample_size": "1"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_rows"] == 3
+    assert body["valid_rows"] == 1
+    assert body["invalid_rows"] == 2
+    assert [row["transaction_id"] for row in body["sample_rows"]] == ["T1"]
+    assert len(body["errors"]) == 1
+    assert body["errors"][0]["row_number"] == 3
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_upload_preview_disabled_by_feature_flag(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock, monkeypatch
 ):
@@ -2028,6 +6209,23 @@ async def test_upload_preview_disabled_by_feature_flag(
     body = response.json()
     assert body["detail"]["code"] == "LOTUS_CORE_ADAPTER_MODE_DISABLED"
     assert body["detail"]["capability"] == "lotus_core.ingestion.bulk_upload_adapter"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_preview_rejects_unsupported_file_format(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": ("transactions.txt", b"transaction_id,portfolio_id\nT1,P1", "text/plain")},
+        data={"entity_type": "transactions", "sample_size": "10"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported file format. Use .csv or .xlsx."
     mock_kafka_producer.publish_message.assert_not_called()
 
 
@@ -2074,6 +6272,86 @@ async def test_upload_commit_disabled_by_feature_flag(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+async def test_upload_commit_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", b"transaction_id,portfolio_id\nT1,P1", "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} estimated rows")
+
+    monkeypatch.setattr(
+        uploads_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", b"transaction_id,portfolio_id\nT1,P1", "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/uploads/commit blocked after 1 estimated rows",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_rejects_empty_csv(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", b"transaction_id,portfolio_id\n", "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Upload file contains no data rows."
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_rejects_unsupported_file_format(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.txt", b"transaction_id,portfolio_id\nT1,P1", "text/plain")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported file format. Use .csv or .xlsx."
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_upload_commit_xlsx_rejects_invalid_without_partial(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -2099,7 +6377,39 @@ async def test_upload_commit_xlsx_rejects_invalid_without_partial(
     )
 
     assert response.status_code == 422
+    assert response.json()["detail"]["message"] == (
+        "Upload contains invalid rows. Fix errors or use allow_partial=true."
+    )
+    assert response.json()["detail"]["errors"][0]["row_number"] == 3
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+    csv_content = "\n".join(
+        [
+            "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+            "T1,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            "T2,P1,I1,S1,2026-01-03T10:00:00Z,BUY,10,100,1000,USD,USD",
+        ]
+    ).encode("utf-8")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["T2"]
+    assert "Remaining unpublished record keys: T2" in body["detail"]["message"]
+    assert mock_kafka_producer.publish_message.call_count == 2
 
 
 async def test_upload_preview_rejects_malformed_xlsx(
@@ -2208,13 +6518,108 @@ async def test_reprocess_transactions_deduplicates_transaction_ids_at_ingress(
 
     assert response.status_code == 202
     body = response.json()
+    assert body["message"] == "Successfully queued 2 transactions for reprocessing."
+    assert body["entity_type"] == "reprocessing_request"
     assert body["accepted_count"] == 2
+    assert body["job_id"]
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
 
     published_ids = [
         call.kwargs["value"]["transaction_id"]
         for call in mock_kafka_producer.publish_message.call_args_list
     ]
     assert published_ids == ["TXN1", "TXN2"]
+    publish_kwargs = mock_kafka_producer.publish_message.call_args_list[0].kwargs
+    assert publish_kwargs["topic"] == "transactions.reprocessing.requested"
+    assert publish_kwargs["key"] == "TXN1"
+
+
+async def test_reprocess_transactions_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = {"transaction_ids": ["TXN_IDEM_001", "TXN_IDEM_002"]}
+    headers = {"X-Idempotency-Key": "reprocessing-replay-001"}
+
+    first = await async_test_client.post("/reprocess/transactions", json=payload, headers=headers)
+    second = await async_test_client.post("/reprocess/transactions", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"]
+        == "Duplicate reprocessing request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "reprocessing-replay-001"
+    assert mock_kafka_producer.publish_message.call_count == 2
+
+
+async def test_reprocess_transactions_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN_BLOCKED_001"]},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_reprocess_transactions_returns_409_when_reprocessing_policy_blocks_publish(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].reprocessing_publish_allowed = False
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN_REPLAY_BLOCKED_001", "TXN_REPLAY_BLOCKED_002"]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "INGESTION_REPLAY_BLOCKED",
+        "message": "Reprocessing publication is blocked for 2 record(s).",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_reprocess_transactions_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        reprocessing_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN_RATE_001", "TXN_RATE_002", "TXN_RATE_001"]},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/reprocess/transactions blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_reprocess_transactions_records_remaining_unpublished_keys_on_partial_failure(
@@ -2224,18 +6629,23 @@ async def test_reprocess_transactions_records_remaining_unpublished_keys_on_part
 ):
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
 
-    with pytest.raises(Exception, match="Failed to publish reprocessing request"):
-        await async_test_client.post(
-            "/reprocess/transactions",
-            json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
-        )
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == ["TXN2", "TXN3"]
+    failed_job_id = body["detail"]["job_id"]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
         params={"status": "failed"},
     )
     assert jobs_response.status_code == 200
-    failed_job_id = jobs_response.json()["jobs"][0]["job_id"]
+    assert jobs_response.json()["jobs"][0]["job_id"] == failed_job_id
 
     failure_history = await event_replay_test_client.get(
         f"/ingestion/jobs/{failed_job_id}/failures"
@@ -2369,6 +6779,169 @@ async def test_business_date_ingestion_rejects_future_dates(
     assert response.status_code == 422
     body = response.json()
     assert body["detail"]["code"] == "BUSINESS_DATE_FUTURE_POLICY_VIOLATION"
+
+
+async def test_ingest_business_dates_endpoint(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-02"),
+        headers={"X-Idempotency-Key": "business-date-batch-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["message"] == "Business dates accepted for asynchronous ingestion processing."
+    assert body["entity_type"] == "business_date"
+    assert body["accepted_count"] == 1
+    assert body["job_id"]
+    assert body["idempotency_key"] == "business-date-batch-idem-001"
+    assert body["correlation_id"]
+    assert body["request_id"]
+    assert body["trace_id"]
+    mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["topic"] == "business_dates.raw.received"
+    assert publish_kwargs["key"] == "GLOBAL|2025-01-02"
+    assert publish_kwargs["value"]["business_date"].isoformat() == "2025-01-02"
+    assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"business-date-batch-idem-001")
+
+
+async def test_ingest_business_dates_replays_duplicate_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _business_date_batch_payload("2025-01-03")
+    headers = {"X-Idempotency-Key": "business-date-replay-001"}
+
+    first = await async_test_client.post("/ingest/business-dates", json=payload, headers=headers)
+    second = await async_test_client.post("/ingest/business-dates", json=payload, headers=headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert (
+        second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
+    )
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert second.json()["idempotency_key"] == "business-date-replay-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_business_dates_rejects_empty_payload_with_canonical_error(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json={"business_dates": []},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "BUSINESS_DATE_PAYLOAD_EMPTY",
+        "message": "At least one business_date record is required.",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_returns_503_when_mode_blocks_writes(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_job_service"].mode = "paused"
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-04"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked after {record_count} records")
+
+    monkeypatch.setattr(
+        business_dates_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-05", "2025-01-06"),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/business-dates blocked after 2 records",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_rejects_monotonic_regression(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    monkeypatch.setattr(business_dates_router, "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", True)
+    ingestion_test_harness["fake_business_calendar_repository"].latest_business_dates["GLOBAL"] = (
+        datetime(2025, 1, 10).date()
+    )
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-09"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "BUSINESS_DATE_MONOTONIC_POLICY_VIOLATION"
+    assert "latest persisted '2025-01-10'" in response.json()["detail"]["message"]
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_business_dates_returns_failed_record_keys_when_publish_fails(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+
+    response = await async_test_client.post(
+        "/ingest/business-dates",
+        json=_business_date_batch_payload("2025-01-07", "2025-01-08"),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["detail"]["failed_record_keys"] == [
+        "GLOBAL|2025-01-07",
+        "GLOBAL|2025-01-08",
+    ]
+    job_id = body["detail"]["job_id"]
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == [
+        "GLOBAL|2025-01-07",
+        "GLOBAL|2025-01-08",
+    ]
 
 
 async def test_transaction_ingestion_allows_future_dated_trade(
@@ -2600,19 +7173,9 @@ async def test_reference_data_ingestion_endpoints_return_canonical_ack_contract(
 
 async def test_reference_data_ingestion_replays_duplicate_idempotency_key(
     async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
 ):
-    payload = {
-        "cash_accounts": [
-            {
-                "cash_account_id": "CASH-ACC-USD-001",
-                "portfolio_id": "P1",
-                "security_id": "CASH_USD",
-                "display_name": "USD Operating Cash",
-                "account_currency": "USD",
-                "lifecycle_status": "ACTIVE",
-            }
-        ]
-    }
+    payload = _cash_account_master_payload()
 
     first = await async_test_client.post(
         "/ingest/reference/cash-accounts",
@@ -2630,6 +7193,8 @@ async def test_reference_data_ingestion_replays_duplicate_idempotency_key(
     second_body = second.json()
     assert second_body["message"] == "Duplicate ingestion request accepted via idempotency replay."
     assert second_body["job_id"] == first.json()["job_id"]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"]
+    assert len(persisted) == 1
 
 
 async def test_reference_data_ingestion_returns_503_when_mode_blocks_writes(
@@ -2641,26 +7206,17 @@ async def test_reference_data_ingestion_returns_503_when_mode_blocks_writes(
 
     response = await async_test_client.post(
         "/ingest/reference/cash-accounts",
-        json={
-            "cash_accounts": [
-                {
-                    "cash_account_id": "CASH-ACC-USD-001",
-                    "portfolio_id": "P1",
-                    "security_id": "CASH_USD",
-                    "display_name": "USD Operating Cash",
-                    "account_currency": "USD",
-                    "lifecycle_status": "ACTIVE",
-                }
-            ]
-        },
+        json=_cash_account_master_payload(),
     )
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"] == []
 
 
 async def test_reference_data_ingestion_returns_429_when_rate_limited(
     async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
     monkeypatch,
 ):
     def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
@@ -2674,26 +7230,17 @@ async def test_reference_data_ingestion_returns_429_when_rate_limited(
 
     response = await async_test_client.post(
         "/ingest/reference/cash-accounts",
-        json={
-            "cash_accounts": [
-                {
-                    "cash_account_id": "CASH-ACC-USD-001",
-                    "portfolio_id": "P1",
-                    "security_id": "CASH_USD",
-                    "display_name": "USD Operating Cash",
-                    "account_currency": "USD",
-                    "lifecycle_status": "ACTIVE",
-                }
-            ]
-        },
+        json=_cash_account_master_payload(),
     )
 
     assert response.status_code == 429
     assert response.json()["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+    assert ingestion_test_harness["fake_reference_data_service"].persisted["cash_accounts"] == []
 
 
 async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
     async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
     ingestion_test_harness,
     monkeypatch,
 ):
@@ -2707,23 +7254,14 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
         _raise_persist_failure,
     )
 
-    with pytest.raises(RuntimeError, match="cash account master persist failed"):
-        await async_test_client.post(
-            "/ingest/reference/cash-accounts",
-            json={
-                "cash_accounts": [
-                    {
-                        "cash_account_id": "CASH-ACC-USD-001",
-                        "portfolio_id": "P1",
-                        "security_id": "CASH_USD",
-                        "display_name": "USD Operating Cash",
-                        "account_currency": "USD",
-                        "lifecycle_status": "ACTIVE",
-                    }
-                ]
-            },
-        )
+    response = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json=_cash_account_master_payload(),
+    )
 
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
+    job_id = response.json()["detail"]["job_id"]
     failed_jobs = [
         job
         for job in ingestion_test_harness["fake_job_service"].jobs.values()
@@ -2731,3 +7269,7 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
     ]
     assert len(failed_jobs) == 1
     assert failed_jobs[0].failure_reason == "cash account master persist failed"
+
+    failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
+    assert failure_history.status_code == 200
+    assert failure_history.json()["failures"][0]["failure_phase"] == "persist"

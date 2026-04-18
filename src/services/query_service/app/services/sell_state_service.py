@@ -31,11 +31,15 @@ class SellStateService:
         self, portfolio_id: str, security_id: str
     ) -> SellDisposalsResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
         rows = await self.repo.get_sell_disposals(
             portfolio_id=portfolio_id, security_id=security_id
         )
+        if not rows:
+            raise LookupError(
+                f"SELL state not found for portfolio {portfolio_id} and security {security_id}"
+            )
 
         records = [
             SellDisposalRecord(
@@ -71,14 +75,15 @@ class SellStateService:
         self, portfolio_id: str, transaction_id: str
     ) -> SellCashLinkageResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
         row = await self.repo.get_sell_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )
         if row is None:
-            raise ValueError(
-                f"SELL transaction {transaction_id} not found for portfolio {portfolio_id}"
+            raise LookupError(
+                f"SELL cash linkage not found for portfolio {portfolio_id} and transaction "
+                f"{transaction_id}"
             )
 
         txn, cashflow = row

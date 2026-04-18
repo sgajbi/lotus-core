@@ -104,19 +104,39 @@ async def test_get_sell_cash_linkage_success(async_test_client):
 
 async def test_get_sell_cash_linkage_not_found(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_sell_cash_linkage.side_effect = ValueError("transaction missing")
+    mock_service.get_sell_cash_linkage.side_effect = LookupError(
+        "SELL cash linkage not found for portfolio PORT-1 and transaction T404"
+    )
 
     response = await client.get("/portfolios/PORT-1/transactions/T404/sell-cash-linkage")
 
     assert response.status_code == 404
-    assert "transaction missing" in response.json()["detail"].lower()
+    assert response.json()["detail"] == (
+        "SELL cash linkage not found for portfolio PORT-1 and transaction T404"
+    )
 
 
 async def test_get_sell_disposals_not_found(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_sell_disposals.side_effect = ValueError("portfolio missing")
+    mock_service.get_sell_disposals.side_effect = LookupError("portfolio missing")
 
     response = await client.get("/portfolios/P404/positions/US0378331005/sell-disposals")
 
     assert response.status_code == 404
     assert "portfolio missing" in response.json()["detail"].lower()
+
+
+async def test_get_sell_disposals_security_key_not_found_uses_investigative_404_example(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+    mock_service.get_sell_disposals.side_effect = LookupError(
+        "SELL state not found for portfolio PORT-1 and security SEC-MISSING"
+    )
+
+    response = await client.get("/portfolios/PORT-1/positions/SEC-MISSING/sell-disposals")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "SELL state not found for portfolio PORT-1 and security SEC-MISSING"
+    )

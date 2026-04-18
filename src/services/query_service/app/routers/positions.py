@@ -32,8 +32,11 @@ def get_position_service(
     },
     summary="Get Position History for a Security",
     description=(
-        "Returns epoch-aware position history for a portfolio-security key across a date range. "
-        "Used for drill-down views and lineage-aware troubleshooting."
+        "Returns epoch-aware position history for a portfolio-security key across an optional date "
+        "range. Use this route for holdings drill-down, lineage-aware troubleshooting, and "
+        "historical security-level state inspection when a downstream consumer needs dated "
+        "position-history rows; do not use it as a substitute for the strategic latest-holdings "
+        "read, transaction-ledger rows, or reporting summaries."
     ),
 )
 async def get_position_history(
@@ -66,13 +69,8 @@ async def get_position_history(
             start_date=start_date,
             end_date=end_date,
         )
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {exc}",
-        )
 
 
 @router.get(
@@ -86,8 +84,18 @@ async def get_position_history(
     },
     summary="Get Latest Positions for a Portfolio",
     description=(
-        "Returns latest current-epoch positions for a portfolio. "
-        "Used by holdings screens and downstream review/analytics flows."
+        "What: Return the strategic HoldingsAsOf operational read for one portfolio.\n"
+        "How: Resolves current-epoch holdings from daily position snapshots, supplements gaps from "
+        "position history when snapshot materialization has not caught up yet, and publishes "
+        "source-data runtime metadata with holdings-level data-quality posture.\n"
+        "When: Use this route for holdings screens, gateway portfolio position books, and other "
+        "downstream consumers that need the governed source-of-truth holdings surface. Use "
+        "`as_of_date` for booked historical state on or before a specific business date. Use "
+        "`include_projected=true` only when the consumer intentionally wants future-dated "
+        "projected state beyond the latest booked business date. Do not treat this route as a "
+        "substitute for performance, risk, or reporting-specific aggregation contracts, and do "
+        "not prefer deprecated reporting convenience shapes when this operational read meets the "
+        "consumer need."
     ),
     openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
@@ -100,16 +108,16 @@ async def get_latest_positions(
     as_of_date: Optional[date] = Query(
         None,
         description=(
-            "Optional as-of date for booked position state. "
-            "If omitted and include_projected is false, latest business_date is used."
+            "Optional as-of date for booked position state. When omitted and "
+            "`include_projected=false`, lotus-core resolves the latest booked business date."
         ),
         examples=["2026-03-10"],
     ),
     include_projected: bool = Query(
         False,
         description=(
-            "When true, includes future-dated projected position state "
-            "beyond current business_date."
+            "When true, returns the latest projected state even if future-dated transactions push "
+            "holdings beyond the latest booked business_date."
         ),
         examples=[False],
     ),
@@ -121,10 +129,5 @@ async def get_latest_positions(
             as_of_date=as_of_date,
             include_projected=include_projected,
         )
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {exc}",
-        )

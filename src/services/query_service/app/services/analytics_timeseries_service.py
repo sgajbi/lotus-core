@@ -617,7 +617,11 @@ class AnalyticsTimeseriesService:
                     }
                 )
 
-        latest_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
+        latest_date = await self._latest_available_performance_date(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            observed_dates=observed_dates,
+        )
         missing_dates = sorted(set(expected_business_dates) - set(observed_dates))
         stale_points_count = sum(
             count for status_name, count in quality_distribution.items() if status_name != "final"
@@ -962,7 +966,10 @@ class AnalyticsTimeseriesService:
         portfolio = await self.repo.get_portfolio(portfolio_id)
         if portfolio is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
-        latest_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
+        latest_date = await self._latest_available_performance_date(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+        )
         fingerprint = self._request_fingerprint(
             {
                 "endpoint": "portfolio-reference",
@@ -970,9 +977,7 @@ class AnalyticsTimeseriesService:
                 "request": request.model_dump(mode="json"),
             }
         )
-        performance_end_date = (
-            min(latest_date, request.as_of_date) if latest_date is not None else None
-        )
+        performance_end_date = latest_date
         generated_at = datetime.now(UTC)
         return PortfolioAnalyticsReferenceResponse(
             portfolio_id=portfolio.portfolio_id,
@@ -1031,6 +1036,34 @@ class AnalyticsTimeseriesService:
             if isinstance(timestamp := getattr(portfolio, field_name, None), datetime)
         ]
         return max(timestamps) if timestamps else None
+
+    async def _latest_available_performance_date(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date: date,
+        observed_dates: list[date] | None = None,
+    ) -> date | None:
+        latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
+        latest_position_date = None
+        if hasattr(self.repo, "get_latest_position_timeseries_date"):
+            latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
+        if observed_dates:
+            observed_latest = max(observed_dates)
+            latest_position_date = (
+                observed_latest
+                if latest_position_date is None
+                else max(latest_position_date, observed_latest)
+            )
+
+        candidates = [
+            candidate
+            for candidate in (latest_portfolio_date, latest_position_date)
+            if candidate is not None
+        ]
+        if not candidates:
+            return None
+        return min(max(candidates), as_of_date)
 
     @staticmethod
     def _export_result_endpoint(job_id: str) -> str:

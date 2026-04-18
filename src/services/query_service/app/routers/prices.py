@@ -15,10 +15,12 @@ router = APIRouter(prefix="/prices", tags=["Market Prices"])
 @router.get(
     "/",
     response_model=MarketPriceResponse,
-    summary="Get Market Prices for a Security",
+    summary="Get market-price series for a security",
     description=(
         "Returns market price series for a security with optional date-range filtering. "
-        "Used by valuation checks and market data diagnostics."
+        "Use this route for source-owned pricing history, valuation checks, and market-data "
+        "diagnostics; do not use it as a substitute for performance analytics, portfolio "
+        "valuation outputs, or holdings reads."
     ),
 )
 async def get_prices(

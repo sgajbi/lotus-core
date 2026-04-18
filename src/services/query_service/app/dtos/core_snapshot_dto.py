@@ -104,11 +104,26 @@ class CoreSnapshotRequest(BaseModel):
     )
     simulation: Optional[CoreSnapshotSimulationOptions] = Field(
         None,
-        description="Simulation options required for SIMULATION mode.",
+        description=(
+            "Simulation options required only when snapshot_mode=SIMULATION. Omit this block "
+            "for BASELINE requests."
+        ),
+        examples=[{"session_id": "SIM_0001", "expected_version": 3}],
     )
     options: CoreSnapshotRequestOptions = Field(
         default_factory=CoreSnapshotRequestOptions,
-        description="Section behavior options.",
+        description=(
+            "Request-level section behavior options controlling zero-quantity inclusion, "
+            "cash handling, and valuation or weight basis semantics."
+        ),
+        examples=[
+            {
+                "include_zero_quantity_positions": False,
+                "include_cash_positions": True,
+                "position_basis": "market_value_base",
+                "weight_basis": "total_market_value_base",
+            }
+        ],
     )
 
     @model_validator(mode="after")
@@ -521,7 +536,10 @@ class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
     )
     governance: CoreSnapshotGovernanceMetadata = Field(
         ...,
-        description="Section governance and policy provenance metadata for this snapshot response.",
+        description=(
+            "Section governance and policy provenance metadata for this snapshot response, "
+            "including requested, applied, and dropped sections."
+        ),
     )
     valuation_context: CoreSnapshotValuationContext = Field(
         ...,
@@ -542,7 +560,10 @@ class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
     )
     sections: CoreSnapshotSections = Field(
         ...,
-        description="Requested snapshot sections payload.",
+        description=(
+            "Requested snapshot section payload. These are portfolio-state source sections, "
+            "not downstream analytics or recommendation outputs."
+        ),
         examples=[
             {
                 "positions_baseline": [

@@ -51,6 +51,34 @@ async def test_capabilities_success(async_test_client):
     )
 
 
+async def test_capabilities_defaults_to_gateway_and_default_tenant(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_integration_capabilities.return_value = {
+        "contract_version": "v1",
+        "source_service": "lotus-core",
+        "consumer_system": "lotus-gateway",
+        "tenant_id": "default",
+        "generated_at": datetime(2026, 2, 23, tzinfo=UTC),
+        "as_of_date": date(2026, 2, 23),
+        "policy_version": "default-v1",
+        "supported_input_modes": ["lotus_core_ref"],
+        "features": [],
+        "workflows": [],
+    }
+
+    response = await client.get("/integration/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["consumer_system"] == "lotus-gateway"
+    assert body["tenant_id"] == "default"
+    assert body["policy_version"] == "default-v1"
+    mock_service.get_integration_capabilities.assert_called_with(
+        consumer_system="lotus-gateway",
+        tenant_id="default",
+    )
+
+
 async def test_get_capabilities_service_returns_service_instance():
     service = get_capabilities_service()
     assert isinstance(service, CapabilitiesService)

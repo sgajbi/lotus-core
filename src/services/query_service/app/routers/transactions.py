@@ -14,12 +14,23 @@ from ..services.transaction_service import TransactionService
 router = APIRouter(prefix="/portfolios", tags=["Transactions"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-TXN-001 not found"}
+INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
+    "detail": "FX rate not found for USD/SGD as of 2026-03-10."
+}
 
 
 @router.get(
     "/{portfolio_id}/transactions",
     response_model=PaginatedTransactionResponse,
     responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Invalid transaction-ledger query, including unsupported reporting-currency restatement.",
+            "content": {
+                "application/json": {
+                    "example": INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE
+                }
+            },
+        },
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
@@ -27,11 +38,19 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-TXN-00
     },
     summary="Get Portfolio Transactions",
     description=(
-        "Returns the canonical portfolio transaction ledger with date-window filters, optional "
-        "instrument and security drill-down, pagination, and sorting. Use `security_id` for "
-        "holdings drill-down and latest transaction retrieval for a specific security within "
-        "the portfolio. Results default to latest-first ordering by `transaction_date` "
-        "descending unless `sort_by` and `sort_order` are provided explicitly."
+        "What: Return the strategic TransactionLedgerWindow operational read for one portfolio.\n"
+        "How: Publishes the canonical portfolio transaction ledger with date-window filters, "
+        "instrument/security drill-down, FX and linked-event filters, optional reporting-currency "
+        "restatement for monetary fields, pagination, and sorting.\n"
+        "When: Use this route when a downstream consumer needs governed transaction-ledger rows "
+        "rather than summary aggregations. Use `security_id` for holdings drill-down, "
+        "`instrument_id` for instrument-specific inspection, and FX/event filters such as "
+        "`component_type`, `linked_transaction_group_id`, `fx_contract_id`, `swap_event_id`, "
+        "`near_leg_group_id`, or `far_leg_group_id` when the consumer needs multi-row economic "
+        "event analysis. Use `reporting_currency` when a downstream reporting surface needs "
+        "ledger rows and reporting-currency monetary restatement without falling back to "
+        "deprecated reporting summary routes. Results default to latest-first ordering by "
+        "`transaction_date` descending unless `sort_by` and `sort_order` are provided explicitly."
     ),
     openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
@@ -107,6 +126,15 @@ async def get_transactions(
         ),
         examples=["2026-03-10"],
     ),
+    reporting_currency: Optional[str] = Query(
+        None,
+        description=(
+            "Optional reporting currency for restated monetary fields on each returned ledger row. "
+            "Use this when a downstream needs strategic transaction rows plus reporting-currency "
+            "amounts for reporting or aggregation workflows."
+        ),
+        examples=["SGD"],
+    ),
     include_projected: bool = Query(
         False,
         description=(
@@ -135,8 +163,11 @@ async def get_transactions(
             end_date=end_date,
             as_of_date=as_of_date,
             include_projected=include_projected,
+            reporting_currency=reporting_currency,
             **pagination,
             **sorting,
         )
-    except ValueError as exc:
+    except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

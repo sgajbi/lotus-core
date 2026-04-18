@@ -44,7 +44,7 @@ class PositionService:
         )
 
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
         db_results = await self.repo.get_position_history_by_security(
             portfolio_id=portfolio_id,
@@ -82,7 +82,7 @@ class PositionService:
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
         effective_as_of_date = as_of_date
         if effective_as_of_date is None and not include_projected:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,6 +23,9 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
     PortfolioAnalyticsReferenceRequest,
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
+)
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.services.analytics_timeseries_service import AnalyticsInputError
 
@@ -135,6 +139,7 @@ async def test_router_portfolio_reference_success() -> None:
             },
             "contract_version": "rfc_063_v1",
             "supported_grouping_dimensions": ["asset_class", "sector", "country"],
+            **source_data_product_runtime_metadata(as_of_date=date(2025, 12, 31)),
         }
     )
     response = await get_portfolio_analytics_reference(
@@ -147,6 +152,7 @@ async def test_router_portfolio_reference_success() -> None:
     )
     assert response["resolved_as_of_date"] == "2025-12-31"
     assert response["reference_state_policy"] == "current_portfolio_reference_state"
+    assert response["as_of_date"] == date(2025, 12, 31)
 
 
 @pytest.mark.asyncio

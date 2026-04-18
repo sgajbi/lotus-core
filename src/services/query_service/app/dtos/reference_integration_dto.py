@@ -51,12 +51,20 @@ class BenchmarkAssignmentRequest(BaseModel):
     )
     reporting_currency: str | None = Field(
         None,
-        description="Optional reporting currency for downstream context metadata.",
+        description=(
+            "Optional downstream context currency for caller symmetry and lineage. "
+            "This field does not change benchmark assignment selection in the current "
+            "implementation."
+        ),
         examples=["USD"],
     )
     policy_context: IntegrationPolicyContext | None = Field(
         None,
-        description="Optional tenant/policy context for assignment governance.",
+        description=(
+            "Optional tenant/policy context reserved for governance metadata and future "
+            "policy-bound resolution. The current implementation still resolves the "
+            "effective assignment by portfolio_id and as_of_date."
+        ),
     )
 
     model_config = ConfigDict()
@@ -113,6 +121,7 @@ class BenchmarkAssignmentResponse(SourceDataProductRuntimeMetadata):
     assignment_recorded_at: datetime = Field(
         ...,
         description="Timestamp when assignment record was captured in lotus-core.",
+        examples=["2026-01-31T09:15:00Z"],
     )
     assignment_version: int = Field(
         ...,
@@ -122,6 +131,7 @@ class BenchmarkAssignmentResponse(SourceDataProductRuntimeMetadata):
     contract_version: str = Field(
         "rfc_062_v1",
         description="Query contract version for benchmark assignment integration.",
+        examples=["rfc_062_v1"],
     )
 
     model_config = ConfigDict()
@@ -290,6 +300,7 @@ class BenchmarkDefinitionResponse(BaseModel):
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for resolved definition.",
+        examples=["2026-01-31T08:00:00Z"],
     )
     source_vendor: str | None = Field(
         None,
@@ -308,6 +319,7 @@ class BenchmarkDefinitionResponse(BaseModel):
     contract_version: str = Field(
         "rfc_062_v1",
         description="Query contract version for benchmark definition integration.",
+        examples=["rfc_062_v1"],
     )
 
     model_config = ConfigDict()
@@ -359,6 +371,15 @@ class IndexCatalogRequest(BaseModel):
         description="Point-in-time date for index catalog retrieval.",
         examples=["2026-01-31"],
     )
+    index_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional targeted index identifiers to resolve. Use this when the caller already "
+            "knows the component universe and needs canonical metadata without scanning the full "
+            "effective catalog."
+        ),
+        examples=[["IDX_MSCI_WORLD_TR", "IDX_BLOOMBERG_GLOBAL_AGG_TR"]],
+    )
     index_currency: str | None = Field(
         None,
         description="Optional index currency filter.",
@@ -409,8 +430,12 @@ class IndexDefinitionResponse(BaseModel):
     )
     classification_labels: dict[str, str] = Field(
         default_factory=dict,
-        description="Canonical index classification labels required for attribution.",
-        examples=[{"asset_class": "equity", "sector": "technology", "region": "global"}],
+        description=(
+            "Canonical index classification labels required for attribution and benchmark "
+            "exposure grouping. Broad benchmark component indices can carry governed "
+            "broad-market sector labels rather than issuer sectors."
+        ),
+        examples=[{"asset_class": "equity", "sector": "broad_market_equity", "region": "global"}],
     )
     effective_from: date = Field(
         ..., description="Definition effective start date.", examples=["2025-01-01"]
@@ -424,6 +449,7 @@ class IndexDefinitionResponse(BaseModel):
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp.",
+        examples=["2026-01-31T08:00:00Z"],
     )
     source_vendor: str | None = Field(None, description="Source vendor name.", examples=["MSCI"])
     source_record_id: str | None = Field(
@@ -678,6 +704,16 @@ class BenchmarkMarketSeriesResponse(SourceDataProductRuntimeMetadata):
             "Status of the optional benchmark-to-target FX context attached to this response."
         ),
         examples=["native_component_series_with_benchmark_to_target_fx_context"],
+    )
+    component_metadata_policy: str = Field(
+        ...,
+        description=(
+            "Contract guidance for resolving canonical component metadata such as "
+            "classification labels. Benchmark market-series returns raw component series; use "
+            "`POST /integration/indices/catalog` with targeted `index_ids` when canonical "
+            "component metadata is required alongside these series."
+        ),
+        examples=["targeted_index_catalog_lookup_required_for_component_metadata"],
     )
     request_fingerprint: str = Field(
         ...,
@@ -972,7 +1008,10 @@ class ClassificationTaxonomyRequest(BaseModel):
     )
     taxonomy_scope: str | None = Field(
         None,
-        description="Optional taxonomy scope filter.",
+        description=(
+            "Optional taxonomy scope filter such as `index`, `instrument`, or other "
+            "governed source scopes. Omitting the field returns all effective scopes."
+        ),
         examples=["index"],
     )
 
@@ -1026,6 +1065,7 @@ class ClassificationTaxonomyResponse(SourceDataProductRuntimeMetadata):
     taxonomy_version: str = Field(
         "rfc_062_v1",
         description="Taxonomy contract version exposed by query service.",
+        examples=["rfc_062_v1"],
     )
     request_fingerprint: str = Field(
         ...,

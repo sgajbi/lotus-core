@@ -16,7 +16,7 @@ This guide also covers the portfolio-workspace follow-up contracts that make his
 portfolio workspaces trustworthy for PB/WM consumers:
 
 - canonical cash-account master ingestion and query
-- true historical as-of portfolio summary and holdings snapshot contracts
+- true historical as-of portfolio summary contracts
 - reporting-currency restatement for portfolio workspace modules
 - region and look-through allocation support
 
@@ -237,33 +237,8 @@ Behavior:
   - cash-account count
   - valued / unvalued counts
 
-### Holdings Snapshot
-
-- `POST /reporting/holdings-snapshot/query`
-
-Inputs:
-
-- `portfolio_id`
-- `as_of_date`
-- optional `reporting_currency`
-- `include_cash_positions`
-
-Behavior:
-
-- returns a true historical as-of holdings snapshot
-- returns each holding in:
-  - portfolio currency
-  - reporting currency
-- returns portfolio-workspace classifications including:
-  - asset class
-  - sector
-  - country
-  - region
-- supports excluding cash positions for pure investment holdings views
-
 ### Cash Balances
 
-- `POST /reporting/cash-balances/query`
 
 Inputs:
 
@@ -288,79 +263,30 @@ Behavior:
 If no explicit account master or linkage is available, the API falls back to the cash instrument
 identity as the last-resort identifier.
 
-### Income Summary
+### Transaction-Ledger Derived Summaries
 
-- `POST /reporting/income-summary/query`
+The deprecated compatibility routes `POST /reporting/income-summary/query` and
+`POST /reporting/activity-summary/query` are retired.
 
-Inputs:
+Downstream consumers that need income or portfolio-flow summaries should derive them from the
+strategic transaction-ledger route:
 
-- scope:
-  - `portfolio_id`
-  - `portfolio_ids`
-  - `booking_center_code`
-- `window.start_date`
-- `window.end_date`
-- optional `reporting_currency`
-- optional `income_types`
+- `GET /portfolios/{portfolio_id}/transactions`
 
-Behavior:
+Use the ledger route when the consumer needs:
 
-- returns two views for every response:
-  - requested window
-  - year to date through `window.end_date`
-- preserves portfolio-currency values for per-portfolio rows
-- translates every result into the effective reporting currency
-- summarizes canonical Lotus income types:
-  - `DIVIDEND`
-  - `INTEREST`
-  - `CASH_IN_LIEU`
+- requested-window filtering
+- projected-transaction inclusion
+- reporting-currency restatement on monetary fields
+- canonical transaction-type semantics for income aggregation
+- canonical flow-bucket derivation such as:
+  - `INFLOWS` from `DEPOSIT` and `TRANSFER_IN`
+  - `OUTFLOWS` from `WITHDRAWAL` and `TRANSFER_OUT`
+  - `FEES` from `FEE`
+  - `TAXES` from `TAX` plus non-zero `withholding_tax_amount`
 
-Income totals expose:
-
-- gross income
-- withholding tax
-- other deductions
-- net income
-- transaction count
-
-### Activity Summary
-
-- `POST /reporting/activity-summary/query`
-
-Inputs:
-
-- scope:
-  - `portfolio_id`
-  - `portfolio_ids`
-  - `booking_center_code`
-- `window.start_date`
-- `window.end_date`
-- optional `reporting_currency`
-
-Behavior:
-
-- returns two views for every response:
-  - requested window
-  - year to date through `window.end_date`
-- activity is intentionally modeled as portfolio-level flow buckets, not general ledger volume
-- current buckets are:
-  - `INFLOWS`
-  - `OUTFLOWS`
-  - `FEES`
-  - `TAXES`
-
-Bucket semantics:
-
-- `INFLOWS`:
-  - deposit and transfer-in cash activity
-- `OUTFLOWS`:
-  - withdrawal and transfer-out cash activity
-- `FEES`:
-  - fee transactions
-- `TAXES`:
-  - explicit tax transactions plus withholding-tax deductions captured on income records
-
-All bucket values are returned in:
+All derived summary values should be computed from the strategic ledger rather than from retired
+compatibility routes or broad `core-snapshot` payloads.
 
 - portfolio currency for per-portfolio rows
 - reporting currency for all results

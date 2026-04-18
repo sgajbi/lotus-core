@@ -88,7 +88,13 @@ class PortfolioPositionsResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["HoldingsAsOf"] = product_name_field("HoldingsAsOf")
     product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
-    positions: List[Position] = Field(..., description="Latest positions for the portfolio.")
+    positions: List[Position] = Field(
+        ...,
+        description=(
+            "Governed holdings rows for the resolved HoldingsAsOf scope. Rows reflect booked or "
+            "projected state according to the request parameters."
+        ),
+    )
 
 
 class PositionHistoryRecord(BaseModel):

@@ -15,6 +15,8 @@ DOCKER_SMOKE_SERVICES: tuple[str, ...] = (
     "query_control_plane_service",
     "event_replay_service",
     "persistence_service",
+    "cost_calculator_service",
+    "cashflow_calculator_service",
     "position_calculator_service",
     "pipeline_orchestrator_service",
     "valuation_orchestrator_service",

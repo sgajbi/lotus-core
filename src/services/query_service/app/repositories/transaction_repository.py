@@ -1,10 +1,11 @@
 # services/query-service/app/repositories/transaction_repository.py
 import logging
 from datetime import date, datetime
+from decimal import Decimal
 from typing import List, Optional
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
-from portfolio_common.database_models import BusinessDate, Portfolio, Transaction
+from portfolio_common.database_models import BusinessDate, FxRate, Portfolio, Transaction
 from portfolio_common.utils import async_timed
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +40,27 @@ class TransactionRepository:
     async def get_latest_business_date(self) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
             BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def get_latest_fx_rate(
+        self,
+        *,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Optional[float | Decimal]:
+        if from_currency == to_currency:
+            return Decimal("1")
+        stmt = (
+            select(FxRate.rate)
+            .where(
+                FxRate.from_currency == from_currency,
+                FxRate.to_currency == to_currency,
+                FxRate.rate_date <= as_of_date,
+            )
+            .order_by(FxRate.rate_date.desc())
+            .limit(1)
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 

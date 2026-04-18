@@ -66,12 +66,21 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     assert preview_body["properties"]["sample_size"]["description"] == (
         "Maximum number of valid normalized sample rows to include in the preview."
     )
+    assert preview_body["properties"]["file"]["description"] == (
+        "CSV or XLSX file containing rows for the selected upload entity family."
+    )
     assert commit_body["properties"]["allow_partial"]["description"] == (
         "Allow valid rows to publish even when some rows fail validation."
+    )
+    assert commit_body["properties"]["file"]["description"] == (
+        "CSV or XLSX file containing rows to validate and commit."
     )
 
     commit_429 = commit["responses"]["429"]["content"]["application/json"]["example"]
     assert commit_429["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+    commit_500 = commit["responses"]["500"]["content"]["application/json"]["example"]
+    assert commit_500["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
 
     commit_503 = commit["responses"]["503"]["content"]["application/json"]["example"]
     assert commit_503["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
@@ -106,6 +115,9 @@ async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(a
     rate_limited = bundle["responses"]["429"]["content"]["application/json"]["example"]
     assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
+    publish_failed = bundle["responses"]["500"]["content"]["application/json"]["example"]
+    assert publish_failed["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+
     mode_blocked = bundle["responses"]["503"]["content"]["application/json"]["example"]
     assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 
@@ -114,6 +126,15 @@ async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(a
     )
     assert bundle_schema["properties"]["transactions"]["examples"] == [
         [{"transaction_id": "TRN_001", "transaction_type": "BUY"}]
+    ]
+    assert bundle_schema["properties"]["business_dates"]["examples"] == [
+        [{"business_date": "2026-01-02", "calendar_code": "GLOBAL"}]
+    ]
+    assert bundle_schema["properties"]["market_prices"]["examples"] == [
+        [{"security_id": "SEC_AAPL", "price_date": "2026-01-02"}]
+    ]
+    assert bundle_schema["properties"]["fx_rates"]["examples"] == [
+        [{"from_currency": "USD", "to_currency": "SGD"}]
     ]
 
 
@@ -130,6 +151,9 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
 
     rate_limited = reprocess["responses"]["429"]["content"]["application/json"]["example"]
     assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
+
+    publish_failed = reprocess["responses"]["500"]["content"]["application/json"]["example"]
+    assert publish_failed["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
 
     mode_blocked = reprocess["responses"]["503"]["content"]["application/json"]["example"]
     assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
@@ -177,16 +201,38 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         ]
         == "INGESTION_PUBLISH_FAILED"
     )
+    assert "propagate any idempotency key as publish lineage" in single_transaction["description"]
+    assert "replay" not in single_transaction["description"].lower()
     assert (
         batch_transactions["responses"]["429"]["content"]["application/json"]["example"]["detail"][
             "code"
         ]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
+    assert (
+        batch_transactions["responses"]["500"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        batch_transactions["responses"]["503"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_MODE_BLOCKS_WRITES"
+    )
 
     assert (
         instruments["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
+    assert (
+        instruments["responses"]["500"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        instruments["responses"]["503"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_MODE_BLOCKS_WRITES"
     )
     assert (
         market_prices["responses"]["429"]["content"]["application/json"]["example"]["detail"][
@@ -195,18 +241,353 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
     assert (
+        market_prices["responses"]["500"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        market_prices["responses"]["503"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_MODE_BLOCKS_WRITES"
+    )
+    assert (
         fx_rates["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
+    assert (
+        fx_rates["responses"]["500"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        fx_rates["responses"]["503"]["content"]["application/json"]["example"]["detail"]["code"]
+        == "INGESTION_MODE_BLOCKS_WRITES"
     )
 
     business_date_422 = business_dates["responses"]["422"]["content"]["application/json"]["example"]
     assert business_date_422["detail"]["code"] == "BUSINESS_DATE_PAYLOAD_EMPTY"
+    assert (
+        business_dates["responses"]["429"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_RATE_LIMIT_EXCEEDED"
+    )
+    assert (
+        business_dates["responses"]["500"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_PUBLISH_FAILED"
+    )
+    assert (
+        business_dates["responses"]["503"]["content"]["application/json"]["example"]["detail"][
+            "code"
+        ]
+        == "INGESTION_MODE_BLOCKS_WRITES"
+    )
     assert (
         benchmark_assignments["responses"]["503"]["content"]["application/json"]["example"][
             "detail"
         ]["code"]
         == "INGESTION_MODE_BLOCKS_WRITES"
     )
+    assert (
+        benchmark_assignments["responses"]["500"]["content"]["application/json"]["example"][
+            "detail"
+        ]["code"]
+        == "REFERENCE_DATA_PERSIST_FAILED"
+    )
+
+
+async def test_openapi_describes_benchmark_assignment_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["PortfolioBenchmarkAssignmentIngestionRequest"]
+    record_schema = components["PortfolioBenchmarkAssignmentRecord"]
+
+    assert request_schema["properties"]["benchmark_assignments"]["description"] == (
+        "Portfolio benchmark assignment records to ingest or upsert."
+    )
+    assert record_schema["properties"]["portfolio_id"]["description"] == (
+        "Canonical portfolio identifier."
+    )
+    assert record_schema["properties"]["assignment_recorded_at"]["description"] == (
+        "Optional assignment capture timestamp from the source system; "
+        "defaults to ingestion time when omitted."
+    )
+    assert record_schema["properties"]["assignment_version"]["minimum"] == 1.0
+
+
+async def test_openapi_describes_benchmark_definition_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["BenchmarkDefinitionIngestionRequest"]
+    record_schema = components["BenchmarkDefinitionRecord"]
+
+    assert request_schema["properties"]["benchmark_definitions"]["description"] == (
+        "Benchmark definition records to ingest or upsert."
+    )
+    assert record_schema["properties"]["benchmark_id"]["description"] == (
+        "Canonical benchmark identifier."
+    )
+    assert record_schema["properties"]["benchmark_type"]["enum"] == [
+        "single_index",
+        "composite",
+    ]
+    assert record_schema["properties"]["return_convention"]["enum"] == [
+        "price_return_index",
+        "total_return_index",
+    ]
+    assert record_schema["properties"]["classification_labels"]["description"] == (
+        "Canonical classification labels."
+    )
+
+
+async def test_openapi_describes_benchmark_composition_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["BenchmarkCompositionIngestionRequest"]
+    record_schema = components["BenchmarkCompositionRecord"]
+
+    assert request_schema["properties"]["benchmark_compositions"]["description"] == (
+        "Benchmark composition records to ingest or upsert."
+    )
+    assert record_schema["properties"]["benchmark_id"]["description"] == ("Benchmark identifier.")
+    assert record_schema["properties"]["index_id"]["description"] == ("Component index identifier.")
+    composition_weight_number = record_schema["properties"]["composition_weight"]["anyOf"][0]
+    assert composition_weight_number["minimum"] == 0.0
+    assert composition_weight_number["maximum"] == 1.0
+    assert record_schema["properties"]["rebalance_event_id"]["description"] == (
+        "Rebalance event identifier."
+    )
+
+
+async def test_openapi_describes_index_definition_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["IndexDefinitionIngestionRequest"]
+    record_schema = components["IndexDefinitionRecord"]
+
+    assert request_schema["properties"]["indices"]["description"] == (
+        "Index definition records to ingest or upsert."
+    )
+    assert record_schema["properties"]["index_id"]["description"] == ("Canonical index identifier.")
+    assert record_schema["properties"]["index_currency"]["description"] == "Index currency."
+    assert record_schema["properties"]["classification_labels"]["description"] == (
+        "Canonical classification labels for attribution."
+    )
+    assert record_schema["properties"]["index_market"]["examples"] == ["global_developed"]
+
+
+async def test_openapi_describes_index_price_series_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["IndexPriceSeriesIngestionRequest"]
+    record_schema = components["IndexPriceSeriesRecord"]
+
+    assert request_schema["properties"]["index_price_series"]["description"] == (
+        "Index price series records to ingest or upsert."
+    )
+    assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
+    assert record_schema["properties"]["index_id"]["description"] == "Index identifier."
+    assert record_schema["properties"]["series_date"]["description"] == "Series date."
+    index_price_number = record_schema["properties"]["index_price"]["anyOf"][0]
+    assert index_price_number["exclusiveMinimum"] == 0.0
+    assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
+    assert record_schema["properties"]["value_convention"]["examples"] == ["close_price"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the index price series record."
+    )
+
+
+async def test_openapi_describes_index_return_series_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/index-return-series"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["IndexReturnSeriesIngestionRequest"]
+    record_schema = components["IndexReturnSeriesRecord"]
+
+    assert "Validate the canonical record contract" in path["description"]
+    assert request_schema["properties"]["index_return_series"]["description"] == (
+        "Index return series records to ingest or upsert."
+    )
+    assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
+    assert record_schema["properties"]["index_id"]["description"] == "Index identifier."
+    assert record_schema["properties"]["series_date"]["description"] == "Series date."
+    assert record_schema["properties"]["index_return"]["description"] == "Index return value."
+    assert record_schema["properties"]["return_period"]["examples"] == ["1d"]
+    assert record_schema["properties"]["return_convention"]["examples"] == ["total_return_index"]
+    assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the index return series record."
+    )
+
+
+async def test_openapi_describes_benchmark_return_series_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/benchmark-return-series"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["BenchmarkReturnSeriesIngestionRequest"]
+    record_schema = components["BenchmarkReturnSeriesRecord"]
+
+    assert "Validate the canonical record contract" in path["description"]
+    assert request_schema["properties"]["benchmark_return_series"]["description"] == (
+        "Benchmark return series records to ingest or upsert."
+    )
+    assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
+    assert record_schema["properties"]["benchmark_id"]["description"] == ("Benchmark identifier.")
+    assert record_schema["properties"]["series_date"]["description"] == "Series date."
+    assert record_schema["properties"]["benchmark_return"]["description"] == (
+        "Benchmark return value."
+    )
+    assert record_schema["properties"]["return_period"]["examples"] == ["1d"]
+    assert record_schema["properties"]["return_convention"]["examples"] == ["total_return_index"]
+    assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the benchmark return series record."
+    )
+
+
+async def test_openapi_describes_risk_free_series_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    request_schema = components["RiskFreeSeriesIngestionRequest"]
+    record_schema = components["RiskFreeSeriesRecord"]
+
+    assert request_schema["properties"]["risk_free_series"]["description"] == (
+        "Risk-free series records to ingest or upsert."
+    )
+    assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
+    assert record_schema["properties"]["risk_free_curve_id"]["description"] == (
+        "Risk-free curve identifier."
+    )
+    assert record_schema["properties"]["value"]["description"] == "Risk-free value."
+    assert record_schema["properties"]["value_convention"]["enum"] == [
+        "annualized_rate",
+        "period_return",
+    ]
+    assert record_schema["properties"]["day_count_convention"]["examples"] == ["act_360"]
+    assert record_schema["properties"]["compounding_convention"]["examples"] == ["simple"]
+    assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the risk-free curve series record."
+    )
+
+
+async def test_openapi_describes_classification_taxonomy_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/reference/classification-taxonomy"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["ClassificationTaxonomyIngestionRequest"]
+    record_schema = components["ClassificationTaxonomyRecord"]
+
+    assert "platform taxonomy labels are introduced or updated" in path["description"]
+    assert request_schema["properties"]["classification_taxonomy"]["description"] == (
+        "Classification taxonomy records to ingest or upsert."
+    )
+    assert record_schema["properties"]["classification_set_id"]["description"] == (
+        "Classification set identifier."
+    )
+    assert record_schema["properties"]["taxonomy_scope"]["description"] == "Taxonomy scope."
+    assert record_schema["properties"]["dimension_name"]["description"] == "Dimension name."
+    assert record_schema["properties"]["dimension_value"]["description"] == "Dimension value."
+    assert record_schema["properties"]["dimension_description"]["examples"] == [
+        "Technology sector classification"
+    ]
+    assert record_schema["properties"]["effective_from"]["examples"] == ["2025-01-01"]
+    assert record_schema["properties"]["effective_to"]["examples"] == ["2026-12-31"]
+    assert record_schema["properties"]["source_timestamp"]["description"] == (
+        "Source publication timestamp for the taxonomy record."
+    )
+
+
+async def test_openapi_describes_cash_account_master_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/reference/cash-accounts"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["CashAccountMasterIngestionRequest"]
+    record_schema = components["CashAccountMasterRecord"]
+
+    assert "cash-account lifecycle maintenance" in path["description"]
+    assert request_schema["properties"]["cash_accounts"]["description"] == (
+        "Cash-account master records to ingest or upsert."
+    )
+    assert record_schema["properties"]["cash_account_id"]["description"] == (
+        "Canonical Lotus cash account identifier."
+    )
+    assert record_schema["properties"]["portfolio_id"]["description"] == (
+        "Owning portfolio identifier."
+    )
+    assert record_schema["properties"]["security_id"]["description"] == (
+        "Linked cash instrument/security identifier."
+    )
+    assert record_schema["properties"]["account_currency"]["description"] == (
+        "Native cash account currency."
+    )
+    assert record_schema["properties"]["account_role"]["examples"] == ["OPERATING_CASH"]
+    assert record_schema["properties"]["lifecycle_status"]["examples"] == ["ACTIVE"]
+    assert record_schema["properties"]["opened_on"]["examples"] == ["2026-01-01"]
+    assert record_schema["properties"]["closed_on"]["examples"] == ["2026-12-31"]
+    assert record_schema["properties"]["source_system"]["examples"] == ["lotus-manage"]
+
+
+async def test_openapi_describes_instrument_lookthrough_shared_schema(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    path = schema["paths"]["/ingest/reference/instrument-lookthrough-components"]["post"]
+    components = schema["components"]["schemas"]
+    request_schema = components["InstrumentLookthroughComponentIngestionRequest"]
+    record_schema = components["InstrumentLookthroughComponentRecord"]
+
+    assert "source-owned look-through views" in path["description"]
+    assert request_schema["properties"]["lookthrough_components"]["description"] == (
+        "Instrument look-through composition rows to ingest or upsert."
+    )
+    assert record_schema["properties"]["parent_security_id"]["description"] == (
+        "Structured product or fund security identifier being decomposed."
+    )
+    assert record_schema["properties"]["component_security_id"]["description"] == (
+        "Underlying component security identifier."
+    )
+    assert record_schema["properties"]["effective_from"]["examples"] == ["2026-01-01"]
+    assert record_schema["properties"]["effective_to"]["examples"] == ["2026-12-31"]
+    component_weight_number = record_schema["properties"]["component_weight"]["anyOf"][0]
+    assert component_weight_number["minimum"] == 0.0
+    assert component_weight_number["maximum"] == 1.0
+    assert record_schema["properties"]["source_system"]["examples"] == ["lotus-manage"]
+    assert record_schema["properties"]["source_record_id"]["examples"] == ["lt-001"]
 
 
 async def test_openapi_describes_business_date_shared_schema(async_test_client):

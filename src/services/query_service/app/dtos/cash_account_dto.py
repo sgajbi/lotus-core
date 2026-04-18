@@ -70,4 +70,20 @@ class CashAccountQueryResponse(BaseModel):
     cash_accounts: list[CashAccountRecord] = Field(
         ...,
         description="Canonical cash accounts linked to the portfolio.",
+        examples=[
+            [
+                {
+                    "cash_account_id": "CASH-ACC-USD-001",
+                    "portfolio_id": "PORT-001",
+                    "security_id": "CASH_USD",
+                    "display_name": "USD Operating Cash",
+                    "account_currency": "USD",
+                    "account_role": "OPERATING_CASH",
+                    "lifecycle_status": "ACTIVE",
+                    "opened_on": "2026-01-01",
+                    "closed_on": None,
+                    "source_system": "lotus-manage",
+                }
+            ]
+        ],
     )

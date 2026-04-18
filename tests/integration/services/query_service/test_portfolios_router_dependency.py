@@ -19,7 +19,7 @@ pytestmark = pytest.mark.asyncio
 async def async_test_client():
     mock_service = AsyncMock()
     app.dependency_overrides[get_portfolio_service] = lambda: mock_service
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_portfolio_service, None)
@@ -63,7 +63,8 @@ async def test_get_portfolios_unexpected_maps_to_500(async_test_client):
     response = await client.get("/portfolios/")
 
     assert response.status_code == 500
-    assert "unexpected error" in response.json()["detail"].lower()
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()
 
 
 async def test_get_portfolio_by_id_success(async_test_client):
@@ -93,7 +94,7 @@ async def test_get_portfolio_by_id_success(async_test_client):
 
 async def test_get_portfolio_by_id_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_portfolio_by_id.side_effect = ValueError("not found")
+    mock_service.get_portfolio_by_id.side_effect = LookupError("not found")
 
     response = await client.get("/portfolios/P404")
 
@@ -124,4 +125,26 @@ async def test_get_portfolios_forwards_portfolio_ids(async_test_client):
         portfolio_ids=["P1", "P2"],
         client_id=None,
         booking_center_code=None,
+    )
+
+
+async def test_get_portfolios_forwards_discovery_filters(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolios.return_value = {"portfolios": []}
+
+    response = await client.get(
+        "/portfolios/",
+        params={
+            "portfolio_id": "P1",
+            "client_id": "CIF-1",
+            "booking_center_code": "SGPB",
+        },
+    )
+
+    assert response.status_code == 200
+    mock_service.get_portfolios.assert_awaited_once_with(
+        portfolio_id="P1",
+        portfolio_ids=None,
+        client_id="CIF-1",
+        booking_center_code="SGPB",
     )

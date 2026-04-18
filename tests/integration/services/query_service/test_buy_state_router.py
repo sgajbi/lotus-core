@@ -109,10 +109,14 @@ async def test_get_accrued_offsets_success(async_test_client):
 
 async def test_get_cash_linkage_not_found(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_buy_cash_linkage.side_effect = ValueError("not found")
+    mock_service.get_buy_cash_linkage.side_effect = LookupError(
+        "BUY cash linkage not found for portfolio PORT-1 and transaction T404"
+    )
     response = await client.get("/portfolios/PORT-1/transactions/T404/cash-linkage")
     assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "BUY cash linkage not found for portfolio PORT-1 and transaction T404"
+    )
 
 
 async def test_get_cash_linkage_success(async_test_client):
@@ -129,7 +133,7 @@ async def test_get_cash_linkage_success(async_test_client):
 
 async def test_get_position_lots_not_found(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_position_lots.side_effect = ValueError("portfolio missing")
+    mock_service.get_position_lots.side_effect = LookupError("portfolio missing")
     response = await client.get("/portfolios/P404/positions/US0378331005/lots")
     assert response.status_code == 404
     assert "portfolio missing" in response.json()["detail"]
@@ -137,7 +141,39 @@ async def test_get_position_lots_not_found(async_test_client):
 
 async def test_get_accrued_offsets_not_found(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_accrued_offsets.side_effect = ValueError("offsets missing")
+    mock_service.get_accrued_offsets.side_effect = LookupError("offsets missing")
     response = await client.get("/portfolios/P404/positions/US0378331005/accrued-offsets")
     assert response.status_code == 404
     assert "offsets missing" in response.json()["detail"]
+
+
+async def test_get_position_lots_security_key_not_found_uses_investigative_404_example(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+    mock_service.get_position_lots.side_effect = LookupError(
+        "BUY state not found for portfolio PORT-1 and security SEC-MISSING"
+    )
+
+    response = await client.get("/portfolios/PORT-1/positions/SEC-MISSING/lots")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "BUY state not found for portfolio PORT-1 and security SEC-MISSING"
+    )
+
+
+async def test_get_accrued_offsets_security_key_not_found_uses_investigative_404_example(
+    async_test_client,
+):
+    client, mock_service = async_test_client
+    mock_service.get_accrued_offsets.side_effect = LookupError(
+        "BUY state not found for portfolio PORT-1 and security SEC-MISSING"
+    )
+
+    response = await client.get("/portfolios/PORT-1/positions/SEC-MISSING/accrued-offsets")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "BUY state not found for portfolio PORT-1 and security SEC-MISSING"
+    )

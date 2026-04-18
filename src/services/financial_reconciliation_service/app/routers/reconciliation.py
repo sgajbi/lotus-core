@@ -15,7 +15,12 @@ from ..services import ReconciliationService
 
 router = APIRouter(tags=["financial-reconciliation"])
 
-NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Reconciliation run 'FRR-20260306-0001' was not found."}
+NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": {
+        "code": "RECONCILIATION_RUN_NOT_FOUND",
+        "message": "Reconciliation run 'FRR-20260306-0001' was not found.",
+    }
+}
 
 RECONCILIATION_RUN_REQUEST_EXAMPLES = {
     "portfolio_day_scope": {
@@ -84,6 +89,16 @@ RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE = {
     ],
     "total": 1,
 }
+
+
+def _reconciliation_run_not_found(run_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={
+            "code": "RECONCILIATION_RUN_NOT_FOUND",
+            "message": f"Reconciliation run '{run_id}' was not found.",
+        },
+    )
 
 
 def _service(db_session: AsyncSession) -> ReconciliationService:
@@ -200,6 +215,11 @@ async def run_timeseries_integrity_reconciliation(
     "/reconciliation/runs",
     response_model=ReconciliationRunListResponse,
     summary="List reconciliation control runs",
+    description=(
+        "What: Return durable reconciliation control runs for the requested filters.\n"
+        "How: Query persisted run history by reconciliation type and portfolio scope.\n"
+        "Why: Use for control evidence review, scheduler verification, and operational triage."
+    ),
     responses={
         200: {
             "description": "Reconciliation runs matching the requested filters.",
@@ -247,6 +267,11 @@ async def list_reconciliation_runs(
     "/reconciliation/runs/{run_id}",
     response_model=ReconciliationRunResponse,
     summary="Get one reconciliation control run",
+    description=(
+        "What: Return one reconciliation control run by run identifier.\n"
+        "How: Read the durable run record, including control summary and execution metadata.\n"
+        "Why: Use when investigating one specific control execution or linking to findings."
+    ),
     responses={
         200: {
             "description": "One reconciliation run.",
@@ -268,10 +293,7 @@ async def get_reconciliation_run(
     repository = ReconciliationRepository(db_session)
     run = await repository.get_run(run_id)
     if run is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Reconciliation run '{run_id}' was not found.",
-        )
+        raise _reconciliation_run_not_found(run_id)
     return run
 
 
@@ -279,13 +301,22 @@ async def get_reconciliation_run(
     "/reconciliation/runs/{run_id}/findings",
     response_model=ReconciliationFindingListResponse,
     summary="List findings for one reconciliation control run",
+    description=(
+        "What: Return durable findings captured for one reconciliation control run.\n"
+        "How: Verify the run exists, then query persisted findings scoped to that run id.\n"
+        "Why: Use to inspect blocking control evidence, not business-calculation output."
+    ),
     responses={
         200: {
             "description": "Findings captured for the requested reconciliation run.",
             "content": {
                 "application/json": {"example": RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE}
             },
-        }
+        },
+        404: {
+            "description": "Run was not found.",
+            "content": {"application/json": {"example": NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def list_reconciliation_findings(
@@ -296,5 +327,8 @@ async def list_reconciliation_findings(
     db_session: AsyncSession = Depends(get_async_db_session),
 ):
     repository = ReconciliationRepository(db_session)
+    run = await repository.get_run(run_id)
+    if run is None:
+        raise _reconciliation_run_not_found(run_id)
     findings = await repository.list_findings(run_id)
     return ReconciliationFindingListResponse(findings=findings, total=len(findings))

@@ -93,6 +93,23 @@ async def test_create_session_returns_session_response(mock_dependencies):
     assert response.session.session_id == "S1"
 
 
+async def test_create_session_raises_when_portfolio_missing(mock_dependencies):
+    repo, position_repo, _ = mock_dependencies
+    position_repo.portfolio_exists.return_value = False
+    service = SimulationService(AsyncMock())
+
+    with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        await service.create_session(
+            SimulationSessionCreateRequest(
+                portfolio_id="P404",
+                created_by="tester",
+                ttl_hours=24,
+            )
+        )
+
+    repo.create_session.assert_not_awaited()
+
+
 async def test_projected_positions_applies_change_delta(mock_dependencies):
     _, _, _ = mock_dependencies
     service = SimulationService(AsyncMock())

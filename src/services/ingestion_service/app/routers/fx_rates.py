@@ -35,6 +35,14 @@ FX_RATE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for /ingest/fx-rates.",
     }
 }
+FX_RATE_PUBLISH_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Failed to publish fx rate 'USD-SGD-2026-03-10'.",
+        "failed_record_keys": ["USD-SGD-2026-03-10"],
+        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+    }
+}
 
 
 @router.post(
@@ -44,9 +52,11 @@ FX_RATE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
     responses={
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the FX-rate request.",
-            "content": {
-                "application/json": {"example": FX_RATE_RATE_LIMIT_EXCEEDED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": FX_RATE_RATE_LIMIT_EXCEEDED_EXAMPLE}},
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "FX-rate publish failed after job metadata was recorded.",
+            "content": {"application/json": {"example": FX_RATE_PUBLISH_FAILED_EXAMPLE}},
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
@@ -120,7 +130,15 @@ async def ingest_fx_rates(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_PUBLISH_FAILED",
+                "message": str(exc),
+                "failed_record_keys": exc.failed_record_keys,
+                "job_id": job_result.job.job_id,
+            },
+        ) from exc
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise
@@ -142,4 +160,3 @@ async def ingest_fx_rates(
         accepted_count=num_rates,
         idempotency_key=idempotency_key,
     )
-

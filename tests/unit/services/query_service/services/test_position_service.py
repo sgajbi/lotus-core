@@ -218,7 +218,7 @@ async def test_get_position_history_raises_when_portfolio_missing(mock_position_
         mock_position_repo.portfolio_exists.return_value = False
         service = PositionService(AsyncMock())
 
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_position_history(portfolio_id="P404", security_id="S1")
 
 
@@ -230,7 +230,7 @@ async def test_get_portfolio_positions_raises_when_portfolio_missing(mock_positi
         mock_position_repo.portfolio_exists.return_value = False
         service = PositionService(AsyncMock())
 
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_portfolio_positions("P404")
 
 

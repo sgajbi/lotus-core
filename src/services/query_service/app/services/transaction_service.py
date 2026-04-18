@@ -1,6 +1,7 @@
 # services/query-service/app/services/transaction_service.py
 import logging
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
@@ -21,6 +22,7 @@ class TransactionService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = TransactionRepository(db)
+        self._fx_cache: dict[tuple[str, str, date], Decimal] = {}
 
     @staticmethod
     def _ledger_data_quality_status(
@@ -55,6 +57,7 @@ class TransactionService:
         end_date: Optional[date] = None,
         as_of_date: Optional[date] = None,
         include_projected: bool = False,
+        reporting_currency: Optional[str] = None,
     ) -> PaginatedTransactionResponse:
         """
         Retrieves a paginated and filtered list of transactions for a portfolio.
@@ -62,7 +65,7 @@ class TransactionService:
         logger.info(f"Fetching transactions for portfolio '{portfolio_id}'.")
 
         if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
         effective_as_of_date = as_of_date
         if effective_as_of_date is None and not include_projected:
@@ -94,6 +97,7 @@ class TransactionService:
             **ledger_filters,
         )
         latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(**ledger_filters)
+        resolved_reporting_currency = reporting_currency
 
         transactions = []
         for transaction in db_results:
@@ -101,10 +105,17 @@ class TransactionService:
             record.costs = [cost for cost in transaction.costs or []]
             if transaction.cashflow:
                 record.cashflow = transaction.cashflow
+            if resolved_reporting_currency and effective_as_of_date is not None:
+                await self._apply_reporting_currency_fields(
+                    record=record,
+                    reporting_currency=resolved_reporting_currency,
+                    as_of_date=effective_as_of_date,
+                )
             transactions.append(record)
 
         return PaginatedTransactionResponse(
             portfolio_id=portfolio_id,
+            reporting_currency=resolved_reporting_currency,
             total=total_count,
             skip=skip,
             limit=limit,
@@ -119,3 +130,72 @@ class TransactionService:
                 latest_evidence_timestamp=latest_evidence_timestamp,
             ),
         )
+
+    async def _apply_reporting_currency_fields(
+        self,
+        *,
+        record: TransactionRecord,
+        reporting_currency: str,
+        as_of_date: date,
+    ) -> None:
+        money_fields = (
+            ("gross_transaction_amount", "gross_transaction_amount_reporting_currency"),
+            ("gross_cost", "gross_cost_reporting_currency"),
+            ("trade_fee", "trade_fee_reporting_currency"),
+            ("net_cost", "net_cost_reporting_currency"),
+            ("withholding_tax_amount", "withholding_tax_amount_reporting_currency"),
+            (
+                "other_interest_deductions_amount",
+                "other_interest_deductions_amount_reporting_currency",
+            ),
+            ("net_interest_amount", "net_interest_amount_reporting_currency"),
+        )
+        for source_field, target_field in money_fields:
+            amount = getattr(record, source_field)
+            if amount is None:
+                continue
+            setattr(
+                record,
+                target_field,
+                await self._convert_amount(
+                    amount=amount,
+                    from_currency=record.currency,
+                    to_currency=reporting_currency,
+                    as_of_date=as_of_date,
+                ),
+            )
+
+    async def _convert_amount(
+        self,
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        if from_currency == to_currency:
+            return amount
+        rate = await self._get_fx_rate(from_currency, to_currency, as_of_date)
+        return amount * rate
+
+    async def _get_fx_rate(
+        self,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        cache_key = (from_currency, to_currency, as_of_date)
+        if cache_key in self._fx_cache:
+            return self._fx_cache[cache_key]
+        rate = await self.repo.get_latest_fx_rate(
+            from_currency=from_currency,
+            to_currency=to_currency,
+            as_of_date=as_of_date,
+        )
+        if rate is None:
+            raise ValueError(
+                f"FX rate not found for {from_currency}/{to_currency} as of {as_of_date}."
+            )
+        resolved_rate = Decimal(str(rate))
+        self._fx_cache[cache_key] = resolved_rate
+        return resolved_rate

@@ -22,9 +22,13 @@ def get_capabilities_service() -> CapabilitiesService:
     description=(
         "What: Return policy-resolved integration capabilities for a consumer and tenant context.\n"
         "How: Applies environment and tenant-policy overrides, then derives workflow states from "
-        "canonical feature dependencies.\n"
-        "When: Used by downstream services and UI clients to enable only supported lotus-core "
-        "integration paths."
+        "canonical feature dependencies. Callers should use the canonical snake_case query "
+        "parameters `consumer_system` and `tenant_id`.\n"
+        "When: Used directly by lotus-gateway platform capability aggregation and other "
+        "downstream discovery clients to enable only supported lotus-core integration paths. "
+        "This route is a control-plane discovery contract, not a substitute for endpoint-specific "
+        "OpenAPI or source-data product contracts. CamelCase aliases such as `consumerSystem` "
+        "and `tenantId` are not supported."
     ),
 )
 async def get_integration_capabilities(

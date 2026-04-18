@@ -13,6 +13,25 @@ from portfolio_common.source_data_security import (
 )
 
 from src.services.query_control_plane_service.app.main import app, lifespan
+from tests.integration.services.query_control_plane_service.openapi_schema_contracts import (
+    ANALYTICS_INPUT_SCHEMA_ROOTS,
+    BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS,
+    BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS,
+    BENCHMARK_SOURCE_SCHEMA_ROOTS,
+    CAPABILITIES_SCHEMA_ROOTS,
+    CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS,
+    CORE_SNAPSHOT_SCHEMA_ROOTS,
+    INGESTION_EVIDENCE_SCHEMA_ROOTS,
+    INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS,
+    INTEGRATION_POLICY_SCHEMA_ROOTS,
+    READINESS_SUPPORT_SCHEMA_ROOTS,
+    RECONCILIATION_EVIDENCE_SCHEMA_ROOTS,
+    RECONCILIATION_SUPPORT_SCHEMA_ROOTS,
+    RISK_FREE_SCHEMA_ROOTS,
+    SIMULATION_SCHEMA_ROOTS,
+    SUPPORT_OPERATIONS_SCHEMA_ROOTS,
+    assert_schema_properties_are_documented_and_exampled,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -163,6 +182,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/support/portfolios/{portfolio_id}/overview" in paths
     assert "/support/portfolios/{portfolio_id}/readiness" in paths
     assert "/simulation-sessions/{session_id}" in paths
+    assert "/integration/advisory/proposals/simulate-execution" in paths
     analytics_input_routes = {
         "/integration/portfolios/{portfolio_id}/analytics/reference",
         "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
@@ -180,9 +200,17 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     portfolio_reference = paths["/integration/portfolios/{portfolio_id}/analytics/reference"][
         "post"
     ]
-    assert "lotus-performance and lotus-risk" in portfolio_timeseries["description"]
+    assert (
+        "lotus-performance and other governed downstream analytics consumers"
+        in (portfolio_timeseries["description"])
+    )
+    assert (
+        "Used directly for stateful TWR/MWR input acquisition in lotus-performance"
+        in (portfolio_timeseries["description"])
+    )
     assert "historical risk attribution" in position_timeseries["description"]
-    assert "lotus-performance and lotus-risk" in portfolio_reference["description"]
+    assert "lotus-performance analytics pipelines" in portfolio_reference["description"]
+    assert "lotus-gateway workspace source context flows" in portfolio_reference["description"]
 
     assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
     assert "/integration/positions/{portfolio_id}/timeseries" not in paths
@@ -224,6 +252,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "failed_window_hours"
     )
     assert overview_failed_window["description"].startswith("Window in hours")
+    assert (
+        "gateway support panels, operator consoles, and incident workflows"
+        in (overview["description"])
+    )
+    assert "backlog, control-stage, or replay evidence matters" in overview["description"]
+    assert "/support/portfolios/{portfolio_id}/readiness" in overview["description"]
+    assert "supportability evidence, not business-calculation inputs" in (overview["description"])
+    assert "400" not in overview["responses"]
 
     readiness_as_of_date = next(
         parameter for parameter in readiness["parameters"] if parameter["name"] == "as_of_date"
@@ -231,6 +267,11 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert readiness_as_of_date["description"] == (
         "Optional as-of date in YYYY-MM-DD format used to scope booked-state readiness."
     )
+    assert "front-office readiness indicators and workflow gating" in readiness["description"]
+    assert "/support/portfolios/{portfolio_id}/overview" in readiness["description"]
+    assert "instead of inferring readiness from row counts" in readiness["description"]
+    assert "supportability and readiness posture" in readiness["description"]
+    assert "not calculation-grade portfolio analytics" in readiness["description"]
 
     stale_threshold = next(
         parameter
@@ -244,9 +285,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         if parameter["name"] == "failed_window_hours"
     )
     assert failed_window["description"].startswith("Window in hours")
+    assert "daily operational SLO checks" in calculator_slos["description"]
 
     not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    readiness_invalid_date = readiness["responses"]["400"]["content"]["application/json"]["example"]
+    assert readiness_invalid_date["detail"] == (
+        "Invalid as_of_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
 
     lineage_not_found = lineage["responses"]["404"]["content"]["application/json"]["example"]
     assert lineage_not_found["detail"] == (
@@ -282,9 +328,49 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
         "get"
     ]
+    control_stages_invalid_date = control_stages["responses"]["400"]["content"]["application/json"][
+        "example"
+    ]
+    assert control_stages_invalid_date["detail"] == (
+        "Invalid business_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    reprocessing_keys_invalid_date = reprocessing_keys["responses"]["400"]["content"][
+        "application/json"
+    ]["example"]
+    assert reprocessing_keys_invalid_date["detail"] == (
+        "Invalid watermark_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
     reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
         "get"
     ]
+    assert "not business calculations" in reconciliation_runs["description"]
+    assert "not business calculations" in reconciliation_findings["description"]
+    assert "overview` shows control blocking" in reconciliation_runs["description"]
+    assert "front-office readiness indicators" in reconciliation_runs["description"]
+    assert "not direct business-calculation inputs" in reprocessing_keys["description"]
+    assert "not direct business-calculation inputs" in reprocessing_jobs["description"]
+    assert (
+        "after `overview` or reconciliation evidence points to replay work"
+        in (reprocessing_keys["description"])
+    )
+    assert "front-office readiness indicators" in reprocessing_keys["description"]
+    assert (
+        "after `overview` or reconciliation evidence indicates replay pressure"
+        in (reprocessing_jobs["description"])
+    )
+    assert "400" not in reprocessing_jobs["responses"]
+    assert "not a business-calculation contract" in lineage["description"]
+    assert (
+        "not business-calculation inputs"
+        in schema["paths"]["/lineage/portfolios/{portfolio_id}/keys"]["get"]["description"]
+    )
+    assert "verify stage progression over time" in control_stages["description"]
+    assert (
+        "after `overview` or `readiness` indicates a blocked or lagging portfolio"
+        in (control_stages["description"])
+    )
+    assert "operator investigation evidence" in control_stages["description"]
+    assert "front-office readiness indicators" in reconciliation_findings["description"]
     analytics_export_status = next(
         parameter
         for parameter in analytics_export_jobs["parameters"]
@@ -311,11 +397,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         ]["parameters"]
         if parameter["name"] == "job_id"
     )
+    valuation_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"]["get"]
+    aggregation_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/aggregation-jobs"]["get"]
     control_stage_id = next(
         parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_id"
     )
     assert control_stage_id["description"] == "Optional durable control-stage row id filter."
     assert valuation_job_id["description"] == "Optional durable valuation job id filter."
+    assert "calculator-slos" in valuation_jobs["description"]
+    assert "operator support evidence" in valuation_jobs["description"]
     valuation_business_date = next(
         parameter
         for parameter in schema["paths"]["/support/portfolios/{portfolio_id}/valuation-jobs"][
@@ -379,6 +469,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         aggregation_correlation_id["description"]
         == "Optional durable aggregation correlation identifier filter."
     )
+    assert "calculator-slos" in aggregation_jobs["description"]
+    assert "operator support evidence" in aggregation_jobs["description"]
 
     analytics_export_job_id = next(
         parameter
@@ -398,6 +490,17 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         analytics_export_request_fingerprint["description"]
         == "Optional analytics export request fingerprint filter."
     )
+    assert "large-window extraction or support escalation" in analytics_export_jobs["description"]
+    assert "operator support evidence" in analytics_export_jobs["description"]
+    assert "fleet-health baselining" in calculator_slos["description"]
+    assert (
+        "valuation, aggregation, replay, or export-job listings" in calculator_slos["description"]
+    )
+
+    control_stages = schema["paths"]["/support/portfolios/{portfolio_id}/control-stages"]["get"]
+    reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
+        "get"
+    ]
     replay_job_id = next(
         parameter for parameter in reprocessing_jobs["parameters"] if parameter["name"] == "job_id"
     )
@@ -801,7 +904,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     findings_not_found = reconciliation_findings["responses"]["404"]["content"]["application/json"][
         "example"
     ]
-    assert findings_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    assert findings_not_found["detail"] == (
+        "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
+    )
     control_stage_name = next(
         parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_name"
     )
@@ -841,6 +946,22 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "application/json"
     ]["example"]
     assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+
+
+async def test_openapi_fully_documents_readiness_support_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, READINESS_SUPPORT_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_support_operations_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, SUPPORT_OPERATIONS_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_analytics_reference_contract(async_test_client):
@@ -1029,11 +1150,22 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     assert response.status_code == 200
     schema = response.json()
 
+    create_route = schema["paths"]["/simulation-sessions"]["post"]
     get_session = schema["paths"]["/simulation-sessions/{session_id}"]["get"]
+    projected_positions_route = schema["paths"][
+        "/simulation-sessions/{session_id}/projected-positions"
+    ]["get"]
+    projected_summary_route = schema["paths"][
+        "/simulation-sessions/{session_id}/projected-summary"
+    ]["get"]
     delete_change = schema["paths"]["/simulation-sessions/{session_id}/changes/{change_id}"][
         "delete"
     ]
     create_session = schema["components"]["schemas"]["SimulationSessionCreateRequest"]
+
+    assert "what-if simulation session" in create_route["description"]
+    not_found_create = create_route["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found_create["detail"] == "Portfolio with id PORT-404 not found"
 
     session_param = next(
         parameter for parameter in get_session["parameters"] if parameter["name"] == "session_id"
@@ -1047,6 +1179,22 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
         parameter for parameter in delete_change["parameters"] if parameter["name"] == "change_id"
     )
     assert change_id_param["description"] == "Simulation change identifier."
+    add_changes = schema["paths"]["/simulation-sessions/{session_id}/changes"]["post"]
+    add_changes_not_found = add_changes["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert add_changes_not_found["detail"] == "Simulation session SIM-20260310-0001 not found"
+    delete_change_not_found = delete_change["responses"]["404"]["content"]["application/json"][
+        "example"
+    ]
+    assert delete_change_not_found["detail"] == "Simulation change SIM-CHG-0001 not found"
+    delete_change_invalid_state = delete_change["responses"]["400"]["content"]["application/json"][
+        "example"
+    ]
+    assert (
+        delete_change_invalid_state["detail"]
+        == "Simulation session SIM-20260310-0001 is not active"
+    )
 
     portfolio_id = create_session["properties"]["portfolio_id"]
     assert portfolio_id["description"] == "Portfolio identifier for the simulated scenario."
@@ -1065,6 +1213,49 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     assert projected_positions["properties"]["positions"]["description"] == (
         "Projected positions after all simulation changes are applied."
     )
+    assert "not for performance analytics" in projected_positions_route["description"]
+    assert "not a recommendation" in projected_summary_route["description"]
+
+
+async def test_openapi_describes_advisory_simulation_contract(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    advisory_simulation = schema["paths"]["/integration/advisory/proposals/simulate-execution"][
+        "post"
+    ]
+    assert "intended for lotus-advise" in advisory_simulation["description"]
+    assert (
+        "request hashing, and lifecycle/idempotency orchestration"
+        in (advisory_simulation["description"])
+    )
+    assert (
+        "Do not use it for generic simulation-session lifecycle orchestration"
+        in (advisory_simulation["description"])
+    )
+    assert "advisory recommendation ownership" in advisory_simulation["description"]
+
+    contract_header = next(
+        parameter
+        for parameter in advisory_simulation["parameters"]
+        if parameter["name"] == "X-Lotus-Contract-Version"
+    )
+    assert "must match the version supported by lotus-core" in contract_header["description"]
+
+    precondition = advisory_simulation["responses"]["412"]
+    assert (
+        precondition["description"]
+        == "Caller requested an unsupported canonical simulation contract version."
+    )
+
+
+async def test_openapi_simulation_schema_family_is_fully_documented(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, SIMULATION_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_analytics_input_parameters_and_examples(async_test_client):
@@ -1078,6 +1269,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     position_inputs = schema["paths"][
         "/integration/portfolios/{portfolio_id}/analytics/position-timeseries"
     ]["post"]
+    export_status = schema["paths"]["/integration/exports/analytics-timeseries/jobs/{job_id}"][
+        "get"
+    ]
     export_result = schema["paths"][
         "/integration/exports/analytics-timeseries/jobs/{job_id}/result"
     ]["get"]
@@ -1107,13 +1301,22 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert position_product["route_family"] == "Analytics Input"
     assert "lotus-risk" in position_product["consumers"]
 
+    assert "large-window extraction flows" in export_status["description"]
+    assert "durable export hand-off" in export_status["description"]
+
     job_id_param = next(
         parameter for parameter in export_result["parameters"] if parameter["name"] == "job_id"
     )
     assert job_id_param["description"] == "Durable analytics export job identifier."
+    assert "lotus-performance batch pipelines" in export_result["description"]
+    assert "instead of repeatedly replaying large paged windows" in export_result["description"]
 
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
+    assert (
+        export_result["responses"]["422"]["description"]
+        == "Export job is incomplete, source payload unavailable, or requested serialization is unsupported."
+    )
 
     components = schema["components"]["schemas"]
     page_metadata = components["PageMetadata"]
@@ -1181,6 +1384,14 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     )
 
 
+async def test_openapi_fully_documents_analytics_input_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, ANALYTICS_INPUT_SCHEMA_ROOTS)
+
+
 async def test_openapi_describes_integration_policy_and_core_snapshot(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
@@ -1198,6 +1409,15 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert consumer_system["description"] == (
         "Downstream consumer system requesting policy resolution."
     )
+    assert (
+        "Used directly by lotus-gateway platform/bootstrap flows"
+        in (effective_policy["description"])
+    )
+    assert "`include_sections`" in effective_policy["description"]
+    assert (
+        "does not publish portfolio state or analytics inputs" in (effective_policy["description"])
+    )
+    assert "`consumerSystem` and `tenantId` are not supported" in (effective_policy["description"])
 
     portfolio_param = next(
         parameter
@@ -1205,6 +1425,10 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         if parameter["name"] == "portfolio_id"
     )
     assert portfolio_param["description"] == "Portfolio identifier for the snapshot request."
+    assert "lotus-gateway workspace state sourcing" in core_snapshot["description"]
+    assert (
+        "lotus-risk concentration or rolling-Sharpe context flows" in core_snapshot["description"]
+    )
     assert not any(
         parameter["name"] == "consumer_system" for parameter in core_snapshot.get("parameters", [])
     )
@@ -1219,6 +1443,9 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "example"
     ]
     assert invalid_enrichment["detail"] == "security_ids must contain at least one identifier"
+    assert "Used directly by lotus-advise and lotus-risk" in (enrichment_bulk["description"])
+    assert "lotus-performance or lotus-gateway may adopt" in (enrichment_bulk["description"])
+    assert "null issuer fields for unknown securities" in enrichment_bulk["description"]
 
     components = schema["components"]["schemas"]
     policy_response = components["EffectiveIntegrationPolicyResponse"]
@@ -1233,13 +1460,20 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert policy_response["properties"]["policy_provenance"]["description"] == (
         "Policy lineage metadata showing how the effective policy was resolved."
     )
+    assert policy_response["properties"]["allowed_sections"]["description"] == (
+        "Section allow-list resolved for this consumer and tenant."
+    )
     assert enrichment_request["properties"]["security_ids"]["description"] == (
-        "Canonical Lotus security identifiers to enrich in one deterministic batch."
+        "Canonical Lotus security identifiers to enrich in one deterministic batch. Order is "
+        "preserved in the response."
     )
     assert enrichment_response["properties"]["product_name"]["default"] == (
         "InstrumentReferenceBundle"
     )
     assert enrichment_response["properties"]["product_version"]["default"] == "v1"
+    assert enrichment_response["properties"]["records"]["description"].startswith(
+        "Deterministic enrichment records in the same order as request security_ids."
+    )
     assert core_snapshot_governance["properties"]["requested_sections"]["examples"] == [
         ["positions_baseline", "positions_projected", "positions_delta"]
     ]
@@ -1269,9 +1503,42 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert core_snapshot_response["properties"]["request_fingerprint"]["description"] == (
         "Deterministic fingerprint of the full core snapshot request contract."
     )
+    assert "portfolio-state source data" in core_snapshot["description"]
+    assert (
+        "does not publish a legacy nested `portfolio` or `metadata` envelope"
+        in (core_snapshot["description"])
+    )
+    assert "top-level source-data runtime metadata" in core_snapshot["description"]
+    assert "valuation_context" in core_snapshot["description"]
+    assert core_snapshot_request["properties"]["simulation"]["description"].startswith(
+        "Simulation options required only when snapshot_mode=SIMULATION."
+    )
+    assert core_snapshot_request["properties"]["options"]["description"].startswith(
+        "Request-level section behavior options controlling zero-quantity inclusion"
+    )
+    assert core_snapshot_response["properties"]["sections"]["description"].startswith(
+        "Requested snapshot section payload."
+    )
     assert core_snapshot_sections["properties"]["positions_delta"]["description"] == (
         "Per-security baseline versus projected deltas."
     )
+
+
+async def test_openapi_fully_documents_core_snapshot_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, CORE_SNAPSHOT_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_policy_and_enrichment_schema_families(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, INTEGRATION_POLICY_SCHEMA_ROOTS)
+    assert_schema_properties_are_documented_and_exampled(schema, INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS)
 
 
 async def test_openapi_describes_benchmark_reference_parameters(async_test_client):
@@ -1292,6 +1559,7 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "/integration/benchmarks/{benchmark_id}/market-series"
     ]["post"]
     index_price_series = schema["paths"]["/integration/indices/{index_id}/price-series"]["post"]
+    index_return_series = schema["paths"]["/integration/indices/{index_id}/return-series"]["post"]
     benchmark_coverage = schema["paths"]["/integration/benchmarks/{benchmark_id}/coverage"]["post"]
     risk_free_coverage = schema["paths"]["/integration/reference/risk-free-series/coverage"]["post"]
     risk_free_series = schema["paths"]["/integration/reference/risk-free-series"]["post"]
@@ -1307,7 +1575,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert portfolio_param["description"] == (
         "Portfolio identifier whose effective benchmark assignment is requested."
     )
-    assert "lotus-performance, lotus-risk, and reporting" in benchmark_assignment["description"]
+    assert "lotus-performance benchmark-aware analytics" in benchmark_assignment["description"]
+    assert "lotus-gateway workspace composition flows" in benchmark_assignment["description"]
+    assert "reporting workflows" in benchmark_assignment["description"]
+    assert "portfolio_id and as_of_date" in benchmark_assignment["description"]
 
     assignment_not_found = benchmark_assignment["responses"]["404"]["content"]["application/json"][
         "example"
@@ -1323,6 +1594,11 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     )
     assert benchmark_id["description"] == (
         "Benchmark identifier for the requested composition window contract."
+    )
+    assert "without daily-expanding weights" in benchmark_composition_window["description"]
+    assert (
+        "calculate benchmark returns across rebalance windows"
+        in benchmark_composition_window["description"]
     )
 
     composition_not_found = benchmark_composition_window["responses"]["404"]["content"][
@@ -1340,6 +1616,15 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_id["description"] == (
         "Benchmark identifier for the requested benchmark definition."
     )
+    assert "point-in-time reference context" in benchmark_definition["description"]
+    assert (
+        "Used directly by lotus-performance stateful benchmark sourcing"
+        in (benchmark_definition["description"])
+    )
+    assert (
+        "not the strategic cross-window benchmark calculation contract"
+        in (benchmark_definition["description"])
+    )
 
     definition_not_found = benchmark_definition["responses"]["404"]["content"]["application/json"][
         "example"
@@ -1356,11 +1641,28 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert market_series_param["description"] == (
         "Benchmark identifier for the requested market series input contract."
     )
-    assert "lotus-performance and lotus-risk" in benchmark_market_series["description"]
-    assert "lotus-performance and lotus-risk" in risk_free_series["description"]
     assert (
-        "lotus-performance, lotus-risk, lotus-gateway, and lotus-advise"
+        "lotus-performance and other downstream benchmark sourcing workflows"
+        in benchmark_market_series["description"]
+    )
+    assert "benchmark-to-target FX context semantics" in benchmark_market_series["description"]
+    assert "lotus-performance owns benchmark math" in benchmark_market_series["description"]
+    assert "lotus-performance and lotus-risk" in risk_free_series["description"]
+    assert "raw risk-free reference series" in risk_free_series["description"]
+    assert "downstream readiness or support flows" in (benchmark_coverage["description"])
+    assert (
+        "source-data readiness evidence, not benchmark returns"
+        in (benchmark_coverage["description"])
+    )
+    assert "lotus-risk and other readiness/support flows" in (risk_free_coverage["description"])
+    assert (
+        "downstream consumers that need governed shared classification labels"
         in (classification_taxonomy["description"])
+    )
+    assert "instead of local taxonomy drift" in classification_taxonomy["description"]
+    assert (
+        "Missing labels remain absent rather than synthesized"
+        in classification_taxonomy["description"]
     )
 
     index_id = next(
@@ -1369,6 +1671,44 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         if parameter["name"] == "index_id"
     )
     assert index_id["description"] == "Index identifier for the requested raw price series."
+    benchmark_catalog_route = schema["paths"]["/integration/benchmarks/catalog"]["post"]
+    index_catalog_route = schema["paths"]["/integration/indices/catalog"]["post"]
+    benchmark_return_series = schema["paths"][
+        "/integration/benchmarks/{benchmark_id}/return-series"
+    ]["post"]
+    assert (
+        "Used directly by lotus-gateway workspace benchmark selection flows"
+        in (benchmark_catalog_route["description"])
+    )
+    assert "before targeted benchmark assignment" in benchmark_catalog_route["description"]
+    assert (
+        "Prefer the targeted routes once a concrete benchmark identifier is known."
+        in (benchmark_catalog_route["description"])
+    )
+    assert (
+        "Used directly by lotus-performance benchmark exposure and attribution sourcing flows"
+        in (index_catalog_route["description"])
+    )
+    assert "governed classification labels" in index_catalog_route["description"]
+    assert "broad-market sector labels" in index_catalog_route["description"]
+    assert "prefer `index_ids` to avoid full-catalog scans" in index_catalog_route["description"]
+    assert (
+        "Used directly by lotus-performance stateful benchmark sourcing"
+        in (index_price_series["description"])
+    )
+    assert (
+        "not a normalized benchmark-engine output contract" in (index_price_series["description"])
+    )
+    assert "lotus-performance and other downstream workflows" in index_return_series["description"]
+    assert (
+        "not a substitute for benchmark composition plus market-series inputs"
+        in (index_return_series["description"])
+    )
+    assert (
+        "Used directly by lotus-performance vendor-series sourcing"
+        in (benchmark_return_series["description"])
+    )
+    assert "not the default benchmark-math source" in benchmark_return_series["description"]
 
     coverage_param = next(
         parameter
@@ -1397,6 +1737,8 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     coverage_response = components["CoverageResponse"]
     classification_taxonomy_response = components["ClassificationTaxonomyResponse"]
     benchmark_component_response = components["BenchmarkComponentResponse"]
+    benchmark_assignment_request = components["BenchmarkAssignmentRequest"]
+    index_catalog_request = components["IndexCatalogRequest"]
 
     assert benchmark_catalog["properties"]["records"]["description"] == (
         "Benchmark definition records effective for the requested date."
@@ -1407,6 +1749,13 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_component_response["properties"]["rebalance_event_id"]["description"] == (
         "Rebalance event identifier linking related composition changes."
     )
+    assert index_catalog_request["properties"]["index_ids"]["description"].startswith(
+        "Optional targeted index identifiers to resolve."
+    )
+    assert index_catalog_request["properties"]["index_ids"]["type"] == "array"
+    assert components["IndexDefinitionResponse"]["properties"]["classification_labels"][
+        "description"
+    ].startswith("Canonical index classification labels required for attribution")
     assert benchmark_assignment_response["properties"]["product_name"]["default"] == (
         "BenchmarkAssignment"
     )
@@ -1416,6 +1765,9 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert benchmark_market_series_response["properties"]["product_name"]["default"] == (
         "MarketDataWindow"
     )
+    assert benchmark_market_series_response["properties"]["component_metadata_policy"][
+        "description"
+    ].startswith("Contract guidance for resolving canonical component metadata")
     assert index_price_series_response["properties"]["product_name"]["default"] == (
         "IndexSeriesWindow"
     )
@@ -1432,6 +1784,20 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         "InstrumentReferenceBundle"
     )
     assert benchmark_assignment_response["properties"]["product_version"]["default"] == "v1"
+    assert (
+        "does not change benchmark assignment selection"
+        in (benchmark_assignment_request["properties"]["reporting_currency"]["description"])
+    )
+    assert (
+        "current implementation still resolves the effective assignment"
+        in (benchmark_assignment_request["properties"]["policy_context"]["description"])
+    )
+    assert benchmark_assignment_response["properties"]["assignment_recorded_at"]["examples"] == [
+        "2026-01-31T09:15:00Z"
+    ]
+    assert benchmark_assignment_response["properties"]["contract_version"]["examples"] == [
+        "rfc_062_v1"
+    ]
     source_data_product_reference_responses = [
         benchmark_assignment_response,
         benchmark_composition_window_response,
@@ -1514,12 +1880,89 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert classification_taxonomy_response["properties"]["request_fingerprint"]["description"] == (
         "Deterministic request fingerprint for the taxonomy response scope."
     )
+    assert classification_taxonomy_response["properties"]["taxonomy_version"]["examples"] == [
+        "rfc_062_v1"
+    ]
     reference_page_metadata = components["ReferencePageMetadata"]
     assert reference_page_metadata["properties"]["returned_component_count"]["description"] == (
         "Number of component series records returned in the current page."
     )
     assert reference_page_metadata["properties"]["request_scope_fingerprint"]["description"] == (
         "Deterministic fingerprint of the request scope bound to this page sequence."
+    )
+
+
+async def test_openapi_fully_documents_benchmark_reference_catalog_schema_family(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(
+        schema, BENCHMARK_REFERENCE_CATALOG_SCHEMA_ROOTS
+    )
+
+
+async def test_openapi_fully_documents_benchmark_assignment_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_benchmark_source_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_SOURCE_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_risk_free_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, RISK_FREE_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_classification_taxonomy_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(
+        schema, CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS
+    )
+
+
+async def test_openapi_fully_documents_reconciliation_evidence_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(
+        schema, RECONCILIATION_EVIDENCE_SCHEMA_ROOTS
+    )
+
+
+async def test_openapi_fully_documents_ingestion_evidence_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, INGESTION_EVIDENCE_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_reconciliation_support_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(
+        schema, RECONCILIATION_SUPPORT_SCHEMA_ROOTS
     )
 
 
@@ -1542,10 +1985,19 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert consumer_system["schema"]["default"] == "lotus-gateway"
     assert tenant_id["description"] == "Tenant or client identifier for policy resolution."
     assert tenant_id["schema"]["default"] == "default"
+    assert (
+        "Used directly by lotus-gateway platform capability aggregation"
+        in (capabilities["description"])
+    )
+    assert "supported lotus-core integration paths" in capabilities["description"]
+    assert "snake_case query parameters" in capabilities["description"]
+    assert "not a substitute for endpoint-specific OpenAPI" in capabilities["description"]
+    assert "`consumerSystem` and `tenantId` are not supported" in capabilities["description"]
 
     components = schema["components"]["schemas"]
     feature_capability = components["FeatureCapability"]
     workflow_capability = components["WorkflowCapability"]
+    capabilities_response = components["IntegrationCapabilitiesResponse"]
 
     assert feature_capability["properties"]["key"]["description"] == "Canonical feature key."
     assert feature_capability["properties"]["owner_service"]["description"] == (
@@ -1557,3 +2009,17 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert workflow_capability["properties"]["required_features"]["description"] == (
         "Feature keys required for workflow execution."
     )
+    assert capabilities_response["properties"]["consumer_system"]["description"] == (
+        "Canonical consumer system receiving capabilities."
+    )
+    assert capabilities_response["properties"]["tenant_id"]["description"] == (
+        "Tenant identifier used for capability policy resolution."
+    )
+
+
+async def test_openapi_fully_documents_capabilities_schema_family(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(schema, CAPABILITIES_SCHEMA_ROOTS)

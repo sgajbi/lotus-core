@@ -49,6 +49,7 @@ from src.services.query_service.app.services.core_snapshot_service import (
     SnapshotGovernanceContext,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+from .response_helpers import problem_response
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -94,8 +95,17 @@ def get_core_snapshot_service(
     response_model=EffectiveIntegrationPolicyResponse,
     summary="Get effective lotus-core integration policy",
     description=(
-        "Returns effective policy diagnostics and provenance for the given consumer and tenant "
-        "context, including strict-mode behavior and allowed sections."
+        "What: Return effective integration policy diagnostics for a consumer and tenant "
+        "context.\n"
+        "How: Resolves the canonical policy rule, reports policy provenance, and optionally "
+        "evaluates requested snapshot sections through `include_sections`.\n"
+        "When: Used directly by lotus-gateway platform/bootstrap flows, operator tooling, and "
+        "other downstream clients that need to inspect lotus-core section policy before calling "
+        "governed source-data routes such as "
+        "`/integration/portfolios/{portfolio_id}/core-snapshot`. This route returns policy "
+        "diagnostics only; it does not publish portfolio state or analytics inputs. Callers must "
+        "use the canonical snake_case query parameters `consumer_system` and `tenant_id`; "
+        "camelCase aliases such as `consumerSystem` and `tenantId` are not supported."
     ),
 )
 async def get_effective_integration_policy(
@@ -131,22 +141,22 @@ async def get_effective_integration_policy(
         status.HTTP_400_BAD_REQUEST: {
             "description": "Invalid request payload or invalid section/mode combination."
         },
-        status.HTTP_403_FORBIDDEN: {
-            "description": "Requested sections are blocked by strict integration policy.",
-            "content": {"application/json": {"example": INTEGRATION_POLICY_BLOCKED_EXAMPLE}},
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio or simulation session not found.",
-            "content": {"application/json": {"example": CORE_SNAPSHOT_NOT_FOUND_EXAMPLE}},
-        },
-        status.HTTP_409_CONFLICT: {
-            "description": "Simulation expected version mismatch or portfolio/session conflict.",
-            "content": {"application/json": {"example": CORE_SNAPSHOT_CONFLICT_EXAMPLE}},
-        },
-        HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Section cannot be fulfilled due to missing valuation dependencies.",
-            "content": {"application/json": {"example": CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE}},
-        },
+        status.HTTP_403_FORBIDDEN: problem_response(
+            "Requested sections are blocked by strict integration policy.",
+            INTEGRATION_POLICY_BLOCKED_EXAMPLE,
+        ),
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio or simulation session not found.",
+            CORE_SNAPSHOT_NOT_FOUND_EXAMPLE,
+        ),
+        status.HTTP_409_CONFLICT: problem_response(
+            "Simulation expected version mismatch or portfolio/session conflict.",
+            CORE_SNAPSHOT_CONFLICT_EXAMPLE,
+        ),
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            "Section cannot be fulfilled due to missing valuation dependencies.",
+            CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE,
+        ),
     },
     summary="Fetch governed core snapshot contract",
     description=(
@@ -154,8 +164,15 @@ async def get_effective_integration_policy(
         "integration consumers.\n"
         "How: Applies tenant and consumer policy, resolves baseline or simulation state, "
         "and returns reproducibility metadata including request fingerprint and freshness.\n"
-        "When: Used by downstream systems that need policy-aware positions, totals, "
-        "delta, or enrichment views without direct query-service coupling."
+        "When: Used directly by lotus-gateway workspace state sourcing and lotus-risk "
+        "concentration or rolling-Sharpe context flows that need policy-aware positions, "
+        "totals, delta, or enrichment views without direct query-service coupling. Other "
+        "downstream consumers may adopt it later, but this route publishes portfolio-state "
+        "source data, not downstream analytics conclusions such as performance returns, "
+        "risk metrics, or advisory recommendation ownership.\n"
+        "Contract note: the governed response does not publish a legacy nested `portfolio` "
+        "or `metadata` envelope. Consumer context should be read from the top-level "
+        "source-data runtime metadata, `valuation_context`, and the requested `sections`."
     ),
     openapi_extra=source_data_product_openapi_extra("PortfolioStateSnapshot"),
 )
@@ -244,16 +261,22 @@ async def create_core_snapshot(
     "/instruments/enrichment-bulk",
     response_model=InstrumentEnrichmentBulkResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Invalid request payload.",
-            "content": {"application/json": {"example": INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE}},
-        },
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Invalid request payload.",
+            INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE,
+        ),
     },
     summary="Resolve issuer enrichment for security identifiers",
     description=(
-        "Returns issuer enrichment for a caller-provided security_id list. "
-        "Records are deterministic and preserve request order. Unknown securities are returned "
-        "with null issuer fields."
+        "What: Return source-owned issuer and liquidity enrichment for a caller-provided "
+        "security_id list.\n"
+        "How: Resolves canonical instrument metadata in one deterministic batch, preserves "
+        "request order, and returns null issuer fields for unknown securities instead of "
+        "inventing fallback identities.\n"
+        "When: Used directly by lotus-advise and lotus-risk when shared instrument reference "
+        "context is needed without direct query-service coupling. Other downstream consumers "
+        "such as lotus-performance or lotus-gateway may adopt the same governed enrichment "
+        "contract when they need source-owned reference context."
     ),
     openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )
@@ -272,18 +295,21 @@ async def get_instrument_enrichment_bulk(
     "/portfolios/{portfolio_id}/benchmark-assignment",
     response_model=BenchmarkAssignmentResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "No effective benchmark assignment found.",
-            "content": {"application/json": {"example": BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective benchmark assignment found.",
+            BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE,
+        ),
     },
     summary="Resolve effective portfolio benchmark assignment",
     description=(
         "What: Resolve benchmark assignment for a portfolio as-of a point-in-time date.\n"
         "How: Applies effective-dating and assignment version ordering to return "
-        "deterministic match.\n"
-        "When: Used by lotus-performance, lotus-risk, and reporting workflows before "
-        "benchmark-aware analytics or evidence generation."
+        "deterministic match. Resolution is keyed by portfolio_id and as_of_date; "
+        "request reporting_currency and policy_context are caller-context fields and do "
+        "not change assignment selection in the current implementation.\n"
+        "When: Used by lotus-performance benchmark-aware analytics, lotus-gateway workspace "
+        "composition flows, and reporting workflows that need governed benchmark context "
+        "before downstream benchmark math or evidence generation."
     ),
     openapi_extra=source_data_product_openapi_extra("BenchmarkAssignment"),
 )
@@ -315,12 +341,10 @@ async def resolve_portfolio_benchmark_assignment(
     "/benchmarks/{benchmark_id}/composition-window",
     response_model=BenchmarkCompositionWindowResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "No overlapping benchmark definition found.",
-            "content": {
-                "application/json": {"example": BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE}
-            },
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No overlapping benchmark definition found.",
+            BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE,
+        ),
         status.HTTP_409_CONFLICT: {
             "description": "Benchmark definition changed incompatibly inside the requested window."
         },
@@ -332,7 +356,8 @@ async def resolve_portfolio_benchmark_assignment(
         "How: Resolves overlapping benchmark definition and composition records with deterministic "
         "ordering and without daily-expanding weights.\n"
         "When: Used by lotus-performance and other downstream consumers to calculate benchmark "
-        "returns across rebalance windows."
+        "returns across rebalance windows. This is the strategic cross-rebalance source contract; "
+        "single-date benchmark definition reads are not a substitute for long-window benchmark math."
     ),
     openapi_extra=source_data_product_openapi_extra("BenchmarkConstituentWindow"),
 )
@@ -369,16 +394,20 @@ async def fetch_benchmark_composition_window(
     "/benchmarks/{benchmark_id}/definition",
     response_model=BenchmarkDefinitionResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "No effective benchmark definition found.",
-            "content": {"application/json": {"example": BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE}},
-        }
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective benchmark definition found.",
+            BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE,
+        )
     },
     summary="Fetch effective benchmark definition",
     description=(
         "What: Return effective benchmark definition for an as-of date.\n"
         "How: Resolves benchmark master fields and composition records with effective dating.\n"
-        "When: Used by lotus-performance to construct benchmark input context."
+        "When: Used directly by lotus-performance stateful benchmark sourcing and other "
+        "downstream consumers that need point-in-time benchmark reference context before "
+        "targeted composition-window, market-series, or benchmark-aware reporting workflows. "
+        "This is point-in-time reference context, not the strategic cross-window benchmark "
+        "calculation contract."
     ),
 )
 async def fetch_benchmark_definition(
@@ -409,7 +438,10 @@ async def fetch_benchmark_definition(
     description=(
         "What: Return benchmark master records effective on a requested date.\n"
         "How: Applies optional filters and effective dating in query service.\n"
-        "When: Used by downstream integration workflows to discover valid benchmark references."
+        "When: Used directly by lotus-gateway workspace benchmark selection flows and other "
+        "downstream discovery workflows to find valid benchmark references before targeted "
+        "benchmark assignment, definition, market-series, or benchmark-return retrieval. "
+        "Prefer the targeted routes once a concrete benchmark identifier is known."
     ),
 )
 async def fetch_benchmark_catalog(
@@ -433,9 +465,14 @@ async def fetch_benchmark_catalog(
     summary="Fetch index master catalog",
     description=(
         "What: Return index master records effective on a requested date.\n"
-        "How: Applies optional filters and effective dating in query service.\n"
-        "When: Used by lotus-performance and attribution pipelines to discover "
-        "canonical index metadata."
+        "How: Applies optional targeted index_ids filters, broader attribute filters, and "
+        "effective dating in query service.\n"
+        "When: Used directly by lotus-performance benchmark exposure and attribution sourcing "
+        "flows to discover canonical index metadata and governed classification labels. "
+        "Benchmark component indices can publish broad-market sector labels such as "
+        "`broad_market_equity` or `broad_market_fixed_income` for exposure grouping. When a "
+        "downstream caller already knows the benchmark component universe, prefer `index_ids` "
+        "to avoid full-catalog scans."
     ),
 )
 async def fetch_index_catalog(
@@ -446,6 +483,7 @@ async def fetch_index_catalog(
         IndexCatalogResponse,
         await integration_service.list_index_catalog(
             as_of_date=request.as_of_date,
+            index_ids=request.index_ids,
             index_currency=request.index_currency,
             index_type=request.index_type,
             index_status=request.index_status,
@@ -461,8 +499,11 @@ async def fetch_index_catalog(
         "What: Return benchmark market series inputs required by lotus-performance.\n"
         "How: Resolves components and returns aligned raw series honoring requested "
         "series_fields, deterministic paging, and benchmark-to-target FX context semantics.\n"
-        "When: Used by lotus-performance and lotus-risk for benchmark analytics and replay-safe "
-        "portfolio or risk attribution calculations."
+        "When: Used by lotus-performance and other downstream benchmark sourcing workflows that "
+        "need native component series plus benchmark-to-target FX context. The response "
+        "publishes native component series plus optional benchmark-to-target FX context; "
+        "lotus-performance owns benchmark math and any benchmark-currency normalization of "
+        "component series."
     ),
     openapi_extra=source_data_product_openapi_extra("MarketDataWindow"),
 )
@@ -493,7 +534,10 @@ async def fetch_benchmark_market_series(
     description=(
         "What: Return raw index price series for the requested index and window.\n"
         "How: Reads canonical time series records with deterministic ordering.\n"
-        "When: Used by downstream analytics pipelines requiring raw index price inputs."
+        "When: Used directly by lotus-performance stateful benchmark sourcing and other "
+        "downstream benchmark workflows that require raw index price inputs for calculation, "
+        "validation, or evidence. This is source reference data, not a normalized "
+        "benchmark-engine output contract."
     ),
     openapi_extra=source_data_product_openapi_extra("IndexSeriesWindow"),
 )
@@ -519,7 +563,10 @@ async def fetch_index_price_series(
     description=(
         "What: Return raw vendor-provided index return series.\n"
         "How: Reads canonical index return records with explicit convention fields.\n"
-        "When: Used by lotus-performance for return-based benchmark processing."
+        "When: Used by lotus-performance and other downstream workflows when raw provider return "
+        "inputs are required for validation, evidence, or explicit return-series sourcing. This "
+        "is a raw source contract, not a substitute for benchmark composition plus market-series "
+        "inputs when lower-level benchmark reconstruction is required."
     ),
     openapi_extra=source_data_product_openapi_extra("IndexSeriesWindow"),
 )
@@ -545,7 +592,10 @@ async def fetch_index_return_series(
     description=(
         "What: Return raw vendor-provided benchmark return series.\n"
         "How: Reads canonical benchmark return records with explicit convention fields.\n"
-        "When: Used by lotus-performance when provider benchmark return inputs are available."
+        "When: Used directly by lotus-performance vendor-series sourcing and other downstream "
+        "workflows when provider benchmark return inputs are available for validation, evidence, "
+        "or explicit override modes. This is not the default benchmark-math source when "
+        "lower-level benchmark composition and market-series contracts are available."
     ),
 )
 async def fetch_benchmark_return_series(
@@ -574,7 +624,10 @@ async def fetch_benchmark_return_series(
         "What: Return raw risk-free reference series for requested currency and window.\n"
         "How: Serves canonical risk-free records with convention metadata and lineage.\n"
         "When: Used by lotus-performance and lotus-risk for excess return, Sharpe, and "
-        "risk-adjusted analytics inputs."
+        "risk-adjusted analytics inputs. Empty `points` means the route is reachable but "
+        "usable source data is absent for the requested currency/window, so downstream "
+        "readiness checks should treat that as a data-availability gap rather than a "
+        "fallback-to-zero methodology signal."
     ),
     openapi_extra=source_data_product_openapi_extra("RiskFreeSeriesWindow"),
 )
@@ -595,8 +648,10 @@ async def fetch_risk_free_series(
     description=(
         "What: Return effective classification taxonomy records.\n"
         "How: Applies as-of effective dating and optional scope filtering.\n"
-        "When: Used by lotus-performance, lotus-risk, lotus-gateway, and lotus-advise to enforce "
-        "shared classification labels instead of local taxonomy drift."
+        "When: Used by downstream consumers that need governed shared classification labels "
+        "instead of local taxonomy drift. Missing labels remain absent rather than synthesized, "
+        "so consumers can distinguish governed coverage gaps from valid source-owned "
+        "classifications."
     ),
     openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )
@@ -621,7 +676,9 @@ async def fetch_classification_taxonomy(
         "What: Return benchmark reference data coverage diagnostics for an expected window.\n"
         "How: Compares expected window dates against observed data and summarizes "
         "quality distribution.\n"
-        "When: Used by ops monitoring and pre-run validation before analytics processing."
+        "When: Used by downstream readiness or support flows before benchmark-aware analytics "
+        "processing. This route publishes source-data readiness evidence, not benchmark returns "
+        "or benchmark-engine outputs."
     ),
     openapi_extra=source_data_product_openapi_extra("DataQualityCoverageReport"),
 )
@@ -652,7 +709,10 @@ async def get_benchmark_coverage(
         "What: Return risk-free series coverage diagnostics for an expected window.\n"
         "How: Compares expected window dates against observed data and summarizes "
         "quality distribution.\n"
-        "When: Used by ops monitoring and analytics readiness checks."
+        "When: Used by lotus-risk and other readiness/support flows that need deterministic "
+        "risk-free availability evidence before downstream analytics proceed. A response with "
+        "`total_points = 0` and null observed bounds indicates an upstream data-availability gap "
+        "for the requested currency/window."
     ),
     openapi_extra=source_data_product_openapi_extra("DataQualityCoverageReport"),
 )

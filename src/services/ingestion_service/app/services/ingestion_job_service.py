@@ -499,9 +499,7 @@ class IngestionJobService:
         async for db in get_async_db_session():
             async with db.begin():
                 row = await db.scalar(
-                    select(DBIngestionJob)
-                    .where(DBIngestionJob.job_id == job_id)
-                    .limit(1)
+                    select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
                 )
                 if row is None:
                     return
@@ -631,12 +629,19 @@ class IngestionJobService:
             accepted_jobs = int(row[1] or 0)
             queued_jobs = int(row[2] or 0)
             failed_jobs = int(row[3] or 0)
+            oldest_backlog_job_id = await db.scalar(
+                select(DBIngestionJob.job_id)
+                .where(DBIngestionJob.status.in_(("accepted", "queued")))
+                .order_by(DBIngestionJob.submitted_at.asc(), DBIngestionJob.id.asc())
+                .limit(1)
+            )
             return IngestionHealthSummaryResponse(
                 total_jobs=total_jobs,
                 accepted_jobs=accepted_jobs,
                 queued_jobs=queued_jobs,
                 failed_jobs=failed_jobs,
                 backlog_jobs=accepted_jobs + queued_jobs,
+                oldest_backlog_job_id=oldest_backlog_job_id,
             )
         return IngestionHealthSummaryResponse(
             total_jobs=0,
@@ -1254,9 +1259,7 @@ class IngestionJobService:
             stmt = select(DBConsumerDlqReplayAudit).where(
                 and_(
                     DBConsumerDlqReplayAudit.replay_fingerprint == replay_fingerprint,
-                    DBConsumerDlqReplayAudit.replay_status.in_(
-                        _SUCCESSFUL_REPLAY_AUDIT_STATUSES
-                    ),
+                    DBConsumerDlqReplayAudit.replay_status.in_(_SUCCESSFUL_REPLAY_AUDIT_STATUSES),
                 )
             )
             if recovery_path is not None:

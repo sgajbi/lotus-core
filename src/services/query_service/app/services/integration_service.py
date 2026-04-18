@@ -542,12 +542,14 @@ class IntegrationService:
     async def list_index_catalog(
         self,
         as_of_date: date,
+        index_ids: list[str],
         index_currency: str | None,
         index_type: str | None,
         index_status: str | None,
     ) -> IndexCatalogResponse:
         rows = await self._reference_repository.list_index_definitions(
             as_of_date=as_of_date,
+            index_ids=index_ids,
             index_currency=index_currency,
             index_type=index_type,
             index_status=index_status,
@@ -774,6 +776,9 @@ class IntegrationService:
             fx_context_target_currency=fx_context_target_currency,
             normalization_policy="native_component_series_downstream_normalization_required",
             normalization_status=normalization_status,
+            component_metadata_policy=(
+                "targeted_index_catalog_lookup_required_for_component_metadata"
+            ),
             request_fingerprint=request_scope_fingerprint,
             page=ReferencePageMetadata(
                 page_size=page_size,

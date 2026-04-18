@@ -38,6 +38,19 @@ PORTFOLIO_BUNDLE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for /ingest/portfolio-bundle.",
     }
 }
+PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": (
+            "Portfolio bundle publish stopped after these entity groups were already published: "
+            "{'business_dates': 1, 'portfolios': 0, 'instruments': 0, "
+            "'transactions': 0, 'market_prices': 0, 'fx_rates': 0}. "
+            "Failed to publish portfolio 'P1'."
+        ),
+        "failed_record_keys": ["P1"],
+        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+    }
+}
 
 
 @router.post(
@@ -55,11 +68,13 @@ PORTFOLIO_BUNDLE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
                 "application/json": {"example": PORTFOLIO_BUNDLE_RATE_LIMIT_EXCEEDED_EXAMPLE}
             },
         },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Portfolio-bundle publish failed after job metadata was recorded.",
+            "content": {"application/json": {"example": PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE}},
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
-            "content": {
-                "application/json": {"example": PORTFOLIO_BUNDLE_MODE_BLOCKED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": PORTFOLIO_BUNDLE_MODE_BLOCKED_EXAMPLE}},
         },
     },
     tags=["Portfolio Bundle"],
@@ -137,7 +152,15 @@ async def ingest_portfolio_bundle(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_PUBLISH_FAILED",
+                "message": str(exc),
+                "failed_record_keys": exc.failed_record_keys,
+                "job_id": job_result.job.job_id,
+            },
+        ) from exc
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise
@@ -170,4 +193,3 @@ async def ingest_portfolio_bundle(
         accepted_count=accepted_count,
         idempotency_key=idempotency_key,
     )
-

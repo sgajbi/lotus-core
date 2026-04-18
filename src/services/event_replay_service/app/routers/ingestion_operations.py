@@ -24,6 +24,7 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     IngestionJobListResponse,
     IngestionJobRecordStatusResponse,
     IngestionJobResponse,
+    IngestionJobStatus,
     IngestionOperatingBandResponse,
     IngestionOpsModeResponse,
     IngestionOpsModeUpdateRequest,
@@ -71,6 +72,282 @@ INGESTION_JOB_RESPONSE_EXAMPLE = {
     "failure_reason": None,
     "retry_count": 1,
     "last_retried_at": "2026-03-06T13:24:10.512Z",
+}
+
+INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE = {
+    "failures": [
+        {
+            "failure_id": "fail_01J5S27P16BSKQ3R2P2HK67GQZ",
+            "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+            "failure_phase": "publish",
+            "failure_reason": "Kafka publish timeout for topic transactions.raw.received.",
+            "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+            "failed_at": "2026-03-06T13:23:09.021Z",
+        }
+    ],
+    "total": 1,
+}
+
+INGESTION_JOB_RECORD_STATUS_RESPONSE_EXAMPLE = {
+    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    "entity_type": "transaction",
+    "accepted_count": 3,
+    "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+    "replayable_record_keys": [
+        "TXN-2026-000145",
+        "TXN-2026-000146",
+        "TXN-2026-000147",
+    ],
+}
+
+INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE = {
+    "total_jobs": 2450,
+    "accepted_jobs": 3,
+    "queued_jobs": 7,
+    "failed_jobs": 2,
+    "backlog_jobs": 10,
+    "oldest_backlog_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+}
+
+INGESTION_CONSUMER_LAG_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "backlog_jobs": 10,
+    "total_groups": 2,
+    "groups": [
+        {
+            "consumer_group": "persistence-service-group",
+            "original_topic": "transactions.raw.received",
+            "dlq_events": 21,
+            "last_observed_at": "2026-03-06T13:25:42.501Z",
+            "lag_severity": "high",
+        },
+        {
+            "consumer_group": "valuation-service-group",
+            "original_topic": "market-prices.raw.received",
+            "dlq_events": 8,
+            "last_observed_at": "2026-03-06T13:21:18.113Z",
+            "lag_severity": "medium",
+        },
+    ],
+}
+
+INGESTION_SLO_STATUS_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "total_jobs": 320,
+    "failed_jobs": 4,
+    "failure_rate": "0.0125",
+    "p95_queue_latency_seconds": 1.42,
+    "backlog_age_seconds": 74.0,
+    "breach_failure_rate": False,
+    "breach_queue_latency": False,
+    "breach_backlog_age": False,
+}
+
+INGESTION_ERROR_BUDGET_STATUS_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "previous_lookback_minutes": 60,
+    "total_jobs": 320,
+    "failed_jobs": 7,
+    "failure_rate": "0.021875",
+    "remaining_error_budget": "0.008125",
+    "backlog_jobs": 12,
+    "previous_backlog_jobs": 9,
+    "backlog_growth": 3,
+    "replay_backlog_pressure_ratio": "0.0024",
+    "dlq_events_in_window": 4,
+    "dlq_budget_events_per_window": 10,
+    "dlq_pressure_ratio": "0.4000",
+    "breach_failure_rate": False,
+    "breach_backlog_growth": False,
+}
+
+INGESTION_OPERATING_BAND_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 60,
+    "operating_band": "yellow",
+    "recommended_action": "Scale up one band and monitor DLQ pressure.",
+    "backlog_age_seconds": 42.0,
+    "dlq_pressure_ratio": "0.3000",
+    "failure_rate": "0.0125",
+    "triggered_signals": ["backlog_age_seconds>=15", "dlq_pressure_ratio>=0.25"],
+}
+
+INGESTION_OPS_POLICY_RESPONSE_EXAMPLE = {
+    "policy_version": "v1",
+    "policy_fingerprint": "e6a9f2cc3bb5e5a7",
+    "lookback_minutes_default": 60,
+    "failure_rate_threshold_default": "0.03",
+    "queue_latency_threshold_seconds_default": 5.0,
+    "backlog_age_threshold_seconds_default": 300.0,
+    "replay_max_records_per_request": 5000,
+    "replay_max_backlog_jobs": 5000,
+    "reprocessing_worker_poll_interval_seconds": 10,
+    "reprocessing_worker_batch_size": 10,
+    "valuation_scheduler_poll_interval_seconds": 30,
+    "valuation_scheduler_batch_size": 100,
+    "valuation_scheduler_dispatch_rounds": 3,
+    "dlq_budget_events_per_window": 10,
+    "operating_band_yellow_backlog_age_seconds": 15.0,
+    "operating_band_orange_backlog_age_seconds": 60.0,
+    "operating_band_red_backlog_age_seconds": 180.0,
+    "operating_band_yellow_dlq_pressure_ratio": "0.25",
+    "operating_band_orange_dlq_pressure_ratio": "0.50",
+    "operating_band_red_dlq_pressure_ratio": "1.0",
+    "calculator_peak_lag_age_seconds": {
+        "position": 30,
+        "cost": 45,
+        "valuation": 60,
+        "cashflow": 45,
+        "timeseries": 120,
+    },
+    "replay_isolation_mode": "shared_workers",
+    "partition_growth_strategy": "scale_out_only",
+    "replay_dry_run_supported": True,
+}
+
+INGESTION_REPROCESSING_QUEUE_HEALTH_RESPONSE_EXAMPLE = {
+    "as_of": "2026-03-03T04:12:20.000Z",
+    "total_pending_jobs": 5,
+    "total_processing_jobs": 2,
+    "total_failed_jobs": 1,
+    "queues": [
+        {
+            "job_type": "RESET_WATERMARKS",
+            "pending_jobs": 4,
+            "processing_jobs": 1,
+            "failed_jobs": 0,
+            "oldest_pending_created_at": "2026-03-03T04:10:11.000Z",
+            "oldest_pending_age_seconds": 127.5,
+        },
+        {
+            "job_type": "RECALCULATE_POSITIONS",
+            "pending_jobs": 1,
+            "processing_jobs": 1,
+            "failed_jobs": 1,
+            "oldest_pending_created_at": "2026-03-03T04:11:03.000Z",
+            "oldest_pending_age_seconds": 75.0,
+        },
+    ],
+}
+
+INGESTION_CAPACITY_STATUS_RESPONSE_EXAMPLE = {
+    "as_of": "2026-03-03T14:55:22.000Z",
+    "lookback_minutes": 60,
+    "assumed_replicas": 2,
+    "total_backlog_records": 300,
+    "total_groups": 1,
+    "groups": [
+        {
+            "endpoint": "/ingest/transactions",
+            "entity_type": "transaction",
+            "total_records": 1200,
+            "processed_records": 900,
+            "backlog_records": 300,
+            "backlog_jobs": 6,
+            "lambda_in_events_per_second": "0.333333",
+            "mu_msg_per_replica_events_per_second": "0.250000",
+            "assumed_replicas": 2,
+            "effective_capacity_events_per_second": "0.500000",
+            "utilization_ratio": "0.666666",
+            "headroom_ratio": "0.333334",
+            "estimated_drain_seconds": 1800.0,
+            "saturation_state": "stable",
+        }
+    ],
+}
+
+INGESTION_BACKLOG_BREAKDOWN_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 1440,
+    "total_backlog_jobs": 8,
+    "largest_group_backlog_jobs": 6,
+    "largest_group_backlog_share": "0.75",
+    "top_3_backlog_share": "1.0",
+    "groups": [
+        {
+            "endpoint": "/ingest/transactions",
+            "entity_type": "transaction",
+            "total_jobs": 10,
+            "accepted_jobs": 2,
+            "queued_jobs": 4,
+            "failed_jobs": 4,
+            "backlog_jobs": 6,
+            "oldest_backlog_submitted_at": "2026-03-03T04:10:11.000Z",
+            "oldest_backlog_age_seconds": 127.5,
+            "failure_rate": "0.4",
+        },
+        {
+            "endpoint": "/ingest/instruments",
+            "entity_type": "instrument",
+            "total_jobs": 4,
+            "accepted_jobs": 1,
+            "queued_jobs": 1,
+            "failed_jobs": 2,
+            "backlog_jobs": 2,
+            "oldest_backlog_submitted_at": "2026-03-03T04:11:03.000Z",
+            "oldest_backlog_age_seconds": 75.0,
+            "failure_rate": "0.5",
+        },
+    ],
+}
+
+INGESTION_STALLED_JOB_LIST_RESPONSE_EXAMPLE = {
+    "threshold_seconds": 300,
+    "total": 2,
+    "jobs": [
+        {
+            "job_id": "job_stalled_001",
+            "endpoint": "/ingest/transactions",
+            "entity_type": "transaction",
+            "status": "accepted",
+            "submitted_at": "2026-03-03T04:10:11.000Z",
+            "queue_age_seconds": 901.0,
+            "retry_count": 0,
+            "suggested_action": (
+                "Investigate consumer lag and retry this job once root cause is resolved."
+            ),
+        },
+        {
+            "job_id": "job_stalled_002",
+            "endpoint": "/ingest/portfolio-bundles",
+            "entity_type": "portfolio_bundle",
+            "status": "queued",
+            "submitted_at": "2026-03-03T03:58:02.000Z",
+            "queue_age_seconds": 1632.5,
+            "retry_count": 2,
+            "suggested_action": (
+                "Inspect downstream dependency saturation before forcing replay or pausing intake."
+            ),
+        },
+    ],
+}
+
+CONSUMER_DLQ_EVENT_LIST_RESPONSE_EXAMPLE = {
+    "events": [
+        {
+            "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+            "original_topic": "transactions.raw.received",
+            "consumer_group": "persistence-service-group",
+            "dlq_topic": "dlq.persistence_service",
+            "original_key": "TXN-2026-000145",
+            "error_reason_code": "VALIDATION_ERROR",
+            "error_reason": "ValidationError: portfolio_id is required",
+            "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+            "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
+            "observed_at": "2026-03-06T09:11:05.812Z",
+        },
+        {
+            "event_id": "cdlq_01J5VK612V7N8J1RP4PD7NCQ44",
+            "original_topic": "portfolio-bundles.raw.received",
+            "consumer_group": "valuation-service-group",
+            "dlq_topic": "dlq.valuation_service",
+            "original_key": "BUNDLE-2026-000014",
+            "error_reason_code": "DEPENDENCY_TIMEOUT",
+            "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
+            "correlation_id": "ING:e59dd219-3902-4f38-8f8d-7c6cb1456672",
+            "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
+            "observed_at": "2026-03-06T09:15:42.114Z",
+        },
+    ],
+    "total": 2,
 }
 
 INGESTION_RETRY_REQUEST_EXAMPLES = {
@@ -121,12 +398,62 @@ INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE = {
     "completed_at": "2026-03-06T10:12:02.039Z",
 }
 
+INGESTION_REPLAY_AUDIT_LIST_RESPONSE_EXAMPLE = {
+    "audits": [
+        INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE,
+        {
+            "replay_id": "replay_01J5WK2V8GE7K9VK2R6TFY4KQZ",
+            "recovery_path": "consumer_dlq_replay",
+            "event_id": "cdlq_01J5VK612V7N8J1RP4PD7NCQ44",
+            "replay_fingerprint": (
+                "8d9d2ddf66ef6a5c5f0fbd7654a7de0b7f7982393e0d3b599d4fa32e84793d09"
+            ),
+            "correlation_id": "ING:e59dd219-3902-4f38-8f8d-7c6cb1456672",
+            "job_id": "job_01J5S0M3BVX8M5A4SK13Q20D8D",
+            "endpoint": "/ingest/portfolio-bundles",
+            "replay_status": "dry_run",
+            "dry_run": True,
+            "replay_reason": "Dry-run successful. Correlated ingestion job is replayable.",
+            "requested_by": "ops-token",
+            "requested_at": "2026-03-06T10:20:11.019Z",
+            "completed_at": "2026-03-06T10:20:11.442Z",
+        },
+    ],
+    "total": 2,
+}
+
 INGESTION_OPS_MODE_EXAMPLE = {
     "mode": "paused",
     "replay_window_start": "2026-03-06T00:00:00Z",
     "replay_window_end": "2026-03-06T06:00:00Z",
     "updated_by": "ops_automation",
     "updated_at": "2026-03-06T02:15:07.234Z",
+}
+
+INGESTION_IDEMPOTENCY_DIAGNOSTICS_RESPONSE_EXAMPLE = {
+    "lookback_minutes": 1440,
+    "total_keys": 2,
+    "collisions": 1,
+    "keys": [
+        {
+            "idempotency_key": "integration-ingestion-idempotency-001",
+            "usage_count": 3,
+            "endpoint_count": 2,
+            "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
+            "first_seen_at": "2026-03-06T07:10:11.211Z",
+            "last_seen_at": "2026-03-06T07:15:01.127Z",
+            "collision_detected": True,
+        },
+        {
+            "idempotency_key": "integration-ingestion-idempotency-002",
+            "usage_count": 2,
+            "endpoint_count": 1,
+            "endpoints": ["/ingest/transactions"],
+            "first_seen_at": "2026-03-06T08:01:03.000Z",
+            "last_seen_at": "2026-03-06T08:05:17.000Z",
+            "collision_detected": False,
+        },
+    ],
 }
 
 INGESTION_JOB_NOT_FOUND_EXAMPLE = {
@@ -146,6 +473,20 @@ INGESTION_JOB_RETRY_UNSUPPORTED_EXAMPLE = {
     }
 }
 
+INGESTION_JOB_PARTIAL_RETRY_UNSUPPORTED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED",
+        "message": "Partial retry is not supported for endpoint '/ingest/market-prices'.",
+    }
+}
+
+INGESTION_JOB_RETRY_BLOCKED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RETRY_BLOCKED",
+        "message": "Retries are blocked while ingestion is paused.",
+    }
+}
+
 INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
@@ -154,12 +495,28 @@ INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE = {
     }
 }
 
+INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RETRY_BOOKKEEPING_FAILED",
+        "message": (
+            "Replay publish succeeded but post-publish bookkeeping failed: queue state write failed"
+        ),
+        "replay_audit_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
+        "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+    }
+}
+
 INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE = {
     "detail": {
         "code": "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND",
-        "message": (
-            "Consumer DLQ event 'cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6' was not found."
-        ),
+        "message": ("Consumer DLQ event 'cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6' was not found."),
+    }
+}
+
+INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_REPLAY_AUDIT_NOT_FOUND",
+        "message": "Replay audit 'replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P' was not found.",
     }
 }
 
@@ -395,7 +752,7 @@ async def get_ingestion_job(
     },
 )
 async def list_ingestion_jobs(
-    status: str | None = Query(
+    status: IngestionJobStatus | None = Query(
         default=None,
         description="Optional job status filter.",
         examples=["queued"],
@@ -429,9 +786,8 @@ async def list_ingestion_jobs(
     ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
-    status_value = status if status in {"accepted", "queued", "failed"} else None
     jobs, next_cursor = await ingestion_job_service.list_jobs(
-        status=status_value,
+        status=status,
         entity_type=entity_type,
         submitted_from=submitted_from,
         submitted_to=submitted_to,
@@ -452,6 +808,18 @@ async def list_ingestion_jobs(
         "How: Read ingestion job failure history with most-recent-first ordering.\n"
         "When: Use during incident triage to identify failure phases and impacted record keys."
     ),
+    responses={
+        200: {
+            "description": "Failure events for the requested ingestion job.",
+            "content": {
+                "application/json": {"example": INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE}
+            },
+        },
+        404: {
+            "description": "Ingestion job not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
+    },
 )
 async def list_ingestion_job_failures(
     job_id: str = Path(
@@ -491,6 +859,18 @@ async def list_ingestion_job_failures(
         "How: Derive replayable keys from stored payload and merge with failure history.\n"
         "When: Use before partial retry operations or to build precise remediation batches."
     ),
+    responses={
+        200: {
+            "description": "Record-level replayability and failed keys for the ingestion job.",
+            "content": {
+                "application/json": {"example": INGESTION_JOB_RECORD_STATUS_RESPONSE_EXAMPLE}
+            },
+        },
+        404: {
+            "description": "Ingestion job not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
+    },
 )
 async def get_ingestion_job_records(
     job_id: str = Path(
@@ -539,11 +919,21 @@ async def get_ingestion_job_records(
                 "application/json": {
                     "examples": {
                         "retry_unsupported": {"value": INGESTION_JOB_RETRY_UNSUPPORTED_EXAMPLE},
+                        "partial_retry_unsupported": {
+                            "value": INGESTION_JOB_PARTIAL_RETRY_UNSUPPORTED_EXAMPLE
+                        },
+                        "retry_blocked": {"value": INGESTION_JOB_RETRY_BLOCKED_EXAMPLE},
                         "duplicate_blocked": {
                             "value": INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE
                         },
                     }
                 }
+            },
+        },
+        500: {
+            "description": "Replay publish succeeded but retry bookkeeping failed.",
+            "content": {
+                "application/json": {"example": INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE}
             },
         },
     },
@@ -670,8 +1060,7 @@ async def retry_ingestion_job(
             detail={
                 "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
                 "message": (
-                    "Retry blocked because an equivalent deterministic replay "
-                    "already succeeded."
+                    "Retry blocked because an equivalent deterministic replay already succeeded."
                 ),
                 "replay_fingerprint": replay_fingerprint,
             },
@@ -722,10 +1111,7 @@ async def retry_ingestion_job(
             requested_by=ops_actor,
         )
     except Exception as exc:
-        replay_reason = (
-            "Replay publish succeeded but post-publish bookkeeping failed: "
-            f"{exc}"
-        )
+        replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
         replay_audit_id = await _record_replay_audit_best_effort(
             ingestion_job_service=ingestion_job_service,
             recovery_path="ingestion_job_retry",
@@ -772,6 +1158,12 @@ async def retry_ingestion_job(
         "How: Compute summary from canonical ingestion job state.\n"
         "When: Use for fast operational health checks and dashboards."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current aggregate ingestion job health counters.",
+            "content": {"application/json": {"example": INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_health_summary(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
@@ -790,6 +1182,12 @@ async def get_ingestion_health_summary(
         "How: Reuse canonical health summary state for lag visibility.\n"
         "When: Use when operations need a quick backlog signal during ingestion incidents."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current backlog-oriented ingestion health counters.",
+            "content": {"application/json": {"example": INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_health_lag(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
@@ -808,6 +1206,12 @@ async def get_ingestion_health_lag(
         "How: Aggregate consumer dead-letter events by consumer group and original topic.\n"
         "When: Use to triage downstream consumer lag before replaying ingestion jobs."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Consumer-group/topic lag diagnostics for the requested lookback.",
+            "content": {"application/json": {"example": INGESTION_CONSUMER_LAG_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_consumer_lag(
     lookback_minutes: int = Query(
@@ -843,6 +1247,12 @@ async def get_ingestion_consumer_lag(
         "How: Compute lookback-window metrics and compare against caller thresholds.\n"
         "When: Use for alert evaluation, on-call triage, and operational readiness checks."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current ingestion SLO status for the requested thresholds.",
+            "content": {"application/json": {"example": INGESTION_SLO_STATUS_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_slo_status(
     lookback_minutes: int = Query(
@@ -894,6 +1304,14 @@ async def get_ingestion_slo_status(
         "How: Compare failure/backlog metrics across current and previous lookback windows.\n"
         "When: Use for SRE-style burn-rate alerts and release-go/no-go operational checks."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Current ingestion error-budget and backlog-growth status.",
+            "content": {
+                "application/json": {"example": INGESTION_ERROR_BUDGET_STATUS_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_error_budget_status(
     lookback_minutes: int = Query(
@@ -901,8 +1319,7 @@ async def get_ingestion_error_budget_status(
         ge=5,
         le=1440,
         description=(
-            "Lookback window, in minutes, used for current-vs-previous "
-            "error-budget comparison."
+            "Lookback window, in minutes, used for current-vs-previous error-budget comparison."
         ),
         examples=[60],
     ),
@@ -942,6 +1359,12 @@ async def get_ingestion_error_budget_status(
         "When: Use for autoscaling decisions, replay safety gating, and incident "
         "triage automation."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Canonical ingestion operating severity band and runbook action.",
+            "content": {"application/json": {"example": INGESTION_OPERATING_BAND_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_operating_band(
     lookback_minutes: int = Query(
@@ -994,6 +1417,12 @@ async def get_ingestion_operating_band(
         "When: Use to prevent config drift and keep runbooks/automation aligned "
         "with runtime policy."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Active ingestion operating policy and replay guardrails.",
+            "content": {"application/json": {"example": INGESTION_OPS_POLICY_RESPONSE_EXAMPLE}},
+        }
+    },
 )
 async def get_ingestion_operating_policy(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
@@ -1012,6 +1441,16 @@ async def get_ingestion_operating_policy(
         "How: Aggregate durable reprocessing job states and compute oldest pending age signal.\n"
         "When: Use for operations triage and replay worker scaling decisions."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Reprocessing queue health totals and per-job-type rows.",
+            "content": {
+                "application/json": {
+                    "example": INGESTION_REPROCESSING_QUEUE_HEALTH_RESPONSE_EXAMPLE
+                }
+            },
+        }
+    },
 )
 async def get_reprocessing_queue_health(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
@@ -1032,6 +1471,14 @@ async def get_reprocessing_queue_health(
         "lambda_in, mu_msg, rho, headroom, and drain time.\n"
         "When: Use to detect overload, prioritize scaling, and estimate backlog recovery time."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Per endpoint/entity capacity totals and saturation diagnostics.",
+            "content": {
+                "application/json": {"example": INGESTION_CAPACITY_STATUS_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_capacity_status(
     lookback_minutes: int = Query(
@@ -1076,6 +1523,14 @@ async def get_ingestion_capacity_status(
         "with oldest backlog age.\n"
         "When: Use to isolate the highest-impact ingestion pipeline segment during incidents."
     ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Grouped backlog pressure and concentration diagnostics.",
+            "content": {
+                "application/json": {"example": INGESTION_BACKLOG_BREAKDOWN_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_backlog_breakdown(
     lookback_minutes: int = Query(
@@ -1111,6 +1566,14 @@ async def get_ingestion_backlog_breakdown(
         "How: Filter canonical jobs by age and status, then attach runbook-oriented suggestions.\n"
         "When: Use to identify concrete stuck jobs requiring operator intervention."
     ),
+    responses={
+        200: {
+            "description": "Stalled ingestion jobs older than the requested threshold.",
+            "content": {
+                "application/json": {"example": INGESTION_STALLED_JOB_LIST_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def list_ingestion_stalled_jobs(
     threshold_seconds: int = Query(
@@ -1149,27 +1612,7 @@ async def list_ingestion_stalled_jobs(
     responses={
         200: {
             "description": "Consumer DLQ events matching the requested filters.",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "events": [
-                            {
-                                "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
-                                "original_topic": "transactions.raw.received",
-                                "consumer_group": "persistence-service-group",
-                                "dlq_topic": "dlq.persistence_service",
-                                "original_key": "TXN-2026-000145",
-                                "error_reason_code": "VALIDATION_ERROR",
-                                "error_reason": "ValidationError: portfolio_id is required",
-                                "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
-                                "payload_excerpt": "{\"transaction_id\":\"TXN-2026-000145\"}",
-                                "observed_at": "2026-03-06T09:11:05.812Z",
-                            }
-                        ],
-                        "total": 1,
-                    }
-                }
-            },
+            "content": {"application/json": {"example": CONSUMER_DLQ_EVENT_LIST_RESPONSE_EXAMPLE}},
         }
     },
 )
@@ -1214,9 +1657,7 @@ async def list_consumer_dlq_events(
     responses={
         200: {
             "description": "Replay outcome for the correlated DLQ event.",
-            "content": {
-                "application/json": {"example": CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE}
-            },
+            "content": {"application/json": {"example": CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE}},
         },
         404: {
             "description": "Consumer DLQ event was not found.",
@@ -1268,8 +1709,7 @@ async def replay_consumer_dlq_event(
             replay_status="not_replayable",
             dry_run=replay_request.dry_run,
             replay_reason=(
-                "DLQ event has no correlation id and cannot be mapped to "
-                "ingestion payload."
+                "DLQ event has no correlation id and cannot be mapped to ingestion payload."
             ),
             requested_by=ops_actor,
         )
@@ -1465,10 +1905,7 @@ async def replay_consumer_dlq_event(
             requested_by=ops_actor,
         )
     except Exception as exc:
-        replay_reason = (
-            "Replay publish succeeded but post-publish bookkeeping failed: "
-            f"{exc}"
-        )
+        replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
         replay_audit_id = await _record_replay_audit_best_effort(
             ingestion_job_service=ingestion_job_service,
             recovery_path="consumer_dlq_replay",
@@ -1518,9 +1955,7 @@ async def replay_consumer_dlq_event(
         200: {
             "description": "Replay audit rows matching the requested filters.",
             "content": {
-                "application/json": {
-                    "example": {"audits": [INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE], "total": 1}
-                }
+                "application/json": {"example": INGESTION_REPLAY_AUDIT_LIST_RESPONSE_EXAMPLE}
             },
         }
     },
@@ -1580,7 +2015,11 @@ async def list_ingestion_replay_audits(
         200: {
             "description": "One replay audit row.",
             "content": {"application/json": {"example": INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "Replay audit row was not found.",
+            "content": {"application/json": {"example": INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE}},
+        },
     },
 )
 async def get_ingestion_replay_audit(
@@ -1666,7 +2105,7 @@ async def update_ingestion_ops_control(
         and update_request.replay_window_start > update_request.replay_window_end
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "INGESTION_INVALID_REPLAY_WINDOW",
                 "message": "replay_window_start must be before replay_window_end.",
@@ -1691,6 +2130,14 @@ async def update_ingestion_ops_control(
         "How: Aggregate ingestion jobs by idempotency key and detect multi-endpoint collisions.\n"
         "When: Use to detect client integration anti-patterns before they create replay ambiguity."
     ),
+    responses={
+        200: {
+            "description": "Idempotency-key diagnostics for the requested lookback window.",
+            "content": {
+                "application/json": {"example": INGESTION_IDEMPOTENCY_DIAGNOSTICS_RESPONSE_EXAMPLE}
+            },
+        }
+    },
 )
 async def get_ingestion_idempotency_diagnostics(
     lookback_minutes: int = Query(

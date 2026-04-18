@@ -111,6 +111,7 @@ async def test_get_portfolio_by_id_success(mock_portfolio_repo: AsyncMock):
         result = await service.get_portfolio_by_id("P1")
 
         assert result.portfolio_id == "P1"
+        assert result.cost_basis_method == "FIFO"
         mock_portfolio_repo.get_by_id.assert_awaited_once_with("P1")
 
 
@@ -123,5 +124,5 @@ async def test_get_portfolio_by_id_not_found(mock_portfolio_repo: AsyncMock):
         service = PortfolioService(mock_db_session)
         mock_portfolio_repo.get_by_id.return_value = None
 
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_portfolio_by_id("P404")

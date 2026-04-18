@@ -48,6 +48,41 @@ async def test_create_simulation_session_success(async_test_client):
     assert response.json()["session"]["session_id"] == "S1"
 
 
+async def test_get_simulation_session_success(async_test_client):
+    client, mock_service = async_test_client
+    now = datetime.now(timezone.utc)
+    mock_service.get_session.return_value = {
+        "session": {
+            "session_id": "S1",
+            "portfolio_id": "P1",
+            "status": "ACTIVE",
+            "version": 2,
+            "created_by": "tester",
+            "created_at": now,
+            "expires_at": now,
+        }
+    }
+
+    response = await client.get("/simulation-sessions/S1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["session"]["session_id"] == "S1"
+    assert body["session"]["status"] == "ACTIVE"
+
+
+async def test_create_simulation_session_unknown_portfolio_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.create_session.side_effect = ValueError("Portfolio with id P404 not found")
+
+    response = await client.post(
+        "/simulation-sessions", json={"portfolio_id": "P404", "created_by": "tester"}
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Portfolio with id P404 not found"
+
+
 async def test_get_simulation_session_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_session.side_effect = ValueError("not found")
@@ -69,6 +104,70 @@ async def test_add_simulation_changes_validation_maps_to_400(async_test_client):
     )
 
     assert response.status_code == 400
+
+
+async def test_add_simulation_changes_missing_session_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.add_changes.side_effect = ValueError("Simulation session S404 not found")
+
+    response = await client.post(
+        "/simulation-sessions/S404/changes",
+        json={
+            "changes": [{"security_id": "SEC_AAPL_US", "transaction_type": "BUY", "quantity": 10}]
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Simulation session S404 not found"
+
+
+async def test_add_simulation_changes_success(async_test_client):
+    client, mock_service = async_test_client
+    now = datetime.now(timezone.utc)
+    mock_service.add_changes.return_value = {
+        "session_id": "S1",
+        "version": 3,
+        "changes": [
+            {
+                "change_id": "SIM-CHG-0001",
+                "session_id": "S1",
+                "portfolio_id": "P1",
+                "security_id": "SEC_AAPL_US",
+                "transaction_type": "BUY",
+                "quantity": 10.0,
+                "price": "210.5000000000",
+                "amount": "2105.0000000000",
+                "currency": "USD",
+                "effective_date": "2026-03-10",
+                "metadata": {"source": "gateway"},
+                "created_at": now,
+            }
+        ],
+    }
+
+    response = await client.post(
+        "/simulation-sessions/S1/changes",
+        json={
+            "changes": [
+                {
+                    "security_id": "SEC_AAPL_US",
+                    "transaction_type": "BUY",
+                    "quantity": 10,
+                    "price": "210.5000000000",
+                    "currency": "USD",
+                    "effective_date": "2026-03-10",
+                    "metadata": {"source": "gateway"},
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["session_id"] == "S1"
+    assert body["version"] == 3
+    assert body["changes"][0]["change_id"] == "SIM-CHG-0001"
+    assert body["changes"][0]["metadata"]["source"] == "gateway"
 
 
 async def test_get_projected_positions_success(async_test_client):
@@ -108,7 +207,7 @@ async def test_create_simulation_session_unexpected_error_maps_to_500(async_test
     )
 
     assert response.status_code == 500
-    assert "db unavailable" in response.json()["detail"]
+    assert response.json()["detail"] == "Failed to create simulation session."
 
 
 async def test_close_simulation_session_not_found_maps_to_404(async_test_client):
@@ -119,12 +218,78 @@ async def test_close_simulation_session_not_found_maps_to_404(async_test_client)
     assert response.status_code == 404
 
 
+async def test_close_simulation_session_success(async_test_client):
+    client, mock_service = async_test_client
+    now = datetime.now(timezone.utc)
+    mock_service.close_session.return_value = {
+        "session": {
+            "session_id": "S1",
+            "portfolio_id": "P1",
+            "status": "CLOSED",
+            "version": 4,
+            "created_by": "tester",
+            "created_at": now,
+            "expires_at": now,
+        }
+    }
+
+    response = await client.delete("/simulation-sessions/S1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["session"]["session_id"] == "S1"
+    assert body["session"]["status"] == "CLOSED"
+
+
 async def test_delete_simulation_change_validation_maps_to_400(async_test_client):
     client, mock_service = async_test_client
     mock_service.delete_change.side_effect = ValueError("invalid")
 
     response = await client.delete("/simulation-sessions/S1/changes/C404")
     assert response.status_code == 400
+
+
+async def test_delete_simulation_change_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.delete_change.side_effect = ValueError("Simulation change C404 not found")
+
+    response = await client.delete("/simulation-sessions/S1/changes/C404")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Simulation change C404 not found"
+
+
+async def test_delete_simulation_change_success(async_test_client):
+    client, mock_service = async_test_client
+    now = datetime.now(timezone.utc)
+    mock_service.delete_change.return_value = {
+        "session_id": "S1",
+        "version": 4,
+        "changes": [
+            {
+                "change_id": "SIM-CHG-0002",
+                "session_id": "S1",
+                "portfolio_id": "P1",
+                "security_id": "SEC_MSFT_US",
+                "transaction_type": "SELL",
+                "quantity": 5.0,
+                "price": "395.0000000000",
+                "amount": "1975.0000000000",
+                "currency": "USD",
+                "effective_date": "2026-03-11",
+                "metadata": {"source": "gateway"},
+                "created_at": now,
+            }
+        ],
+    }
+
+    response = await client.delete("/simulation-sessions/S1/changes/C1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["session_id"] == "S1"
+    assert body["version"] == 4
+    assert body["changes"][0]["change_id"] == "SIM-CHG-0002"
 
 
 async def test_get_projected_positions_not_found_maps_to_404(async_test_client):

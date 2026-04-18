@@ -552,7 +552,7 @@ class CoreSnapshotService:
     ) -> list[InstrumentEnrichmentRecord]:
         requested_ids = [value.strip() for value in security_ids if value and value.strip()]
         if not requested_ids:
-            raise CoreSnapshotBadRequestError("security_ids must contain at least one value")
+            raise CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
 
         instruments = await self.instrument_repo.get_by_security_ids(requested_ids)
         by_security_id = {item.security_id: item for item in instruments}

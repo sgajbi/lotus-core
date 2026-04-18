@@ -34,6 +34,12 @@ ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = {
     "detail": "Analytics export job JOB-AN-0001 is not complete."
 }
 HTTP_422_UNPROCESSABLE_CONTENT = 422
+ANALYTICS_ERROR_STATUS_MAP = {
+    "RESOURCE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
+    "INVALID_REQUEST": status.HTTP_400_BAD_REQUEST,
+    "INSUFFICIENT_DATA": HTTP_422_UNPROCESSABLE_CONTENT,
+    "UNSUPPORTED_CONFIGURATION": HTTP_422_UNPROCESSABLE_CONTENT,
+}
 
 
 def get_analytics_timeseries_service(
@@ -43,15 +49,11 @@ def get_analytics_timeseries_service(
 
 
 def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
-    if exc.code == "RESOURCE_NOT_FOUND":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if exc.code == "INVALID_REQUEST":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    if exc.code == "INSUFFICIENT_DATA":
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
-    if exc.code == "UNSUPPORTED_CONFIGURATION":
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
-    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    status_code = ANALYTICS_ERROR_STATUS_MAP.get(
+        exc.code,
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+    raise HTTPException(status_code=status_code, detail=str(exc))
 
 
 @router.post(
@@ -74,12 +76,13 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
     summary="Fetch portfolio analytics timeseries inputs",
     description=(
         "What: Return canonical portfolio valuation and cash-flow timeseries required by "
-        "lotus-performance and lotus-risk.\n"
+        "lotus-performance and other governed downstream analytics consumers.\n"
         "How: Resolve effective window, apply deterministic paging, and include "
         "lineage/quality diagnostics. Returned cash_flows are canonical portfolio-level "
         "events expressed in the effective reporting currency with explicit flow provenance.\n"
-        "When: Used for stateful TWR/MWR input acquisition and risk analytics sourcing without "
-        "direct database coupling."
+        "When: Used directly for stateful TWR/MWR input acquisition in lotus-performance and "
+        "kept available as a governed portfolio-level analytics-input contract for future "
+        "downstream analytics sourcing without direct database coupling."
     ),
     openapi_extra=source_data_product_openapi_extra("PortfolioTimeseriesInput"),
 )
@@ -164,8 +167,9 @@ async def get_position_analytics_timeseries(
         "lifecycle context.\n"
         "How: Resolve current canonical portfolio reference fields, bound "
         "performance_end_date by the requested as_of_date, and include lineage metadata.\n"
-        "When: Used by lotus-performance and lotus-risk alongside analytics timeseries endpoints "
-        "to avoid repetitive metadata payload duplication.\n"
+        "When: Used by lotus-performance analytics pipelines and lotus-gateway workspace source "
+        "context flows alongside analytics timeseries endpoints to avoid repetitive metadata "
+        "payload duplication.\n"
         "Contract note: portfolio reference fields are current canonical portfolio state, "
         "not historical effective-dated portfolio snapshots."
     ),
@@ -244,7 +248,9 @@ async def create_analytics_export_job(
         "How: Reads persisted job metadata and terminal status from canonical "
         "query-service storage, including result availability and deterministic "
         "result retrieval path.\n"
-        "When: Used by polling clients before attempting result retrieval."
+        "When: Used by polling clients before attempting result retrieval, especially for "
+        "large-window extraction flows where direct page-by-page replay would be slower or "
+        "operationally noisier than a durable export hand-off."
     ),
 )
 async def get_analytics_export_job(
@@ -270,7 +276,10 @@ async def get_analytics_export_job(
             "content": {"application/json": {"example": ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE}},
         },
         HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Export job is incomplete or source payload unavailable.",
+            "description": (
+                "Export job is incomplete, source payload unavailable, or requested "
+                "serialization is unsupported."
+            ),
             "content": {"application/json": {"example": ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE}},
         },
     },
@@ -279,7 +288,8 @@ async def get_analytics_export_job(
         "What: Retrieve finalized export payload for a completed analytics export job.\n"
         "How: Returns JSON envelope or NDJSON stream with optional gzip encoding and "
         "includes deterministic request/result provenance metadata.\n"
-        "When: Used by lotus-performance batch pipelines after job completion."
+        "When: Used by lotus-performance batch pipelines and similar downstream bulk retrieval "
+        "flows after job completion instead of repeatedly replaying large paged windows."
     ),
 )
 async def get_analytics_export_job_result(

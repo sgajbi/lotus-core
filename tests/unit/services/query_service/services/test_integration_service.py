@@ -565,7 +565,7 @@ async def test_reference_contract_methods() -> None:
     benchmark_catalog = await service.list_benchmark_catalog(date(2026, 1, 1), None, None, None)
     assert benchmark_catalog.records == []
 
-    index_catalog = await service.list_index_catalog(date(2026, 1, 1), None, None, None)
+    index_catalog = await service.list_index_catalog(date(2026, 1, 1), [], None, None, None)
     assert index_catalog.records[0].index_id == "IDX1"
 
     market_series = await service.get_benchmark_market_series(

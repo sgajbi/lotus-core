@@ -175,6 +175,94 @@ async def test_support_overview_success(async_test_client):
     )
 
 
+async def test_support_overview_defaults_apply(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_support_overview.return_value = {
+        "portfolio_id": "P1",
+        "business_date": date(2025, 8, 31),
+        "current_epoch": 3,
+        "stale_threshold_minutes": 15,
+        "failed_window_hours": 24,
+        "generated_at_utc": "2026-03-14T10:45:00Z",
+        "active_reprocessing_keys": 0,
+        "stale_reprocessing_keys": 0,
+        "oldest_reprocessing_watermark_date": None,
+        "oldest_reprocessing_security_id": None,
+        "oldest_reprocessing_epoch": None,
+        "oldest_reprocessing_updated_at": None,
+        "reprocessing_backlog_age_days": None,
+        "pending_valuation_jobs": 0,
+        "processing_valuation_jobs": 0,
+        "stale_processing_valuation_jobs": 0,
+        "failed_valuation_jobs": 0,
+        "failed_valuation_jobs_within_window": 0,
+        "oldest_pending_valuation_date": None,
+        "oldest_pending_valuation_job_id": None,
+        "oldest_pending_valuation_security_id": None,
+        "oldest_pending_valuation_correlation_id": None,
+        "valuation_backlog_age_days": None,
+        "pending_aggregation_jobs": 0,
+        "processing_aggregation_jobs": 0,
+        "stale_processing_aggregation_jobs": 0,
+        "failed_aggregation_jobs": 0,
+        "failed_aggregation_jobs_within_window": 0,
+        "oldest_pending_aggregation_date": None,
+        "oldest_pending_aggregation_job_id": None,
+        "oldest_pending_aggregation_correlation_id": None,
+        "aggregation_backlog_age_days": None,
+        "pending_analytics_export_jobs": 0,
+        "processing_analytics_export_jobs": 0,
+        "stale_processing_analytics_export_jobs": 0,
+        "failed_analytics_export_jobs": 0,
+        "failed_analytics_export_jobs_within_window": 0,
+        "oldest_pending_analytics_export_created_at": None,
+        "oldest_pending_analytics_export_job_id": None,
+        "oldest_pending_analytics_export_request_fingerprint": None,
+        "analytics_export_backlog_age_minutes": None,
+        "latest_transaction_date": None,
+        "latest_booked_transaction_date": None,
+        "latest_position_snapshot_date": None,
+        "latest_booked_position_snapshot_date": None,
+        "position_snapshot_history_mismatch_count": 0,
+        "controls_business_date": None,
+        "controls_stage_id": None,
+        "controls_last_source_event_type": None,
+        "controls_created_at": None,
+        "controls_ready_emitted_at": None,
+        "controls_epoch": None,
+        "controls_status": None,
+        "controls_failure_reason": None,
+        "controls_latest_reconciliation_run_id": None,
+        "controls_latest_reconciliation_type": None,
+        "controls_latest_reconciliation_status": None,
+        "controls_latest_reconciliation_correlation_id": None,
+        "controls_latest_reconciliation_requested_by": None,
+        "controls_latest_reconciliation_dedupe_key": None,
+        "controls_latest_reconciliation_failure_reason": None,
+        "controls_latest_reconciliation_total_findings": None,
+        "controls_latest_reconciliation_blocking_findings": None,
+        "controls_latest_blocking_finding_id": None,
+        "controls_latest_blocking_finding_type": None,
+        "controls_latest_blocking_finding_security_id": None,
+        "controls_latest_blocking_finding_transaction_id": None,
+        "controls_last_updated_at": None,
+        "controls_blocking": False,
+        "publish_allowed": False,
+    }
+
+    response = await client.get("/support/portfolios/P1/overview")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stale_threshold_minutes"] == 15
+    assert body["failed_window_hours"] == 24
+    mock_service.get_support_overview.assert_awaited_once_with(
+        portfolio_id="P1",
+        stale_threshold_minutes=15,
+        failed_window_hours=24,
+    )
+
+
 async def test_portfolio_readiness_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_portfolio_readiness.return_value = {
@@ -240,6 +328,50 @@ async def test_portfolio_readiness_success(async_test_client):
     )
 
 
+async def test_portfolio_readiness_defaults_apply(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_readiness.return_value = {
+        "portfolio_id": "P1",
+        "requested_as_of_date": None,
+        "resolved_as_of_date": date(2026, 3, 28),
+        "generated_at_utc": "2026-03-28T08:45:00Z",
+        "holdings": {"status": "READY", "reasons": []},
+        "pricing": {"status": "READY", "reasons": []},
+        "transactions": {"status": "READY", "reasons": []},
+        "reporting": {"status": "READY", "reasons": []},
+        "blocking_reasons": [],
+        "latest_booked_transaction_date": date(2026, 3, 28),
+        "latest_booked_position_snapshot_date": date(2026, 3, 28),
+        "current_epoch": 4,
+        "position_snapshot_history_mismatch_count": 0,
+        "snapshot_valuation_total_positions": 3,
+        "snapshot_valuation_valued_positions": 3,
+        "snapshot_valuation_unvalued_positions": 0,
+        "controls_status": "COMPLETED",
+        "publish_allowed": True,
+        "missing_historical_fx_dependencies": {
+            "missing_count": 0,
+            "earliest_transaction_date": None,
+            "latest_transaction_date": None,
+            "sample_records": [],
+        },
+    }
+
+    response = await client.get("/support/portfolios/P1/readiness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["requested_as_of_date"] is None
+    assert body["resolved_as_of_date"] == "2026-03-28"
+    assert body["publish_allowed"] is True
+    mock_service.get_portfolio_readiness.assert_awaited_once_with(
+        portfolio_id="P1",
+        as_of_date=None,
+        stale_threshold_minutes=15,
+        failed_window_hours=24,
+    )
+
+
 async def test_support_overview_unexpected_maps_to_500(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_support_overview.side_effect = RuntimeError("boom")
@@ -258,6 +390,46 @@ async def test_portfolio_readiness_not_found_maps_to_404(async_test_client):
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+async def test_portfolio_readiness_invalid_as_of_date_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/support/portfolios/P1/readiness?as_of_date=2026-31-03")
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Invalid as_of_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    mock_service.get_portfolio_readiness.assert_not_awaited()
+
+
+async def test_control_stages_invalid_business_date_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/support/portfolios/P1/control-stages?business_date=2026-31-03")
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "Invalid business_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    mock_service.get_portfolio_control_stages.assert_not_awaited()
+
+
+async def test_reprocessing_keys_invalid_watermark_date_maps_to_400(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/support/portfolios/P1/reprocessing-keys?watermark_date=2026-31-03"
+    )
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "Invalid watermark_date '2026-31-03'. Expected YYYY-MM-DD format."
+    )
+    mock_service.get_reprocessing_keys.assert_not_awaited()
 
 
 async def test_calculator_slos_success(async_test_client):

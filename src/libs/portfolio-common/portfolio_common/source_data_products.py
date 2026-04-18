@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 CATALOG_VERSION = "2026-04-15"
 
 OPERATIONAL_READ = "Operational Read"
@@ -72,15 +71,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         route_family=OPERATIONAL_READ,
         serving_plane=QUERY_SERVICE,
         owner="lotus-core",
-        consumers=("lotus-gateway", "lotus-risk", "lotus-report", "lotus-manage"),
+        consumers=("lotus-gateway", "lotus-risk", "lotus-report", "lotus-manage", "lotus-advise"),
         current_routes=(
             "/portfolios/{portfolio_id}/positions",
-            "/reporting/holdings-snapshot/query",
-            "/reporting/cash-balances/query",
-        ),
-        replaces_convenience_shapes=(
-            "/reporting/holdings-snapshot/query",
-            "/reporting/cash-balances/query",
+            "/portfolios/{portfolio_id}/cash-balances",
         ),
         notes="Canonical holdings and cash state for an as-of date.",
     ),
@@ -91,15 +85,7 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         serving_plane=QUERY_SERVICE,
         owner="lotus-core",
         consumers=("lotus-gateway", "lotus-report", "lotus-manage", "lotus-risk"),
-        current_routes=(
-            "/portfolios/{portfolio_id}/transactions",
-            "/reporting/activity-summary/query",
-            "/reporting/income-summary/query",
-        ),
-        replaces_convenience_shapes=(
-            "/reporting/activity-summary/query",
-            "/reporting/income-summary/query",
-        ),
+        current_routes=("/portfolios/{portfolio_id}/transactions",),
         notes="Deterministically ordered transaction and income ledger window.",
     ),
     SourceDataProductDefinition(

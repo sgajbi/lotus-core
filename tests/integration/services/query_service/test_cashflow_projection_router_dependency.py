@@ -17,7 +17,7 @@ pytestmark = pytest.mark.asyncio
 async def async_test_client():
     mock_service = AsyncMock()
     app.dependency_overrides[get_cashflow_projection_service] = lambda: mock_service
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_cashflow_projection_service, None)
@@ -83,3 +83,14 @@ async def test_cashflow_projection_not_found_maps_to_404(async_test_client):
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+async def test_cashflow_projection_unexpected_uses_global_500_envelope(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_cashflow_projection.side_effect = RuntimeError("boom")
+
+    response = await client.get("/portfolios/P1/cashflow-projection")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()

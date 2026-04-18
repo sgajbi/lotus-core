@@ -41,12 +41,12 @@ class FxRate(BaseModel):
         }
     )
 
+
 class FxRateIngestionRequest(BaseModel):
     fx_rates: List[FxRate] = Field(
         ...,
         description=(
-            "FX reference-rate observations to publish into valuation and "
-            "conversion workflows."
+            "FX reference-rate observations to publish into valuation and conversion workflows."
         ),
         min_length=1,
         examples=[
@@ -60,4 +60,3 @@ class FxRateIngestionRequest(BaseModel):
             ]
         ],
     )
-

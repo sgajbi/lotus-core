@@ -58,6 +58,7 @@ def mock_transaction_repo() -> AsyncMock:
     repo.get_transactions_count.return_value = 25
     repo.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
+    repo.get_latest_fx_rate.return_value = Decimal("1.36")
     return repo
 
 
@@ -150,6 +151,7 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.product_name == "TransactionLedgerWindow"
         assert response_dto.product_version == "v1"
         assert response_dto.as_of_date == date(2025, 1, 15)
+        assert response_dto.reporting_currency is None
         assert response_dto.generated_at.tzinfo is not None
         assert response_dto.restatement_version == "current"
         assert response_dto.reconciliation_status == "UNKNOWN"
@@ -292,7 +294,7 @@ async def test_get_transactions_raises_when_portfolio_missing(mock_transaction_r
         mock_transaction_repo.portfolio_exists.return_value = False
         service = TransactionService(AsyncMock(spec=AsyncSession))
 
-        with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_transactions(portfolio_id="P404", skip=0, limit=10)
 
 
@@ -343,3 +345,58 @@ async def test_get_transactions_include_projected_skips_business_date_default(
             end_date=None,
             as_of_date=None,
         )
+
+
+async def test_get_transactions_applies_reporting_currency_restated_fields(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        response_dto = await service.get_transactions(
+            portfolio_id="P1",
+            skip=0,
+            limit=10,
+            reporting_currency="SGD",
+        )
+
+    first_transaction = response_dto.transactions[0]
+    income_transaction = response_dto.transactions[1]
+
+    assert response_dto.reporting_currency == "SGD"
+    assert first_transaction.gross_transaction_amount_reporting_currency == Decimal("1360.00")
+    assert first_transaction.gross_cost_reporting_currency == Decimal("1360.00")
+    assert first_transaction.trade_fee_reporting_currency == Decimal("17.000")
+    assert income_transaction.gross_transaction_amount_reporting_currency == Decimal("170.00")
+    assert (
+        income_transaction.withholding_tax_amount_reporting_currency == Decimal("13.60")
+    )
+    assert (
+        income_transaction.other_interest_deductions_amount_reporting_currency
+        == Decimal("6.80")
+    )
+    assert income_transaction.net_interest_amount_reporting_currency == Decimal("149.60")
+    assert mock_transaction_repo.get_latest_fx_rate.await_count == 1
+
+
+async def test_get_transactions_raises_when_reporting_currency_rate_missing(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_latest_fx_rate.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        with pytest.raises(ValueError, match="FX rate not found for USD/SGD as of 2025-01-15"):
+            await service.get_transactions(
+                portfolio_id="P1",
+                skip=0,
+                limit=10,
+                reporting_currency="SGD",
+            )

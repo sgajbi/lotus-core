@@ -24,10 +24,13 @@ def get_portfolio_service(
 @router.get(
     "/",
     response_model=PortfolioQueryResponse,
-    summary="Get Portfolio Details",
+    summary="Get portfolio discovery records",
     description=(
-        "Returns portfolios with optional filtering by portfolio ID, CIF, and booking center. "
-        "Used by UI/lotus-gateway for portfolio discovery and navigation."
+        "Returns canonical portfolio discovery records with optional filtering by portfolio ID, "
+        "portfolio identifier list, client grouping ID, and booking center. Use this route for "
+        "portfolio lookup, selector population, and navigation scope discovery; do not use it as "
+        "a substitute for single-portfolio detail, workspace composition, or holdings/reporting "
+        "reads."
     ),
 )
 async def get_portfolios(
@@ -53,18 +56,12 @@ async def get_portfolios(
     ),
     service: PortfolioService = Depends(get_portfolio_service),
 ):
-    try:
-        return await service.get_portfolios(
-            portfolio_id=portfolio_id,
-            portfolio_ids=portfolio_ids,
-            client_id=client_id,
-            booking_center_code=booking_center_code,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {e}",
-        )
+    return await service.get_portfolios(
+        portfolio_id=portfolio_id,
+        portfolio_ids=portfolio_ids,
+        client_id=client_id,
+        booking_center_code=booking_center_code,
+    )
 
 
 @router.get(
@@ -76,8 +73,13 @@ async def get_portfolios(
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
         }
     },
-    summary="Get a Single Portfolio by ID",
-    description="Returns the canonical portfolio record for a single portfolio identifier.",
+    summary="Get canonical portfolio detail by ID",
+    description=(
+        "Returns the canonical portfolio identity and standing metadata for one portfolio "
+        "identifier. Use this route when a downstream workflow needs the source-owned portfolio "
+        "record before composing workspace, holdings, transaction, or reporting reads; do not use "
+        "it as a substitute for portfolio positions, transaction-ledger, or reporting routes."
+    ),
 )
 async def get_portfolio_by_id(
     portfolio_id: str = Path(
@@ -94,7 +96,7 @@ async def get_portfolio_by_id(
     try:
         portfolio = await service.get_portfolio_by_id(portfolio_id)
         return portfolio
-    except ValueError:
+    except LookupError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Portfolio with id {portfolio_id} not found",
