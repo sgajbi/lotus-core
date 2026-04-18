@@ -291,6 +291,29 @@ def _wait_portfolio_visible(query_base_url: str, portfolio_id: str, timeout_seco
     )
 
 
+def _wait_expected_status(url: str, expected_statuses: set[int], timeout_seconds: int) -> None:
+    deadline = time.time() + timeout_seconds
+    last_status: int | None = None
+    last_error: str | None = None
+    while time.time() < deadline:
+        try:
+            response = requests.get(url, timeout=8)
+            last_status = response.status_code
+            if response.status_code in expected_statuses:
+                return
+        except Exception as exc:  # pragma: no cover - defensive runtime capture
+            last_error = str(exc)
+        time.sleep(2)
+
+    failure_context = f"last_status={last_status}" if last_status is not None else "no response"
+    if last_error:
+        failure_context = f"{failure_context}, last_error={last_error}"
+    raise TimeoutError(
+        f"Timed out waiting for endpoint status {sorted(expected_statuses)} at {url} "
+        f"({failure_context})"
+    )
+
+
 def _write_report(
     *,
     output_dir: Path,
@@ -953,6 +976,16 @@ def main() -> int:
     _wait_portfolio_visible(
         query_base_url=query,
         portfolio_id=portfolio_id,
+        timeout_seconds=args.query_visible_timeout_seconds,
+    )
+    _wait_expected_status(
+        url=f"{query}/portfolios/{portfolio_id}/positions/{security_id}/lots",
+        expected_statuses={200},
+        timeout_seconds=args.query_visible_timeout_seconds,
+    )
+    _wait_expected_status(
+        url=f"{query}/portfolios/{portfolio_id}/positions/{security_id}/accrued-offsets",
+        expected_statuses={200},
         timeout_seconds=args.query_visible_timeout_seconds,
     )
 
