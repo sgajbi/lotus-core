@@ -359,6 +359,66 @@ async def test_timeseries_integrity_run_detects_aggregate_and_completeness_drift
     }
 
 
+async def test_timeseries_integrity_run_detects_missing_portfolio_timeseries_row(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+):
+    await _seed_portfolio(async_db_session, "PORT-R3B")
+    await _seed_instrument(async_db_session, "SEC-R3B")
+
+    async_db_session.add_all(
+        [
+            DailyPositionSnapshot(
+                portfolio_id="PORT-R3B",
+                security_id="SEC-R3B",
+                date=date(2026, 3, 9),
+                epoch=1,
+                quantity=Decimal("8"),
+                cost_basis=Decimal("80"),
+                cost_basis_local=Decimal("80"),
+                valuation_status="VALUED",
+            ),
+            PositionTimeseries(
+                portfolio_id="PORT-R3B",
+                security_id="SEC-R3B",
+                date=date(2026, 3, 9),
+                epoch=1,
+                bod_market_value=Decimal("80"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("84"),
+                fees=Decimal("0"),
+                quantity=Decimal("8"),
+                cost=Decimal("80"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    response = await async_test_client.post(
+        "/reconciliation/runs/timeseries-integrity",
+        json={"portfolio_id": "PORT-R3B", "business_date": "2026-03-09", "epoch": 1},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["finding_count"] == 1
+    assert payload["summary"]["passed"] is False
+
+    findings_response = await async_test_client.get(
+        f"/reconciliation/runs/{payload['run_id']}/findings"
+    )
+    assert findings_response.status_code == 200
+    findings = findings_response.json()["findings"]
+    assert len(findings) == 1
+    assert findings[0]["finding_type"] == "missing_portfolio_timeseries"
+    assert findings[0]["detail"]["position_timeseries_rows"] == 1
+
+
 async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_404(
     async_test_client: httpx.AsyncClient,
     async_db_session: AsyncSession,
